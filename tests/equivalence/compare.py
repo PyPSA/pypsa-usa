@@ -27,7 +27,7 @@ import pandas as pd
 import xarray as xr
 import yaml
 
-from .paths import ArtifactPair, prong_pairs
+from .paths import INTERCONNECT, ArtifactPair, prong_pairs
 
 REPO = Path(__file__).resolve().parents[2]
 RTOL = 1e-3
@@ -511,7 +511,8 @@ def run_comparison(prong: int, cand_root: Path, anch_root: Path) -> dict:
         "pass": not live,
         "findings": all_findings,
     }
-    out = REPO / "workflow" / "results" / "equivalence" / f"findings_{prong}.json"
+    suffix = "" if INTERCONNECT == "western" else f"_{INTERCONNECT}"
+    out = REPO / "workflow" / "results" / "equivalence" / f"findings_{prong}{suffix}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, indent=1, default=str))
     return result

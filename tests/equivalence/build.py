@@ -32,6 +32,8 @@ import sys
 import time
 from pathlib import Path
 
+from .paths import CONFIGFILE
+
 REPO = Path(__file__).resolve().parents[2]
 ANCHOR_SHA = "e7f8bd70"
 ANCHOR_WORKTREE = REPO / ".worktrees" / "anchor-e7f8bd70"
@@ -98,11 +100,9 @@ def provision_anchor_worktree() -> Path:
         else:
             shutil.copy2(entry, dst)
 
-    # Shared harness config (kept in sync from the candidate repo_data copy).
-    shutil.copy2(
-        REPO / "workflow" / "repo_data" / "config" / "config.equivalence.yaml",
-        wf / "config" / "config.equivalence.yaml",
-    )
+    # Shared harness configs (kept in sync from the candidate repo_data copies).
+    for cfg in (REPO / "workflow" / "repo_data" / "config").glob("config.equivalence*.yaml"):
+        shutil.copy2(cfg, wf / "config" / cfg.name)
 
     apply_infra_patches(wt)
 
@@ -148,7 +148,7 @@ def snakemake_cmd(target: str, jobs: int = 4) -> list[str]:
         "snakemake",
         target,
         "--configfile",
-        "config/config.equivalence.yaml",
+        CONFIGFILE,
         "-j",
         str(jobs),
         "--scheduler",
@@ -177,7 +177,7 @@ def build_side(side: str, target: str, jobs: int = 4, timeout: int = 10800) -> d
 def write_manifest(side: str, wt: Path, target: str, wall: float) -> dict:
     wf = wt / "workflow"
     sha = run(["git", "rev-parse", "HEAD"], cwd=wt).stdout.strip()
-    cfg = (wf / "config" / "config.equivalence.yaml").read_bytes()
+    cfg = (wf / CONFIGFILE).read_bytes()
     manifest = {
         "side": side,
         "sha": sha,
@@ -190,7 +190,10 @@ def write_manifest(side: str, wt: Path, target: str, wall: float) -> dict:
     }
     out = REPO / "workflow" / "results" / "equivalence"
     out.mkdir(parents=True, exist_ok=True)
-    path = out / f"manifest_{side}.json"
+    from .paths import INTERCONNECT
+
+    suffix = "" if INTERCONNECT == "western" else f"_{INTERCONNECT}"
+    path = out / f"manifest_{side}{suffix}.json"
     path.write_text(json.dumps(manifest, indent=1))
     log(f"manifest -> {path}")
     return manifest

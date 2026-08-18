@@ -12,6 +12,8 @@ their normalized-name index reset back into a ``name`` column).
 
 from __future__ import annotations
 
+from ..paths import INTERCONNECT as IC
+
 # Relative (rel) thresholds mirroring the harness tolerance policy:
 # assembled-stage per-bus vectors (D2-ish) and solved-stage zone vectors (D7).
 ASSEMBLED_RTOL = 1e-3
@@ -174,9 +176,9 @@ def render(ctx) -> str:
     nc = na = regs_c = regs_a = None
     try:
         nc = ctx["load_network"](
-            ctx["cand_root"] / "resources/equivalence/networks/western/elec_s_l_pp.pkl",
+            ctx["cand_root"] / "resources/equivalence/networks/" + IC + "/elec_s_l_pp.pkl",
         )
-        na = ctx["load_network"](ctx["anch_root"] / "resources/equivalence/western/elec_s.nc")
+        na = ctx["load_network"](ctx["anch_root"] / "resources/equivalence/" + IC + "/elec_s.nc")
         regs_c = ctx["load_regions"]("candidate", "")
         regs_a = ctx["load_regions"]("anchor", "")
     except Exception as e:
@@ -274,8 +276,8 @@ def render(ctx) -> str:
                 "excluded set, so equivalence is unaffected).</p>",
             ]
             for tech in ("onwind", "solar"):
-                pcand = ctx["cand_root"] / f"resources/equivalence/profiles/western/2030/profile_{tech}_s.nc"
-                panch = ctx["anch_root"] / f"resources/equivalence/western/2030/profile_{tech}.nc"
+                pcand = ctx["cand_root"] / f"resources/equivalence/profiles/{IC}/2030/profile_{tech}_s.nc"
+                panch = ctx["anch_root"] / "resources/equivalence/" + IC + "/2030/profile_{tech}.nc"
 
                 def _one(pcand=pcand, panch=panch, tech=tech):
                     with xr.open_dataset(pcand) as dc, xr.open_dataset(panch) as da:

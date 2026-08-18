@@ -16,10 +16,15 @@ candidate counterpart.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 RUN = "equivalence"
-INTERCONNECT = "western"
+INTERCONNECT = os.environ.get("EQ_INTERCONNECT", "western")
+UNTIL = os.environ.get("EQ_UNTIL", "")  # 'assembled' = stop pairs at the assembled stage
+CONFIGFILE = (
+    "config/config.equivalence.yaml" if INTERCONNECT == "western" else f"config/config.equivalence-{INTERCONNECT}.yaml"
+)
 CLUSTERS = "4"
 LL = "v1.0"
 OPTS = "REM-3h"
@@ -82,6 +87,8 @@ def prong_pairs(prong: int) -> list[ArtifactPair]:
                 kind="network_pkl_vs_nc",
             ),
         )
+    if UNTIL == "assembled":
+        return pairs
     core = f"elec_s{s}_c{CLUSTERS}"
     prepared = f"{core}_ec_l{LL}_{OPTS}"
     pairs += [
@@ -135,3 +142,13 @@ def anchor_final_target(prong: int, solve: bool = True) -> str:
     if solve:
         return f"{RES}/{INTERCONNECT}/networks/{prepared}.nc"
     return f"{EQ}/{INTERCONNECT}/{prepared}.nc"
+
+
+def assembled_target() -> str:
+    """Candidate assembled-stage target (prong 1)."""
+    return f"{EQ}/networks/{INTERCONNECT}/elec_s_l_pp.pkl"
+
+
+def anchor_assembled_target() -> str:
+    """Anchor assembled-stage target (its simplify output, prong 1)."""
+    return f"{EQ}/{INTERCONNECT}/elec_s.nc"
