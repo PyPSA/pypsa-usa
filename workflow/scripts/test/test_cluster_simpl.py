@@ -50,7 +50,8 @@ def substation_network():
     """Tiny 4-bus substation-level network with the columns cluster_simpl expects.
 
     Mirrors what aggregate_to_substations produces under topological_boundaries='county':
-    every bus has reeds_zone, county (FIPS), Pd, LAF_state. No loads or generators
+    every bus has reeds_zone, county (FIPS), Pd, load_weight, LAF_state. No loads
+    or generators
     (cluster_simpl runs before add_electricity).
     """
     n = pypsa.Network()
@@ -65,6 +66,7 @@ def substation_network():
     n.buses["reeds_state"] = ["CA", "CA", "CA", "CA"]
     n.buses["interconnect"] = "western"
     n.buses["Pd"] = [100.0, 200.0, 150.0, 250.0]
+    n.buses["load_weight"] = [100.0, 200.0, 150.0, 250.0]
     n.buses["LAF_state"] = [0.25, 0.25, 0.25, 0.25]
     n.buses["substation_lv"] = True
 

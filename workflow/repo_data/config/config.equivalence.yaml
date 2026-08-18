@@ -72,6 +72,9 @@ electricity:
     Link: []
   demand:
     profile: efs
+    # pin the legacy Breakthrough Pd weight: the anchor branch has no
+    # census-population method, so equivalence requires the legacy path
+    bus_allocation: breakthrough
     scenario:
       efs_case: reference
       efs_speed: moderate

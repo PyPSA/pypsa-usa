@@ -141,14 +141,18 @@ def apply_infra_patches(wt: Path) -> None:
         log("applied infra patch: common.smk constants source-cache fix")
 
 
-def snakemake_cmd(target: str, jobs: int = 4) -> list[str]:
+def snakemake_cmd(
+    target: str,
+    jobs: int = 4,
+    configfile: str = "config/config.equivalence.yaml",
+) -> list[str]:
     return [
         "uv",
         "run",
         "snakemake",
         target,
         "--configfile",
-        "config/config.equivalence.yaml",
+        configfile,
         "-j",
         str(jobs),
         "--scheduler",
