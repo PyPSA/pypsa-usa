@@ -60,6 +60,14 @@ def render(ctx) -> str:
             diff = vals_c.reindex(idx, fill_value=diff_fill) - vals_a.reindex(idx, fill_value=diff_fill)
         finite = diff.values[np.isfinite(diff.values)]
         dmax = float(np.abs(finite).max()) if finite.size else 0.0
+        dmax_rel_pct = None
+        try:
+            _i = diff.abs().idxmax()
+            _a = abs(float(vals_a.reindex(diff.index).get(_i, float("nan"))))
+            if np.isfinite(_a) and _a > 0:
+                dmax_rel_pct = abs(float(diff.get(_i))) / _a * 100.0
+        except Exception:
+            pass
         vmax = float(
             max(
                 vals_c.max() if len(vals_c) else 0.0,
@@ -109,6 +117,7 @@ def render(ctx) -> str:
             "identical within tolerance &mdash; the difference panel is blank by construction"
             if same
             else f"largest per-region difference: {dmax:,.4g} {unit}"
+            + (f" ({dmax_rel_pct:,.3g}% of the anchor value there)" if dmax_rel_pct is not None else "")
         )
         return img(fig, f"{title} &mdash; {note}"), dmax
 

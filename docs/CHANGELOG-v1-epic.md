@@ -99,6 +99,15 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **Rename rule `cluster_simpl` -> `cluster_resources`** (user request
+  2026-08-07; rule name, log path, walltime config key, living docs; the
+  script file stays `workflow/scripts/cluster_simpl.py`). *Results effect:*
+  None (identical code, outputs, and paths).
+- **Report: % differences on every numerical delta** — findings now carry
+  `max_rel_pct`/`rel_pct` (comparator), and all report narratives, map
+  captions, and delta quotes state relative differences alongside absolutes.
+  *Results effect:* None (reporting only).
+
 - **Equivalence report revamped into a single explanatory artifact**
   (`tests/equivalence/report_sections/`, grilling session 2026-08-07):
   one `equivalence_report.html` with executive summary (verdict, provenance

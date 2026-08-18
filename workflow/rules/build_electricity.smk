@@ -819,7 +819,7 @@ if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:
             "../scripts/aggregate_egs.py"
 
 
-rule cluster_simpl:
+rule cluster_resources:
     params:
         aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
         focus_weights=config_provider("focus_weights", default=False),
@@ -835,11 +835,11 @@ rule cluster_simpl:
         regions_offshore=GEOSPATIAL + "{interconnect}/regions_offshore_s{simpl}.geojson",
         busmap=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
     log:
-        "logs/cluster_simpl/{interconnect}/elec_s{simpl}.log",
+        "logs/cluster_resources/{interconnect}/elec_s{simpl}.log",
     threads: 1
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 150000) * attempt * 1.5,
-        walltime=config_provider("walltime", "cluster_simpl", default="01:00:00"),
+        walltime=config_provider("walltime", "cluster_resources", default="01:00:00"),
     script:
         "../scripts/cluster_simpl.py"
 
