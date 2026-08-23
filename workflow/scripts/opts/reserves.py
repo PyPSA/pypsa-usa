@@ -13,16 +13,8 @@ import pandas as pd
 import pypsa
 from linopy import merge
 from opts._helpers import get_region_buses
-from pypsa.descriptors import (
-    expand_series,
-    get_activity_mask,
-    get_bounds_pu,
-    nominal_attrs,
-)
-from pypsa.descriptors import (
-    get_switchable_as_dense as get_as_dense,
-)
-from pypsa.optimization.common import reindex
+from pypsa.common import expand_series
+from pypsa.descriptors import nominal_attrs
 from xarray import DataArray, concat
 
 logger = logging.getLogger(__name__)
@@ -47,8 +39,8 @@ def define_SU_reserve_constraints(n, sns):
     m = n.model
     c = "StorageUnit"
     dim = "snapshot"
-    assets = n.df(c)
-    active = DataArray(get_activity_mask(n, c, sns))
+    assets = n.components[c].static
+    active = DataArray(n.components[c].get_activity_mask(sns))
 
     if assets.empty:
         return
@@ -56,16 +48,16 @@ def define_SU_reserve_constraints(n, sns):
     # elapsed hours
     eh = expand_series(n.snapshot_weightings.stores[sns], assets.index)
     # efficiencies
-    eff_stand = (1 - get_as_dense(n, c, "standing_loss", sns)).pow(eh)
-    eff_dispatch = get_as_dense(n, c, "efficiency_dispatch", sns)
-    eff_store = get_as_dense(n, c, "efficiency_store", sns)
+    eff_stand = (1 - n.get_switchable_as_dense(c, "standing_loss", sns)).pow(eh)
+    eff_dispatch = n.get_switchable_as_dense(c, "efficiency_dispatch", sns)
+    eff_store = n.get_switchable_as_dense(c, "efficiency_store", sns)
 
     soc = m[f"{c}-state_of_charge_RESERVES"]
 
     lhs = [
         (-1, soc),
-        (-1 / eff_dispatch * eh, m[f"{c}-p_dispatch_RESERVES"]),
-        (eff_store * eh, m[f"{c}-p_store_RESERVES"]),
+        (DataArray(-1 / eff_dispatch * eh), m[f"{c}-p_dispatch_RESERVES"]),
+        (DataArray(eff_store * eh), m[f"{c}-p_store_RESERVES"]),
     ]
 
     # We create a mask `include_previous_soc` which excludes the first snapshot
@@ -77,7 +69,7 @@ def define_SU_reserve_constraints(n, sns):
 
     # We add inflow and initial soc for noncyclic assets to rhs
     soc_init = assets.state_of_charge_initial.to_xarray()
-    rhs = DataArray(-get_as_dense(n, c, "inflow", sns).mul(eh))
+    rhs = DataArray(-n.get_switchable_as_dense(c, "inflow", sns).mul(eh))
 
     if isinstance(sns, pd.MultiIndex):
         # If multi-horizon optimizing, we update the previous_soc and the rhs
@@ -111,7 +103,7 @@ def define_SU_reserve_constraints(n, sns):
             per_period,
             include_previous_soc,
         )
-    lhs += [(eff_stand, previous_soc)]
+    lhs += [(DataArray(eff_stand), previous_soc)]
     rhs = rhs.where(include_previous_soc, rhs - soc_init)
     m.add_constraints(lhs, "=", rhs, name=f"{c}-energy_balance_RESERVES", mask=active)
 
@@ -139,20 +131,28 @@ def define_operational_constraints_for_extendables(
     lhs_lower: DataArray | tuple
     lhs_upper: DataArray | tuple
 
-    ext_i = n.get_extendable_i(c)
+    c_obj = n.components[c]
+    ext_i = c_obj.extendables
 
     if ext_i.empty:
         return
+    if isinstance(ext_i, pd.MultiIndex):
+        ext_i = ext_i.unique(level="name")
 
-    min_pu, max_pu = map(DataArray, get_bounds_pu(n, c, sns, ext_i, attr))
+    min_pu, max_pu = c_obj.get_bounds_pu(attr=attr)
+    min_pu = min_pu.sel(name=ext_i)
+    max_pu = max_pu.sel(name=ext_i)
+    if "snapshot" in min_pu.dims:
+        min_pu = min_pu.sel(snapshot=sns)
+        max_pu = max_pu.sel(snapshot=sns)
 
-    dispatch = reindex(n.model[f"{c}-{attr}_RESERVES"], c, ext_i)
-    capacity = n.model[f"{c}-{nominal_attrs[c]}"]
+    dispatch = n.model[f"{c}-{attr}_RESERVES"].sel(name=ext_i)
+    capacity = n.model[f"{c}-{nominal_attrs[c]}"].sel(name=ext_i)
 
-    active = get_activity_mask(n, c, sns, ext_i)
+    active = c_obj.da.active.sel(name=ext_i, snapshot=sns)
 
-    lhs_lower = (1, dispatch), (-min_pu, capacity)
-    lhs_upper = (1, dispatch), (-max_pu, capacity)
+    lhs_lower = dispatch - min_pu * capacity
+    lhs_upper = dispatch - max_pu * capacity
 
     n.model.add_constraints(
         lhs_lower,
@@ -193,21 +193,27 @@ def define_operational_constraints_for_non_extendables(
     dispatch_lower: DataArray | tuple
     dispatch_upper: DataArray | tuple
 
-    fix_i = n.get_non_extendable_i(c)
-    fix_i = fix_i.difference(n.get_committable_i(c)).rename(fix_i.name)
+    c_obj = n.components[c]
+    fix_i = c_obj.fixed.difference(c_obj.committables)
 
     if fix_i.empty:
         return
 
-    nominal_fix = n.df(c)[nominal_attrs[c]].reindex(fix_i)
-    min_pu, max_pu = get_bounds_pu(n, c, sns, fix_i, attr)
-    lower = min_pu.mul(nominal_fix)
-    upper = max_pu.mul(nominal_fix)
+    nominal_fix = c_obj.da[nominal_attrs[c]].sel(name=fix_i)
+    min_pu, max_pu = c_obj.get_bounds_pu(attr=attr)
+    min_pu = min_pu.sel(name=fix_i)
+    max_pu = max_pu.sel(name=fix_i)
+    if "snapshot" in min_pu.dims:
+        min_pu = min_pu.sel(snapshot=sns)
+        max_pu = max_pu.sel(snapshot=sns)
 
-    active = get_activity_mask(n, c, sns, fix_i)
+    lower = min_pu * nominal_fix
+    upper = max_pu * nominal_fix
 
-    dispatch_lower = reindex(n.model[f"{c}-{attr}_RESERVES"], c, fix_i)
-    dispatch_upper = reindex(n.model[f"{c}-{attr}_RESERVES"], c, fix_i)
+    active = c_obj.da.active.sel(name=fix_i, snapshot=sns)
+
+    dispatch_lower = n.model[f"{c}-{attr}_RESERVES"].sel(name=fix_i)
+    dispatch_upper = n.model[f"{c}-{attr}_RESERVES"].sel(name=fix_i)
 
     n.model.add_constraints(
         dispatch_lower,
@@ -241,7 +247,7 @@ def _get_regional_demand(n, region_buses):
         Hourly demand series for the region
     """
     rhs = (
-        (-get_as_dense(n, "Load", "p_set", n.snapshots) * n.loads.sign)
+        (-n.get_switchable_as_dense("Load", "p_set", n.snapshots) * n.loads.sign)
         .T.groupby(n.loads.bus)
         .sum()
         .T.reindex(columns=region_buses.index, fill_value=0)
@@ -308,7 +314,7 @@ def define_erm_nodal_balance_constraints(
         snap_is_zero = pd.Series(False, index=sns, dtype=bool)
 
     def _activity_da(component):
-        mask = get_activity_mask(n, component, sns)
+        mask = n.components[component].get_activity_mask(sns)
         mask.index.name = "snapshot"
         return DataArray(mask)
 
@@ -317,7 +323,7 @@ def define_erm_nodal_balance_constraints(
     line_activity = _activity_da("Line") if not n.lines.empty else None
     link_activity = _activity_da("Link") if not n.links.empty else None
 
-    link_efficiency = get_as_dense(n, "Link", "efficiency", sns)
+    link_efficiency = n.get_switchable_as_dense("Link", "efficiency", sns)
     link_efficiency.index.name = "snapshot"
 
     args = [
@@ -332,14 +338,14 @@ def define_erm_nodal_balance_constraints(
     exprs = []
 
     for c, attr, column, sign, activity in args:
-        if n.df(c).empty:
+        if n.components[c].static.empty:
             continue
 
-        if "sign" in n.df(c):
-            sign = sign * n.df(c).sign
+        if "sign" in n.components[c].static:
+            sign = sign * n.components[c].static.sign
 
         expr = DataArray(sign) * m[f"{c}-{attr}"]
-        df = n.df(c)
+        df = n.components[c].static
         # For components with both bus0 and bus1, require both to be in buses
         if "bus0" in df.columns and "bus1" in df.columns:
             mask = df["bus0"].isin(buses) & df["bus1"].isin(buses)
@@ -347,11 +353,11 @@ def define_erm_nodal_balance_constraints(
         else:
             cbuses = df[column][lambda ds: ds.isin(buses)].rename("Bus")
 
-        expr = expr.sel({c: cbuses.index})
+        expr = expr.sel(name=cbuses.index)
 
         if expr.size:
             if activity is not None:
-                expr = expr.where(activity.sel({c: cbuses.index}))
+                expr = expr.where(activity.sel(name=cbuses.index))
             exprs.append(expr.groupby(cbuses).sum())
 
     # Extendable generators on LHS: p_nom * p_max_pu * activity_mask
@@ -361,17 +367,19 @@ def define_erm_nodal_balance_constraints(
 
     if not region_ext_gens.empty:
         ext_p_nom = m["Generator-p_nom"].loc[region_ext_gens.index]
-        ext_p_max_pu = get_as_dense(n, "Generator", "p_max_pu", sns, inds=region_ext_gens.index)
+        ext_p_max_pu = n.get_switchable_as_dense("Generator", "p_max_pu", sns, inds=region_ext_gens.index)
 
         ext_p_max_pu.index.name = "snapshot"
-        ext_p_max_pu.columns.name = "Generator-ext"
-        ext_contribution = ext_p_nom * ext_p_max_pu
+        ext_p_max_pu.columns.name = "name"
+        # wrap in DataArray so linopy keeps the flat 'snapshot' dim of the
+        # MultiIndex frames instead of unstacking to period x timestep
+        ext_contribution = ext_p_nom * DataArray(ext_p_max_pu)
 
         # Use .where() to remove terms for inactive periods (sets var labels to -1)
         # rather than zeroing coefficients, which leaves orphaned variable references
-        activity = get_activity_mask(n, "Generator", sns)[region_ext_gens.index]
+        activity = n.components["Generator"].get_activity_mask(sns)[region_ext_gens.index]
         activity.index.name = "snapshot"
-        activity.columns.name = "Generator-ext"
+        activity.columns.name = "name"
 
         # Exclude emitting generators from ERM credit in zero-emission periods
         if snap_is_zero.any() and emitting_carriers:
@@ -380,7 +388,7 @@ def define_erm_nodal_balance_constraints(
                 activity.loc[snap_is_zero, fossil_cols] = False
                 # pandas .loc boolean assignment can silently reset index/column names
                 activity.index.name = "snapshot"
-                activity.columns.name = "Generator-ext"
+                activity.columns.name = "name"
                 logger.debug(
                     f"Excluded {len(fossil_cols)} emitting extendable generators from ERM "
                     f"in zero-emission snapshots for region {region_name}.",
@@ -390,8 +398,8 @@ def define_erm_nodal_balance_constraints(
 
         gen_buses = DataArray(
             region_ext_gens.bus.values,
-            dims=["Generator-ext"],
-            coords={"Generator-ext": region_ext_gens.index.values},
+            dims=["name"],
+            coords={"name": region_ext_gens.index.values},
             name="Bus",
         )
         exprs.append(ext_contribution.groupby(gen_buses).sum())
@@ -401,7 +409,7 @@ def define_erm_nodal_balance_constraints(
     # Non-extendable generators on RHS: p_nom * p_max_pu * activity_mask
     region_nonext_gens = n.generators[region_gens & ~extendable_gens]
     if not region_nonext_gens.empty:
-        nonext_activity = get_activity_mask(n, "Generator", sns)[region_nonext_gens.index]
+        nonext_activity = n.components["Generator"].get_activity_mask(sns)[region_nonext_gens.index]
         nonext_activity.index.name = "snapshot"
 
         # Exclude emitting generators from ERM credit in zero-emission periods
@@ -414,7 +422,7 @@ def define_erm_nodal_balance_constraints(
                     f"from ERM credit in zero-emission snapshots for region {region_name}.",
                 )
 
-        nonext_p_max_pu = get_as_dense(n, "Generator", "p_max_pu", sns, inds=region_nonext_gens.index)
+        nonext_p_max_pu = n.get_switchable_as_dense("Generator", "p_max_pu", sns, inds=region_nonext_gens.index)
         nonext_p_max_pu.index.name = "snapshot"
         nonext_p_max_pu = nonext_p_max_pu * nonext_activity
         rhs_existing = region_nonext_gens.p_nom * nonext_p_max_pu
@@ -585,22 +593,22 @@ def add_operational_reserve_margin(n, sns, config):
         name="Generator-r",
     )
     reserve = n.model["Generator-r"]
-    summed_reserve = reserve.sum("Generator")
+    summed_reserve = reserve.sum("name")
 
     # Share of extendable renewable capacities
     ext_i = n.generators.query("p_nom_extendable").index
     vres_i = n.generators_t.p_max_pu.columns
     if not ext_i.empty and not vres_i.empty:
         capacity_factor = n.generators_t.p_max_pu[vres_i.intersection(ext_i)]
-        p_nom_vres = n.model["Generator-p_nom"].loc[vres_i.intersection(ext_i)].rename({"Generator-ext": "Generator"})
-        lhs = summed_reserve + (p_nom_vres * (-eps_vres * capacity_factor)).sum(
-            "Generator",
+        p_nom_vres = n.model["Generator-p_nom"].loc[vres_i.intersection(ext_i)]
+        lhs = summed_reserve + (p_nom_vres * DataArray(-eps_vres * capacity_factor)).sum(
+            "name",
         )
     else:  # if no extendable VRES
         lhs = summed_reserve
 
     # Total demand per t
-    demand = get_as_dense(n, "Load", "p_set").sum(axis=1)
+    demand = n.get_switchable_as_dense("Load", "p_set").sum(axis=1)
 
     # VRES potential of non extendable generators
     capacity_factor = n.generators_t.p_max_pu[vres_i.difference(ext_i)]
@@ -622,13 +630,11 @@ def add_operational_reserve_margin(n, sns, config):
 
     capacity_fixed = n.generators.p_nom[fix_i]
 
-    p_max_pu = get_as_dense(n, "Generator", "p_max_pu")
+    p_max_pu = n.get_switchable_as_dense("Generator", "p_max_pu")
 
     if not ext_i.empty:
-        capacity_variable = n.model["Generator-p_nom"].rename(
-            {"Generator-ext": "Generator"},
-        )
-        lhs = dispatch + reserve - capacity_variable * p_max_pu[ext_i]
+        capacity_variable = n.model["Generator-p_nom"]
+        lhs = dispatch + reserve - capacity_variable * DataArray(p_max_pu[ext_i])
     else:
         lhs = dispatch + reserve
 

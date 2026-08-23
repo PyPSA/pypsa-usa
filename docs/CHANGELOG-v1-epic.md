@@ -99,6 +99,55 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **PyPSA v1 migration: `pypsa==1.2.4` / `linopy==0.9.1`** (branch
+  `claude/pypsa-v1-migration-data-storage-26840f`; redo of upstream
+  [PyPSA#762](https://github.com/PyPSA/pypsa-usa/pull/762) against the
+  v1-epic tree). Every removed pre-1.0 API is migrated: `madd`/`mremove` →
+  `add`/`remove` (with `names=` → `name=`; v1 `add` returns `None`),
+  `clustering.network` → `clustering.n`, `n.df/n.pnl/iterate_components` →
+  `n.components[c].static/.dynamic` iteration, `pypsa.descriptors` imports →
+  `n.get_switchable_as_dense` / component methods / `pypsa.common.expand_series`,
+  `pypsa.components.component_attrs` → `n.components[c].defaults`,
+  `n.copy(with_time=False)` → `n.copy(snapshots=[])`, statistics groupers
+  (`get_bus_and_carrier` → `groupby=["bus", "carrier"]`; `comps`/`aggregate_time`
+  → `components`/`groupby_time`), `pypsa.pf` logger → `pypsa.network.power_flow`.
+  linopy 0.9 dim alignment: model variables now live on dim `"name"` (not
+  `"Generator"`/`"Generator-ext"`), fixed across `opts/policy.py`,
+  `opts/reserves.py`, `opts/land.py`, `opts/sector.py`, `opts/interchange.py`;
+  the two RESERVES operational-constraint builders were rewritten to mirror
+  pypsa v1's internal implementations (`c.get_bounds_pu` xarray form), and
+  pandas MultiIndex coefficient frames are wrapped in `DataArray(...)` so linopy
+  keeps the flat `snapshot` dim instead of unstacking to `period × timestep`.
+  *Results effect: None intended for non-UC runs, with two pinned exceptions:*
+  (1) pypsa v1 flipped `e_cyclic_per_period` / `cyclic_state_of_charge_per_period`
+  defaults True→False — all 15 cyclic stores/storage-unit adds now pin
+  `*_per_period=True` explicitly to preserve per-investment-period cyclicity;
+  (2) unit-commitment runs may see small deltas from pypsa's UC ramp-limit fixes
+  (first-snapshot ramp limits now enforced; `ramp_limit_start_up/shut_down`
+  defaults 1→NaN). The bus index is named `"name"` under v1; `bus2sub.csv` keeps
+  its legacy `Bus` header via `index_label="Bus"` so downstream readers and
+  artifacts are unchanged, and in-memory nearest-bus matching was made
+  index-based (this also fixes two latent `.Bus`-attribute bugs in
+  `build_base_network.match_missing_buses` when called with `n.buses`-derived
+  frames). Dead `load_network` custom-component helper deleted (no callers;
+  used removed `pypsa.components.components`). Unit-commitment defaults now
+  read from `n.components["Generator"].defaults` instead of the removed
+  module-level `component_attrs` (all-zero defaults, identical behavior; the
+  upstream PR's `data/unit_commitment.csv` was deliberately not adopted to
+  keep behavior byte-identical). Test suite: 45 passed / 1 skipped — the
+  migration fixed 9 previously skip-marked "pre-existing failure on v1-epic"
+  tests (RPS, TCT, regional CO2, ERM zero-emission) whose failures were
+  old-stack artifacts; their skip markers are removed. The one remaining skip
+  (`test_e2e_solve_network_myopic`) was verified pre-existing: the fixture
+  model is infeasible on the old stack (pypsa 0.32) too. A pypsa bug
+  (still in 1.3.0) where `Network.copy()` drops the hidden
+  `name="snapshot"` attribute of MultiIndex snapshots (breaking `c.da`
+  accessors) is worked around in `workflow/scripts/test/conftest.py`; netCDF
+  round-trips are unaffected. `pyproject.toml` gains an explicit
+  `tables==3.10.2` pin (previously an implicit transitive dependency that the
+  re-lock dropped). See `docs/pypsa-v1-migration.md` for the migration map and
+  the pypsa-v1 data-storage features we can now adopt.
+
 - **Out-of-footprint NREL caps: loud accounting + opt-in nearest-bus
   reassignment** (`workflow/scripts/build_renewable_profiles.py`,
   `workflow/scripts/nrel_exclusion/build_nrel_bus_capacities.py`, new

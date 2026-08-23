@@ -75,11 +75,11 @@ def _capacity_by_bus_carrier(
     Mirrors `summary.get_capacity_brownfield` but filters by activity in `horizon`.
     """
     parts = []
-    for c in n.iterate_components(["Generator", "StorageUnit", "Link"]):
-        mask = _active_mask(c.df, horizon)
+    for c in (n.components[name] for name in ["Generator", "StorageUnit", "Link"]):
+        mask = _active_mask(c.static, horizon)
         if not mask.any():
             continue
-        df = c.df.loc[mask]
+        df = c.static.loc[mask]
         if c.name == "Link":
             parts.append(df[attr].groupby([df.bus0, df.carrier]).sum().rename_axis(index={"bus0": "bus"}))
             parts.append(df[attr].groupby([df.bus1, df.carrier]).sum().rename_axis(index={"bus1": "bus"}))
@@ -512,8 +512,12 @@ def plot_capacity_map_by_horizon(
         elif kind == "new":
             # Restrict to assets vintaged to this horizon: built_year == horizon.
             parts = []
-            for c in n.iterate_components(["Generator", "StorageUnit", "Link"]):
-                df = c.df[c.df.get("build_year") == horizon] if "build_year" in c.df.columns else c.df.iloc[0:0]
+            for c in (n.components[name] for name in ["Generator", "StorageUnit", "Link"]):
+                df = (
+                    c.static[c.static.get("build_year") == horizon]
+                    if "build_year" in c.static.columns
+                    else c.static.iloc[0:0]
+                )
                 if df.empty:
                     continue
                 if c.name == "Link":

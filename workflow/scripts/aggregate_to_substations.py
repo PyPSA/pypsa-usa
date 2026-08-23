@@ -65,7 +65,7 @@ def remove_transformers(n):
     trafo_map = trafo_map.reindex(n.buses.index)
 
     for c in n.one_port_components | n.branch_components:
-        df = n.df(c)
+        df = n.components[c].static
         for col in df.columns:
             if col.startswith("bus"):
                 df[col] = df[col].map(trafo_map)
@@ -79,8 +79,8 @@ def remove_transformers(n):
             transferred = n.buses[col].groupby(trafo_map).sum(min_count=1)
             n.buses.loc[transferred.index, col] = transferred
 
-    n.mremove("Transformer", n.transformers.index)
-    n.mremove("Bus", n.buses.index.difference(trafo_map))
+    n.remove("Transformer", n.transformers.index)
+    n.remove("Bus", n.buses.index.difference(trafo_map))
     return n, trafo_map
 
 
@@ -140,7 +140,7 @@ def aggregate_to_substations(
                 "zonal_aggregation must be either balancing_area, country, or state",
             )
 
-    network_s = clustering.network
+    network_s = clustering.n
 
     network_s.buses["interconnect"] = substations.interconnect
     network_s.buses["x"] = substations.x

@@ -283,10 +283,10 @@ def compare_networks(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
         _compare_solved(pair, nc, na, findings)
         return
     comps = sorted(
-        {c.name for c in nc.iterate_components()} | {c.name for c in na.iterate_components()},
+        {c.name for c in nc.components if not c.static.empty} | {c.name for c in na.components if not c.static.empty},
     )
     for name in comps:
-        dfc, dfa = nc.df(name), na.df(name)
+        dfc, dfa = nc.components[name].static, na.components[name].static
         if dfc.empty and dfa.empty:
             continue
         map_c = map_a = None
@@ -307,7 +307,7 @@ def compare_networks(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
                 dfc, map_c = kc
                 dfa, map_a = ka
         compare_frames(pair.stage, name, dfc, dfa, findings)
-        pnl_c, pnl_a = nc.pnl(name), na.pnl(name)
+        pnl_c, pnl_a = nc.components[name].dynamic, na.components[name].dynamic
         for attr in sorted(set(pnl_c) | set(pnl_a)):
             tc = pnl_c.get(attr, pd.DataFrame())
             ta = pnl_a.get(attr, pd.DataFrame())

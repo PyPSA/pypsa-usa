@@ -68,7 +68,7 @@ def add_electricity_infrastructure(
     df.index = df["bus0"] + " " + df["sector"]
     df["carrier"] = df["sector"] + f"-{elec}"
 
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix=suffix,
@@ -119,7 +119,7 @@ def add_electricity_dr(
 
     # two buses for forward and backwards load shifting
 
-    n.madd(
+    n.add(
         "Bus",
         df.index,
         suffix="-fwd-dr",
@@ -131,7 +131,7 @@ def add_electricity_dr(
         STATE_NAME=df.STATE_NAME,
     )
 
-    n.madd(
+    n.add(
         "Bus",
         df.index,
         suffix="-bck-dr",
@@ -145,7 +145,7 @@ def add_electricity_dr(
 
     # seperate charging/discharging links to follow conventions
 
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix="-fwd-dr-charger",
@@ -158,7 +158,7 @@ def add_electricity_dr(
         build_year=n.investment_periods[0],
     )
 
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix="-fwd-dr-discharger",
@@ -171,7 +171,7 @@ def add_electricity_dr(
         build_year=n.investment_periods[0],
     )
 
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix="-bck-dr-charger",
@@ -184,7 +184,7 @@ def add_electricity_dr(
         build_year=n.investment_periods[0],
     )
 
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix="-bck-dr-discharger",
@@ -200,12 +200,13 @@ def add_electricity_dr(
     # backward stores have positive marginal cost storage and postive e
     # forward stores have negative marginal cost storage and negative e
 
-    n.madd(
+    n.add(
         "Store",
         df.index,
         suffix="-bck-dr",
         bus=df.index + "-bck-dr",
         e_cyclic=True,
+        e_cyclic_per_period=True,  # pypsa v1 flipped this default to False
         e_nom_extendable=False,
         e_nom=1e9,
         e_min_pu=0,
@@ -217,12 +218,13 @@ def add_electricity_dr(
         standing_loss=0,
     )
 
-    n.madd(
+    n.add(
         "Store",
         df.index,
         suffix="-fwd-dr",
         bus=df.index + "-fwd-dr",
         e_cyclic=True,
+        e_cyclic_per_period=True,  # pypsa v1 flipped this default to False
         e_nom_extendable=False,
         e_nom=1e9,
         e_min_pu=-1,
@@ -272,7 +274,7 @@ def _split_urban_rural_load(
         # strip out the 'res-heat' and 'com-heat' to add in 'rural' and 'urban'
         new_buses.index = new_buses.index.str.rstrip(f" {sector}-{fuel}")
 
-        n.madd(
+        n.add(
             "Bus",
             new_buses.index,
             suffix=f" {sector}-{system}-{fuel}",
@@ -292,7 +294,7 @@ def _split_urban_rural_load(
         )
         loads_t = loads_t.mul(ratios[f"{system}_fraction"])
 
-        n.madd(
+        n.add(
             "Load",
             new_buses.index,
             suffix=f" {sector}-{system}-{fuel}",
@@ -302,8 +304,8 @@ def _split_urban_rural_load(
         )
 
     # remove old combined loads from the network
-    n.mremove("Load", load_names)
-    n.mremove("Bus", load_names)
+    n.remove("Load", load_names)
+    n.remove("Bus", load_names)
 
 
 def _format_total_load(
@@ -333,7 +335,7 @@ def _format_total_load(
     # strip out the 'res-heat' and 'com-heat' to add in 'rural' and 'urban'
     new_buses.index = new_buses.index.str.rstrip(f" {sector}-{fuel}")
 
-    n.madd(
+    n.add(
         "Bus",
         new_buses.index,
         suffix=f" {sector}-total-{fuel}",
@@ -352,7 +354,7 @@ def _format_total_load(
         columns={x: x.rstrip(f" {sector}-{fuel}") for x in loads_t.columns},
     )
 
-    n.madd(
+    n.add(
         "Load",
         new_buses.index,
         suffix=f" {sector}-total-{fuel}",
@@ -362,5 +364,5 @@ def _format_total_load(
     )
 
     # remove old combined loads from the network
-    n.mremove("Load", load_names)
-    n.mremove("Bus", load_names)
+    n.remove("Load", load_names)
+    n.remove("Bus", load_names)

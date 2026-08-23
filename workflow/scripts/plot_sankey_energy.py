@@ -13,7 +13,6 @@ import pypsa
 from _helpers import configure_logging, mock_snakemake
 from constants import ATB_TECH_MAPPER, TBTU_2_MWH
 from constants_sector import TransportEfficiency
-from pypsa.descriptors import get_switchable_as_dense
 from summary_sector import _get_gens_in_state, _get_links_in_state
 
 # These are node colors! Energy Services and Rejected Energy links do not
@@ -110,7 +109,7 @@ def _get_consumption_generators(
         generators = n.generators.index.to_list()
 
     weights = n.snapshot_weightings.objective
-    eff = get_switchable_as_dense(n, "Generator", "efficiency")
+    eff = n.get_switchable_as_dense("Generator", "efficiency")
 
     df = n.generators_t["p"].div(eff).loc[period][generators].rename(columns=n.generators.carrier)
     df = df.T.groupby(level=0).sum().T
@@ -130,7 +129,7 @@ def _get_rejected_generators(
         generators = n.generators.index.to_list()
 
     weights = n.snapshot_weightings.objective
-    eff = get_switchable_as_dense(n, "Generator", "efficiency")
+    eff = n.get_switchable_as_dense("Generator", "efficiency")
 
     consumption = n.generators_t["p"].div(eff).loc[period][generators].rename(columns=n.generators.carrier)
     production = n.generators_t["p"].loc[period][generators].rename(columns=n.generators.carrier)
@@ -296,7 +295,7 @@ def _get_service_rejected(
 
     links = n.links[n.links.index.isin(links_in_state) & n.links.carrier.str.startswith(f"{sector}-")]
 
-    eff = get_switchable_as_dense(n, "Link", "efficiency")
+    eff = n.get_switchable_as_dense("Link", "efficiency")
     supply = n.links_t["p1"].mul(-1)
 
     # rejected will be less than 0 for COP > 1
@@ -342,7 +341,7 @@ def _get_industry_rejected(
 
     links = n.links[n.links.index.isin(links_in_state) & n.links.carrier.str.startswith("ind-")]
 
-    eff = get_switchable_as_dense(n, "Link", "efficiency")
+    eff = n.get_switchable_as_dense("Link", "efficiency")
     supply = n.links_t["p1"].mul(-1)
 
     # rejected will be less than 0 for COP > 1

@@ -111,7 +111,7 @@ if __name__ == "__main__":
             weighting_strategy="population",
         )
         busmap = clustering.busmap
-        n = clustering.network
+        n = clustering.n
 
         cluster_regions((busmap,), snakemake.input, snakemake.output)
     else:

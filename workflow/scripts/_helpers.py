@@ -163,8 +163,8 @@ def log_network_schema(
         Pass this back as baseline= on the matching exit call.
     """
     snapshot: dict[str, dict] = {}
-    for component in n.iterate_components():
-        df = component.df
+    for component in n.components:
+        df = component.static
         if df.empty:
             continue
         snapshot[component.name] = {
@@ -205,59 +205,6 @@ def log_network_schema(
                 removed,
             )
     return snapshot
-
-
-def load_network(import_name=None, custom_components=None):
-    """
-    Helper for importing a pypsa.Network with additional custom components.
-
-    Parameters
-    ----------
-    import_name : str
-        As in pypsa.Network(import_name)
-    custom_components : dict
-        Dictionary listing custom components.
-        For using ``snakemake.config['override_components']``
-        in ``config.yaml`` define:
-
-        .. code:: yaml
-
-            override_components:
-                ShadowPrice:
-                    component: ["shadow_prices","Shadow price for a global constraint.",np.nan]
-
-    Attributes
-    ----------
-                    name: ["string","n/a","n/a","Unique name","Input (required)"]
-                    value: ["float","n/a",0.,"shadow value","Output"]
-
-    Returns
-    -------
-    pypsa.Network
-    """
-    from pypsa.descriptors import Dict
-
-    override_components = None
-    override_component_attrs = None
-
-    if custom_components is not None:
-        override_components = pypsa.components.components.copy()
-        override_component_attrs = Dict(
-            {k: v.copy() for k, v in pypsa.components.component_attrs.items()},
-        )
-        for k, v in custom_components.items():
-            override_components.loc[k] = v["component"]
-            override_component_attrs[k] = pd.DataFrame(
-                columns=["type", "unit", "default", "description", "status"],
-            )
-            for attr, val in v["attributes"].items():
-                override_component_attrs[k].loc[attr] = val
-
-    return pypsa.Network(
-        import_name=import_name,
-        override_components=override_components,
-        override_component_attrs=override_component_attrs,
-    )
 
 
 def pdbcast(v, h):
@@ -437,19 +384,19 @@ def aggregate_costs(n, flatten=False, opts=None, existing_only=False):
 
     costs = {}
     for c, (p_nom, p_attr) in zip(
-        n.iterate_components(components.keys(), skip_empty=False),
+        (n.components[name] for name in components),
         components.values(),
     ):
-        if c.df.empty:
+        if c.static.empty:
             continue
         if not existing_only:
             p_nom += "_opt"
-        costs[(c.list_name, "capital")] = (c.df[p_nom] * c.df.capital_cost).groupby(c.df.carrier).sum()
+        costs[(c.list_name, "capital")] = (c.static[p_nom] * c.static.capital_cost).groupby(c.static.carrier).sum()
         if p_attr is not None:
-            p = c.pnl[p_attr].sum()
+            p = c.dynamic[p_attr].sum()
             if c.name == "StorageUnit":
                 p = p.loc[p > 0]
-            costs[(c.list_name, "marginal")] = (p * c.df.marginal_cost).groupby(c.df.carrier).sum()
+            costs[(c.list_name, "marginal")] = (p * c.static.marginal_cost).groupby(c.static.carrier).sum()
     costs = pd.concat(costs)
 
     if flatten:
@@ -542,7 +489,7 @@ def mock_snakemake(rulename, **wildcards):
 
     import snakemake as sm
     from packaging.version import Version, parse
-    from pypsa.descriptors import Dict
+    from pypsa.definitions.structures import Dict
     from snakemake.script import Snakemake
 
     script_dir = Path(__file__).parent.resolve()
@@ -996,4 +943,4 @@ def get_multiindex_snapshots(
         sns = sns.append(
             get_snapshots(sns_config).map(lambda x: x.replace(year=year)),
         )
-    return pd.MultiIndex.from_arrays([sns.year, sns])
+    return pd.MultiIndex.from_arrays([sns.year, sns], names=["period", "timestep"])
