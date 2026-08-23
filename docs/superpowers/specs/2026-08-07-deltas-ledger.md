@@ -142,3 +142,38 @@ classes; waivers finalized in tests/equivalence/waivers.yaml.
   entry (delta class: border-bus p_nom_max/potential/weight increases)
   the first time it is used in an equivalence-checked run. | needs no
   countersignature while default-off |
+
+- **DL-9/CF-coverage root cause found: interconnect-wide empty-county sweep
+  (prototype 2026-08-22, branch `proto/footprint-scoped-regions`, commit
+  ccfe4b77 — NOT on v1-epic).** `build_bus_regions`'s empty-county sweep
+  (upstream PR #723) tests counties against the FULL interconnect ReEDS
+  footprint, ignoring `model_topology.include`, and glues every busless
+  county onto the nearest retained bus. A CA-only run's onshore regions
+  therefore covered 2,930,688 km2 — 86.0% outside California, ~7x the
+  state. Consequences measured on the CA harness (candidate side, both
+  prongs rebuilt from build_bus_regions with the prototype): (a)
+  `filter_plants_by_region`'s sjoin passed the whole WECC fleet — 215.5 GW
+  existing capacity attached to a CA-demand-only model (22.6 GW coal,
+  7.7 GW nuclear, 29.2 GW onwind, 45.4 GW solar); after scoping the sweep
+  to the network's ReEDS zones the fleet is 84.5 GW and matches CA's
+  actual one carrier-by-carrier (coal 62.5 MW = Argus Cogen, nuclear
+  2,323 MW = Diablo Canyon, CCGT+OCGT 39.1 GW, geothermal 2.77 GW; hydro
+  unchanged at 12,976.8 MW — it attaches by bus_id, not geometry). (b)
+  Regions after: 409,842 km2, 0.2% out-of-state slivers; count unchanged
+  (1,972). (c) Border-bus godeeep CFs shift: onwind 9/544 buses (max
+  |dCF| 0.147, cap-wtd mean CF −2.41%), solar 11/808 (max 0.047,
+  +0.24%). (d) Caps-derived p_nom_max/weight sums UNCHANGED (0.000%) —
+  the out-of-footprint caps drop is an independent bug. (e) Demand
+  identical (10,181,147 MWh, 1,674 load buses). (f) Solved objective
+  moves −91.3% (prong 1) / −89.4% (prong 2); p_nom_opt flips (CCGT
+  0→12.6 GW, coal 22.7→0.06 GW, onwind 29.2→4.2 GW). This is the parent
+  of DL-9's "plants snapped a median 878 km" observation. Shared
+  identically by the anchor, so the CA harness stayed green while both
+  sides simulated most of WECC's fleet against CA demand. Fix is gated on
+  `include` being set — unfiltered interconnect runs byte-identical.
+  ADOPTING IT BREAKS CA-HARNESS EQUIVALENCE BY DESIGN (the anchor keeps
+  the contamination): needs its own ledger row, a decision on how the CA
+  harness re-baselines, and user countersignature before landing on
+  v1-epic. Before/after artifacts + patch preserved in the session
+  scratchpad (`before_footprint_fix/`, `after_footprint_fix/`,
+  `footprint_scoped_regions.patch`). | awaiting user decision |
