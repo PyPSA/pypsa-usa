@@ -14,7 +14,13 @@ sys.path.insert(0, str(REPO))
 
 from tests.equivalence.build import ANCHOR_WORKTREE, build_side  # noqa: E402
 from tests.equivalence.compare import run_comparison  # noqa: E402
-from tests.equivalence.paths import anchor_final_target, final_target  # noqa: E402
+from tests.equivalence.paths import (  # noqa: E402
+    UNTIL,
+    anchor_assembled_target,
+    anchor_final_target,
+    assembled_target,
+    final_target,
+)
 from tests.equivalence.report import build_report  # noqa: E402
 
 
@@ -32,10 +38,17 @@ def main() -> int:
     args = ap.parse_args()
 
     solve = not args.skip_solve
+    # EQ_UNTIL=assembled already stops the compared pairs at the assembled
+    # stage (paths.prong_pairs); build the matching targets too, or the run
+    # would still drive the whole chain through the solve it is not comparing.
+    if UNTIL == "assembled":
+        cand_target, anch_target = assembled_target(), anchor_assembled_target()
+    else:
+        cand_target, anch_target = final_target(args.prong, solve), anchor_final_target(args.prong, solve)
     if args.side in ("candidate", "both"):
-        build_side("candidate", final_target(args.prong, solve), args.jobs)
+        build_side("candidate", cand_target, args.jobs)
     if args.side in ("anchor", "both"):
-        build_side("anchor", anchor_final_target(args.prong, solve), args.jobs)
+        build_side("anchor", anch_target, args.jobs)
 
     result = run_comparison(
         args.prong,

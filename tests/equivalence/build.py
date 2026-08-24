@@ -14,10 +14,11 @@ git worktree of the pinned anchor SHA, provisioned per the plan:
   upstream #764 ``constants`` source-cache import bug; same fix as v1-epic
   commit e43fa927). Infra-only: cannot affect numbers;
 - apply the documented ADOPTED-FIX patches: ``build_bus_regions`` (DL-11:
-  footprint-scoped empty-county sweep) and ``build_powerplants`` (DL-12:
-  pre-aggregate EIA-860 history before the LEFT JOINs). Results-affecting BY
-  DESIGN and applied to BOTH sides by user decision so the harness keeps
-  comparing like-for-like; see the deltas ledger;
+  footprint-scoped empty-county sweep), ``build_powerplants`` (DL-12:
+  pre-aggregate EIA-860 history before the LEFT JOINs) and ``add_electricity``
+  (DL-13: bound the must-add seam-plant fallback to the model footprint).
+  Results-affecting BY DESIGN and applied to BOTH sides by user decision so
+  the harness keeps comparing like-for-like; see the deltas ledger;
 - ``touch`` retrieve_caiso_data's output if present so a fresh-checkout mtime
   on its tracked input xlsx does not retrigger a re-download into shared
   ``data/``.
@@ -51,6 +52,10 @@ ADOPTED_FIX_MARK = "restricting empty-county sweep"  # idempotence marker (DL-11
 # copying a wrong/stale source file over the anchor's script.
 POWERPLANTS_FIX_MARK = "ges_latest"
 POWERPLANTS_SCRIPT = "workflow/scripts/build_powerplants.py"
+# DL-13 sentinel: the seam-bound helper's name. Present in the candidate's
+# add_electricity.py only after the seam fix, and never in the pristine anchor.
+SEAM_FIX_MARK = "_drop_distant_seam_plants"
+ADD_ELECTRICITY_SCRIPT = "workflow/scripts/add_electricity.py"
 FORCE_RERUN_MARKER = ".eq-force-rerun"  # rules to -R once after a newly applied patch
 
 LAYERED_CONFIGS = [
@@ -206,6 +211,13 @@ def apply_adopted_fix_patches(wt: Path) -> None:
     duplicate rows reweight the ``mean()`` that produces heat_rate /
     fuel_cost / efficiency. Left unpatched this is the dominant prong-1
     residual (solved objective rel 2.34%, CCGT/OCGT p_nom_opt split).
+
+    DL-13 (countersigned 2026-08-23): bound ``add_electricity``'s "must add"
+    seam-plant fallback to SEAM_PLANT_MAX_KM of the model footprint in
+    footprint-scoped runs. Same change as v1-epic commit d98cb93f. Without it
+    a CA-scoped run attaches 23 out-of-footprint plants / 1,887.4 MW (nearest
+    890 km away) to California buses. Gated on ``model_topology.include``, so
+    it is a no-op for unfiltered interconnect/usa runs on both sides.
     """
     applied_rules: list[str] = []
     smk = wt / "workflow" / "rules" / "build_electricity.smk"
@@ -264,6 +276,7 @@ def apply_adopted_fix_patches(wt: Path) -> None:
         applied_rules.append("build_bus_regions")
 
     apply_powerplants_adoption(wt, applied_rules)
+    apply_seam_adoption(wt, applied_rules)
 
     if applied_rules:
         mark_force_rerun(wt, applied_rules)
@@ -319,6 +332,187 @@ def apply_powerplants_adoption(wt: Path, applied_rules: list[str]) -> None:
     dst.write_text(cand_text)
     log("applied adopted-fix patch DL-12: build_powerplants.py adopted from candidate")
     applied_rules.append("build_powerplants")
+
+
+def apply_seam_adoption(wt: Path, applied_rules: list[str]) -> None:
+    """DL-13: mirror the seam-plant bound onto the anchor's add_electricity.py.
+
+    Wholesale file adoption (the DL-12 mechanism) is NOT available here:
+    v1-epic's ``add_electricity.py`` legitimately differs from the anchor's in
+    the simplify-early bus2sub/sub_id removals, the ``length_factor=1.0``
+    decision (DL-1/DL-2) and the schema-logging calls. Copying it over would
+    smuggle those unrelated deltas onto the anchor. So this is targeted string
+    surgery instead.
+
+    What it introduces, matching the candidate's semantics exactly:
+      * the ``SEAM_PLANT_MAX_KM`` module constant;
+      * the ``_drop_distant_seam_plants`` helper;
+      * a ``footprint_scoped: bool = False`` parameter on
+        ``filter_plants_by_region``, applied right after the
+        ``plants_must_add.set_index`` that closes the fallback's construction;
+      * ``main()`` wiring that reads ``model_topology.include`` off
+        ``snakemake.config`` and passes ``footprint_scoped=bool(include)``.
+
+    Difference from the candidate: none in the code that runs. The whole
+    ``filter_plants_by_region`` body is byte-identical between e7f8bd70 and
+    v1-epic (verified 2026-08-24), so the anchor takes the same
+    ``footprint_scoped`` parameter plumbing rather than the inlined-config
+    variant that a divergent anchor shape would have forced. Only the comment
+    banners differ, marking the lines as harness patches.
+
+    The constant block and the helper body are sliced out of the LIVE candidate
+    file rather than duplicated here, so the numeric logic the two sides run is
+    the same text and any drift in v1-epic's helper re-triggers the forced
+    rerun. The four wiring edits are hardcoded because they are the part that
+    must adapt to the anchor's own shape.
+
+    Safety rails, all of which raise rather than guess:
+      * the candidate file must carry the DL-13 sentinel and yield both slices;
+      * every needle is verified against the PRISTINE anchor file fetched from
+        git, not the possibly already-patched worktree;
+      * the pristine anchor must NOT already contain the sentinel, else the
+        DL-13 premise is wrong.
+    """
+    dst = wt / ADD_ELECTRICITY_SCRIPT
+    if SEAM_FIX_MARK in dst.read_text():
+        return  # already patched in this worktree
+
+    cand_src = REPO / "workflow" / "scripts" / "add_electricity.py"
+    if not cand_src.exists():
+        raise RuntimeError(f"candidate {ADD_ELECTRICITY_SCRIPT} missing; refusing to patch")
+    cand_text = cand_src.read_text()
+    if SEAM_FIX_MARK not in cand_text:
+        raise RuntimeError(
+            f"candidate {ADD_ELECTRICITY_SCRIPT} lacks the DL-13 sentinel "
+            f"{SEAM_FIX_MARK!r}; refusing to mirror an unexpected file",
+        )
+
+    # Slice the constant block and the helper out of the candidate.
+    try:
+        const_start = cand_text.index("# Maximum distance from the model footprint")
+        const_end = cand_text.index("SEAM_PLANT_MAX_KM = 100.0") + len("SEAM_PLANT_MAX_KM = 100.0")
+        helper_start = cand_text.index(f"def {SEAM_FIX_MARK}(")
+        helper_end = cand_text.index("def filter_plants_by_region(")
+    except ValueError as exc:
+        raise RuntimeError(
+            f"cannot slice the DL-13 constant/helper out of the candidate "
+            f"{ADD_ELECTRICITY_SCRIPT}; its shape changed: {exc}",
+        ) from None
+    if not (const_start < const_end < helper_start < helper_end):
+        raise RuntimeError(
+            f"candidate {ADD_ELECTRICITY_SCRIPT} DL-13 slices are out of order; refusing to patch",
+        )
+    const_block = cand_text[const_start:const_end]
+    helper_block = cand_text[helper_start:helper_end]
+
+    cp = run(["git", "show", f"{ANCHOR_SHA}:{ADD_ELECTRICITY_SCRIPT}"], cwd=wt)
+    if cp.returncode != 0:
+        raise RuntimeError(f"cannot read pristine anchor {ADD_ELECTRICITY_SCRIPT}:\n{cp.stderr[-2000:]}")
+    orig_text = cp.stdout
+    if SEAM_FIX_MARK in orig_text:
+        raise RuntimeError(
+            f"pristine anchor {ADD_ELECTRICITY_SCRIPT} already contains "
+            f"{SEAM_FIX_MARK!r}; DL-13 premise is wrong — refusing to patch",
+        )
+
+    banner = "    # EQUIVALENCE-HARNESS ADOPTED-FIX PATCH DL-13 (same as v1-epic d98cb93f):\n"
+    needle_logger = "logger = logging.getLogger(__name__)\n"
+    needle_signature = (
+        "def filter_plants_by_region(\n"
+        "    plants: pd.DataFrame,\n"
+        "    regions_onshore: gpd.GeoDataFrame,\n"
+        "    regions_offshore: gpd.GeoDataFrame,\n"
+        "    reeds_shapes: gpd.GeoDataFrame,\n"
+        "    all_reeds_shapes: gpd.GeoDataFrame,\n"
+        "    reeds_memberships: pd.DataFrame,\n"
+        ") -> pd.DataFrame:\n"
+    )
+    needle_set_index = '        plants_must_add.set_index("generator_name", inplace=True)\n'
+    needle_main_call = (
+        "    plants = filter_plants_by_region(\n"
+        "        plants,\n"
+        "        regions_onshore,\n"
+        "        regions_offshore,\n"
+        "        reeds_shapes,\n"
+        "        all_reeds_shapes,\n"
+        "        reeds_memberships,\n"
+        "    )\n"
+    )
+    needles = {
+        "logger": needle_logger,
+        "signature": needle_signature,
+        "set_index": needle_set_index,
+        "main_call": needle_main_call,
+    }
+    bad = {name: orig_text.count(n) for name, n in needles.items() if orig_text.count(n) != 1}
+    if bad:
+        raise RuntimeError(
+            f"anchor {ADD_ELECTRICITY_SCRIPT} shape unexpected; refusing to patch. "
+            f"Needles not found exactly once: {bad}",
+        )
+
+    text = orig_text
+    # 1. module constant, right after the logger. The slice is inserted verbatim;
+    #    a module-level banner above it marks it as a harness patch.
+    text = text.replace(
+        needle_logger,
+        needle_logger
+        + "\n"
+        + "# EQUIVALENCE-HARNESS ADOPTED-FIX PATCH DL-13 (same as v1-epic d98cb93f):\n"
+        + const_block
+        + "\n",
+    )
+    # 2. helper, immediately above filter_plants_by_region (its only caller).
+    text = text.replace(needle_signature, helper_block + needle_signature)
+    # 3. the gated parameter on the signature.
+    text = text.replace(
+        needle_signature,
+        needle_signature.replace(
+            "    reeds_memberships: pd.DataFrame,\n",
+            "    reeds_memberships: pd.DataFrame,\n" + banner + "    footprint_scoped: bool = False,\n",
+        ),
+    )
+    # 4. the gated call, right after plants_must_add is finished being built.
+    text = text.replace(
+        needle_set_index,
+        needle_set_index
+        + "\n"
+        + banner.replace("    #", "        #")
+        + "        # The regions layers only tile the model footprint when the run is\n"
+        + "        # scoped with model_topology.include, so the unconditional add-back\n"
+        + "        # above leaks far-away plants into the model. Bound it — but only for\n"
+        + "        # scoped runs, so unfiltered interconnect/usa runs stay byte-identical.\n"
+        + "        if footprint_scoped:\n"
+        + f"            plants_must_add = {SEAM_FIX_MARK}(\n"
+        + "                plants_must_add,\n"
+        + "                regions_onshore,\n"
+        + "                regions_offshore,\n"
+        + "            )\n",
+    )
+    # 5. main() wiring off snakemake.config.
+    text = text.replace(
+        needle_main_call,
+        banner
+        + "    # A run scoped with model_topology.include tiles regions over the footprint\n"
+        + "    # only; the seam-plant fallback must then be distance-bounded.\n"
+        + '    include_filter = snakemake.config.get("model_topology", {}).get("include") or {}\n'
+        + needle_main_call.replace(
+            "        reeds_memberships,\n    )\n",
+            "        reeds_memberships,\n        footprint_scoped=bool(include_filter),\n    )\n",
+        ),
+    )
+
+    if text.count(SEAM_FIX_MARK) != 3:  # def, gated call, constant comment
+        raise RuntimeError(
+            f"DL-13 patch produced {text.count(SEAM_FIX_MARK)} sentinel occurrences "
+            "in the anchor (expected 3); refusing to write a half-applied patch",
+        )
+    if "footprint_scoped=bool(include_filter)" not in text or "if footprint_scoped:" not in text:
+        raise RuntimeError("DL-13 patch did not wire footprint_scoped end to end; refusing to write")
+
+    dst.write_text(text)
+    log("applied adopted-fix patch DL-13: add_electricity.py seam-plant bound")
+    applied_rules.append("add_electricity")
 
 
 def snakemake_cmd(target: str, jobs: int = 4) -> list[str]:
