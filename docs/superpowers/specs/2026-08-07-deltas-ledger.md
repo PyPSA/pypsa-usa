@@ -176,4 +176,39 @@ classes; waivers finalized in tests/equivalence/waivers.yaml.
   harness re-baselines, and user countersignature before landing on
   v1-epic. Before/after artifacts + patch preserved in the session
   scratchpad (`before_footprint_fix/`, `after_footprint_fix/`,
-  `footprint_scoped_regions.patch`). | awaiting user decision |
+  `footprint_scoped_regions.patch`). | superseded by DL-11 below (adopted
+  2026-08-23) |
+
+- **DL-11 (scoped runs, all stages; ADOPTED on both sides): footprint-scoped
+  empty-county sweep.** `build_bus_regions` restricts the empty-county
+  nearest-bus assignment to the ReEDS zones present in the
+  `model_topology.include`-filtered network (v1-epic commit 88bede47, from
+  prototype ccfe4b77; quantification in the 2026-08-22 amendment above:
+  regions 2.93M→0.41M km2, existing fleet 215.5→84.5 GW, demand and
+  caps-derived p_nom_max unchanged, objective −91.3%/−89.4%). USER DECISION
+  2026-08-23: fold into v1-epic AND mirror onto the anchor, so the CA
+  harness compares two footprint-correct pipelines instead of freezing the
+  contamination. Implemented as the first ADOPTED-FIX anchor patch
+  (`tests/equivalence/build.py::apply_adopted_fix_patches`, marker-idempotent,
+  documented exception to the D10 "no anchor patches" rule — unlike the
+  build-infra category this one changes numbers BY DESIGN, identically on
+  both sides). Because the harness builds with `--rerun-triggers mtime`
+  (code changes never invalidate outputs, and missing intermediates are NOT
+  revisited when the final target looks current — both observed 2026-08-23),
+  a newly applied patch also drops a one-shot `.eq-force-rerun` marker that
+  `build_side` turns into `-R build_bus_regions` and clears on success.
+  Unfiltered runs (usa harness `include: {}`) untouched, so
+  whole-US results and all non-scoped configs carry no delta. KNOWN
+  RESIDUAL (2026-08-23 adversarial review, empirically reproduced):
+  `filter_plants_by_region`'s `plants_must_add` seam-plant fallback bypasses
+  the region sjoin and, via the unbounded second-pass nearest-bus match,
+  still attaches ~27 out-of-footprint seam plants / 1,890.6 MW to CA buses
+  (Buffalo Ridge II SD 210 MW, Hardy Hills IN 195 MW, Fort Peck MT 162 MW,
+  ~1.1 GW NM wind/solar). Pre-existing and shared by both sides (no
+  equivalence delta); spun off as its own follow-up fix requiring its own
+  ledger entry. NOTE: DL-9's
+  recorded magnitudes (existing onwind 33,583.0 vs 29,164.4 MW etc.) were
+  measured under the pre-DL-11 contamination; its mechanism (issue-#16
+  profile-group drops vs cluster geometry) is unchanged but the numbers are
+  superseded by the post-DL-11 rerun recorded below. | countersigned
+  (ktehranchi, 2026-08-23) |

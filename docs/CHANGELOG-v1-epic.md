@@ -99,6 +99,30 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **Footprint-scoped empty-county sweep in `build_bus_regions` (DL-11)**
+  (`workflow/scripts/build_bus_regions.py`,
+  `workflow/rules/build_electricity.smk`, commit 88bede47; harness adoption
+  in `tests/equivalence/build.py::apply_adopted_fix_patches`).
+  When `model_topology.include` scopes a run (e.g. `reeds_state: [CA]`), the
+  empty-county sweep now only considers counties inside the ReEDS zones
+  retained in the filtered network, instead of the whole interconnect. Before
+  the fix a CA-only run's onshore regions covered 2,930,688 km2 (86% outside
+  CA), which passed the entire WECC fleet through
+  `filter_plants_by_region`'s sjoin — 215.5 GW of existing capacity attached
+  to a CA-demand-only model (22.6 GW coal, 7.7 GW nuclear). After: 409,842
+  km2 (0.2% border slivers) and an 84.5 GW fleet matching California's
+  actual one carrier-by-carrier. Gated on `include` being set: unfiltered
+  interconnect runs (incl. the usa harness, `include: {}`) are untouched.
+  *Results effect:* **Accepted delta for scoped runs — DL-11, countersigned
+  2026-08-23.** By user decision the same patch is applied to the anchor
+  worktree (first ADOPTED-FIX anchor patch, distinct from the numbers-neutral
+  build-infra category) so the CA harness keeps comparing like-for-like;
+  patch application drops a one-shot `.eq-force-rerun` marker because
+  `--rerun-triggers mtime` neither reruns on code changes nor revisits
+  missing intermediates when the final target looks current. Known residual
+  (own follow-up): the `plants_must_add` seam-plant fallback still leaks
+  ~1.9 GW of out-of-footprint plants into scoped runs.
+
 - **Out-of-footprint NREL caps: loud accounting + opt-in nearest-bus
   reassignment** (`workflow/scripts/build_renewable_profiles.py`,
   `workflow/scripts/nrel_exclusion/build_nrel_bus_capacities.py`, new
