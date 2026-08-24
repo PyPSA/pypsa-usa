@@ -99,6 +99,86 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **Seam-plant fallback bounded to the model footprint in scoped runs
+  (DL-13)** (`workflow/scripts/add_electricity.py`, commits d98cb93f and
+  103f2194; harness adoption in
+  `tests/equivalence/build.py::apply_seam_adoption`).
+  `filter_plants_by_region` re-adds "must add" plants — those outside
+  every ReEDS shape of the run's interconnect whose ReEDS membership
+  contradicts their EIA `interconnection` — without testing them against
+  the regions layers, and `match_plant_to_bus` then attaches whatever
+  survives to the nearest bus at unbounded distance. Since DL-11 shrank
+  those layers to the model footprint, a CA-only run picked up 23 plants /
+  1,887.4 MW from as far away as Indiana (Hardy Hills Solar, 2,508 km).
+  Now, when `model_topology.include` scopes the run, a must-add plant is
+  kept only if it lies within `SEAM_PLANT_MAX_KM` = 100 km of the
+  onshore+offshore regions (EPSG:5070); in-footprint plants are at
+  distance 0 and always kept, and every drop is logged at WARNING with
+  name, carrier, state, MW and distance. *Results effect:* **Accepted
+  delta for scoped runs — DL-13, countersigned 2026-08-23.** Gated on
+  `include`, so unfiltered interconnect runs (incl. the usa harness,
+  `include: {}`) are byte-identical by construction. Of the 1,887.4 MW,
+  1,725.0 MW actually reached the assembled network (onwind 1,416.5,
+  solar 281.5, oil 27.0; the 162.4 MW of Fort Peck hydro never did, since
+  hydro comes from the breakthrough files), and the change is symmetric:
+  after mirroring onto the anchor, prong 1 is PASS with 0 live findings,
+  objective rel 2.46e-06 and per-carrier existing capacity equal to
+  4.5e-13 MW, while prong 2 leaves DL-9's absolute gaps (3,680.1 /
+  3,586.6 MW) exactly unchanged. Third ADOPTED-FIX anchor patch after
+  DL-11 and DL-12, and the first done by targeted string surgery rather
+  than whole-file adoption, because `add_electricity.py` legitimately
+  differs between the branches. Note: the first implementation unioned
+  the region layers before measuring distance and crashed prong 2 with a
+  GEOS "side location conflict" — reprojecting coarse cluster polygons to
+  EPSG:5070 leaves 9 of 29 invalid — so the distance is now taken per
+  region, which is mathematically identical (0.0 m difference where the
+  union succeeds) and robust to invalid geometry.
+
+- **`build_powerplants` EIA-860 pre-aggregation adopted onto the anchor
+  (DL-12)** (candidate code already on `v1-epic`; harness adoption in
+  `tests/equivalence/build.py::apply_powerplants_adoption`). v1-epic
+  pre-aggregates the EIA-860 tables into `ges_latest` / `plants_latest` /
+  `yg_latest` CTEs before the LEFT JOINs; upstream joins them raw, so ~24
+  years of `report_date` vintages fan out per generator and reweight the
+  means behind `heat_rate`, `fuel_cost` and `efficiency` (8,231 / 10,381 /
+  8,380 differing cells in `powerplants.csv`; CA gas capacity-weighted
+  fuel cost +0.0558 $/MMBtu). *Results effect:* **Accepted delta — DL-12,
+  countersigned 2026-08-23.** Second ADOPTED-FIX anchor patch after DL-11:
+  the anchor's script is replaced at provision time with the live
+  candidate copy, sentinel-gated on the `ges_latest` CTE and guarded by an
+  interface check against the pristine e7f8bd70 file. Restores prong-1
+  solve exactness: objective rel 2.34e-2 -> ~2e-6, CCGT/OCGT `p_nom_opt`
+  split eliminated, 0 live findings (prong 2 also PASS). Also regenerated
+  the candidate's own stale `powerplants.csv` (predated its own derate
+  fix; `--rerun-triggers mtime` never noticed). Known residual (own
+  follow-up): `build_powerplants` is not bit-reproducible — DuckDB
+  `first()` / tied `array_agg` picks perturb imputations at <=1e-5
+  relative, below the harness's 1e-3 tolerance but non-zero.
+
+- **Footprint-scoped empty-county sweep in `build_bus_regions` (DL-11)**
+  (`workflow/scripts/build_bus_regions.py`,
+  `workflow/rules/build_electricity.smk`, commit 88bede47; harness adoption
+  in `tests/equivalence/build.py::apply_adopted_fix_patches`).
+  When `model_topology.include` scopes a run (e.g. `reeds_state: [CA]`), the
+  empty-county sweep now only considers counties inside the ReEDS zones
+  retained in the filtered network, instead of the whole interconnect. Before
+  the fix a CA-only run's onshore regions covered 2,930,688 km2 (86% outside
+  CA), which passed the entire WECC fleet through
+  `filter_plants_by_region`'s sjoin — 215.5 GW of existing capacity attached
+  to a CA-demand-only model (22.6 GW coal, 7.7 GW nuclear). After: 409,842
+  km2 (0.2% border slivers) and an 84.5 GW fleet matching California's
+  actual one carrier-by-carrier. Gated on `include` being set: unfiltered
+  interconnect runs (incl. the usa harness, `include: {}`) are untouched.
+  *Results effect:* **Accepted delta for scoped runs — DL-11, countersigned
+  2026-08-23.** By user decision the same patch is applied to the anchor
+  worktree (first ADOPTED-FIX anchor patch, distinct from the numbers-neutral
+  build-infra category) so the CA harness keeps comparing like-for-like;
+  patch application drops a one-shot `.eq-force-rerun` marker because
+  `--rerun-triggers mtime` neither reruns on code changes nor revisits
+  missing intermediates when the final target looks current. Known residual
+  (own follow-up): the `plants_must_add` seam-plant fallback still leaks
+  ~1.9 GW of out-of-footprint plants into scoped runs.
+
 - **PyPSA v1 migration: `pypsa==1.3.0` / `linopy==0.9.1` / `pandas==3.0.5`**
   (branch `claude/pypsa-v1-migration-data-storage-26840f`; redo of upstream
   [PyPSA#762](https://github.com/PyPSA/pypsa-usa/pull/762) against the

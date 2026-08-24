@@ -30,6 +30,11 @@ idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
 
+# Maximum distance from the model footprint at which a "must add" seam plant is
+# still attached. Only applied to footprint-scoped runs (model_topology.include);
+# see filter_plants_by_region / _drop_distant_seam_plants.
+SEAM_PLANT_MAX_KM = 100.0
+
 
 def sanitize_carriers(n, config):
     """
@@ -311,6 +316,76 @@ def match_plant_to_bus(n, plants):
     return plants_matched
 
 
+def _drop_distant_seam_plants(
+    plants_must_add: pd.DataFrame,
+    regions_onshore: gpd.GeoDataFrame,
+    regions_offshore: gpd.GeoDataFrame,
+    max_km: float = SEAM_PLANT_MAX_KM,
+) -> pd.DataFrame:
+    """
+    Drop "must add" seam plants lying further than ``max_km`` from the model footprint.
+
+    ``plants_must_add`` collects plants that fall outside every ReEDS shape of the
+    run's interconnect and whose ReEDS membership disagrees with their EIA
+    ``interconnection`` column. They are re-added unconditionally so imprecise ReEDS
+    shapes never silently delete a legitimate border plant. In a footprint-scoped run
+    (model_topology.include) the regions layers only tile the model footprint, so that
+    unconditional add-back lets plants thousands of km away survive the filter and then
+    attach to the nearest in-footprint bus — match_plant_to_bus applies no distance
+    bound. Bounding the population here keeps nearby seam plants while cutting the leak.
+
+    Plants inside the footprint have distance 0 and are always kept.
+    """
+    if plants_must_add.empty:
+        return plants_must_add
+
+    region_geoms = [
+        regions.to_crs(epsg=5070).geometry
+        for regions in (regions_onshore, regions_offshore)
+        if regions is not None and not regions.empty
+    ]
+    if not region_geoms:
+        return plants_must_add
+    footprint = pd.concat(region_geoms)
+    footprint = footprint[footprint.notna() & ~footprint.is_empty]
+    if footprint.empty:
+        return plants_must_add
+
+    points = gpd.GeoSeries(
+        gpd.points_from_xy(plants_must_add.longitude, plants_must_add.latitude),
+        crs="EPSG:4326",
+    ).to_crs(epsg=5070)
+    # The distance to the footprint is the smallest distance to any one of its
+    # regions, so take that minimum directly instead of unioning them first.
+    # Reprojecting the region layer into EPSG:5070 can leave coarse cluster
+    # polygons invalid (9 of 29 self-intersecting or degenerate at simpl=20,
+    # none at simpl=''), and union_all() then dies with a GEOSException
+    # "side location conflict"; pairwise distance is robust to that. Where the
+    # union does succeed the two agree to 0.0 m, verified on the simpl='' layer.
+    distance_km = points.apply(lambda point: footprint.distance(point).min()).to_numpy() / 1e3
+
+    keep = distance_km <= max_km
+    if keep.all():
+        return plants_must_add
+
+    dropped = plants_must_add[~keep]
+    for (name, plant), distance in zip(dropped.iterrows(), distance_km[~keep], strict=False):
+        logger.warning(
+            f"Out-of-footprint seam plant dropped: '{name}' "
+            f"(carrier={plant.get('carrier', 'n/a')}, state={plant.get('state', 'n/a')}, "
+            f"{plant.get('p_nom', float('nan')):.1f} MW) sits {distance:.0f} km from the model "
+            f"regions, beyond the {max_km:.0f} km seam bound.",
+        )
+    dropped_mw = float(dropped["p_nom"].sum()) if "p_nom" in dropped.columns else float("nan")
+    logger.warning(
+        f"Footprint-scoped run: dropped {int((~keep).sum())} of {len(plants_must_add)} 'must add' "
+        f"seam plants ({dropped_mw:.1f} MW) further than {max_km:.0f} km from the model regions. "
+        "Without this bound match_plant_to_bus attaches them to the nearest in-footprint bus at "
+        "unbounded distance.",
+    )
+    return plants_must_add[keep]
+
+
 def filter_plants_by_region(
     plants: pd.DataFrame,
     regions_onshore: gpd.GeoDataFrame,
@@ -318,10 +393,17 @@ def filter_plants_by_region(
     reeds_shapes: gpd.GeoDataFrame,
     all_reeds_shapes: gpd.GeoDataFrame,
     reeds_memberships: pd.DataFrame,
+    footprint_scoped: bool = False,
 ) -> pd.DataFrame:
     """
     Filters the plants dataframe to remove plants not within the onshore and
     offshore geometries.
+
+    ``footprint_scoped`` must be set when the run was scoped with
+    model_topology.include. It bounds the "must add" seam-plant fallback below to
+    SEAM_PLANT_MAX_KM of the (footprint-sized) regions. Left false, the fallback keeps
+    its legacy unconditional behavior, so unfiltered interconnect/usa runs are
+    unchanged.
     """
     plants = plants.copy()
     plants["geometry"] = gpd.points_from_xy(
@@ -376,6 +458,17 @@ def filter_plants_by_region(
             plants_must_add = plants_no_region_all_shapes
             remaining_plants = pd.DataFrame()
         plants_must_add.set_index("generator_name", inplace=True)
+
+        # The regions layers only tile the model footprint when the run is scoped with
+        # model_topology.include, so the unconditional add-back above leaks far-away
+        # plants into the model. Bound it — but only for scoped runs, so unfiltered
+        # interconnect/usa runs stay byte-identical.
+        if footprint_scoped:
+            plants_must_add = _drop_distant_seam_plants(
+                plants_must_add,
+                regions_onshore,
+                regions_offshore,
+            )
 
         if not remaining_plants.empty:
             remaining_clean = remaining_plants.drop(columns=["index_right"], errors="ignore")
@@ -1133,6 +1226,9 @@ def main(snakemake):
         n.investment_periods,
         interconnect=interconnection,
     )
+    # A run scoped with model_topology.include tiles regions over the footprint only;
+    # the seam-plant fallback in filter_plants_by_region must then be distance-bounded.
+    include_filter = snakemake.config.get("model_topology", {}).get("include") or {}
     plants = filter_plants_by_region(
         plants,
         regions_onshore,
@@ -1140,6 +1236,7 @@ def main(snakemake):
         reeds_shapes,
         all_reeds_shapes,
         reeds_memberships,
+        footprint_scoped=bool(include_filter),
     )
     plants = match_plant_to_bus(n, plants)
 
