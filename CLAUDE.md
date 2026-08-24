@@ -103,5 +103,5 @@ Defined in `workflow/Snakefile`:
 
 ## Environment
 
-- `pypsa==0.30.2`, `atlite==0.3.0`, `linopy==0.3.14`, Python `>=3.11, <3.12` (conda) / `>=3.11` (uv). Dependency pins in both `pyproject.toml` and `workflow/envs/environment.yaml` — keep them in sync if you bump.
+- `pypsa==1.3.0`, `linopy==0.9.1`, `pandas==3.0.5`, `xarray==2026.7.0`, `geopandas==1.1.4`, `atlite==0.3.0`, numpy held at `1.26.0` (rasterio/atlite ABI), Python `>=3.11, <3.12` (conda) / `>=3.11` (uv). Dependency pins in both `pyproject.toml` and `workflow/envs/environment.yaml` — keep them in sync if you bump. Migration notes: `docs/pypsa-v1-migration.md`.
 - Gurobi is the default ILP scheduler. `highspy` is in deps as a fallback solver.

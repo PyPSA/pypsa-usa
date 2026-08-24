@@ -56,6 +56,11 @@ _T_SKIP_EMPTY = True
 def load_network(path: Path):
     import pypsa
 
+    # Keep network frames on numpy object dtype under pandas 3 (matches
+    # _helpers), so candidate and anchor networks compare on equal footing.
+    if hasattr(pypsa, "options"):
+        pypsa.options.api.legacy_string_dtype = True
+
     if path.suffix == ".pkl":
         import dill
 

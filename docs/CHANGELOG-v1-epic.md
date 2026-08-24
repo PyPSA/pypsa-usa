@@ -99,8 +99,8 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
-- **PyPSA v1 migration: `pypsa==1.2.4` / `linopy==0.9.1`** (branch
-  `claude/pypsa-v1-migration-data-storage-26840f`; redo of upstream
+- **PyPSA v1 migration: `pypsa==1.3.0` / `linopy==0.9.1` / `pandas==3.0.5`**
+  (branch `claude/pypsa-v1-migration-data-storage-26840f`; redo of upstream
   [PyPSA#762](https://github.com/PyPSA/pypsa-usa/pull/762) against the
   v1-epic tree). Every removed pre-1.0 API is migrated: `madd`/`mremove` →
   `add`/`remove` (with `names=` → `name=`; v1 `add` returns `None`),
@@ -145,8 +145,44 @@ Conventions:
   accessors) is worked around in `workflow/scripts/test/conftest.py`; netCDF
   round-trips are unaffected. `pyproject.toml` gains an explicit
   `tables==3.10.2` pin (previously an implicit transitive dependency that the
-  re-lock dropped). See `docs/pypsa-v1-migration.md` for the migration map and
-  the pypsa-v1 data-storage features we can now adopt.
+  re-lock dropped). The port was first proven on `pypsa==1.2.4` /
+  `pandas==2.2.2` (identical v1 API behavior, pandas held constant), then the
+  same branch took the stack the rest of the way: `pypsa==1.3.0`,
+  `pandas==3.0.5`, `xarray==2026.7.0` (floor forced by pandas 3, which needs
+  `xarray>=2024.10`) and `geopandas==1.1.4` (the pandas-3-compatible line),
+  with `numpy` deliberately held at 1.26.0 to protect the binary compatibility
+  of the pinned `rasterio==1.3.8` / `atlite==0.3.0` wheels and
+  `dask`/`distributed` held at 2024.12.0 (import-verified under pandas 3) — the
+  1.2.4 / pandas 2.2.2 pin set remains a working fallback. Under xarray 2026
+  the pypsa-0.30-era copy of the StorageUnit energy-balance constraint in
+  `opts/reserves.py` raised `AlignmentError` (conflicting `period` indexes from
+  mixing pandas-converted DataArrays with model-space coords), so
+  `define_SU_reserve_constraints` was rewritten to mirror pypsa 1.3's internal
+  `define_storage_unit_constraints` exactly — `n.optimize._window`
+  (`subset` / snapshot weightings / `roll_within_periods` /
+  `period_start_mask`) plus `c.da.*` accessors, entirely in xarray model space,
+  differing from upstream only in the `*_RESERVES` variable names and the
+  absence of a spill term. A second v1 index-rename bug in the same file: the
+  ERM nodal-balance RHS DataFrame inherited the columns-axis name `"name"` from
+  `region_buses.index`, so linopy broadcast the constraint over a spurious
+  `name` dim (warning `Constant RHS contains dimensions {'name'}`) and the dual
+  was no longer pivotable in `store_ERM_duals`; fixed by pinning
+  `rhs.columns.name = "Bus"`. *Results effect of both:* restorative — the SU
+  reserve energy balance is the same constraint re-expressed in model space
+  (it otherwise fails to build), and the ERM fix restores the per-bus dual that
+  the spurious dim was mis-broadcasting.
+  `pypsa.options.api.legacy_string_dtype = True` is pinned in `_helpers.py`
+  and the test conftest so component frames keep `object` dtype under pandas 3 (a deliberate holding position; flipping
+  it off is the pypsa-2.0-era follow-up), and the workflow scripts were swept
+  for pandas-3 breakage — removed APIs (`groupby(axis=1)` and relatives),
+  retired lower-case frequency aliases, chained-assignment patterns that
+  copy-on-write turns into silent no-ops, `object`-dtype string checks — all
+  intended behavior-preserving. Test counts are unchanged on the pandas-3
+  stack (unit 45 passed / 1 skipped, static 72 passed); the Tier-C equivalence
+  harness has *not* been re-run and must be re-baselined, the environment
+  having moved twice. See `docs/pypsa-v1-migration.md` for the migration map,
+  the pandas-3 bump detail, and the pypsa-v1 data-storage features we can now
+  adopt.
 
 - **Out-of-footprint NREL caps: loud accounting + opt-in nearest-bus
   reassignment** (`workflow/scripts/build_renewable_profiles.py`,

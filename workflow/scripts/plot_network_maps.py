@@ -220,9 +220,11 @@ def plot_emissions_map(
 
     emissions = (
         get_node_emissions_timeseries(n)
-        .groupby(level=0, axis=1)  # group columns
+        # pandas 3 removed groupby(axis=1); transpose-group-transpose groups
+        # the columns while preserving the (snapshots x bus) orientation.
+        .T.groupby(level=0)  # group columns
         .sum()
-        .sum()  # collaps rows
+        .T.sum()  # collaps rows
         .mul(1e-6)  # T -> MT
     )
     emissions = remove_sector_buses(emissions.T).T

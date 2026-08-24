@@ -311,7 +311,9 @@ if __name__ == "__main__":
     time_resolution = params.time_resolution
     is_string = isinstance(time_resolution, str)
     if is_string and time_resolution.lower().endswith("h"):
-        n = average_every_nhours(n, time_resolution)
+        # pandas 3 only accepts the lowercase 'h' offset alias, and this config
+        # knob is documented as "int H", so normalise before resampling.
+        n = average_every_nhours(n, time_resolution.lower())
 
     # segments with package tsam
 

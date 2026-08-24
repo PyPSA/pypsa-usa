@@ -15,6 +15,16 @@ import yaml
 from constants import HOURS_PER_YEAR
 from snakemake.utils import update_config
 
+# pandas 3 infers `str` dtype for string data; pypsa (until 2.0) converts
+# network frames back to numpy object dtype on import. Pin the legacy
+# behavior explicitly so every script that imports _helpers is consistent
+# and the per-import FutureWarning is silenced.
+# Guarded because this module is also imported at DAG-construction time by
+# rules/common.smk, which runs under the snakemake launcher's interpreter --
+# that may still carry pypsa <1.0, where `pypsa.options` does not exist.
+if hasattr(pypsa, "options"):
+    pypsa.options.api.legacy_string_dtype = True
+
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
 
 logger = logging.getLogger(__name__)
@@ -325,7 +335,7 @@ def update_p_nom_max(n):
     # the installed capacity might exceed the expansion limit.
     # Hence, we update the assumptions.
 
-    n.generators.p_nom_max = n.generators[["p_nom_min", "p_nom_max"]].max(1)
+    n.generators.p_nom_max = n.generators[["p_nom_min", "p_nom_max"]].max(axis=1)
 
 
 def aggregate_p_nom(n):
@@ -334,7 +344,9 @@ def aggregate_p_nom(n):
             n.generators.groupby("carrier").p_nom_opt.sum(),
             n.storage_units.groupby("carrier").p_nom_opt.sum(),
             n.links.groupby("carrier").p_nom_opt.sum(),
-            n.loads_t.p.groupby(n.loads.carrier, axis=1).sum().mean(),
+            # pandas 3 removed groupby(axis=1); transpose-group-transpose is
+            # the shape-preserving equivalent of grouping the columns.
+            n.loads_t.p.T.groupby(n.loads.carrier).sum().T.mean(),
         ],
     )
 

@@ -1,17 +1,23 @@
-# PyPSA v1 migration (pypsa 1.2.4 / linopy 0.9.1)
+# PyPSA v1 migration (pypsa 1.3.0 / linopy 0.9.1 / pandas 3.0.5)
 
 This branch migrates the whole workflow from `pypsa==0.30.2` / `linopy==0.3.14`
-to `pypsa==1.2.4` / `linopy==0.9.1`. It is a redo of upstream
-[PyPSA/pypsa-usa#762](https://github.com/PyPSA/pypsa-usa/pull/762) against the
-v1-epic tree (which had diverged substantially: simplify-early DAG, `opts/`
-constraint modules, equivalence harness), verified against the real pypsa 1.2.4
-API rather than ported line-by-line.
+/ `pandas==2.2.2` to `pypsa==1.3.0` / `linopy==0.9.1` / `pandas==3.0.5`, which
+pulls `xarray==2026.7.0` and `geopandas==1.1.4` with it. It is a redo of
+upstream [PyPSA/pypsa-usa#762](https://github.com/PyPSA/pypsa-usa/pull/762)
+against the v1-epic tree (which had diverged substantially: simplify-early
+DAG, `opts/` constraint modules, equivalence harness), verified against the
+real pypsa v1 API rather than ported line-by-line.
 
-**Why 1.2.4 and not 1.3.0:** pypsa 1.3.0 requires `pandas>=3.0`; the repo pins
-`pandas==2.2.2` and a pandas-3 bump (copy-on-write, string dtype) is a separate
-migration. 1.2.4 is the newest v1 that runs on pandas 2.x. All code written
-here uses only API that behaves identically on 1.3.0, so the later bump should
-be pins-only.
+**Two-step landing:** the port was first written and proven against
+`pypsa==1.2.4` on the existing `pandas==2.2.2` stack — 1.2.4 is the newest v1
+that runs on pandas 2.x, and its API behaves identically to 1.3.0 — so the
+pypsa-0.30 → v1 API changes could be validated with pandas held constant. The
+pandas-3 stack was then bumped in the same branch (next section). The
+1.2.4 / pandas 2.2.2 / xarray 2024.9.0 / geopandas 1.0.1 pin set therefore
+remains a viable fallback if pandas-3 problems surface in downstream or HPC
+environments; the one piece to re-check on that path is the rewritten
+StorageUnit RESERVES builder, which now mirrors 1.3's internal
+`define_storage_unit_constraints` and leans on the `n.optimize._window` helper.
 
 ## Migration map
 
@@ -45,7 +51,9 @@ be pins-only.
 2. **linopy 0.9 unstacks MultiIndex DataFrames** — multiplying a linopy
    expression by a `(period, timestep)`-indexed DataFrame produces dense
    `period × timestep` dims. Coefficient frames are wrapped in `DataArray(...)`
-   first so the flat `snapshot` dim is preserved (opts/reserves).
+   first so the flat `snapshot` dim is preserved (opts/reserves). The
+   StorageUnit RESERVES energy balance no longer needs this at all — it was
+   later rewritten entirely in model space (see the pandas-3 section).
 3. **Cyclic storage defaults flipped** — v1 changed
    `e_cyclic_per_period` / `cyclic_state_of_charge_per_period` defaults
    True→False. All 15 cyclic adds now pin `*_per_period=True` explicitly to
@@ -60,14 +68,91 @@ be pins-only.
 6. **UC ramp-limit fixes upstream** — first-snapshot ramp limits are now
    enforced and `ramp_limit_start_up/shut_down` defaults changed 1→NaN;
    unit-commitment runs may show small accepted deltas.
-7. **pypsa bug (present through 1.3.0):** `Network.copy()` drops the hidden
+7. **pypsa bug (confirmed still present in 1.3.0):** `Network.copy()` drops the hidden
    `name="snapshot"` attribute of MultiIndex snapshots, breaking the `c.da`
    xarray accessors on the copy (`dim_0` instead of `snapshot`). netCDF
    round-trips are unaffected, so production paths are safe; the unit-test
    conftest wraps `Network.copy` with a `set_snapshots(n.snapshots)` heal.
    Worth reporting upstream.
 
+## pandas 3 / xarray 2026 bump
+
+Step two of the landing, done in the same branch once the v1 API port was green
+on 1.2.4 / pandas 2.
+
+### Pins
+
+Values below are `pyproject.toml`'s; `workflow/envs/environment.yaml` mirrors
+them, except that its `dask` entry is still a `>=2023.7.0` floor rather than a
+pin and it carries no `distributed` entry.
+
+| Package | Was | Now | Why |
+|---|---|---|---|
+| `pypsa` | 1.2.4 | **1.3.0** | newest v1 line; also unlocks piecewise-linear costs, maintenance scheduling, phase-shifters |
+| `pandas` | 2.2.2 | **3.0.5** | pypsa 1.3 requires `pandas>=3.0` |
+| `xarray` | 2024.9.0 | **2026.7.0** | floor forced by pandas 3 (needs `xarray>=2024.10`); took the current release rather than the bare minimum |
+| `geopandas` | 1.0.1 | **1.1.4** | the 1.1 line is the pandas-3-compatible one |
+| `linopy` | 0.9.1 | 0.9.1 | unchanged |
+| `numpy` | 1.26.0 | 1.26.0 | **held deliberately** — the pinned `rasterio==1.3.8` / `atlite==0.3.0` wheels are built against the numpy 1.x ABI. A numpy-2 bump is its own migration with its own binary-compatibility blast radius, and pandas 3 does not force it. |
+| `dask` / `distributed` | 2024.12.0 | 2024.12.0 | held; import-verified under pandas 3 rather than bumped speculatively |
+
+### StorageUnit RESERVES rewritten in model space
+
+Under xarray 2026 the pypsa-0.30-era copy of the StorageUnit energy-balance
+constraint used by the reserves module raised `AlignmentError`. Root cause: it
+assembled the constraint by mixing DataArrays converted from pandas (carrying
+their own `period` index) with model-space coordinates (whose `period` coord
+comes from the linopy model). Older xarray tolerated the two conflicting
+`period` indexes; 2026 does not.
+
+`define_SU_reserve_constraints` in `workflow/scripts/opts/reserves.py` is now a
+direct mirror of pypsa 1.3's internal `define_storage_unit_constraints`: the
+same `n.optimize._window` machinery (`.subset(sns)`, snapshot weightings,
+`roll_within_periods` for the previous-SOC term, `period_start_mask` for the
+period-start / within-period split) and the same `c.da.*` accessors, so the
+constraint is built in xarray model space end to end and never round-trips
+through pandas. The only deliberate departures from upstream's implementation
+are the `*_RESERVES` variable names and the absence of a spill term — the
+shadow reserve system has no spillage variable.
+
+### ERM nodal balance: pin the RHS columns name
+
+A second v1 index-rename bug in the same file. The energy-reserve-margin nodal
+balance builds its RHS as a DataFrame whose columns come from
+`region_buses.index`; under v1 the bus index is named `"name"`, so the columns
+axis silently inherited that name. linopy then broadcast the constraint over a
+spurious `name` dim (surfacing as the warning `Constant RHS contains dimensions
+{'name'}`) and the resulting dual could not be pivoted by bus in
+`store_ERM_duals`. Fixed by pinning `rhs.columns.name = "Bus"` before the
+constraint is built.
+
+### `pypsa.options.api.legacy_string_dtype = True`
+
+pandas 3 makes a dedicated `str` dtype the default for string columns. pypsa v1
+still carries `object`-dtype assumptions in places, and this repo has a large
+surface of code that reads component frames and compares, joins, or
+type-inspects their string columns. Rather than chase dtype-sensitive behavior
+through the whole workflow inside this change, `legacy_string_dtype` is pinned
+to `True` in `workflow/scripts/_helpers.py` and in the unit-test `conftest.py`,
+so pypsa component frames keep `object` dtype exactly as before.
+
+This is a deliberate holding position, not a permanent one: pypsa intends to
+drop the legacy switch at 2.0, so flipping it off — and fixing whatever dtype
+assumptions that surfaces — is the follow-up, best done as its own PR with the
+equivalence harness available.
+
+### pandas-3 compatibility sweep
+
+Independently of pypsa, the workflow scripts were swept for pandas-3 breakage:
+APIs removed in 3.0 (notably `DataFrame.groupby(axis=1)` and its relatives),
+the retired lower-case offset/frequency aliases used in date ranges and
+resampling, chained-assignment patterns that copy-on-write turns into silent
+no-ops, and dtype checks written against `object`-dtype strings. All of these
+are mechanical compatibility fixes, intended to be behavior-preserving.
+
 ## Verification
+
+Re-run on the final pypsa 1.3.0 / pandas 3.0.5 / xarray 2026.7.0 stack:
 
 - Unit tier: **45 passed / 1 skipped** (`workflow/scripts/test/`). The
   migration un-skipped and fixed 9 tests previously marked "pre-existing
@@ -76,16 +161,18 @@ be pins-only.
   (`test_e2e_solve_network_myopic`) was bisected: its fixture model is
   infeasible on pristine v1-epic under pypsa 0.32 too (pre-existing).
 - Static tier: **72 passed** (`tests/static/`, includes full-DAG dry-runs).
-- Not yet run: a full `data_model`/solve pipeline run and the Tier-C
-  equivalence harness against develop anchors (needs data downloads + solver;
-  the env itself changed, so deltas must be re-baselined per the harness
-  conventions).
+- **Not yet run:** a full `data_model`/solve pipeline run, and the Tier-C
+  equivalence harness against develop anchors (needs data downloads + a
+  solver). The harness has *not* been re-run since the pandas-3 bump. The
+  environment moved twice — pypsa 0.30 → v1, then pandas 2 → 3 — so its anchors
+  must be re-baselined per the harness conventions before any delta it reports
+  is meaningful.
 
 ---
 
 # PyPSA v1 data-storage features worth adopting
 
-Surveyed from pypsa 1.0–1.3 release notes and the installed 1.2.4 API.
+Surveyed from pypsa 1.0–1.3 release notes and the installed 1.3.0 API.
 Ordered by leverage for this repo.
 
 ## Adopted in this migration
@@ -151,9 +238,11 @@ Ordered by leverage for this repo.
    Directly relevant to the `renewable_scenarios` (GODEEEP) machinery, which
    currently multiplies whole networks.
 
-8. **`pypsa.options`.** Global/env-var config (`PYPSA_*`). Two concrete uses:
-   `pypsa.options.api.legacy_string_dtype` for the eventual pandas-3 bump, and
-   consistency-check verbosity control in batch runs.
+8. **`pypsa.options`.** Global/env-var config (`PYPSA_*`). Already in use:
+   `pypsa.options.api.legacy_string_dtype = True` is set in `_helpers.py` and
+   the unit-test conftest to hold component frames on `object` dtype under
+   pandas 3 (see above), and flipping it off is the pypsa-2.0-era follow-up.
+   Remaining use: consistency-check verbosity control in batch runs.
 
 ## Noted, lower priority
 
@@ -165,4 +254,7 @@ Ordered by leverage for this repo.
   `add_extra_components.py`/`build_natural_gas.py`, but a results-affecting
   remodel, not a storage swap.
 - **Piecewise-linear costs, maintenance scheduling, phase-shifters** (v1.3):
-  new modeling capabilities gated on the pandas-3/pypsa-1.3 bump.
+  new modeling capabilities, available as of this branch now that the repo runs
+  on 1.3.0. Nothing in the workflow uses them yet, and each is a
+  results-affecting modeling choice rather than a storage swap, so adoption is
+  a separate decision per feature.

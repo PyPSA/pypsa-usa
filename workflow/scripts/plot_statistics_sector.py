@@ -802,7 +802,7 @@ def plot_sector_load_factor_timeseries(
         row = i // 2
         col = i % 2
 
-        df = get_load_factor_timeseries(n, sector, state=state).loc[investment_period].resample("d").mean().dropna()
+        df = get_load_factor_timeseries(n, sector, state=state).loc[investment_period].resample("D").mean().dropna()
 
         try:
             if nrows > 1:

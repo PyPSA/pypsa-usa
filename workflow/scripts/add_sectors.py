@@ -355,7 +355,7 @@ def get_dynamic_marginal_costs(
     hourly_index = pd.date_range(
         start=f"{year}-01-01",
         end=f"{year}-12-31 23:00:00",
-        freq="H",
+        freq="h",
     )
 
     # need ffill and bfill as some data is not provided at the resolution or

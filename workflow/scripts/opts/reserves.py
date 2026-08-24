@@ -7,15 +7,13 @@ including energy reserve margins (ERM).
 
 import logging
 
-import linopy
 import numpy as np
 import pandas as pd
 import pypsa
 from linopy import merge
 from opts._helpers import get_region_buses
-from pypsa.common import expand_series
 from pypsa.descriptors import nominal_attrs
-from xarray import DataArray, concat
+from xarray import DataArray
 
 logger = logging.getLogger(__name__)
 
@@ -35,77 +33,76 @@ def _get_zero_emission_periods(n, config):
 
 
 def define_SU_reserve_constraints(n, sns):
-    """Sets energy balance constraints for storage units."""
-    m = n.model
-    c = "StorageUnit"
-    dim = "snapshot"
-    assets = n.components[c].static
-    active = DataArray(n.components[c].get_activity_mask(sns))
+    """Energy-balance constraints for the StorageUnit RESERVES shadow variables.
 
-    if assets.empty:
+    Mirrors pypsa v1.3's internal ``define_storage_unit_constraints`` (xarray
+    model-space via ``n.optimize._window`` and ``c.da``) so that MultiIndex
+    snapshots align under xarray >= 2026; only the variable names differ
+    (``*_RESERVES``) and there is no spill term in the shadow system.
+    """
+    m = n.model
+    component = "StorageUnit"
+    dim = "snapshot"
+    window = n.optimize._window.subset(sns)
+    c_obj = n.components[component]
+
+    if c_obj.static.empty:
         return
 
-    # elapsed hours
-    eh = expand_series(n.snapshot_weightings.stores[sns], assets.index)
-    # efficiencies
-    eff_stand = (1 - n.get_switchable_as_dense(c, "standing_loss", sns)).pow(eh)
-    eff_dispatch = n.get_switchable_as_dense(c, "efficiency_dispatch", sns)
-    eff_store = n.get_switchable_as_dense(c, "efficiency_store", sns)
+    active = c_obj.da.active.sel(snapshot=sns, name=c_obj.active_assets)
 
-    soc = m[f"{c}-state_of_charge_RESERVES"]
+    eh = window.snapshot_weightings("stores")
+
+    eff_stand = (1 - c_obj.da.standing_loss.sel(snapshot=sns, name=c_obj.active_assets)) ** eh
+    eff_dispatch = c_obj.da.efficiency_dispatch.sel(snapshot=sns, name=c_obj.active_assets)
+    eff_store = c_obj.da.efficiency_store.sel(snapshot=sns, name=c_obj.active_assets)
+
+    soc = m[f"{component}-state_of_charge_RESERVES"]
 
     lhs = [
         (-1, soc),
-        (DataArray(-1 / eff_dispatch * eh), m[f"{c}-p_dispatch_RESERVES"]),
-        (DataArray(eff_store * eh), m[f"{c}-p_store_RESERVES"]),
+        (-1 / eff_dispatch * eh, m[f"{component}-p_dispatch_RESERVES"]),
+        (eff_store * eh, m[f"{component}-p_store_RESERVES"]),
     ]
 
-    # We create a mask `include_previous_soc` which excludes the first snapshot
-    # for non-cyclic assets.
-    noncyclic_b = ~assets.cyclic_state_of_charge.to_xarray()
+    # mask `include_previous_soc` excludes the first snapshot for non-cyclic assets
+    noncyclic_b = ~c_obj.da.cyclic_state_of_charge.sel(name=c_obj.active_assets)
     include_previous_soc = (active.cumsum(dim) != 1).where(noncyclic_b, True)
 
-    previous_soc = soc.where(active).ffill(dim).roll(snapshot=1).ffill(dim).where(include_previous_soc)
+    previous_soc = soc.where(active).ffill(dim).roll(snapshot=1).ffill(dim)
 
-    # We add inflow and initial soc for noncyclic assets to rhs
-    soc_init = assets.state_of_charge_initial.to_xarray()
-    rhs = DataArray(-n.get_switchable_as_dense(c, "inflow", sns).mul(eh))
+    # inflow and initial soc for noncyclic assets go to rhs
+    soc_init = c_obj.da.state_of_charge_initial.sel(name=c_obj.active_assets)
+    rhs = -c_obj.da.inflow.sel(snapshot=sns, name=c_obj.active_assets) * eh
 
-    if isinstance(sns, pd.MultiIndex):
-        # If multi-horizon optimizing, we update the previous_soc and the rhs
-        # for all assets which are cyclid/non-cyclid per period.
-        periods = soc.coords["period"]
-        per_period = (
-            assets.cyclic_state_of_charge_per_period.to_xarray() | assets.state_of_charge_initial_per_period.to_xarray()
+    if n._multi_invest:
+        # per-period cycling / initial-value reset, exactly as pypsa v1 does it
+        per_period = c_obj.da.cyclic_state_of_charge_per_period.sel(
+            name=c_obj.active_assets,
+        ) | c_obj.da.state_of_charge_initial_per_period.sel(name=c_obj.active_assets)
+
+        previous_soc_pp = window.roll_within_periods(soc)
+
+        within_period = ~window.period_start_mask()
+        include_previous_soc_pp = active & (
+            within_period | c_obj.da.cyclic_state_of_charge_per_period.sel(name=c_obj.active_assets)
         )
 
-        # We calculate the previous soc per period while cycling within a period
-        # Normally, we should use groupby, but is broken for multi-index
-        # see https://github.com/pydata/xarray/issues/6836
-        ps = sns.unique("period")
-        sl = slice(None)
-        previous_soc_pp_list = [soc.data.sel(snapshot=(p, sl)).roll(snapshot=1) for p in ps]
-        previous_soc_pp = concat(previous_soc_pp_list, dim="snapshot")
-
-        # We create a mask `include_previous_soc_pp` which excludes the first
-        # snapshot of each period for non-cyclic assets.
-        include_previous_soc_pp = active & (periods == periods.shift(snapshot=1))
-        include_previous_soc_pp = include_previous_soc_pp.where(noncyclic_b, True)
-        # We take values still to handle internal xarray multi-index difficulties
-        previous_soc_pp = previous_soc_pp.where(
-            include_previous_soc_pp.values,
-            linopy.variables.FILL_VALUE,
-        )
-
-        # update the previous_soc variables and right hand side
+        # the per-period inclusion is carried by the `include_previous_soc`
+        # coefficient (not by masking `previous_soc_pp` to NaN, which v1 reads
+        # as an absent term and would drop the period-start energy-balance row)
         previous_soc = previous_soc.where(~per_period, previous_soc_pp)
         include_previous_soc = include_previous_soc_pp.where(
             per_period,
             include_previous_soc,
         )
-    lhs += [(DataArray(eff_stand), previous_soc)]
+
+    lhs += [(eff_stand * include_previous_soc, previous_soc)]
+
+    lhs = m.linexpr(*lhs)
     rhs = rhs.where(include_previous_soc, rhs - soc_init)
-    m.add_constraints(lhs, "=", rhs, name=f"{c}-energy_balance_RESERVES", mask=active)
+
+    m.add_constraints(lhs, "=", rhs, name=f"{component}-energy_balance_RESERVES", mask=active)
 
 
 def define_operational_constraints_for_extendables(
@@ -433,6 +430,8 @@ def define_erm_nodal_balance_constraints(
 
     rhs = planning_reserve
     rhs.index.name = "snapshot"
+    # under pypsa v1 the bus index is named "name"; the lhs groupbys use "Bus"
+    rhs.columns.name = "Bus"
 
     # Constraint over ALL snapshots
     empty_nodal_balance = (lhs.vars == -1).all("_term")

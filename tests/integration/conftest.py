@@ -13,7 +13,13 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+import pypsa
 import pytest
+
+# Keep network frames on numpy object dtype under pandas 3 (matches _helpers),
+# so the artifacts these tests read back match what the workflow produced.
+if hasattr(pypsa, "options"):
+    pypsa.options.api.legacy_string_dtype = True
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO_ROOT / "workflow"

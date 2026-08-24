@@ -954,7 +954,7 @@ def plot_fuel_costs(
     color_palette = n.carriers.color.to_dict()
 
     # plot error plot of all fuels
-    df = fuel_costs.droplevel(["bus", "Generator"]).T.resample("d").mean().reset_index().melt(id_vars="timestep")
+    df = fuel_costs.droplevel(["bus", "Generator"]).T.resample("D").mean().reset_index().melt(id_vars="timestep")
     sns.lineplot(
         data=df,
         x="timestep",
@@ -971,7 +971,7 @@ def plot_fuel_costs(
     # plot bus fuel prices for each fuel
     for i, fuel in enumerate(fuels):
         nice_name = n.carriers.at[fuel, "nice_name"]
-        df = fuel_costs.loc[fuel, :, :].droplevel("Generator").T.resample("d").mean().T.groupby(level=0).mean().T
+        df = fuel_costs.loc[fuel, :, :].droplevel("Generator").T.resample("D").mean().T.groupby(level=0).mean().T
         sns.lineplot(
             data=df,
             legend=False,

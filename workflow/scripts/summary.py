@@ -153,7 +153,7 @@ def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
 
 def get_demand_timeseries(n: pypsa.Network) -> pd.DataFrame:
     """Gets timeseries energy demand."""
-    return pd.DataFrame(n.loads_t.p.sum(1)).rename(columns={0: "Demand"})
+    return pd.DataFrame(n.loads_t.p.sum(axis=1)).rename(columns={0: "Demand"})
 
 
 def get_demand_base(n: pypsa.Network) -> pd.DataFrame:
@@ -162,7 +162,7 @@ def get_demand_base(n: pypsa.Network) -> pd.DataFrame:
 
     This groups all demand per node togheter.
     """
-    df = pd.DataFrame(n.loads_t.p).rename(columns=n.loads.bus).sum(0).groupby(level=0).sum()
+    df = pd.DataFrame(n.loads_t.p).rename(columns=n.loads.bus).sum(axis=0).groupby(level=0).sum()
     assert len(df) == len(df.index.unique())
     return df
 
@@ -273,7 +273,7 @@ def get_capital_costs(n: pypsa.Network) -> pd.DataFrame:
 
 def get_generator_marginal_costs(
     n: pypsa.Network,
-    resample_period: str = "d",
+    resample_period: str = "D",
 ) -> pd.DataFrame:
     """
     Gets generator marginal costs of Units with static MC and units with time

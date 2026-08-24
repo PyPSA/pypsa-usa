@@ -16,6 +16,9 @@ import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from _helpers import get_multiindex_snapshots
 
+# Keep network frames on numpy object dtype under pandas 3 (matches _helpers).
+pypsa.options.api.legacy_string_dtype = True
+
 # pypsa >=1.0 (still present in 1.3.0): Network.copy() drops the hidden
 # ``name="snapshot"`` attribute of the snapshots MultiIndex on multi-period
 # networks. The optimizer's xarray accessors (c.da) then see a 'dim_0'
