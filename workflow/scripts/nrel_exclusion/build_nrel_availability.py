@@ -52,14 +52,10 @@ RASTER_PATHS = {
     ("offwind_floating", "open"): "offwind/open_composite_lzw.tif",
 }
 
-# Per-raster nodata sentinels that exactextract will ignore.
-# Solar uses a large float sentinel; onwind uses 255; offwind has no nodata.
-RASTER_NODATA = {
-    "solar": 3.4028234663852886e38,
-    "onwind": 255,
-    "offwind": None,
-    "offwind_floating": None,
-}
+# The onwind raster declares no nodata in its header, so its 255 sentinel has
+# to be masked out by value. Solar and offwind carry a header nodata that is
+# read from the file itself.
+ONWIND_RASTER_NODATA = 255
 
 # Sentinel used for nodata in the composite GeoTIFF we hand to exactextract.
 # Chosen to be well outside the value range of any real raster (0-100 for solar,
@@ -207,7 +203,7 @@ def build_composite_raster(
     if src_nodata is not None:
         nrel = np.where(np.isclose(nrel, src_nodata), np.nan, nrel)
     if tech == "onwind":
-        nrel = np.where(nrel == 255, np.nan, nrel)
+        nrel = np.where(nrel == ONWIND_RASTER_NODATA, np.nan, nrel)
 
     composite = nrel
 

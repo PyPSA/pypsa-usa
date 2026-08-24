@@ -97,7 +97,7 @@ class ZenodoScenarioDownloader:
 
         Useful when called from a snakemake rule whose `output:` already names
         the destination — bypasses the scenario subdir conventions of
-        download_scenario_file / download_by_record_id.
+        download_scenario_file.
 
         Parameters
         ----------
@@ -114,35 +114,6 @@ class ZenodoScenarioDownloader:
             print(f"File already exists locally: {out_path}. Skipping download.")
             return str(out_path)
         return self._download_file(record_id, filename, out_path, force_redownload)
-
-    def download_by_record_id(self, record_id, filename, force_redownload=False):
-        """
-        Download a file directly using a record ID.
-
-        Parameters
-        ----------
-        record_id : int or str
-            Zenodo record ID (e.g. 17059209).
-        filename : str
-            Name of the file to download.
-        force_redownload : bool, optional
-            If True, redownload even if file exists locally. Default is False.
-
-        Returns
-        -------
-        str or None
-            Path to the downloaded file, or None if download failed.
-        """
-        # pointing file path to workflow/data/zenodo
-        local_filepath = f"{self.download_dir}/zenodo/{filename}"
-
-        # Check if file already exists
-        if Path(local_filepath).exists() and not force_redownload:
-            print(f"File {filename} already exists. Use force_redownload=True to redownload.")
-            return str(local_filepath)
-
-        # Only proceed with download if needed
-        return self._download_file(record_id, filename, Path(local_filepath), force_redownload)
 
     def _download_file(self, record_id, filename, local_filepath, force_redownload=False):
         """
@@ -209,62 +180,3 @@ class ZenodoScenarioDownloader:
             if Path(local_filepath).exists():
                 Path(local_filepath).unlink()  # Remove partial file
             return None
-
-    def list_available_files(self, scenario_name):
-        """List all available files in a scenario dataset."""
-        record_id = self.scenario_records.get(scenario_name)
-        if not record_id:
-            print(f"No record ID found for scenario: {scenario_name}")
-            print("Available scenarios with record IDs:")
-            for scenario, rec_id in self.scenario_records.items():
-                if rec_id is not None:
-                    print(f"  - {scenario} (ID: {rec_id})")
-            return []
-
-        return self.list_files_by_record_id(record_id)
-
-    def list_files_by_record_id(self, record_id):
-        """List all files in a record by record ID."""
-        metadata = self.get_record_metadata(record_id)
-        if not metadata:
-            return []
-
-        files = []
-        record_title = metadata.get("metadata", {}).get("title", "Unknown")
-        print(f"Available files in record {record_id} ({record_title}):")
-
-        for file_info in metadata.get("files", []):
-            filename = file_info["key"]
-            size_mb = file_info["size"] / (1024 * 1024)
-            files.append(filename)
-            print(f"  - {filename} ({size_mb:.1f} MB)")
-
-        return files
-
-    def get_available_scenarios(self):
-        """Get list of available scenarios (ones with record IDs)."""
-        available = []
-        print("Available scenarios:")
-        for scenario, record_id in self.scenario_records.items():
-            if record_id is not None:
-                available.append(scenario)
-                print(f"  - {scenario} (Record ID: {record_id})")
-        return available
-
-
-def download_scenario_file(scenario_final, scenario, filename, download_dir="./data/zenodo"):
-    """Quick function to download a single file from a scenario."""
-    downloader = ZenodoScenarioDownloader(download_dir)
-    return downloader.download_scenario_file(scenario_final, scenario, filename)
-
-
-def download_by_record_id(record_id, filename, download_dir="./data/zenodo"):
-    """Quick function to download a file directly by record ID."""
-    downloader = ZenodoScenarioDownloader(download_dir)
-    return downloader.download_by_record_id(record_id, filename)
-
-
-def list_available_scenarios():
-    """List all available scenarios."""
-    downloader = ZenodoScenarioDownloader()
-    return downloader.get_available_scenarios()

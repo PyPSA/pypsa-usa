@@ -13,6 +13,8 @@ from constants import REC_TRADING_ZONE_MAPPER
 from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
 
+logger = logging.getLogger(__name__)
+
 
 def haversine_np(lon1, lat1, lon2, lat2):
     """
@@ -108,8 +110,8 @@ def add_custom_line_type(n: pypsa.Network):
     )
 
 
-def assign_line_types(n: pypsa.Network):
-    n.lines.type = n.lines.v_nom.map(snakemake.config["lines"]["types"])
+def assign_line_types(n: pypsa.Network, line_types: dict):
+    n.lines.type = n.lines.v_nom.map(line_types)
 
 
 def add_dclines_from_file(n: pypsa.Network, fn_dclines: str) -> pypsa.Network:
@@ -579,7 +581,7 @@ def main(snakemake):
 
     # Assign Lines Types and Missing Region Memberships
     add_custom_line_type(n)
-    assign_line_types(n)
+    assign_line_types(n, snakemake.config["lines"]["types"])
     length_factor = snakemake.params.length_factor
     assign_line_length(n)
     assign_link_length_and_efficiency(n, length_factor)
@@ -674,7 +676,6 @@ def main(snakemake):
 
 
 if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 

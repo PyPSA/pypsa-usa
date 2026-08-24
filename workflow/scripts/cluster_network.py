@@ -421,6 +421,7 @@ def convert_to_transport(
     topology_aggregation,
     planning_horizons,
     lifetime,
+    agg_busmap=None,
 ):
     """
     Replaces all Lines according to Links with the transfer capacity specified
@@ -444,8 +445,8 @@ def convert_to_transport(
     add_itls(buses, itls_filt, itl_cost, planning_horizons, lifetime)
 
     if itl_agg_fn:
+        assert agg_busmap is not None, "agg_busmap is required when itl_agg_fn is given."
         # Aggregating the ITLs to lower resolution
-        topology_aggregation_key = next(iter(topology_aggregation.keys()))
         itl_lower_res = pd.read_csv(itl_agg_fn)
         itl_lower_res.columns = itl_lower_res.columns.str.lower()
         itl_lower_res = itl_lower_res.rename(
@@ -457,11 +458,6 @@ def convert_to_transport(
         ]
         aggregated_buses = agg_busmap.rename(index=lambda x: x.rsplit(" ", 1)[0])
         aggregated_buses = aggregated_buses[~aggregated_buses.index.duplicated(keep="first")]
-        non_agg_buses = buses[~buses.index.isin(agg_busmap.values)]
-        non_agg_buses = non_agg_buses[
-            non_agg_buses[topology_aggregation_key].isin(itl_lower_res.r)
-            | non_agg_buses[topology_aggregation_key].isin(itl_lower_res.rr)
-        ]
 
         itl_lower_res = itl_lower_res[  # Filter low-res ITLs to only include those that have both ends in the network
             itl_lower_res.r.isin(buses["country"])
@@ -562,7 +558,7 @@ def cluster_regions(busmaps, input=None, output=None):
             # Try to convert to float to see if values are numeric
             pd.to_numeric(regions["name"], errors="raise")
             is_float = True
-        except:  # noqa: E722
+        except (ValueError, TypeError):
             is_float = False
 
         # Preserve representative coordinates alongside geometry; downstream
@@ -639,6 +635,8 @@ def calibrate_tamu_transmission_capacity(
         If True, use original region info saved before aggregation
     """
     logger.info("Calibrate TAMU transmission capacity...")
+
+    hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
 
     # Read REEDS capacity data
     reeds_data = pd.read_csv(reeds_capacity_file)
@@ -997,6 +995,8 @@ if __name__ == "__main__":
                 )
         aggregate_carriers = carriers
 
+    costs = load_costs(snakemake.input.tech_costs, params.costs)
+
     if (n_clusters == len(n.buses)) and not transport_model:
         # Fast-path if no clustering is necessary
         busmap = n.buses.index.to_series()
@@ -1006,13 +1006,7 @@ if __name__ == "__main__":
             busmap,
             linemap,
         )
-
-        costs = load_costs(snakemake.input.tech_costs, params.costs)
-        hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
     else:
-        costs = load_costs(snakemake.input.tech_costs, params.costs)
-        hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
-
         custom_busmap = params.custom_busmap
         if custom_busmap:
             custom_busmap = pd.read_csv(
@@ -1027,6 +1021,7 @@ if __name__ == "__main__":
             # Prepare data for transport model
             itl_agg_fn = None
             itl_agg_costs_fn = None
+            agg_busmap = None
             logger.info(
                 f"Aggregating to transport model with {topological_boundaries} zones.",
             )
@@ -1123,6 +1118,7 @@ if __name__ == "__main__":
                 topology_aggregation,
                 snakemake.params.planning_horizons,
                 transmission_lifetime,
+                agg_busmap=agg_busmap,
             )
         else:
             # Use standard transmission cost estimates

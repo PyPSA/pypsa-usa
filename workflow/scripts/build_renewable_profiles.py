@@ -249,6 +249,11 @@ if __name__ == "__main__":
     nprocesses = int(snakemake.threads)
     noprogress = snakemake.config["run"].get("disable_progressbar", True)
     noprogress = noprogress or not snakemake.config["atlite"]["show_progress"]
+    dataset = snakemake.params.renewable.get("dataset")
+    if dataset not in ("atlite", "godeeep"):
+        raise ValueError(
+            f"renewable.dataset must be either 'atlite' or 'godeeep'; got {dataset!r}",
+        )
     params = snakemake.params.renewable[snakemake.wildcards.technology]
     resource = params["resource"]  # pv panel params / wind turbine params
     correction_factor = params.get("correction_factor", 1.0)
@@ -277,7 +282,7 @@ if __name__ == "__main__":
     buses = regions.index
 
     #### start editing to separate out different datasets
-    if snakemake.params.renewable.get("dataset", False) == "atlite":
+    if dataset == "atlite":
         ### start here
         logger.info("Loading atlite renewable dataset...")
 
@@ -427,7 +432,7 @@ if __name__ == "__main__":
         average_distance = xr.DataArray(average_distance, [buses])
         centre_of_mass = xr.DataArray(centre_of_mass, [buses, ("spatial", ["x", "y"])])
 
-    if snakemake.params.renewable.get("dataset", False) == "godeeep":
+    if dataset == "godeeep":
         logger.info("Loading godeeep renewable data...")
         scenario = snakemake.config["renewable_scenarios"][0]
         tech = snakemake.wildcards.technology
@@ -548,7 +553,7 @@ if __name__ == "__main__":
 
     # Adding 'underwater_fraction' for offshore wind only
     if snakemake.wildcards.technology.startswith("offwind"):
-        if snakemake.params.renewable.get("dataset", False) == "atlite":
+        if dataset == "atlite":
             logger.info("Calculate underwater fraction of connections.")
             offshore_shape = gpd.read_file(snakemake.input["offshore_shapes"]).unary_union
             underwater_fraction = []
@@ -558,7 +563,7 @@ if __name__ == "__main__":
                 frac = line.intersection(offshore_shape).length / line.length
                 underwater_fraction.append(frac)
             ds["underwater_fraction"] = xr.DataArray(underwater_fraction, [buses])
-        elif snakemake.params.renewable.get("dataset", False) == "godeeep":
+        elif dataset == "godeeep":
             # underwater_fraction is baked into the NREL caps file by
             # build_nrel_bus_capacities.py.
             ds["underwater_fraction"] = caps_ds["underwater_fraction"].reindex(

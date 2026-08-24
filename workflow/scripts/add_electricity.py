@@ -549,11 +549,8 @@ def attach_conventional_generators(
     plants: pd.DataFrame,
     conventional_carriers: list,
     extendable_carriers: list,
-    conventional_params,
     renewable_carriers: list,
-    conventional_inputs,
     unit_commitment=None,
-    fuel_price=None,
 ):
     carriers = [
         carrier
@@ -622,10 +619,6 @@ def attach_conventional_generators(
     n.generators.loc[plants.index, "fuel_cost"] = plants.fuel_cost
     n.generators.loc[plants.index, "heat_rate"] = plants.heat_rate_mmbtu_per_mwh
     n.generators.loc[plants.index, "ba_eia"] = plants.balancing_authority_code
-
-
-def normed(s):
-    return s / s.sum()
 
 
 def attach_wind_and_solar(
@@ -766,7 +759,7 @@ def attach_egs(
     input_profiles: str,
     carriers: list[str],
     extendable_carriers: dict[str, list[str]],
-    line_length_factor=1,
+    egs_config: dict,
 ):
     """
     Attached STM Calculated wind and solar capacity factor profiles to the
@@ -778,7 +771,7 @@ def attach_egs(
     add_missing_carriers(n, carriers)
     capital_recovery_period = 25  # Following EGS supply curves by Aljubran et al. (2024)
     discount_rate = 0.07  # load_costs(snakemake.input.tech_costs).loc["geothermal", "wacc_real"]
-    drilling_cost = snakemake.config["renewable"]["EGS"]["drilling_cost"]
+    drilling_cost = egs_config["drilling_cost"]
 
     with (
         xr.open_dataset(
@@ -837,7 +830,7 @@ def attach_egs(
                 f"Seismic risk mask excluded {len(excluded_buses)} EGS buses. {len(df_specs)} buses remaining.",
             )
 
-        qualities = snakemake.config["renewable"]["EGS"].get("quality", [1])
+        qualities = egs_config.get("quality", [1])
 
         for q in qualities:
             suffix = " " + car + f" Q{q}"
@@ -1065,9 +1058,10 @@ def clean_bus_data(n: pypsa.Network):
 def attach_breakthrough_renewable_plants(
     n,
     fn_plants,
+    bus2sub_fn,
+    busmap_s_fn,
+    profile_fns,
     renewable_carriers,
-    extendable_carriers,
-    costs,
 ):
     add_missing_carriers(n, renewable_carriers)
 
@@ -1082,11 +1076,11 @@ def attach_breakthrough_renewable_plants(
     # absent from bus2sub and drop out naturally, which also removes accidental
     # attachments where a foreign raw id collides with a local substation id.
     # All ids are compared as plain integer-strings ("35827", never "35827.0").
-    bus2sub = pd.read_csv(snakemake.input.bus2sub, dtype=str)
+    bus2sub = pd.read_csv(bus2sub_fn, dtype=str)
     raw_to_sub = bus2sub.assign(
         sub_id=bus2sub["sub_id"].str.replace(r"\.0$", "", regex=True),
     ).set_index("Bus")["sub_id"]
-    busmap_s = pd.read_csv(snakemake.input.busmap_s, dtype=str)
+    busmap_s = pd.read_csv(busmap_s_fn, dtype=str)
     sub_to_cluster = busmap_s.assign(
         sub_id=busmap_s["sub_id"].str.replace(r"\.0$", "", regex=True),
         cluster_bus=busmap_s["cluster_bus"].str.replace(r"\.0$", "", regex=True),
@@ -1104,7 +1098,7 @@ def attach_breakthrough_renewable_plants(
         tech_plants.index = tech_plants.index.astype(str)
         logger.info(f"Adding {len(tech_plants)} {tech} generators to the network.")
 
-        p_nom_be = pd.read_csv(snakemake.input[f"{tech}_breakthrough"], index_col=0)
+        p_nom_be = pd.read_csv(profile_fns[tech], index_col=0)
 
         intersection = set(p_nom_be.columns).intersection(
             tech_plants.index,
@@ -1148,9 +1142,10 @@ def apply_pudl_fuel_costs(
     n,
     plants,
     costs,
+    pudl_fuel_costs_fn,
 ):
     # Apply PuDL Fuel Costs for plants where listed
-    pudl_fuel_costs = pd.read_csv(snakemake.input["pudl_fuel_costs"], index_col=0)
+    pudl_fuel_costs = pd.read_csv(pudl_fuel_costs_fn, index_col=0)
 
     # Check if any of the plants are in the pudl fuel costs
     if not set(plants.index).intersection(pudl_fuel_costs.columns):
@@ -1217,7 +1212,6 @@ def main(snakemake):
     renewable_carriers = set(params.renewable_carriers)
     extendable_carriers = params.extendable_carriers
     conventional_carriers = params.conventional_carriers
-    conventional_inputs = {k: v for k, v in snakemake.input.items() if k.startswith("conventional_")}
 
     plants = load_powerplants(
         snakemake.input["powerplants"],
@@ -1244,7 +1238,7 @@ def main(snakemake):
         snakemake.input,
         renewable_carriers,
         extendable_carriers,
-        params.length_factor,
+        snakemake.config["renewable"]["EGS"],
     )
 
     attach_conventional_generators(
@@ -1253,11 +1247,8 @@ def main(snakemake):
         plants,
         conventional_carriers,
         extendable_carriers,
-        params.conventional,
         renewable_carriers,
-        conventional_inputs,
         unit_commitment=params.conventional["unit_commitment"],
-        fuel_price=None,  # update fuel prices later
     )
     apply_seasonal_capacity_derates(
         n,
@@ -1309,9 +1300,10 @@ def main(snakemake):
     n = attach_breakthrough_renewable_plants(
         n,
         snakemake.input["plants_breakthrough"],
+        snakemake.input.bus2sub,
+        snakemake.input.busmap_s,
+        {"hydro": snakemake.input["hydro_breakthrough"]},
         ["hydro"],
-        extendable_carriers,
-        costs,
     )
 
     update_p_nom_max(n)
@@ -1378,7 +1370,7 @@ def main(snakemake):
                     )
 
         if params.conventional["dynamic_fuel_price"]["pudl"]:
-            n = apply_pudl_fuel_costs(n, plants, costs)
+            n = apply_pudl_fuel_costs(n, plants, costs, snakemake.input["pudl_fuel_costs"])
 
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues

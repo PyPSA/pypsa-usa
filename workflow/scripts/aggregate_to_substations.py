@@ -86,7 +86,6 @@ def remove_transformers(n):
 
 def aggregate_to_substations(
     network: pypsa.Network,
-    substations,
     busmap,
     topological_boundaries: str,
     aggregation_strategies=dict(),
@@ -109,7 +108,7 @@ def aggregate_to_substations(
         generator_strategies=generator_strategies,
     )
 
-    substations = network.buses[
+    bus_attrs_by_sub = network.buses[
         [
             "sub_id",
             "interconnect",
@@ -124,27 +123,28 @@ def aggregate_to_substations(
             "y",
         ]
     ]
-    substations = substations.drop_duplicates(subset=["sub_id"])
-    substations.sub_id = substations.sub_id.astype(int).astype(str)
-    substations.index = substations.sub_id
+    bus_attrs_by_sub = bus_attrs_by_sub.drop_duplicates(subset=["sub_id"])
+    bus_attrs_by_sub.sub_id = bus_attrs_by_sub.sub_id.astype(int).astype(str)
+    bus_attrs_by_sub.index = bus_attrs_by_sub.sub_id
 
     match topological_boundaries:
         case "county":
-            zone = substations.county
+            zone = bus_attrs_by_sub.county
         case "reeds_zone":
-            zone = substations.reeds_zone
+            zone = bus_attrs_by_sub.reeds_zone
         case "state":
-            zone = substations.reeds_state
+            zone = bus_attrs_by_sub.reeds_state
         case _:
             raise ValueError(
-                "zonal_aggregation must be either balancing_area, country, or state",
+                "model_topology.topological_boundaries must be one of 'county', "
+                f"'reeds_zone', 'state'; got {topological_boundaries!r}",
             )
 
     network_s = clustering.network
 
-    network_s.buses["interconnect"] = substations.interconnect
-    network_s.buses["x"] = substations.x
-    network_s.buses["y"] = substations.y
+    network_s.buses["interconnect"] = bus_attrs_by_sub.interconnect
+    network_s.buses["x"] = bus_attrs_by_sub.x
+    network_s.buses["y"] = bus_attrs_by_sub.y
     network_s.buses["substation_lv"] = True
     network_s.buses["country"] = zone  # `country` field drives pypsa aggregation grouping
 
@@ -169,19 +169,6 @@ def aggregate_to_substations(
             "trans_reg",
             "trans_grp",
             "state",
-        ]
-    else:
-        cols2drop = [
-            "balancing_area",
-            "state",
-            "substation_off",
-            "sub_id",
-            "reeds_zone",
-            "reeds_ba",
-            "nerc_reg",
-            "trans_reg",
-            "trans_grp",
-            "reeds_state",
         ]
 
     cols2drop = [col for col in cols2drop if col in network_s.buses.columns]
@@ -226,9 +213,6 @@ if __name__ == "__main__":
     n = convert_to_voltage_level(n, 230)
     n, trafo_map = remove_transformers(n)
 
-    substations = pd.read_csv(snakemake.input.sub, index_col=0)
-    substations.index = substations.index.astype(str)
-
     busmap_to_sub = n.buses.sub_id.astype(int).astype(str).to_frame()
 
     n = assign_line_lengths(n, 1.25)
@@ -237,7 +221,6 @@ if __name__ == "__main__":
 
     n, busmap = aggregate_to_substations(
         n,
-        substations,
         busmap_to_sub.sub_id,
         topological_boundaries,
         params.aggregation_strategies,

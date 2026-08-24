@@ -129,13 +129,9 @@ if __name__ == "__main__":
         len(df_specs),
     )
 
-    specs_caps = (
-        agg_specs.set_index(["sub_id", "Quality"])["avail_capacity_mw"]
-        # Use the post-aggregation capacities as weights so re-running the
-        # aggregation against the output reproduces it (idempotent).
-    )
-    # For profile weighting we need the PRE-aggregation per-(sub_id, Quality)
-    # capacity. Rebuild it from the original dataframe.
+    # Weight by the PRE-aggregation per-(sub_id, Quality) capacity: aggregate_profile
+    # maps each substation row through the busmap itself, so post-aggregation cluster
+    # capacities would double-count. Rebuild it from the original dataframe.
     pre_caps = df_specs.assign(sub_id=df_specs["sub_id"].astype(str)).set_index(["sub_id", "Quality"])[
         "avail_capacity_mw"
     ]

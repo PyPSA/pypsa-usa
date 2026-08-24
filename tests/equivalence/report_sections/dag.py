@@ -60,22 +60,18 @@ def _parse(dot: str) -> tuple[set[str], set[tuple[str, str]]]:
 def _walltimes(ctx: dict) -> dict:
     """Per-rule walltimes {rule: {'candidate': s, 'anchor': s}}, best effort.
 
-    The ``benchmarks`` module is being written concurrently, so both the
-    import and the call are guarded; fallback is no time annotation.
+    Both the import of the ``benchmarks`` module and the call into it are
+    guarded; fallback is no time annotation.
     """
     try:
         from .benchmarks import rule_walltimes
     except Exception:
         return {}
-    for args in ((ctx,), ()):
-        try:
-            times = rule_walltimes(*args)
-        except TypeError:
-            continue
-        except Exception:
-            return {}
-        return times if isinstance(times, dict) else {}
-    return {}
+    try:
+        times = rule_walltimes(ctx)
+    except Exception:
+        return {}
+    return times if isinstance(times, dict) else {}
 
 
 def _node_label(rule: str, times: dict, labels: dict) -> str:

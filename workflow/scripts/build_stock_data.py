@@ -401,33 +401,6 @@ def _already_retired(build_year: int, lifetime: int, year: int) -> bool:
         return False
 
 
-def _get_marginal_cost(
-    n: pypsa.Network,
-    names: list[str],
-    fuel: str | None = None,
-) -> float | pd.DataFrame:
-    """
-    Gets marginal cost from the investable link.
-
-    If dyanmic costs are applied, returns the marginal cost dataframe.
-    Else, returns the static cost associated with the first name in the
-    list
-    """
-    df = pd.DataFrame(index=n.links_t.marginal_cost.index)
-
-    try:
-        for name in names:
-            df[name] = n.links_t.marginal_cost[name]
-        return df
-    except KeyError:
-        logger.info(f"No dynamic cost found for {name}")
-        if fuel:
-            return n.links.at[fuel, "marginal_cost"]
-        else:
-            logger.warning(f"No fuel costs applied for {name}")
-            return 0
-
-
 ###
 # Public methods
 ###
@@ -881,8 +854,6 @@ def add_road_transport_brownfield(
 
         df["ratio"] = ratios.at["lpg", ratio_name]
         df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency).round(2)  # div to convert from %
-
-        # marginal_cost = _get_marginal_cost(n, df.bus1.to_list())
 
         # roll back vehicle stock in 5 year segments
         step = 5  # years

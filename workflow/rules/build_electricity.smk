@@ -155,6 +155,37 @@ godeeep_planning_horizon = (
 )
 
 
+def nrel_exclusion_artifact(kind):
+    """Input function for the NREL exclusion artifact of the given ``kind``.
+
+    ``kind`` is either ``avail`` or ``caps``; the artifact is named
+    ``{kind}_{tech}_{access}{_cec}{_boem}.nc``. Returns no input when
+    ``renewable_land_access`` is unset.
+    """
+
+    def _inner(w):
+        access = config.get("renewable_land_access")
+        if not access:
+            return []
+        cec = (
+            "_cec"
+            if config.get("apply_cec_basescreen")
+            and w.technology in ("onwind", "solar")
+            else ""
+        )
+        boem = (
+            "_boem"
+            if config.get("apply_boem_osw") and w.technology.startswith("offwind")
+            else ""
+        )
+        return (
+            DATA
+            + f"nrel_exclusion/derived/{kind}_{w.technology}_{access}{cec}{boem}.nc"
+        )
+
+    return _inner
+
+
 rule build_renewable_profiles:
     params:
         renewable=config_provider("renewable"),
@@ -189,48 +220,8 @@ rule build_renewable_profiles:
             if w.technology in ("onwind", "solar")
             else GEOSPATIAL + "{interconnect}/regions_offshore_s{simpl}.geojson"
         ),
-        nrel_avail=lambda w: (
-            DATA
-            + "nrel_exclusion/derived/avail_{tech}_{acc}{cec}{boem}.nc".format(
-                tech=w.technology,
-                acc=config["renewable_land_access"],
-                cec=(
-                    "_cec"
-                    if config.get("apply_cec_basescreen")
-                    and w.technology in ("onwind", "solar")
-                    else ""
-                ),
-                boem=(
-                    "_boem"
-                    if config.get("apply_boem_osw")
-                    and w.technology.startswith("offwind")
-                    else ""
-                ),
-            )
-            if config.get("renewable_land_access")
-            else []
-        ),
-        nrel_caps=lambda w: (
-            DATA
-            + "nrel_exclusion/derived/caps_{tech}_{acc}{cec}{boem}.nc".format(
-                tech=w.technology,
-                acc=config["renewable_land_access"],
-                cec=(
-                    "_cec"
-                    if config.get("apply_cec_basescreen")
-                    and w.technology in ("onwind", "solar")
-                    else ""
-                ),
-                boem=(
-                    "_boem"
-                    if config.get("apply_boem_osw")
-                    and w.technology.startswith("offwind")
-                    else ""
-                ),
-            )
-            if config.get("renewable_land_access")
-            else []
-        ),
+        nrel_avail=nrel_exclusion_artifact("avail"),
+        nrel_caps=nrel_exclusion_artifact("caps"),
         cutout=lambda wildcards: (
             expand(
                 "cutouts/"
@@ -377,17 +368,14 @@ def demand_raw_data(wildcards):
         return []
 
 
-def demand_dissagregate_data(wildcards):
-    end_use = wildcards.end_use
-    if end_use == "industry":
-        strategy = "cliu"
-    else:
-        strategy = "pop"
+def demand_disaggregate_data(wildcards):
+    """CLIU county-level industrial loads are the only disaggregation input.
 
-    if strategy == "pop":
+    All other end uses disaggregate by population and need no extra file.
+    """
+    if wildcards.end_use != "industry":
         return []
-    elif strategy == "cliu":
-        return DATA + "industry_load/2014_update_20170910-0116.csv"
+    return DATA + "industry_load/2014_update_20170910-0116.csv"
 
 
 def demand_scaling_data(wildcards):
@@ -456,7 +444,7 @@ rule build_service_demand:
     input:
         network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
-        dissagregate_files=demand_dissagregate_data,
+        dissagregate_files=demand_disaggregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
         electricity=DEMAND + "{interconnect}/{end_use}_electricity_s{simpl}.pkl",
@@ -486,7 +474,7 @@ rule build_industry_demand:
     input:
         network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
-        dissagregate_files=demand_dissagregate_data,
+        dissagregate_files=demand_disaggregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
         electricity=DEMAND + "{interconnect}/{end_use}_electricity_s{simpl}.pkl",
@@ -514,7 +502,7 @@ rule build_transport_road_demand:
     input:
         network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
-        dissagregate_files=demand_dissagregate_data,
+        dissagregate_files=demand_disaggregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
         light_duty=DEMAND + "{interconnect}/{end_use}_light-duty_s{simpl}.pkl",
@@ -546,7 +534,7 @@ rule build_transport_other_demand:
     input:
         network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
-        dissagregate_files=demand_dissagregate_data,
+        dissagregate_files=demand_disaggregate_data,
     output:
         DEMAND + "{interconnect}/{end_use}_{vehicle}_s{simpl}.pkl",
     log:
@@ -989,14 +977,12 @@ rule prepare_network:
     output:
         NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
     log:
-        solver="logs/prepare_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.log",
+        "logs/prepare_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.log",
     threads: 1
     resources:
         walltime=config_provider("walltime", "prepare_network", default="00:30:00"),
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 6,
     group:
         "prepare"
-    log:
-        "logs/prepare_network",
     script:
         "../scripts/prepare_network.py"

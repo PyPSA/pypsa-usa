@@ -178,10 +178,7 @@ def _benchmark_headline(ctx) -> str:
     except Exception:
         return fallback
     try:
-        try:
-            df = harness_benchmark_df(ctx)
-        except TypeError:
-            df = harness_benchmark_df()
+        df = harness_benchmark_df(ctx)
         if df is None or len(df) == 0:
             return fallback
         cand_name = ctx["labels"]["candidate"]

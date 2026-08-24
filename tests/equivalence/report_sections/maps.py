@@ -21,12 +21,13 @@ otherwise), sub-pixel simplified geometry, zero region-edge linewidth, and
 
 from __future__ import annotations
 
+from ..compare import CAPACITY_RTOL, OBJECTIVE_RTOL, RTOL
 from ..paths import INTERCONNECT as IC
 
-# Relative (rel) thresholds mirroring the harness tolerance policy:
-# assembled-stage per-bus vectors (D2-ish) and solved-stage zone vectors (D7).
-ASSEMBLED_RTOL = 1e-3
-SOLVED_RTOL = 5e-3
+# Relative (rel) thresholds come from the harness tolerance policy itself
+# (compare.RTOL for assembled-stage per-bus vectors (D2-ish), and
+# compare.CAPACITY_RTOL / compare.OBJECTIVE_RTOL for the solved stage (D7)),
+# so the maps cannot drift from the gate that decides pass/fail.
 ABS_FLOOR = 1e-3  # MW — ignore sub-kW noise when flagging a carrier
 
 MAP_DPI = 96  # <= 100 per scale policy: many ~41k-polygon panels must stay small
@@ -164,7 +165,7 @@ def render(ctx) -> str:
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=Normalize(vmin_, vmax_))
             fig.colorbar(sm, ax=ax, shrink=0.75, pad=0.02)
         fig.suptitle(title, fontsize=12)
-        same = dmax <= max(1e-6, ASSEMBLED_RTOL * vmax)
+        same = dmax <= max(1e-6, RTOL * vmax)
         note = (
             "identical within tolerance &mdash; the difference panel is blank by construction"
             if same
@@ -301,7 +302,7 @@ def render(ctx) -> str:
             pa = pnom_by_carrier_bus(na, "p_nom")
             order, totals = carriers_by_total(pc, pa)
             order = [c for c in order if totals[c] > 0.0]
-            differing, identical = differing_carriers(pc, pa, ASSEMBLED_RTOL)
+            differing, identical = differing_carriers(pc, pa, RTOL)
             out = [
                 "<h4>Existing generator capacity (p_nom) by carrier</h4>"
                 "<p>Installed capacity attached to each substation, split by carrier. "
@@ -311,7 +312,7 @@ def render(ctx) -> str:
             ]
             if differing:
                 out.append(
-                    f"<p>Summary: per-bus vectors differ beyond {ASSEMBLED_RTOL:.0e} relative for "
+                    f"<p>Summary: per-bus vectors differ beyond {RTOL:.0e} relative for "
                     "<b>"
                     + ", ".join(differing)
                     + "</b>; identical within tolerance for "
@@ -321,7 +322,7 @@ def render(ctx) -> str:
             else:
                 out.append(
                     f"<p>Summary: all {len(identical)} carriers are identical within "
-                    f"{ASSEMBLED_RTOL:.0e} relative per bus ("
+                    f"{RTOL:.0e} relative per bus ("
                     + ", ".join(identical)
                     + ") &mdash; every difference panel below should be blank.</p>",
                 )
@@ -534,7 +535,7 @@ def render(ctx) -> str:
         f"{ctx['clusters']} zones and solving, the question changes from "
         "&lsquo;is the input data identical?&rsquo; to &lsquo;does the optimizer build the same "
         "system?&rsquo;. Zone-level optimal capacity (p_nom_opt) per carrier is mapped "
-        f"only where the two sides disagree by more than {SOLVED_RTOL:.1%} (the "
+        f"only where the two sides disagree by more than {CAPACITY_RTOL:.1%} (the "
         "harness's solved-stage tolerance).</p>",
     )
 
@@ -560,18 +561,18 @@ def render(ctx) -> str:
             out.append(
                 f"<p>Total system cost (solver objective): {labels['candidate']} "
                 f"{oc:,.0f} vs {labels['anchor']} {oa:,.0f} &mdash; relative difference "
-                f"{rel:.1e}, within the 0.1% solved-stage tolerance."
-                if rel <= 1e-3
+                f"{rel:.1e}, within the {OBJECTIVE_RTOL:.1%} solved-stage tolerance."
+                if rel <= OBJECTIVE_RTOL
                 else f"<p>Total system cost (solver objective): {labels['candidate']} "
                 f"{oc:,.0f} vs {labels['anchor']} {oa:,.0f} &mdash; relative difference "
-                f"{rel:.1e}, OUTSIDE the 0.1% tolerance.",
+                f"{rel:.1e}, OUTSIDE the {OBJECTIVE_RTOL:.1%} tolerance.",
             )
             out[-1] += "</p>"
         except Exception as e:
             out.append(f"<p>map failed (system cost note): {e}</p>")
         pc = pnom_by_carrier_bus(nsc, "p_nom_opt")
         pa = pnom_by_carrier_bus(nsa, "p_nom_opt")
-        differing, identical = differing_carriers(pc, pa, SOLVED_RTOL)
+        differing, identical = differing_carriers(pc, pa, CAPACITY_RTOL)
         if identical:
             out.append(
                 "<p>Zone-level optimal capacity identical within tolerance for: " + ", ".join(identical) + ".</p>",
