@@ -303,3 +303,90 @@ classes; waivers finalized in tests/equivalence/waivers.yaml.
   drop to the geometry-dependent attach. All three prong-2 findings are
   DL-9-class and waived; magnitudes recorded here supersede the row's. |
   recalibrated 2026-08-23 |
+
+- **DL-13 (scoped runs, all stages; ADOPTED on both sides): the
+  `plants_must_add` seam-plant fallback bounded to the model footprint.**
+  `filter_plants_by_region` unconditionally re-adds every plant outside all
+  of the run's interconnect ReEDS shapes whose ReEDS membership disagrees
+  with its EIA `interconnection` column — a guard so imprecise ReEDS shapes
+  never delete a legitimate border plant. Since DL-11 the regions layers
+  tile only the model footprint in scoped runs, so that add-back bypasses
+  the now CA-sized region sjoin, and `match_plant_to_bus`'s second pass —
+  which applies NO distance bound — attaches the survivors to the nearest
+  in-footprint bus. This is DL-11's recorded KNOWN RESIDUAL, now measured
+  exactly: 23 plants / 1,887.4 MW, every one >=890 km away (1,112.1 MW NM
+  wind/solar, Buffalo Ridge II SD 210.0 MW, Hardy Hills Solar IN 195.0 MW
+  at 2,508 km, Fort Peck MT hydro 162.4 MW over 4 units; DL-11's "~27 /
+  1,890.6 MW" estimate superseded). FIX (v1-epic d98cb93f + 103f2194): in
+  a footprint-scoped run keep only must-add plants within
+  `SEAM_PLANT_MAX_KM` = 100 km of `regions_onshore` + `regions_offshore`
+  in EPSG:5070; in-footprint plants are at distance 0 and always kept, so
+  genuine near-seam plants still attach. `match_plant_to_bus` is
+  deliberately left alone — its unbounded second pass is correct once the
+  leak population is filtered upstream. Every drop logged at WARNING with
+  name, carrier, state, MW, distance, plus a count/MW summary. GATE:
+  applied only when `model_topology.include` is truthy, read from
+  `snakemake.config` in `main()` and threaded as
+  `filter_plants_by_region(footprint_scoped=...)`. With the gate off not
+  one statement changes, so unfiltered interconnect/usa runs are
+  byte-identical BY CONSTRUCTION — verified by evaluating the gate
+  expression parsed from both sides' source against both configs
+  (`{'reeds_state': ['CA']}`->True, `{}`->False). The gate is
+  load-bearing, not cosmetic: against a full-western footprint the same
+  population is mostly legitimate and an unconditional 100 km bound would
+  delete 8 plants / 694.9 MW. USER DECISION 2026-08-23: fold into v1-epic
+  AND mirror onto the anchor. THIRD ADOPTED-FIX anchor patch
+  (`tests/equivalence/build.py::apply_seam_adoption`), and the first by
+  targeted string surgery rather than DL-12's whole-file adoption, because
+  v1-epic's `add_electricity.py` legitimately differs from the anchor's
+  (simplify-early bus2sub/sub_id removal, the DL-1/DL-2 `length_factor=1.0`
+  decision, schema logging). The whole `filter_plants_by_region` body is
+  byte-identical between e7f8bd70 and v1-epic, so the anchor takes the
+  same `footprint_scoped` plumbing; the constant and helper are sliced
+  from the LIVE candidate file so both sides run the same text and drift
+  re-applies. Rails: candidate sentinel, all four needles verified exactly
+  once against the PRISTINE anchor file via `git show e7f8bd70:`, refusal
+  if the pristine anchor already carries the sentinel, post-assembly
+  checks for three sentinel occurrences and end-to-end wiring, idempotence
+  BY CONTENT, and `mark_force_rerun(["add_electricity"])` on
+  newly-applied. Verified AST-identical across sides in helper body,
+  constant, signature, gated block and `main()` wiring. MEASURED EFFECT —
+  SYMMETRIC, and larger than the pre-run estimate, which counted generator
+  NAMES rather than capacity: 19 of the 23 plants / 1,725.0 MW do reach
+  the assembled network (onwind 1,416.5, solar 281.5, oil 27.0), but only
+  the oil plant is its own conventional generator — wind and solar
+  capacity is folded onto per-bus atlite profile generators by
+  `attach_renewable_capacities_to_atlite`, so the generator COUNT falls by
+  1 while p_nom falls by 1,725.0 MW. The other 4 (Fort Peck hydro, 162.4
+  MW) never reached the network: hydro is attached from the breakthrough
+  base-grid files. Cross-check: pre-fix onwind (2,776.9 + 1,416.5 =
+  4,193.4) and solar (21,165.4 + 281.5 = 21,446.9) reproduce DL-9's
+  recorded anchor values exactly. Assembled stage, BOTH sides: existing
+  p_nom 84,456.3 -> 82,731.3 MW, p10 oil 67.4 -> 40.4, onwind 4,193.4 ->
+  2,776.9, solar 21,446.9 -> 21,165.4, generators 2,594 -> 2,593
+  (candidate) and 1,771 -> 1,770 (anchor); max cross-side per-carrier
+  residual 4.5e-13 MW. HARNESS RESULT: prong 1 PASS, 0 live / 72 total
+  (finding classes identical to the DL-12 baseline), solved objective
+  candidate -204,665,425.94 vs anchor -204,665,929.13, rel 2.46e-06,
+  per-carrier `p_nom_opt` agreeing to 6e-4 MW; both sides moved together
+  from ~-222,743,578.7 (+8.1%) as 1.7 GW of free existing renewables left
+  and gas build rose (CCGT 12,563.3 -> 12,578.7, OCGT 8,434.5 -> 8,843.9
+  MW). Prong 2 PASS, 0 live / 3 (all DL-9-class): onwind 6,457.0 vs
+  2,776.9 and solar 24,752.0 vs 21,165.4, i.e. DL-9's absolute gaps
+  3,680.1 and 3,586.6 MW are EXACTLY unchanged while both levels shift
+  together — percentages rose (87.8%->132.5%, 16.7%->16.9%) only because
+  the bases shrank. ROBUSTNESS DEFECT FOUND BY THE HARNESS (fixed in
+  103f2194 before sign-off): the first implementation unioned the region
+  layers before measuring distance and prong 2 died with `GEOSException:
+  TopologyException: side location conflict` — the regions are 100% valid
+  as stored in EPSG:4326, but reprojecting to EPSG:5070 leaves 9 of 29
+  polygons self-intersecting or degenerate at simpl=20 (none at simpl=''),
+  and GEOS `union_all` refuses invalid input. Since dist(p, U R) = min
+  over R of dist(p, R), the union was replaced by a per-region minimum,
+  robust to self-intersection; the two agree to 0.0 m on the simpl=''
+  layer where the union works, and prong-1 numbers were bit-identical
+  before and after. A regression test (self-intersecting bowtie +
+  overlapping box) reproduces the GEOS failure against the union
+  implementation. USA leg: gate proven mechanically and by config;
+  empirical usa data-stage run in progress at sign-off, recorded below
+  when complete. | countersigned (ktehranchi, 2026-08-23) |

@@ -99,6 +99,41 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **Seam-plant fallback bounded to the model footprint in scoped runs
+  (DL-13)** (`workflow/scripts/add_electricity.py`, commits d98cb93f and
+  103f2194; harness adoption in
+  `tests/equivalence/build.py::apply_seam_adoption`).
+  `filter_plants_by_region` re-adds "must add" plants — those outside
+  every ReEDS shape of the run's interconnect whose ReEDS membership
+  contradicts their EIA `interconnection` — without testing them against
+  the regions layers, and `match_plant_to_bus` then attaches whatever
+  survives to the nearest bus at unbounded distance. Since DL-11 shrank
+  those layers to the model footprint, a CA-only run picked up 23 plants /
+  1,887.4 MW from as far away as Indiana (Hardy Hills Solar, 2,508 km).
+  Now, when `model_topology.include` scopes the run, a must-add plant is
+  kept only if it lies within `SEAM_PLANT_MAX_KM` = 100 km of the
+  onshore+offshore regions (EPSG:5070); in-footprint plants are at
+  distance 0 and always kept, and every drop is logged at WARNING with
+  name, carrier, state, MW and distance. *Results effect:* **Accepted
+  delta for scoped runs — DL-13, countersigned 2026-08-23.** Gated on
+  `include`, so unfiltered interconnect runs (incl. the usa harness,
+  `include: {}`) are byte-identical by construction. Of the 1,887.4 MW,
+  1,725.0 MW actually reached the assembled network (onwind 1,416.5,
+  solar 281.5, oil 27.0; the 162.4 MW of Fort Peck hydro never did, since
+  hydro comes from the breakthrough files), and the change is symmetric:
+  after mirroring onto the anchor, prong 1 is PASS with 0 live findings,
+  objective rel 2.46e-06 and per-carrier existing capacity equal to
+  4.5e-13 MW, while prong 2 leaves DL-9's absolute gaps (3,680.1 /
+  3,586.6 MW) exactly unchanged. Third ADOPTED-FIX anchor patch after
+  DL-11 and DL-12, and the first done by targeted string surgery rather
+  than whole-file adoption, because `add_electricity.py` legitimately
+  differs between the branches. Note: the first implementation unioned
+  the region layers before measuring distance and crashed prong 2 with a
+  GEOS "side location conflict" — reprojecting coarse cluster polygons to
+  EPSG:5070 leaves 9 of 29 invalid — so the distance is now taken per
+  region, which is mathematically identical (0.0 m difference where the
+  union succeeds) and robust to invalid geometry.
+
 - **`build_powerplants` EIA-860 pre-aggregation adopted onto the anchor
   (DL-12)** (candidate code already on `v1-epic`; harness adoption in
   `tests/equivalence/build.py::apply_powerplants_adoption`). v1-epic
