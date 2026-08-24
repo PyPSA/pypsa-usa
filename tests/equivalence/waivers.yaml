@@ -81,18 +81,6 @@
   ledger: DL-7
   reason: mean-of-means aggregation composition; max 2.55 $/MWh
 - stage: '*'
-  component: Generator
-  column: efficiency
-  kind: value
-  ledger: DL-7
-  reason: aggregation composition; max 0.0028
-- stage: '*'
-  component: Generator
-  column: marginal_cost
-  kind: value
-  ledger: DL-7
-  reason: aggregation composition; max 2.55 $/MWh
-- stage: '*'
   component: Bus
   column: Pd
   kind: value

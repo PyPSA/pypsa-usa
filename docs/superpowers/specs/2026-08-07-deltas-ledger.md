@@ -212,3 +212,94 @@ classes; waivers finalized in tests/equivalence/waivers.yaml.
   profile-group drops vs cluster geometry) is unchanged but the numbers are
   superseded by the post-DL-11 rerun recorded below. | countersigned
   (ktehranchi, 2026-08-23) |
+
+- **DL-12 (all stages, prong 1; ADOPTED on both sides): EIA-860 history
+  pre-aggregated before the `build_powerplants` LEFT JOINs.** Upstream's
+  `load_eia_operable_data` / `load_heat_rates_data` join
+  `out_eia__yearly_generators` and `core_eia860__scd_*` raw, so each
+  generator fans out against ~24 `report_date` vintages before the aggregate
+  collapses them; v1-epic pre-aggregates in `ges_latest` / `plants_latest` /
+  `yg_latest` CTEs so each generator contributes once. On the shared
+  `powerplants.csv` (31,405 rows x 55 columns, identical index both sides)
+  this moved 8,231 `fuel_cost`, 10,381 `heat_rate`, 8,380 `efficiency` and
+  13,679 `marginal_cost` cells; CA gas capacity-weighted fuel cost was
+  offset +0.0558 $/MMBtu (5.0808 vs 5.0250). The duplicate-weighted means
+  are demonstrably wrong — upstream credits Watson Cogen (1987 vintage) a
+  physically impossible 62% efficiency — and this accounted for essentially
+  all of the live prong-1 divergence. USER DECISION 2026-08-23: adopt the
+  candidate query on the anchor rather than sign the divergence as a delta.
+  Implemented as the SECOND ADOPTED-FIX anchor patch
+  (`tests/equivalence/build.py::apply_powerplants_adoption`, precedent
+  DL-11): a dynamic whole-file adoption that overwrites the anchor's
+  `workflow/scripts/build_powerplants.py` with the live candidate copy at
+  provision time — the two rule definitions are identical apart from the
+  output path and the script is layout-agnostic — gated on the sentinel CTE
+  `ges_latest`, guarded by a check that the PRISTINE anchor file (read via
+  `git show e7f8bd70:`) lacks the sentinel and provides every
+  `snakemake.input/params/output` key the candidate reads, and idempotent
+  by content comparison so future drift re-applies and re-arms the forced
+  rerun. The one-shot `.eq-force-rerun` writer is now merge-safe
+  (`mark_force_rerun`) since two patches can queue rules in one provision.
+  PUDL release is identical on both sides (v2025.2.0) and all five tracked
+  rule inputs are byte-identical, so the query was the sole divergence.
+  RESULT: prong 1 PASS, 0 live findings; solved objective rel
+  2.34e-2 -> 2.1e-6 (full rebuild; 8.4e-8 incremental) and every carrier's
+  `p_nom_opt` agrees to 0.01 MW — CCGT 12,563.33 and OCGT 8,434.51 on both
+  sides, eliminating the 9.3%/11.4% split. Prong 2 PASS, 0 live / 3 total
+  (all DL-9-class). SIDE FINDINGS: (i) the adoption also carries v1-epic's
+  `set_derates` NaN->1.0 fill, a no-op once both sides rebuild from the
+  same code; (ii) the candidate's own `powerplants.csv` was STALE with
+  respect to its own script (built before the derate fix;
+  `--rerun-triggers mtime` never noticed) — both sides regenerated; latent
+  staleness of long-lived shared artifacts flagged for a harness guard;
+  (iii) `build_powerplants` is not bit-reproducible: DuckDB `first()` and
+  tied `array_agg(... ORDER BY report_date DESC)` picks perturb the
+  weighted-mean imputations at <=1e-5 relative — the post-adoption
+  cross-side residual (9,803 cells) is SMALLER than the same-side
+  run-to-run residual (12,951 cells), i.e. parity is exact up to the
+  code's own nondeterminism, >100x below the comparator's 1e-3 tolerance.
+  Deterministic tie-breaks flagged as their own follow-up. | countersigned
+  (ktehranchi, 2026-08-23) |
+
+- **DL-7 re-scope (2026-08-23) — mechanism PARTLY disproven, bounds were
+  stale and exceeded, scope now reduced to one column.** (1) SCOPE: the
+  recorded root cause ("non-composable aggregation strategies, mean of
+  means") never explained the `efficiency` and `marginal_cost` members of
+  this class — those came from the SOURCE DATA (the `build_powerplants`
+  join fan-out now signed as DL-12) and after the DL-12 adoption they
+  produce ZERO findings at every stage in both prongs; their two waiver
+  rows are deleted as dead. The mechanism IS correct for the surviving
+  member: `generators.fuel_cost: mean` (plain, unweighted) is genuinely
+  non-associative, so plants->sub->zone (anchor) differs from plants->zone
+  (candidate). (2) BOUNDS: measured pre-DL-12, `fuel_cost` reached 8.4476
+  $/MWh (3.3x the recorded 2.55), `efficiency` 0.004721 (1.7x) and
+  `marginal_cost` 3.5141 $/MWh (1.4x); because these were stage-`'*'`
+  value waivers they absorbed `marginal_cost` — the column that drives the
+  objective — which is how a 2.34% objective error reached the solved
+  stage with only two live findings. Any future waiver over a solver-input
+  column should carry an explicit magnitude ceiling. RESTATED DL-7:
+  clustered stages, prong 1 only: `Generator.fuel_cost` differs on 6 of 31
+  clustered generators (6/45 at later stages), max 8.4498 $/MWh (40.4%) on
+  `p10 oil`, with p9 oil 6.6% and p9/p10/p11 biomass <=10.8%. Accepted
+  because the column is carried metadata: `marginal_cost`, `efficiency`
+  and the solved objective are finding-free at 1e-3 and per-carrier
+  `p_nom_opt` agrees to 0.01 MW. Prong 2 shows zero residuals. The
+  original recommendation stands, narrower: switching `fuel_cost` (and
+  `heat_rate`) to `capacity_weighted_average` would eliminate the class. |
+  re-scoped 2026-08-23; restatement awaiting countersignature |
+
+- **DL-9 recalibration post-DL-11/DL-12 (2026-08-23):** prong-2 residuals
+  are now existing onwind 7,873.5 (cand) vs 4,193.4 MW (anchor)
+  (+87.8% relative, gap 3,680.1 MW) and solar 25,033.5 vs 21,446.9
+  (+16.7%, gap 3,586.6 MW); objective rel 21.2%. The SOLAR ABSOLUTE GAP IS
+  UNCHANGED from the pre-DL-11 calibration (3,586.6 MW), proving DL-9's
+  mechanism is intact and purely additive to DL-11's footprint scoping;
+  the onwind gap shrank 4,418.6 -> 3,680.1 MW (738.5 MW of the old gap was
+  out-of-footprint plants DL-11 removed). Percentages and the objective
+  rel grew only because the CA-only base is ~5x smaller. NEW ISOLATION
+  EVIDENCE: the anchor is insensitive to `{simpl}` — its prong-2 existing
+  onwind/solar equal its prong-1 values exactly, while the candidate's
+  move with cluster geometry; this cleanly isolates the issue-#16 silent
+  drop to the geometry-dependent attach. All three prong-2 findings are
+  DL-9-class and waived; magnitudes recorded here supersede the row's. |
+  recalibrated 2026-08-23 |

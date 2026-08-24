@@ -13,9 +13,10 @@ git worktree of the pinned anchor SHA, provisioned per the plan:
 - apply the documented BUILD-INFRA patch to ``rules/common.smk`` (the
   upstream #764 ``constants`` source-cache import bug; same fix as v1-epic
   commit e43fa927). Infra-only: cannot affect numbers;
-- apply the documented ADOPTED-FIX patch to ``build_bus_regions`` (DL-11:
-  footprint-scoped empty-county sweep). Results-affecting BY DESIGN and
-  applied to BOTH sides by user decision (2026-08-23) so the harness keeps
+- apply the documented ADOPTED-FIX patches: ``build_bus_regions`` (DL-11:
+  footprint-scoped empty-county sweep) and ``build_powerplants`` (DL-12:
+  pre-aggregate EIA-860 history before the LEFT JOINs). Results-affecting BY
+  DESIGN and applied to BOTH sides by user decision so the harness keeps
   comparing like-for-like; see the deltas ledger;
 - ``touch`` retrieve_caiso_data's output if present so a fresh-checkout mtime
   on its tracked input xlsx does not retrigger a re-download into shared
@@ -30,10 +31,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Iterable
 from pathlib import Path
 
 from .paths import CONFIGFILE
@@ -43,6 +46,11 @@ ANCHOR_SHA = "e7f8bd70"
 ANCHOR_WORKTREE = REPO / ".worktrees" / "anchor-e7f8bd70"
 INFRA_PATCH_MARK = "materialize sibling modules"  # idempotence marker
 ADOPTED_FIX_MARK = "restricting empty-county sweep"  # idempotence marker (DL-11)
+# DL-12 sentinel: a CTE name that exists only in the candidate's
+# build_powerplants.py query. Guards the file-adoption patch against silently
+# copying a wrong/stale source file over the anchor's script.
+POWERPLANTS_FIX_MARK = "ges_latest"
+POWERPLANTS_SCRIPT = "workflow/scripts/build_powerplants.py"
 FORCE_RERUN_MARKER = ".eq-force-rerun"  # rules to -R once after a newly applied patch
 
 LAYERED_CONFIGS = [
@@ -148,6 +156,36 @@ def apply_infra_patches(wt: Path) -> None:
         log("applied infra patch: common.smk constants source-cache fix")
 
 
+def mark_force_rerun(wt: Path, rules: Iterable[str]) -> None:
+    """Record rules to ``-R`` on the next build of this side (merge-safe).
+
+    The harness runs snakemake with ``--rerun-triggers mtime``, under which
+    code/rule changes NEVER invalidate existing outputs — a freshly patched
+    worktree with pre-patch artifacts would silently keep them and the harness
+    would compare fixed-vs-unfixed (2026-08-23 adversarial-review blocker).
+    Deleting the rule's outputs is NOT enough either: when the final target is
+    otherwise up-to-date, snakemake never revisits missing intermediates
+    (observed 2026-08-23). ``build_side`` turns this marker into
+    ``-R <rules>`` and clears it on success.
+
+    Merges with any pending marker so a second patch in the same provision
+    (or a patch applied while an earlier marker is still pending) cannot drop
+    the earlier rules.
+    """
+    marker = wt / FORCE_RERUN_MARKER
+    existing = marker.read_text().split() if marker.exists() else []
+    merged = list(dict.fromkeys([*existing, *rules]))
+    if not merged:
+        return
+    marker.write_text("\n".join(merged) + "\n")
+    log(f"one-shot forced-rerun marker now: {merged}")
+
+
+def snakemake_attrs(text: str) -> set[str]:
+    """Names a script pulls off ``snakemake.input/params/output``."""
+    return set(re.findall(r"snakemake\.(?:input|params|output)\.(\w+)", text))
+
+
 def apply_adopted_fix_patches(wt: Path) -> None:
     """Adopted results-affecting fixes, mirrored onto the anchor by decision.
 
@@ -160,8 +198,16 @@ def apply_adopted_fix_patches(wt: Path) -> None:
     sweep to the model_topology.include footprint. Same change as v1-epic
     commit ccfe4b77; without it a CA-scoped run's regions cover ~7x the
     state and attach the whole interconnect fleet.
+
+    DL-12 (2026-08-23): adopt the candidate's build_powerplants.py wholesale.
+    v1-epic pre-aggregates EIA-860 history in DuckDB CTEs (``ges_latest`` /
+    ``plants_latest`` / ``yg_latest``) BEFORE its LEFT JOINs; the anchor
+    aggregates only after the join fan-out, so ~24 years of ``report_date``
+    duplicate rows reweight the ``mean()`` that produces heat_rate /
+    fuel_cost / efficiency. Left unpatched this is the dominant prong-1
+    residual (solved objective rel 2.34%, CCGT/OCGT p_nom_opt split).
     """
-    applied = False
+    applied_rules: list[str] = []
     smk = wt / "workflow" / "rules" / "build_electricity.smk"
     text = smk.read_text()
     if ADOPTED_FIX_MARK not in text:
@@ -184,7 +230,7 @@ def apply_adopted_fix_patches(wt: Path) -> None:
             ),
         )
         log("applied adopted-fix patch DL-11: build_electricity.smk include param")
-        applied = True
+        applied_rules.append("build_bus_regions")
 
     script = wt / "workflow" / "scripts" / "build_bus_regions.py"
     text = script.read_text()
@@ -215,22 +261,64 @@ def apply_adopted_fix_patches(wt: Path) -> None:
         )
         script.write_text(text)
         log("applied adopted-fix patch DL-11: build_bus_regions.py footprint-scoped sweep")
-        applied = True
+        applied_rules.append("build_bus_regions")
 
-    if applied:
-        # The harness runs snakemake with ``--rerun-triggers mtime``, under
-        # which code/rule changes NEVER invalidate existing outputs — a
-        # freshly patched worktree with pre-patch artifacts would silently
-        # keep them and the harness would compare fixed-vs-unfixed
-        # (2026-08-23 adversarial-review blocker). Deleting the rule's
-        # outputs is NOT enough either: when the final target is otherwise
-        # up-to-date, snakemake never revisits missing intermediates
-        # (observed 2026-08-23). Instead, record a one-shot forced-rerun
-        # marker that build_side turns into ``-R build_bus_regions`` on the
-        # next build and clears on success. One-time: patch application is
-        # marker-gated.
-        (wt / FORCE_RERUN_MARKER).write_text("build_bus_regions\n")
-        log("wrote one-shot forced-rerun marker: build_bus_regions")
+    apply_powerplants_adoption(wt, applied_rules)
+
+    if applied_rules:
+        mark_force_rerun(wt, applied_rules)
+
+
+def apply_powerplants_adoption(wt: Path, applied_rules: list[str]) -> None:
+    """DL-12: adopt the candidate's build_powerplants.py onto the anchor.
+
+    Dynamic file adoption rather than textual surgery: the candidate file is
+    read from the live REPO checkout so the patch self-maintains if v1-epic's
+    query evolves, and any drift re-triggers the forced rerun. The two rule
+    definitions are byte-identical apart from the output path, and the script
+    is layout-agnostic (it only ever touches ``snakemake.output.powerplants``),
+    so the anchor's flat ``resources/powerplants.csv`` layout is preserved.
+
+    Safety rails, all of which raise rather than guess:
+      * the candidate file must carry the DL-12 sentinel CTE;
+      * every ``snakemake.input/params/output`` name the candidate file reads
+        must also be read by the anchor's PRISTINE script (fetched from git,
+        not from the possibly already-patched worktree), i.e. the candidate
+        cannot demand a rule key the anchor's rule does not define.
+    """
+    cand_src = REPO / "workflow" / "scripts" / "build_powerplants.py"
+    if not cand_src.exists():
+        raise RuntimeError(f"candidate {POWERPLANTS_SCRIPT} missing; refusing to patch")
+    cand_text = cand_src.read_text()
+    if POWERPLANTS_FIX_MARK not in cand_text:
+        raise RuntimeError(
+            f"candidate {POWERPLANTS_SCRIPT} lacks the DL-12 sentinel "
+            f"{POWERPLANTS_FIX_MARK!r}; refusing to adopt an unexpected file",
+        )
+
+    cp = run(["git", "show", f"{ANCHOR_SHA}:{POWERPLANTS_SCRIPT}"], cwd=wt)
+    if cp.returncode != 0:
+        raise RuntimeError(f"cannot read pristine anchor {POWERPLANTS_SCRIPT}:\n{cp.stderr[-2000:]}")
+    orig_text = cp.stdout
+    if POWERPLANTS_FIX_MARK in orig_text:
+        raise RuntimeError(
+            f"pristine anchor {POWERPLANTS_SCRIPT} already contains "
+            f"{POWERPLANTS_FIX_MARK!r}; DL-12 premise is wrong — refusing to patch",
+        )
+    missing = snakemake_attrs(cand_text) - snakemake_attrs(orig_text)
+    if missing:
+        raise RuntimeError(
+            f"candidate {POWERPLANTS_SCRIPT} reads snakemake keys the anchor's "
+            f"build_powerplants rule does not provide: {sorted(missing)}; "
+            "refusing wholesale adoption (do targeted query surgery instead)",
+        )
+
+    dst = wt / POWERPLANTS_SCRIPT
+    if dst.read_text() == cand_text:
+        return
+    dst.write_text(cand_text)
+    log("applied adopted-fix patch DL-12: build_powerplants.py adopted from candidate")
+    applied_rules.append("build_powerplants")
 
 
 def snakemake_cmd(target: str, jobs: int = 4) -> list[str]:

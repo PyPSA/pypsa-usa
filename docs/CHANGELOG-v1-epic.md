@@ -99,6 +99,27 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **`build_powerplants` EIA-860 pre-aggregation adopted onto the anchor
+  (DL-12)** (candidate code already on `v1-epic`; harness adoption in
+  `tests/equivalence/build.py::apply_powerplants_adoption`). v1-epic
+  pre-aggregates the EIA-860 tables into `ges_latest` / `plants_latest` /
+  `yg_latest` CTEs before the LEFT JOINs; upstream joins them raw, so ~24
+  years of `report_date` vintages fan out per generator and reweight the
+  means behind `heat_rate`, `fuel_cost` and `efficiency` (8,231 / 10,381 /
+  8,380 differing cells in `powerplants.csv`; CA gas capacity-weighted
+  fuel cost +0.0558 $/MMBtu). *Results effect:* **Accepted delta — DL-12,
+  countersigned 2026-08-23.** Second ADOPTED-FIX anchor patch after DL-11:
+  the anchor's script is replaced at provision time with the live
+  candidate copy, sentinel-gated on the `ges_latest` CTE and guarded by an
+  interface check against the pristine e7f8bd70 file. Restores prong-1
+  solve exactness: objective rel 2.34e-2 -> ~2e-6, CCGT/OCGT `p_nom_opt`
+  split eliminated, 0 live findings (prong 2 also PASS). Also regenerated
+  the candidate's own stale `powerplants.csv` (predated its own derate
+  fix; `--rerun-triggers mtime` never noticed). Known residual (own
+  follow-up): `build_powerplants` is not bit-reproducible — DuckDB
+  `first()` / tied `array_agg` picks perturb imputations at <=1e-5
+  relative, below the harness's 1e-3 tolerance but non-zero.
+
 - **Footprint-scoped empty-county sweep in `build_bus_regions` (DL-11)**
   (`workflow/scripts/build_bus_regions.py`,
   `workflow/rules/build_electricity.smk`, commit 88bede47; harness adoption
