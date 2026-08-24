@@ -371,12 +371,15 @@ def apply_seam_adoption(wt: Path, applied_rules: list[str]) -> None:
       * every needle is verified against the PRISTINE anchor file fetched from
         git, not the possibly already-patched worktree;
       * the pristine anchor must NOT already contain the sentinel, else the
-        DL-13 premise is wrong.
+        DL-13 premise is wrong;
+      * the assembled result must carry the sentinel exactly three times and be
+        wired end to end before anything is written.
+
+    Idempotent by CONTENT (like DL-12), not by the sentinel, so that an edit to
+    v1-epic's helper propagates here instead of being skipped as "already
+    patched" — the anchor must never run a stale copy of the candidate's logic.
     """
     dst = wt / ADD_ELECTRICITY_SCRIPT
-    if SEAM_FIX_MARK in dst.read_text():
-        return  # already patched in this worktree
-
     cand_src = REPO / "workflow" / "scripts" / "add_electricity.py"
     if not cand_src.exists():
         raise RuntimeError(f"candidate {ADD_ELECTRICITY_SCRIPT} missing; refusing to patch")
@@ -510,6 +513,12 @@ def apply_seam_adoption(wt: Path, applied_rules: list[str]) -> None:
     if "footprint_scoped=bool(include_filter)" not in text or "if footprint_scoped:" not in text:
         raise RuntimeError("DL-13 patch did not wire footprint_scoped end to end; refusing to write")
 
+    # Idempotence is by CONTENT, not by the sentinel: the patched text is always
+    # rebuilt from the pristine anchor plus the live candidate slices, so a later
+    # edit to v1-epic's helper re-applies here and re-arms the forced rerun
+    # instead of leaving the anchor running a stale copy of it.
+    if dst.read_text() == text:
+        return
     dst.write_text(text)
     log("applied adopted-fix patch DL-13: add_electricity.py seam-plant bound")
     applied_rules.append("add_electricity")

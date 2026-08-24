@@ -346,13 +346,23 @@ def _drop_distant_seam_plants(
     ]
     if not region_geoms:
         return plants_must_add
-    footprint = pd.concat(region_geoms).union_all()
+    footprint = pd.concat(region_geoms)
+    footprint = footprint[footprint.notna() & ~footprint.is_empty]
+    if footprint.empty:
+        return plants_must_add
 
     points = gpd.GeoSeries(
         gpd.points_from_xy(plants_must_add.longitude, plants_must_add.latitude),
         crs="EPSG:4326",
     ).to_crs(epsg=5070)
-    distance_km = points.distance(footprint).to_numpy() / 1e3
+    # The distance to the footprint is the smallest distance to any one of its
+    # regions, so take that minimum directly instead of unioning them first.
+    # Reprojecting the region layer into EPSG:5070 can leave coarse cluster
+    # polygons invalid (9 of 29 self-intersecting or degenerate at simpl=20,
+    # none at simpl=''), and union_all() then dies with a GEOSException
+    # "side location conflict"; pairwise distance is robust to that. Where the
+    # union does succeed the two agree to 0.0 m, verified on the simpl='' layer.
+    distance_km = points.apply(lambda point: footprint.distance(point).min()).to_numpy() / 1e3
 
     keep = distance_km <= max_km
     if keep.all():

@@ -20,7 +20,7 @@ import sys
 import geopandas as gpd
 import pandas as pd
 import pytest
-from shapely.geometry import box
+from shapely.geometry import Polygon, box
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -218,6 +218,55 @@ def test_gate_on_logs_dropped_plant_details(
     assert "dropped 1 of 3" in warnings
     # the near-seam plant is kept, so it must not appear in the drop log
     assert "'seam'" not in warnings
+
+
+def test_gate_on_survives_regions_that_cannot_be_unioned(
+    plants,
+    regions_onshore,
+    regions_offshore,
+    reeds_shapes,
+    all_reeds_shapes,
+    reeds_memberships,
+):
+    """Invalid region polygons must not break the bound.
+
+    Regression test for the 2026-08-24 equivalence prong-2 failure: the region
+    layer is reprojected to EPSG:5070 before the distance test, and that
+    reprojection can leave coarse cluster polygons self-intersecting (9 of 29 at
+    simpl=20, none at simpl=''). The original implementation unioned the regions
+    first, which raised ``GEOSException: TopologyException: side location
+    conflict`` and killed ``add_electricity`` outright.
+
+    The two extra regions here are a self-intersecting bowtie plus a box that
+    overlaps it — the minimal shape that reproduces that GEOS failure. They sit
+    far from every test plant, so the expected keep/drop set is unchanged and
+    only the union-free distance path is under test.
+    """
+    poisoned = pd.concat(
+        [
+            regions_onshore,
+            gpd.GeoDataFrame(
+                {"name": ["bowtie", "overlap"], "country": ["p2", "p2"]},
+                geometry=[
+                    Polygon([(-100.0, 40.0), (-99.0, 41.0), (-99.0, 40.0), (-100.0, 41.0)]),
+                    box(-99.5, 40.5, -98.0, 42.0),
+                ],
+                crs="EPSG:4326",
+            ),
+        ],
+    )
+    assert not poisoned.to_crs(epsg=5070).geometry.is_valid.all(), "fixture must contain invalid geometry"
+
+    result = _filter(
+        plants,
+        poisoned,
+        regions_offshore,
+        reeds_shapes,
+        all_reeds_shapes,
+        reeds_memberships,
+        footprint_scoped=True,
+    )
+    assert set(result.index) == {"in_footprint", "seam"}
 
 
 def test_seam_bound_constant_is_100km():
