@@ -4,9 +4,6 @@ from itertools import chain
 
 
 rule build_shapes:
-    params:
-        source_offshore_shapes=config_provider("offshore_shape"),
-        offwind_params=config_provider("renewable", "offwind"),
     input:
         zone=DATA + "breakthrough_network/base_grid/zone.csv",
         nerc_shapes="repo_data/geospatial/NERC_Regions/NERC_Regions_Subregions.shp",
@@ -28,18 +25,14 @@ rule build_shapes:
     resources:
         walltime=config_provider("walltime", "build_shapes", default="00:30:00"),
         mem_mb=5000,
+    params:
+        source_offshore_shapes=config_provider("offshore_shape"),
+        offwind_params=config_provider("renewable", "offwind"),
     script:
         "../scripts/build_shapes.py"
 
 
 rule build_base_network:
-    params:
-        build_offshore_network=config_provider("offshore_network"),
-        model_topology=config_provider("model_topology", "include"),
-        topological_boundaries=config_provider(
-            "model_topology", "topological_boundaries"
-        ),
-        length_factor=config["lines"]["length_factor"],
     input:
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
         lines=DATA + "breakthrough_network/base_grid/branch.csv",
@@ -64,16 +57,18 @@ rule build_base_network:
     resources:
         mem_mb=5000,
         walltime=config_provider("walltime", "build_base_network", default="00:30:00"),
+    params:
+        build_offshore_network=config_provider("offshore_network"),
+        model_topology=config_provider("model_topology", "include"),
+        topological_boundaries=config_provider(
+            "model_topology", "topological_boundaries"
+        ),
+        length_factor=config["lines"]["length_factor"],
     script:
         "../scripts/build_base_network.py"
 
 
 rule build_bus_regions:
-    params:
-        topological_boundaries=config_provider(
-            "model_topology", "topological_boundaries"
-        ),
-        focus_weights=config_provider("focus_weights"),
     input:
         country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
         county_shapes=RESOURCES + "{interconnect}/Geospatial/county_shapes.geojson",
@@ -94,14 +89,16 @@ rule build_bus_regions:
     resources:
         mem_mb=3000,
         walltime=config_provider("walltime", "build_bus_regions", default="00:30:00"),
+    params:
+        topological_boundaries=config_provider(
+            "model_topology", "topological_boundaries"
+        ),
+        focus_weights=config_provider("focus_weights"),
     script:
         "../scripts/build_bus_regions.py"
 
 
 rule build_cost_data:
-    params:
-        costs=config_provider("costs"),
-        pudl_path=config_provider("pudl_path"),
     input:
         efs_tech_costs="repo_data/costs/EFS_Technology_Data.xlsx",
         efs_icev_costs="repo_data/costs/efs_icev_costs.csv",
@@ -117,6 +114,9 @@ rule build_cost_data:
     resources:
         mem_mb=5000,
         walltime=config_provider("walltime", "build_cost_data", default="00:30:00"),
+    params:
+        costs=config_provider("costs"),
+        pudl_path=config_provider("pudl_path"),
     script:
         "../scripts/build_cost_data.py"
 
@@ -126,10 +126,6 @@ ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 if config["enable"].get("build_cutout", False):
 
     rule build_cutout:
-        params:
-            snapshots=config_provider("snapshots"),
-            cutouts=config_provider("atlite", "cutouts"),
-            interconnects=config_provider("atlite", "interconnects"),
         input:
             regions_onshore=RESOURCES
             + "{interconnect}/Geospatial/country_shapes.geojson",
@@ -145,6 +141,10 @@ if config["enable"].get("build_cutout", False):
         resources:
             mem_mb=ATLITE_NPROCESSES * 5000,
             walltime=config_provider("walltime", "build_cutout", default="10:30:00"),
+        params:
+            snapshots=config_provider("snapshots"),
+            cutouts=config_provider("atlite", "cutouts"),
+            interconnects=config_provider("atlite", "interconnects"),
         script:
             "../scripts/build_cutout.py"
 
@@ -157,13 +157,6 @@ godeeep_planning_horizon = (
 
 
 rule build_renewable_profiles:
-    params:
-        renewable=config_provider("renewable"),
-        snapshots=config_provider("snapshots"),
-        planning_horizon=lambda w: (
-            int(w.planning_horizon) if godeeep_planning_horizon else None
-        ),
-        renewable_scenarios=config_provider("renewable_scenarios"),
     input:
         corine=ancient(
             DATA
@@ -220,6 +213,8 @@ rule build_renewable_profiles:
             if godeeep_planning_horizon
             else BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
         )
+    wildcard_constraints:
+        technology="(?!hydro|EGS).*",  # Any technology other than hydro
     threads: ATLITE_NPROCESSES
     resources:
         mem_mb=lambda wildcards, input, attempt: (
@@ -229,8 +224,13 @@ rule build_renewable_profiles:
         walltime=config_provider(
             "walltime", "build_renewable_profiles", default="02:30:00"
         ),
-    wildcard_constraints:
-        technology="(?!hydro|EGS).*",  # Any technology other than hydro
+    params:
+        renewable=config_provider("renewable"),
+        snapshots=config_provider("snapshots"),
+        planning_horizon=lambda w: (
+            int(w.planning_horizon) if godeeep_planning_horizon else None
+        ),
+        renewable_scenarios=config_provider("renewable_scenarios"),
     script:
         "../scripts/build_renewable_profiles.py"
 
@@ -347,15 +347,6 @@ def demand_scaling_data(wildcards):
 
 
 rule build_electrical_demand:
-    wildcard_constraints:
-        end_use="power",  # added for consistency in build_demand.py
-    params:
-        demand_params=config["electricity"]["demand"],
-        eia_api=config["api"]["eia"],
-        profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
-        planning_horizons=config["scenario"]["planning_horizons"],
-        snapshots=config["snapshots"],
-        pudl_path=config_provider("pudl_path"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -366,24 +357,26 @@ rule build_electrical_demand:
         LOGS + "{interconnect}/{end_use}_build_demand.log",
     benchmark:
         BENCHMARKS + "{interconnect}/{end_use}_build_demand"
+    wildcard_constraints:
+        end_use="power",  # added for consistency in build_demand.py
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
         walltime=config_provider(
             "walltime", "build_electrical_demand", default="00:50:00"
         ),
+    params:
+        demand_params=config["electricity"]["demand"],
+        eia_api=config["api"]["eia"],
+        profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
+        planning_horizons=config["scenario"]["planning_horizons"],
+        snapshots=config["snapshots"],
+        pudl_path=config_provider("pudl_path"),
     script:
         "../scripts/build_demand.py"
 
 
 rule build_service_demand:
-    wildcard_constraints:
-        end_use="residential|commercial",
-    params:
-        planning_horizons=config_provider("scenario", "planning_horizons"),
-        profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
-        eia_api=config_provider("api", "eia"),
-        snapshots=config_provider("snapshots"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -398,22 +391,21 @@ rule build_service_demand:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
         BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
+    wildcard_constraints:
+        end_use="residential|commercial",
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
-    script:
-        "../scripts/build_demand.py"
-
-
-rule build_industry_demand:
-    wildcard_constraints:
-        end_use="industry",
     params:
         planning_horizons=config_provider("scenario", "planning_horizons"),
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
-        pudl_path=config_provider("pudl_path"),
+    script:
+        "../scripts/build_demand.py"
+
+
+rule build_industry_demand:
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -426,22 +418,23 @@ rule build_industry_demand:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
         BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
+    wildcard_constraints:
+        end_use="industry",
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
         walltime=config_provider("walltime", "build_sector_demand", default="00:50:00"),
-    script:
-        "../scripts/build_demand.py"
-
-
-rule build_transport_road_demand:
-    wildcard_constraints:
-        end_use="transport",
     params:
         planning_horizons=config_provider("scenario", "planning_horizons"),
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
+        pudl_path=config_provider("pudl_path"),
+    script:
+        "../scripts/build_demand.py"
+
+
+rule build_transport_road_demand:
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -456,24 +449,24 @@ rule build_transport_road_demand:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
         BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
+    wildcard_constraints:
+        end_use="transport",
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
         walltime=config_provider(
             "walltime", "build_transport_road_demand", default="00:50:00"
         ),
+    params:
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+        profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
+        eia_api=config_provider("api", "eia"),
+        snapshots=config_provider("snapshots"),
     script:
         "../scripts/build_demand.py"
 
 
 rule build_transport_other_demand:
-    wildcard_constraints:
-        end_use="transport",
-        vehicle="boat-shipping|air|rail-shipping|rail-passenger",
-    params:
-        planning_horizons=config_provider("scenario", "planning_horizons"),
-        eia_api=config_provider("api", "eia"),
-        snapshots=config_provider("snapshots"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand_files=demand_raw_data,
@@ -484,9 +477,16 @@ rule build_transport_other_demand:
         LOGS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand.log",
     benchmark:
         BENCHMARKS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand"
+    wildcard_constraints:
+        end_use="transport",
+        vehicle="boat-shipping|air|rail-shipping|rail-passenger",
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
+    params:
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+        eia_api=config_provider("api", "eia"),
+        snapshots=config_provider("snapshots"),
     script:
         "../scripts/build_demand.py"
 
@@ -531,10 +531,6 @@ def demand_to_add(wildcards):
 
 
 rule add_demand:
-    params:
-        sectors=config["scenario"]["sector"],
-        planning_horizons=config_provider("scenario", "planning_horizons"),
-        snapshots=config_provider("snapshots"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
         demand=demand_to_add,
@@ -547,6 +543,10 @@ rule add_demand:
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
         walltime=config_provider("walltime", "add_demand", default="00:50:00"),
+    params:
+        sectors=config["scenario"]["sector"],
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+        snapshots=config_provider("snapshots"),
     script:
         "../scripts/add_demand.py"
 
@@ -559,10 +559,6 @@ def ba_gas_dynamic_fuel_price_files(wildcards):
 
 
 rule build_fuel_prices:
-    params:
-        snapshots=config["snapshots"],
-        api_eia=config["api"]["eia"],
-        pudl_path=config_provider("pudl_path"),
     input:
         gas_balancing_area=ba_gas_dynamic_fuel_price_files,
     output:
@@ -574,11 +570,15 @@ rule build_fuel_prices:
         LOGS + "{interconnect}/build_fuel_prices.log",
     benchmark:
         BENCHMARKS + "{interconnect}/build_fuel_prices"
-    threads: 1
     retries: 3
+    threads: 1
     resources:
         mem_mb=30000,
         walltime=config_provider("walltime", "build_fuel_prices", default="00:20:00"),
+    params:
+        snapshots=config["snapshots"],
+        api_eia=config["api"]["eia"],
+        pudl_path=config_provider("pudl_path"),
     script:
         "../scripts/build_fuel_prices.py"
 
@@ -597,9 +597,6 @@ def dynamic_fuel_price_files(wildcards):
 
 
 rule build_powerplants:
-    params:
-        pudl_path=config_provider("pudl_path"),
-        renewable_weather_year=config_provider("renewable_weather_years"),
     input:
         wecc_ads="repo_data/WECC_ADS_public",
         eia_ads_generator_mapping="repo_data/WECC_ADS_public/eia_ads_generator_mapping_updated.csv",
@@ -613,21 +610,14 @@ rule build_powerplants:
     resources:
         mem_mb=30000,
         walltime=config_provider("walltime", "build_powerplants", default="00:30:00"),
+    params:
+        pudl_path=config_provider("pudl_path"),
+        renewable_weather_year=config_provider("renewable_weather_years"),
     script:
         "../scripts/build_powerplants.py"
 
 
 rule add_electricity:
-    params:
-        length_factor=config["lines"]["length_factor"],
-        renewable=config["renewable"],
-        renewable_carriers=config["electricity"]["renewable_carriers"],
-        extendable_carriers=config["electricity"]["extendable_carriers"],
-        conventional_carriers=config["electricity"]["conventional_carriers"],
-        conventional=config["conventional"],
-        costs=config["costs"],
-        planning_horizons=config["scenario"]["planning_horizons"],
-        eia_api=config["api"]["eia"],
     input:
         unpack(dynamic_fuel_price_files),
         **(
@@ -693,20 +683,22 @@ rule add_electricity:
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 400000) * attempt * 2,
         walltime=config_provider("walltime", "add_electricity", default="01:00:00"),
+    params:
+        length_factor=config["lines"]["length_factor"],
+        renewable=config["renewable"],
+        renewable_carriers=config["electricity"]["renewable_carriers"],
+        extendable_carriers=config["electricity"]["extendable_carriers"],
+        conventional_carriers=config["electricity"]["conventional_carriers"],
+        conventional=config["conventional"],
+        costs=config["costs"],
+        planning_horizons=config["scenario"]["planning_horizons"],
+        eia_api=config["api"]["eia"],
     script:
         "../scripts/add_electricity.py"
 
 
 ################# ----------- Rules to Aggregate & Simplify Network ---------- #################
 rule simplify_network:
-    params:
-        aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
-        focus_weights=config_provider("focus_weights", default=False),
-        simplify_network=config_provider("clustering", "simplify_network"),
-        planning_horizons=config_provider("scenario", "planning_horizons"),
-        topological_boundaries=config_provider(
-            "model_topology", "topological_boundaries"
-        ),
     input:
         bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
         sub=RESOURCES + "{interconnect}/sub.csv",
@@ -726,27 +718,19 @@ rule simplify_network:
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 150000) * attempt * 1.5,
         walltime=config_provider("walltime", "simplify_network", default="01:00:00"),
+    params:
+        aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
+        focus_weights=config_provider("focus_weights", default=False),
+        simplify_network=config_provider("clustering", "simplify_network"),
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+        topological_boundaries=config_provider(
+            "model_topology", "topological_boundaries"
+        ),
     script:
         "../scripts/simplify_network.py"
 
 
 rule cluster_network:
-    params:
-        cluster_network=config_provider("clustering", "cluster_network"),
-        conventional_carriers=config_provider("electricity", "conventional_carriers"),
-        renewable_carriers=config_provider("electricity", "renewable_carriers"),
-        aggregation_strategies=config_provider("clustering", "aggregation_strategies"),
-        custom_busmap=config_provider("enable", "custom_busmap", default=False),
-        focus_weights=config_provider("focus_weights", default=False),
-        length_factor=config_provider("lines", "length_factor"),
-        costs=config_provider("costs"),
-        planning_horizons=config_provider("scenario", "planning_horizons"),
-        transmission_network=config_provider("model_topology", "transmission_network"),
-        topological_boundaries=config_provider(
-            "model_topology", "topological_boundaries"
-        ),
-        topology_aggregation=config_provider("model_topology", "aggregate"),
-        s_max_pu=config_provider("lines", "s_max_pu", default=0.7),
     input:
         network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
         regions_onshore=RESOURCES
@@ -783,6 +767,22 @@ rule cluster_network:
     resources:
         walltime=config_provider("walltime", "cluster_network", default="01:30:00"),
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
+    params:
+        cluster_network=config_provider("clustering", "cluster_network"),
+        conventional_carriers=config_provider("electricity", "conventional_carriers"),
+        renewable_carriers=config_provider("electricity", "renewable_carriers"),
+        aggregation_strategies=config_provider("clustering", "aggregation_strategies"),
+        custom_busmap=config_provider("enable", "custom_busmap", default=False),
+        focus_weights=config_provider("focus_weights", default=False),
+        length_factor=config_provider("lines", "length_factor"),
+        costs=config_provider("costs"),
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+        transmission_network=config_provider("model_topology", "transmission_network"),
+        topological_boundaries=config_provider(
+            "model_topology", "topological_boundaries"
+        ),
+        topology_aggregation=config_provider("model_topology", "aggregate"),
+        s_max_pu=config_provider("lines", "s_max_pu", default=0.7),
     script:
         "../scripts/cluster_network.py"
 
@@ -821,6 +821,16 @@ rule add_extra_components:
             else []
         ),
         county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
+    output:
+        RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
+    log:
+        "logs/add_extra_components/{interconnect}/elec_s{simpl}_c{clusters}_ec.log",
+    group:
+        "prepare"
+    threads: 1
+    resources:
+        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
+        walltime=config_provider("walltime", "add_extra_components", default="00:30:00"),
     params:
         retirement=config["electricity"].get("retirement", "technical"),
         demand_response=config["electricity"].get("demand_response", {}),
@@ -833,33 +843,11 @@ rule add_extra_components:
             "model_topology", "topological_boundaries"
         ),
         transmission_network=config_provider("model_topology", "transmission_network"),
-    output:
-        RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
-    log:
-        "logs/add_extra_components/{interconnect}/elec_s{simpl}_c{clusters}_ec.log",
-    threads: 1
-    resources:
-        mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
-        walltime=config_provider("walltime", "add_extra_components", default="00:30:00"),
-    group:
-        "prepare"
     script:
         "../scripts/add_extra_components.py"
 
 
 rule prepare_network:
-    params:
-        time_resolution=config_provider("clustering", "temporal", "resolution_elec"),
-        adjustments=False,
-        links=config_provider("links"),
-        lines=config_provider("lines"),
-        co2base=config_provider("electricity", "co2base"),
-        co2limit=config_provider("electricity", "co2limit"),
-        co2limit_enable=config_provider("electricity", "co2limit_enable", default=False),
-        gaslimit=config_provider("electricity", "gaslimit"),
-        gaslimit_enable=config_provider("electricity", "gaslimit_enable", default=False),
-        transmission_network=config_provider("model_topology", "transmission_network"),
-        costs=config_provider("costs"),
     input:
         network=(
             config["custom_files"]["files_path"]
@@ -876,14 +864,24 @@ rule prepare_network:
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
     log:
-        solver="logs/prepare_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.log",
+        "logs/prepare_network",
+    group:
+        "prepare"
     threads: 1
     resources:
         walltime=config_provider("walltime", "prepare_network", default="00:30:00"),
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 6,
-    group:
-        "prepare"
-    log:
-        "logs/prepare_network",
+    params:
+        time_resolution=config_provider("clustering", "temporal", "resolution_elec"),
+        adjustments=False,
+        links=config_provider("links"),
+        lines=config_provider("lines"),
+        co2base=config_provider("electricity", "co2base"),
+        co2limit=config_provider("electricity", "co2limit"),
+        co2limit_enable=config_provider("electricity", "co2limit_enable", default=False),
+        gaslimit=config_provider("electricity", "gaslimit"),
+        gaslimit_enable=config_provider("electricity", "gaslimit_enable", default=False),
+        transmission_network=config_provider("model_topology", "transmission_network"),
+        costs=config_provider("costs"),
     script:
         "../scripts/prepare_network.py"

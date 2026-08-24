@@ -250,14 +250,14 @@ rule data_model:
 # snakemake --rulegraph all | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg
 # snakemake --dag -F | sed -n "/digraph/,\$p" | dot -Tpng -o repo_data/dag.jpg
 rule dag:
-    message:
-        "Creating DAG of workflow."
     output:
         dot="repo_data/dag.dot",
         jpg="repo_data/dag.jpg",
+    message:
+        "Creating DAG of workflow."
     shell:
         """
-        snakemake --rulegraph all | sed -n "/digraph/,\$p" > {output.dot}
+        snakemake --rulegraph all | sed -n "/digraph/,\$p" >{output.dot}
         dot -Tjpg -o {output.jpg} {output.dot}
         """
 

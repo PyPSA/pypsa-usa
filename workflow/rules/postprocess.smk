@@ -19,10 +19,6 @@ rule plot_network_maps:
             else RESOURCES
             + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson"
         ),
-    params:
-        electricity=config["electricity"],
-        plotting=config["plotting"],
-        retirement=config["electricity"].get("retirement", "technical"),
     output:
         **{
             fig: RESULTS
@@ -36,6 +32,10 @@ rule plot_network_maps:
     resources:
         mem_mb=7000,
         walltime="00:30:00",
+    params:
+        electricity=config["electricity"],
+        plotting=config["plotting"],
+        retirement=config["electricity"].get("retirement", "technical"),
     script:
         "../scripts/plot_network_maps.py"
 
@@ -58,10 +58,6 @@ rule plot_statistics:
             else RESOURCES
             + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson"
         ),
-    params:
-        electricity=config["electricity"],
-        plotting=config["plotting"],
-        retirement=config["electricity"].get("retirement", "technical"),
     output:
         **{
             fig: RESULTS
@@ -105,5 +101,9 @@ rule plot_statistics:
     resources:
         mem_mb=5000,
         walltime="00:30:00",
+    params:
+        electricity=config["electricity"],
+        plotting=config["plotting"],
+        retirement=config["electricity"].get("retirement", "technical"),
     script:
         "../scripts/plot_statistics.py"
