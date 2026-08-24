@@ -259,8 +259,8 @@ Conventions:
   copy-on-write turns into silent no-ops, `object`-dtype string checks — all
   intended behavior-preserving. Test counts are unchanged on the pandas-3
   stack (unit 45 passed / 1 skipped, static 72 passed); the Tier-C equivalence
-  harness has *not* been re-run and must be re-baselined, the environment
-  having moved twice. Follow-up hardening: pandas 3 also raised its *optional*-dependency
+  harness was re-baselined from scratch under the new environment (outcome at
+  the end of this entry), the environment having moved twice. Follow-up hardening: pandas 3 also raised its *optional*-dependency
   floors, which only error at use time — `openpyxl` 3.1.2→3.1.5 (found via
   the MECS `read_excel` path, uncovered by tests), `matplotlib`
   3.8.0→3.9.3, `scipy` 1.11.3→1.14.1; all 36 floors in
@@ -278,6 +278,30 @@ Conventions:
   "nan0s" bucket. Both fixed byte-identical to pandas-2 semantics
   (`.fillna("nan")`); two latent config-gated sites flagged
   (cluster_simpl county busmap, cluster_network efficiency classes).
+  *Tier-C equivalence re-baseline (2026-08-24), clean runs on the 1.3 /
+  pandas-3 stack against the unchanged pypsa-0.30.2 anchor:* prong 2 PASS
+  (0 live / 3, unchanged DL-9 class) and prong 1 initially FAIL at 16 live /
+  88, with every live finding in one of three verified serialization /
+  reporting classes and none carrying physics — (A) `sub_network` topology
+  metadata pypsa v1 computes and serializes where 0.30 left empty strings and
+  exported no `SubNetwork` rows (11 findings), (B)
+  `StorageUnit.cyclic_state_of_charge_per_period`, which the anchor netCDF
+  **does not store at any stage** (0.30 omitted default-valued attributes), so
+  the pypsa-1.3 loader backfills the *new* `False` default onto an anchor whose
+  actual solve-time behaviour was `True` — the same value the migration pins
+  explicitly on the candidate (4 findings), and (C) the solved objective, where
+  candidate 928,590,425.01 (`objective_constant` 0) equals anchor
+  -204,665,929.13 + `objective_constant` 1,133,255,860.00 = 928,589,930.87 to a
+  **relative difference of 5.3e-07**, v1/linopy 0.9 folding the constant into
+  `objective` where 0.30 split it out. Class C was fixed as a comparator
+  normalization rather than waived — `compare.py::_compare_solved` now compares
+  `objective + objective_constant` on both sides at the unchanged 1e-3 gate, so
+  the prong-1 objective check stays live and correct across conventions; classes
+  A and B took seven targeted `interconnect: western` waivers. Result: prong 1
+  PASS, 0 live / 87 total; prong 2 PASS, 0 live / 3. *Results effect: none —
+  comparison artifacts of the 0.30→1.3 conventions.* Full adjudication in
+  ledger entry **DL-15** (`docs/superpowers/specs/2026-08-07-deltas-ledger.md`),
+  pending countersignature; the usa leg still needs re-baselining on this stack.
   See `docs/pypsa-v1-migration.md` for the migration map,
   the pandas-3 bump detail, and the pypsa-v1 data-storage features we can now
   adopt.

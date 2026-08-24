@@ -135,3 +135,81 @@
   kind: value
   ledger: DL-10
   reason: single CCGT placement flip (35790, 296 MW) - DL-5 nearest-bus class at national scale
+# DL-15 - pypsa 0.30 -> 1.3 serialization/convention artifacts (env-move
+# re-baseline). Scoped to the western re-baseline actually measured; the usa
+# leg must be re-verified when it is rebuilt on the 1.3 stack.
+- interconnect: western
+  stage: '*'
+  component: Bus
+  column: sub_network
+  kind: value
+  ledger: DL-15
+  reason: pypsa v1 computes and serializes sub_network topology metadata that 0.30 left empty; no optimization input
+  justification: >-
+    Candidate (pypsa 1.3) populates Bus.sub_network with the connected-component
+    label ('0','1',...); the anchor (pypsa 0.30) wrote empty strings at every
+    stage. sub_network is topology bookkeeping recomputed by determine_network_topology
+    and is never read by the LOPF/expansion problem.
+- interconnect: western
+  stage: '*'
+  component: Line
+  column: sub_network
+  kind: value
+  ledger: DL-15
+  reason: pypsa v1 computes and serializes sub_network topology metadata that 0.30 left empty; no optimization input
+  justification: >-
+    Same mechanism as Bus.sub_network: candidate labels every line with its
+    connected component, anchor stored empty strings. Topology bookkeeping only.
+- interconnect: western
+  stage: '*'
+  component: SubNetwork
+  column: <index>
+  kind: row_set
+  ledger: DL-15
+  reason: pypsa v1 computes and serializes sub_network topology metadata that 0.30 left empty; no optimization input
+  justification: >-
+    Candidate-only SubNetwork component rows (7 at assembled, 1 at every
+    clustered-and-later stage) are the serialized form of the same
+    connected-component labelling; the anchor exported no SubNetwork rows at
+    all. Derived from Bus/Line/Link/Transformer topology that is itself
+    finding-free; not an optimization input.
+- interconnect: western
+  stage: clustered_network
+  component: StorageUnit
+  column: cyclic_state_of_charge_per_period
+  kind: value
+  ledger: DL-15
+  reason: attribute absent from the anchor file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
+  justification: >-
+    Verified: the anchor netCDF has no storage_units_cyclic_state_of_charge_per_period
+    data_var at any stage (pypsa 0.30 omitted attributes left at their default),
+    and the 0.30-era default was True. The harness loads both sides under pypsa
+    1.3, whose default is False, so the anchor reads back False while its actual
+    solve-time behaviour was True. The candidate stores True explicitly because
+    the migration deliberately pins the 0.30 default to preserve per-period
+    cyclicity. Both sides therefore behaved identically; the comparison
+    manufactures the difference on read.
+- interconnect: western
+  stage: extra_components
+  component: StorageUnit
+  column: cyclic_state_of_charge_per_period
+  kind: value
+  ledger: DL-15
+  reason: attribute absent from the anchor file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
+  justification: see the clustered_network entry - same absent-attribute mechanism, same stage-invariant proof
+- interconnect: western
+  stage: prepared_network
+  component: StorageUnit
+  column: cyclic_state_of_charge_per_period
+  kind: value
+  ledger: DL-15
+  reason: attribute absent from the anchor file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
+  justification: see the clustered_network entry - same absent-attribute mechanism, same stage-invariant proof
+- interconnect: western
+  stage: sectored_network
+  component: StorageUnit
+  column: cyclic_state_of_charge_per_period
+  kind: value
+  ledger: DL-15
+  reason: attribute absent from the anchor file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
+  justification: see the clustered_network entry - same absent-attribute mechanism, same stage-invariant proof
