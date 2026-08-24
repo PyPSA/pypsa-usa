@@ -1060,7 +1060,7 @@ class ReadCliu(ReadStrategy):
         mecs = mecs.dropna(axis=0).drop("Subsector and Industry", axis=1)
         mecs["NAICS"] = mecs.NAICS.astype(int)
         mecs = mecs.set_index(["Region", "NAICS"], drop=True).replace({"*": "0", "Q": "0", "W": "0"}).astype(float)
-        assert not (mecs == np.NaN).any().any()
+        assert not mecs.isna().any().any()
         return mecs
 
     def _apply_mecs(

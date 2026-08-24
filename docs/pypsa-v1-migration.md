@@ -95,6 +95,9 @@ pin and it carries no `distributed` entry.
 | `linopy` | 0.9.1 | 0.9.1 | unchanged |
 | `numpy` | 1.26.0 | 1.26.0 | **held deliberately** — the pinned `rasterio==1.3.8` / `atlite==0.3.0` wheels are built against the numpy 1.x ABI. A numpy-2 bump is its own migration with its own binary-compatibility blast radius, and pandas 3 does not force it. |
 | `dask` / `distributed` | 2024.12.0 | 2024.12.0 | held; import-verified under pandas 3 rather than bumped speculatively |
+| `openpyxl` | 3.1.2 | **3.1.5** | pandas 3 optional-dependency floor — `read_excel` hard-errors below it (found via the MECS path; no test covers Excel IO) |
+| `matplotlib` | 3.8.0 | **3.9.3** | pandas 3 optional-dependency floor (pandas plotting backend errors at use time below it) |
+| `scipy` | 1.11.3 | **1.14.1** | pandas 3 optional-dependency floor (interpolate/stats integrations) |
 
 ### StorageUnit RESERVES rewritten in model space
 

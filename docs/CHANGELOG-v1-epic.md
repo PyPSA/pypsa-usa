@@ -180,7 +180,15 @@ Conventions:
   intended behavior-preserving. Test counts are unchanged on the pandas-3
   stack (unit 45 passed / 1 skipped, static 72 passed); the Tier-C equivalence
   harness has *not* been re-run and must be re-baselined, the environment
-  having moved twice. See `docs/pypsa-v1-migration.md` for the migration map,
+  having moved twice. Follow-up hardening: pandas 3 also raised its *optional*-dependency
+  floors, which only error at use time — `openpyxl` 3.1.2→3.1.5 (found via
+  the MECS `read_excel` path, uncovered by tests), `matplotlib`
+  3.8.0→3.9.3, `scipy` 1.11.3→1.14.1; all 36 floors in
+  `pandas.compat._optional.VERSIONS` now audited clean against the lock.
+  The vacuous `assert not (mecs == np.NaN).any().any()` in
+  `build_demand.py` (always-true; `np.NaN` also removed in numpy 2) is now
+  a real `mecs.isna()` check, verified passing against the actual MECS
+  workbook (405×9, zero NaNs) — *results effect: none*. See `docs/pypsa-v1-migration.md` for the migration map,
   the pandas-3 bump detail, and the pypsa-v1 data-storage features we can now
   adopt.
 
