@@ -188,7 +188,17 @@ Conventions:
   The vacuous `assert not (mecs == np.NaN).any().any()` in
   `build_demand.py` (always-true; `np.NaN` also removed in numpy 2) is now
   a real `mecs.isna()` check, verified passing against the actual MECS
-  workbook (405×9, zero NaNs) — *results effect: none*. See `docs/pypsa-v1-migration.md` for the migration map,
+  workbook (405×9, zero NaNs) — *results effect: none*. The Tier-C re-baseline under the new env then caught two silent pandas-3
+  `astype(str)` regressions (pandas 3 preserves NaN through `astype(str)`
+  from EVERY source dtype instead of stringifying to "nan"): ADS
+  `Long Name` match keys (343 NaN, loud crash) and — via a systematic
+  82-site audit — `build_powerplants` `build_decade`, an inner-merge
+  imputation key whose NaN silently dropped 767 proposed generators /
+  74.7 GW (411 solar, 173 batteries, 47 onwind) that pandas 2 kept via its
+  "nan0s" bucket. Both fixed byte-identical to pandas-2 semantics
+  (`.fillna("nan")`); two latent config-gated sites flagged
+  (cluster_simpl county busmap, cluster_network efficiency classes).
+  See `docs/pypsa-v1-migration.md` for the migration map,
   the pandas-3 bump detail, and the pypsa-v1 data-storage features we can now
   adopt.
 
