@@ -279,8 +279,12 @@ classes; waivers finalized in tests/equivalence/waivers.yaml.
   stage with only two live findings. Any future waiver over a solver-input
   column should carry an explicit magnitude ceiling. RESTATED DL-7:
   clustered stages, prong 1 only: `Generator.fuel_cost` differs on 6 of 31
-  clustered generators (6/45 at later stages), max 8.4498 $/MWh (40.4%) on
-  `p10 oil`, with p9 oil 6.6% and p9/p10/p11 biomass <=10.8%. Accepted
+  clustered generators (6/45 at later stages), max 8.1277 $/MWh (40.24%)
+  on `p10 oil` as of the post-DL-13 artifacts (8.4498/40.4% when first
+  measured post-DL-12), with p9 oil 6.6% and p9/p10/p11 biomass <=10.8%.
+  The DL-9 absolute gaps (3,680.1 / 3,586.6 MW) are invariant across
+  DL-11, DL-12 AND DL-13 — the silent-drop mechanism is independent of
+  all three adopted fixes. Accepted
   because the column is carried metadata: `marginal_cost`, `efficiency`
   and the solved objective are finding-free at 1e-3 and per-carrier
   `p_nom_opt` agrees to 0.01 MW. Prong 2 shows zero residuals. The
