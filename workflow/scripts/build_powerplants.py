@@ -287,7 +287,9 @@ def merge_ads_data(eia_data_operable):
         skiprows=2,
         encoding="unicode_escape",
     )
-    ads["Long Name"] = ads["Long Name"].astype(str)
+    # pandas 3 str dtype: astype(str) preserves NaN instead of stringifying
+    # to "nan"; keep the pandas-2 behavior these name-match keys relied on
+    ads["Long Name"] = ads["Long Name"].fillna("nan").astype(str)
     ads["Name"] = ads["Name"].str.replace(" ", "")
     ads["Name"] = ads["Name"].apply(lambda x: re.sub(r"[^a-zA-Z0-9]", "", x).lower())
     ads["Long Name"] = ads["Long Name"].str.replace(" ", "")
@@ -485,7 +487,10 @@ def set_parameters(plants: pd.DataFrame):
     plants = plants.set_index("generator_name")
     plants["p_nom"] = plants.pop("capacity_mw")
     plants["build_year"] = plants.pop("generator_operating_date").dt.year
-    plants["build_decade"] = plants.build_year.astype(str).str[:3] + "0s"
+    # pandas 3 str dtype: astype(str) preserves NaN instead of stringifying to
+    # "nan"; keep the pandas-2 "nan0s" bucket so plants with no operating date
+    # (proposed units) still match a group in impute_missing_plant_data's inner merge
+    plants["build_decade"] = plants.build_year.astype(str).fillna("nan").str[:3] + "0s"
     plants["heat_rate"] = plants.pop("unit_heat_rate_mmbtu_per_mwh")
     plants["vom"] = plants.pop("ads_vom_cost")
     plants["fuel_cost"] = plants.pop("fuel_cost_per_mmbtu")
