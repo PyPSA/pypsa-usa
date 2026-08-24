@@ -391,6 +391,12 @@ classes; waivers finalized in tests/equivalence/waivers.yaml.
   layer where the union works, and prong-1 numbers were bit-identical
   before and after. A regression test (self-intersecting bowtie +
   overlapping box) reproduces the GEOS failure against the union
-  implementation. USA leg: gate proven mechanically and by config;
-  empirical usa data-stage run in progress at sign-off, recorded below
-  when complete. | countersigned (ktehranchi, 2026-08-23) |
+  implementation. USA leg COMPLETE (2026-08-24):
+  data-stage harness PASS, 0 live / 113 total findings — the identical
+  count and class structure as the pre-DL-11/12/13 usa baseline, i.e. the
+  three adopted fixes left the national comparison untouched. Gate
+  verified on every axis: gate expression AST-identical on both sides and
+  False for `include: {}`; candidate usa add_electricity log 0 seam-drop
+  lines (vs 24 at CA); anchor usa log 0 lines. equivalence_report_usa.html
+  regenerated, superseding the stale 2026-08-22 usa artifacts. |
+  countersigned (ktehranchi, 2026-08-23) |
