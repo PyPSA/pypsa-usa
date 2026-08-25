@@ -467,9 +467,7 @@ def plot_capacity_map_by_horizon(
         line_scale = get_line_scale(interconnect) if interconnect else 1
 
         has_new_capacity = (
-            bus_values.fillna(0).gt(0).any()
-            or line_values.fillna(0).gt(0).any()
-            or link_values.fillna(0).gt(0).any()
+            bus_values.fillna(0).gt(0).any() or line_values.fillna(0).gt(0).any() or link_values.fillna(0).gt(0).any()
         )
 
         if kind == "new" and not has_new_capacity:
@@ -567,9 +565,7 @@ def plot_capacity_map_by_horizon(
         )
 
         has_new_capacity = (
-            bus_values.fillna(0).gt(0).any()
-            or line_values.fillna(0).gt(0).any()
-            or link_values.fillna(0).gt(0).any()
+            bus_values.fillna(0).gt(0).any() or line_values.fillna(0).gt(0).any() or link_values.fillna(0).gt(0).any()
         )
 
         if kind == "new" and not has_new_capacity:
