@@ -7,8 +7,11 @@ from functools import partial, lru_cache
 
 import os, sys, glob
 
-path = workflow.source_path("../scripts/_helpers.py")
-sys.path.insert(0, os.path.dirname(path))
+# Cache local modules before importing them from Snakemake's source cache.
+for source in ("../scripts/_helpers.py", "../scripts/constants.py"):
+    source_dir = os.path.dirname(workflow.source_path(source))
+    if source_dir not in sys.path:
+        sys.path.insert(0, source_dir)
 
 from _helpers import validate_checksum, update_config_from_wildcards
 from constants import HOURS_PER_YEAR
