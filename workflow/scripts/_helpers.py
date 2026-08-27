@@ -17,6 +17,8 @@ from snakemake.utils import update_config
 
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
 
+logger = logging.getLogger(__name__)
+
 
 def configure_logging(snakemake, skip_handlers=False):
     """
@@ -866,3 +868,272 @@ def get_multiindex_snapshots(
             get_snapshots(sns_config).map(lambda x: x.replace(year=year)),
         )
     return pd.MultiIndex.from_arrays([sns.year, sns])
+
+
+def prepare_sector_demand(profiles, allocation, growth, unit_conversion=1.0):
+    """
+    Package zonal sector demand and its original spatial allocation factors.
+
+    Parameters
+    ----------
+    profiles : pd.DataFrame
+        Zonal demand profiles indexed by the timestamps of all required
+        investment periods. Columns identify source zones. Demand growth
+        and unit conversion must not have been applied yet.
+    allocation : pd.DataFrame
+        Allocation table indexed by unique original network bus identifiers.
+        Required columns are ``zone``, identifying the source demand zone,
+        and ``laf``, containing the original nodal load allocation factor.
+    growth : pd.Series
+        Multiplicative demand growth factor for each timestamp. Its index
+        must match ``profiles.index`` exactly, including ordering.
+    unit_conversion : float, default 1.0
+        Conversion applied after nodal allocation and demand growth.
+        Transport demand may require a conversion; other demand categories
+        normally use 1.0.
+
+    Returns
+    -------
+    dict
+        Compact demand representation with ``profiles``, ``allocation``,
+        ``growth``, and ``unit_conversion`` entries. Allocation rows contain
+        only buses passing the existing nodal cutoff and having a matching
+        source-zone profile.
+
+    Raises
+    ------
+    ValueError
+        If profiles are empty, profile and growth indices differ, bus or
+        profile-zone identifiers are duplicated, or numerical inputs contain
+        non-finite values.
+
+    Notes
+    -----
+    Allocation factors below 1e-6 are discarded. Buses whose source zones
+    have no demand profile are skipped with a warning, as can occur near
+    interconnection boundaries. Retained factors are not renormalized.
+
+    No hourly nodal demand matrix is constructed here. Allocation, growth,
+    conversion, and nodal rounding are evaluated when demand is aggregated
+    onto the clustered network.
+    """
+    if profiles.empty or not profiles.index.equals(growth.index):
+        raise ValueError(
+            "Sector profiles and growth factors must have matching, nonempty snapshots",
+        )
+    if not allocation.index.is_unique or not profiles.columns.is_unique:
+        raise ValueError("Sector demand buses and profile zones must be unique")
+    if not np.isfinite(profiles.to_numpy()).all() or not np.isfinite(growth.to_numpy()).all():
+        raise ValueError("Sector demand profiles and growth factors must be finite")
+    if not np.isfinite(allocation.laf.to_numpy()).all() or not np.isfinite(unit_conversion):
+        raise ValueError(
+            "Sector demand allocation factors and unit conversion must be finite",
+        )
+
+    # Apply the original nodal cutoff before any spatial aggregation.
+    allocation = allocation.loc[
+        allocation.laf >= 0.000001,
+        ["zone", "laf"],
+    ].copy()
+
+    missing = allocation.loc[
+        ~allocation.zone.isin(profiles.columns),
+        "zone",
+    ].unique()
+    if len(missing):
+        logger.warning("No demand found for %s", missing.tolist())
+
+    allocation = allocation.loc[allocation.zone.isin(profiles.columns)]
+
+    return {
+        "profiles": profiles,
+        "allocation": allocation,
+        "growth": growth,
+        "unit_conversion": unit_conversion,
+    }
+
+
+def read_busmap(path):
+    """
+    Read a bus mapping without changing textual bus identifiers.
+
+    Parameters
+    ----------
+    path : str or path-like
+        CSV file with exactly two columns: original source bus identifiers
+        followed by destination bus identifiers. Empty destinations indicate
+        buses explicitly removed from the network.
+
+    Returns
+    -------
+    pd.Series
+        Mapping indexed by source bus identifiers. Identifiers are preserved
+        as strings, including leading zeros. Empty destinations become NaN.
+
+    Raises
+    ------
+    ValueError
+        If the file does not contain exactly two columns or source bus
+        identifiers are duplicated.
+
+    Notes
+    -----
+    Both columns are read as ordinary string columns before setting the
+    index. This prevents CSV index inference from converting identifiers
+    such as ``"001"`` into integers.
+
+    Default NA parsing is disabled so identifiers such as ``"NA"`` and
+    ``"nan"`` remain literal strings. Only empty destination fields represent
+    removed buses.
+    """
+    frame = pd.read_csv(path, dtype=str, keep_default_na=False)
+
+    if frame.shape[1] != 2 or not frame.iloc[:, 0].is_unique:
+        raise ValueError(
+            f"Expected source and destination columns with unique source buses in {path}",
+        )
+
+    frame = frame.set_index(frame.columns[0])
+    return frame.iloc[:, 0].replace("", np.nan)
+
+
+def compose_busmaps(first, second):
+    """
+    Compose successive spatial mappings while retaining explicit removals.
+
+    Parameters
+    ----------
+    first : pd.Series
+        Mapping from original buses to intermediate buses, indexed by unique
+        original bus identifiers.
+    second : pd.Series
+        Mapping from intermediate buses to final buses, indexed by unique
+        intermediate bus identifiers.
+
+    Returns
+    -------
+    pd.Series
+        Mapping from original buses to final buses, retaining the index of
+        ``first``. Null destinations propagate through the composition.
+
+    Raises
+    ------
+    ValueError
+        If either mapping has duplicate source identifiers or a non-null
+        destination in ``first`` is absent from the index of ``second``.
+
+    Notes
+    -----
+    A null destination represents an intentional removal. A missing
+    intermediate mapping entry is treated as an error rather than silently
+    interpreted as a removed bus.
+    """
+    if not first.index.is_unique or not second.index.is_unique:
+        raise ValueError("Bus maps must have unique source buses")
+
+    missing = pd.Index(first.dropna().unique()).difference(second.index)
+    if len(missing):
+        raise ValueError(
+            f"Bus map is missing intermediate buses: {missing.tolist()[:10]}",
+        )
+
+    return first.map(second)
+
+
+def aggregate_sector_demand(demand, busmap, block_size=128):
+    """
+    Construct sector demand directly on the surviving clustered buses.
+
+    Parameters
+    ----------
+    demand : dict
+        Compact demand representation produced by ``prepare_sector_demand``.
+        Profiles contain investment-period timestamps, while allocation rows
+        refer to original network buses.
+    busmap : pd.Series
+        Mapping from original buses to final clustered buses. Every retained
+        allocation bus must appear in the mapping index. Null destinations
+        identify buses explicitly removed during network processing.
+    block_size : int, default 128
+        Maximum number of original buses reconstructed simultaneously within
+        each source zone. Must be positive.
+
+    Returns
+    -------
+    pd.DataFrame
+        Demand indexed by ``demand["profiles"].index``, with sorted columns
+        identifying surviving destination buses receiving demand. Values
+        retain the units of the demand category after conversion.
+
+    Raises
+    ------
+    ValueError
+        If block_size is below one or an allocation bus is missing from the
+        bus-map index.
+
+    Notes
+    -----
+    Original nodal values are calculated in this order:
+
+    ``zonal_profile * allocation_factor * growth * unit_conversion``
+
+    Values are rounded to four decimal places at the original bus level
+    before summation onto clustered buses. Allocation factors are not
+    renormalized or aggregated before rounding.
+
+    Demand assigned to explicit null destinations is discarded with a
+    warning. Missing source mapping entries instead raise an error.
+
+    Only the final clustered matrix and one bounded nodal block are
+    materialized. Floating-point summation order can differ from the original
+    network aggregation.
+    """
+    if block_size < 1:
+        raise ValueError("Demand block size must be positive")
+
+    allocation = demand["allocation"]
+
+    missing = allocation.index.difference(busmap.index)
+    if len(missing):
+        raise ValueError(
+            f"Bus map is missing demand buses: {missing.tolist()[:10]}",
+        )
+
+    destinations = busmap.reindex(allocation.index)
+    removed = destinations.isna()
+
+    if removed.any():
+        logger.warning(
+            "Dropping sector demand on %s removed buses",
+            removed.sum(),
+        )
+
+    allocation = allocation.loc[~removed]
+    destinations = destinations.loc[~removed]
+
+    result = pd.DataFrame(
+        0.0,
+        index=demand["profiles"].index,
+        columns=pd.Index(sorted(destinations.unique())),
+    )
+    growth = demand["growth"].to_numpy()[:, None]
+
+    for zone, group in allocation.groupby("zone", sort=False):
+        profile = demand["profiles"][zone].to_numpy(dtype=float)[:, None]
+
+        for start in range(0, len(group), block_size):
+            buses = group.iloc[start : start + block_size]
+
+            # Preserve nodal multiplication and rounding before aggregation.
+            values = profile * buses.laf.to_numpy()[None, :]
+            values *= growth
+            values *= demand["unit_conversion"]
+
+            block = pd.DataFrame(
+                np.round(values, 4).T,
+                index=buses.index,
+            )
+            grouped = block.groupby(destinations.loc[buses.index]).sum().T
+            result.loc[:, grouped.columns] += grouped.to_numpy()
+
+    return result

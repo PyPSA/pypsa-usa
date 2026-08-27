@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging, load_costs
+from add_demand import attach_sector_demand
 from add_electricity import add_missing_carriers
 from constants import HOURS_PER_YEAR
 from eia import FuelCosts
@@ -1545,6 +1546,16 @@ if __name__ == "__main__":
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
+
+    # Introduce sector demand before demand-dependent network preparation.
+    if snakemake.config["scenario"]["sector"] not in ("E", ""):
+        attach_sector_demand(
+            n,
+            snakemake.input.sector_demand,
+            snakemake.input.busmap_s,
+            snakemake.input.busmap_c,
+        )
+
     elec_config = snakemake.config["electricity"]
 
     costs_dict = {

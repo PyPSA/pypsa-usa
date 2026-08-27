@@ -559,10 +559,12 @@ rule build_service_demand:
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        electricity=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
-        space_heat=RESOURCES + "{interconnect}/demand/{end_use}_space-heating.pkl",
-        water_heat=RESOURCES + "{interconnect}/demand/{end_use}_water-heating.pkl",
-        cool=RESOURCES + "{interconnect}/demand/{end_use}_cooling.pkl",
+        electricity=RESOURCES + "{interconnect}/demand/sector/{end_use}_electricity.pkl",
+        space_heat=RESOURCES
+        + "{interconnect}/demand/sector/{end_use}_space-heating.pkl",
+        water_heat=RESOURCES
+        + "{interconnect}/demand/sector/{end_use}_water-heating.pkl",
+        cool=RESOURCES + "{interconnect}/demand/sector/{end_use}_cooling.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
@@ -588,8 +590,8 @@ rule build_industry_demand:
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        electricity=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
-        heat=RESOURCES + "{interconnect}/demand/{end_use}_heating.pkl",
+        electricity=RESOURCES + "{interconnect}/demand/sector/{end_use}_electricity.pkl",
+        heat=RESOURCES + "{interconnect}/demand/sector/{end_use}_heating.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
@@ -616,10 +618,10 @@ rule build_transport_road_demand:
         dissagregate_files=demand_dissagregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        light_duty=RESOURCES + "{interconnect}/demand/{end_use}_light-duty.pkl",
-        med_duty=RESOURCES + "{interconnect}/demand/{end_use}_med-duty.pkl",
-        heavy_duty=RESOURCES + "{interconnect}/demand/{end_use}_heavy-duty.pkl",
-        bus=RESOURCES + "{interconnect}/demand/{end_use}_bus.pkl",
+        light_duty=RESOURCES + "{interconnect}/demand/sector/{end_use}_light-duty.pkl",
+        med_duty=RESOURCES + "{interconnect}/demand/sector/{end_use}_med-duty.pkl",
+        heavy_duty=RESOURCES + "{interconnect}/demand/sector/{end_use}_heavy-duty.pkl",
+        bus=RESOURCES + "{interconnect}/demand/sector/{end_use}_bus.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
     benchmark:
@@ -647,7 +649,7 @@ rule build_transport_other_demand:
         demand_files=demand_raw_data,
         dissagregate_files=demand_dissagregate_data,
     output:
-        RESOURCES + "{interconnect}/demand/{end_use}_{vehicle}.pkl",
+        RESOURCES + "{interconnect}/demand/sector/{end_use}_{vehicle}.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand.log",
     benchmark:
@@ -659,53 +661,80 @@ rule build_transport_other_demand:
         "../scripts/build_demand.py"
 
 
-def demand_to_add(wildcards):
+def sector_demand_files(wildcards):
+    """
+    Return compact sector-demand inputs for the clustered network.
 
-    if config["scenario"]["sector"] == "E":
-        return RESOURCES + "{interconnect}/demand/power_electricity.csv"
+    Parameters
+    ----------
+    wildcards : snakemake.io.Wildcards
+        Wildcards supplied by Snakemake. Returned paths retain the existing
+        interconnect placeholder for workflow expansion.
+
+    Returns
+    -------
+    list or itertools.chain
+        An empty list for electricity-only studies. For sector studies,
+        an iterator over residential, commercial, industrial, road-transport,
+        and other transport demand files.
+
+    Notes
+    -----
+    These files are consumed by add_extra_components after spatial
+    clustering. They are not inputs to the initial add_demand rule.
+
+    The existing service-sector configuration determines whether heating
+    demand is split into space and water heating. No new configuration
+    options are introduced.
+    """
+    if config["scenario"]["sector"] in ("E", ""):
+        return []
+
+    services = ["residential", "commercial"]
+    if config["sector"]["service_sector"]["split_space_water_heating"]:
+        fuels = ["electricity", "cooling", "space-heating", "water-heating"]
     else:
-        # service demand
-        services = ["residential", "commercial"]
-        if config["sector"]["service_sector"]["split_space_water_heating"]:
-            fuels = ["electricity", "cooling", "space-heating", "water-heating"]
-        else:
-            fuels = ["electricity", "cooling", "heating"]
-        service_demands = [
-            RESOURCES + "{interconnect}/demand/" + service + "_" + fuel + ".pkl"
-            for service in services
-            for fuel in fuels
-        ]
-        # industrial demand
-        fuels = ["electricity", "heating"]
-        industrial_demands = [
-            RESOURCES + "{interconnect}/demand/industry_" + fuel + ".pkl"
-            for fuel in fuels
-        ]
-        # road transport demands
-        vehicles = ["light-duty", "med-duty", "heavy-duty", "bus"]
-        road_demand = [
-            RESOURCES + "{interconnect}/demand/transport_" + vehicle + ".pkl"
-            for vehicle in vehicles
-        ]
+        fuels = ["electricity", "cooling", "heating"]
 
-        # other transport demands
-        vehicles = ["boat-shipping", "rail-shipping", "rail-passenger", "air"]
-        non_road_demand = [
-            RESOURCES + "{interconnect}/demand/transport_" + vehicle + ".pkl"
-            for vehicle in vehicles
-        ]
+    service_demands = [
+        RESOURCES + "{interconnect}/demand/sector/" + service + "_" + fuel + ".pkl"
+        for service in services
+        for fuel in fuels
+    ]
 
-        return chain(service_demands, industrial_demands, road_demand, non_road_demand)
+    fuels = ["electricity", "heating"]
+    industrial_demands = [
+        RESOURCES + "{interconnect}/demand/sector/industry_" + fuel + ".pkl"
+        for fuel in fuels
+    ]
+
+    vehicles = ["light-duty", "med-duty", "heavy-duty", "bus"]
+    road_demand = [
+        RESOURCES + "{interconnect}/demand/sector/transport_" + vehicle + ".pkl"
+        for vehicle in vehicles
+    ]
+
+    vehicles = ["boat-shipping", "rail-shipping", "rail-passenger", "air"]
+    non_road_demand = [
+        RESOURCES + "{interconnect}/demand/sector/transport_" + vehicle + ".pkl"
+        for vehicle in vehicles
+    ]
+
+    return chain(
+        service_demands,
+        industrial_demands,
+        road_demand,
+        non_road_demand,
+    )
 
 
 rule add_demand:
     params:
-        sectors=config["scenario"]["sector"],
         planning_horizons=config_provider("scenario", "planning_horizons"),
         snapshots=config_provider("snapshots"),
     input:
         network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        demand=demand_to_add,
+        demand=RESOURCES + "{interconnect}/demand/power_electricity.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_base_network_dem.nc",
     log:
@@ -894,6 +923,7 @@ rule simplify_network:
         + "{interconnect}/Geospatial/regions_offshore.geojson",
     output:
         network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
+        busmap=RESOURCES + "{interconnect}/busmap_s{simpl}.csv",
         regions_onshore=RESOURCES
         + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
         regions_offshore=RESOURCES
@@ -985,6 +1015,17 @@ rule add_extra_components:
             if hour.isdigit()
         },
         network=RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
+        sector_demand=lambda w: list(sector_demand_files(w)),
+        busmap_s=(
+            RESOURCES + "{interconnect}/busmap_s{simpl}.csv"
+            if config["scenario"]["sector"] not in ("E", "")
+            else []
+        ),
+        busmap_c=(
+            RESOURCES + "{interconnect}/busmap_s{simpl}_{clusters}.csv"
+            if config["scenario"]["sector"] not in ("E", "")
+            else []
+        ),
         tech_costs=lambda wildcards: expand(
             RESOURCES + "costs/costs_{year}.csv",
             year=config["scenario"]["planning_horizons"],
