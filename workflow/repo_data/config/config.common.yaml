@@ -28,6 +28,17 @@ pudl_path: s3://pudl.catalyst.coop/v2025.5.0   # versioned S3 prefix to PUDL par
 
 
 # ====================================================================
+# GODEEEP renewable scenario selection
+# ====================================================================
+# Consumed together with `renewable.dataset` below. `add_electricity.py:646`
+# and `build_electricity.smk:166` index `renewable_scenarios[0]` directly
+# whenever the dataset is godeeep, so both keys must be defined here.
+# docs : RENEWABLE_SCENARIOS
+renewable_weather_years: [2019]
+renewable_scenarios: ["rcp85cooler"]   # historical | rcp45hotter | rcp45cooler | rcp85hotter | rcp85cooler
+
+
+# ====================================================================
 # RENEWABLE — per-technology resource and land-availability settings
 # ====================================================================
 # These knobs feed `build_renewable_profiles`. The atlite resource:
@@ -35,6 +46,11 @@ pudl_path: s3://pudl.catalyst.coop/v2025.5.0   # versioned S3 prefix to PUDL par
 # screens together define each cell's potential and per-hour CF.
 # docs : RENEWABLE
 renewable:
+  # Resource-quality source for wind/solar capacity factors. Required: the
+  # rules dereference it directly (retrieve.smk:231 gates rule retrieve_cutout
+  # on `config["renewable"]["dataset"]`), so every config that sets
+  # `enable.build_cutout: false` needs it defined here.
+  dataset: godeeep                         # atlite | godeeep
 
   # ---------- Enhanced Geothermal Systems ----------
   EGS:
