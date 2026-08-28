@@ -1,5 +1,10 @@
 pudl_path: s3://pudl.catalyst.coop/v2025.5.0
 
+pudl_cache:
+  version: v2025.5.0
+  base_url: https://s3.us-west-2.amazonaws.com/pudl.catalyst.coop
+  directory: repo_data/pudl
+
 # docs :
 renewable:
   EGS:

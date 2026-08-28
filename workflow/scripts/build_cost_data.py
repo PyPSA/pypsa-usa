@@ -63,17 +63,8 @@ LIFETIME_DATA = [
 ]  # https://github.com/NREL/ReEDS-2.0/blob/e65ed5ed4ffff973071839481309f77d12d802cd/inputs/plant_characteristics/maxage.csv#L4
 
 
-def create_duckdb_instance():
-    """Set up DuckDB to read parquet files directly."""
-    duckdb.connect(database=":memory:", read_only=False)
-    # Install httpfs extension to access remote files if needed
-    duckdb.query("INSTALL httpfs;")
-
-
 def load_pudl_atb_data(parquet_path: str):
     """Loads ATB data directly from parquet files."""
-    create_duckdb_instance()
-
     query = f"""
     WITH finance_cte AS (
         SELECT

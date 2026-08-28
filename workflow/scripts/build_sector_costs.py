@@ -2,7 +2,7 @@
 Builds costs data from EFS studies.
 
 https://www.nrel.gov/docs/fy18osti/70485.pdf
-https://data.nrel.gov/submissions/78
+https://data.nlr.gov/submissions/78
 """
 
 from abc import ABC, abstractmethod
@@ -22,7 +22,7 @@ LIFETIME_MILES = {  # units of miles
 
 # fixed maintenance costs in %/year
 # From https://www.nrel.gov/docs/fy18osti/71500.pdf
-# Data in Sheet "13" at https://data.nrel.gov/submissions/93
+# Data in Sheet "13" at https://data.nlr.gov/submissions/93
 # manually claculated as fixed/capex
 ICE_MAINTENANCE_COSTS = {  # units of % / year
     "light_duty_cars": 11.34,
@@ -43,7 +43,7 @@ BEV_MAINTENANCE_COSTS = {  # units of % / year
 # maintenance costs in $/mile. This gave very high maintenance costs
 # when using exogenous lifetime miles assumption.
 # From https://www.nrel.gov/docs/fy18osti/71500.pdf
-# Data in Sheet "A2" at https://data.nrel.gov/submissions/93
+# Data in Sheet "A2" at https://data.nlr.gov/submissions/93
 """
 ICE_MAINTENANCE_COSTS = {  # units of $ / miles
     "light_duty_cars": 0.033,
@@ -96,7 +96,7 @@ class EfsTechnologyData:
 
     args:
         file_path: str
-            Path to this file https://data.nrel.gov/submissions/78 which is the
+            Path to this file https://data.nlr.gov/submissions/78 which is the
             data from this report https://www.nrel.gov/docs/fy18osti/70485.pdf
 
     Buildings sector will return both commercial and residential data
@@ -254,7 +254,7 @@ class EfsBevTransportationData(EfsSectorData):
         df = df[
             (df.Sector == "Transportation") & (df["EFS Case"] == self.efs_case) & (df.Metric == "Capital Cost")
         ].copy()
-        source = "NREL EFS at https://data.nrel.gov/submissions/78"
+        source = "NREL EFS at https://data.nlr.gov/submissions/78"
         description = "Supplemented with NREL ATB"
         df["Metric"] = "investment"
         df = self._format_data_structure(df, source=source, description=description)
@@ -278,7 +278,7 @@ class EfsBevTransportationData(EfsSectorData):
         df = df[
             (df.Sector == "Transportation") & (df["EFS Case"] == self.efs_case) & (df.Metric == "Main Efficiency")
         ].copy()
-        source = "NREL EFS at https://data.nrel.gov/submissions/78"
+        source = "NREL EFS at https://data.nlr.gov/submissions/78"
         df["Metric"] = "efficiency"
         df = self._format_data_structure(df, source=source, description="")
         df = self._correct_efficiency_units(df)
@@ -329,7 +329,7 @@ class EfsIceTransportationData:
     Only contains ICE vehicles, as this data is manually scraped.
 
     - See Table 5 in https://www.nrel.gov/docs/fy18osti/70485.pdf for the sources
-    - See this file for the raw data https://data.nrel.gov/submissions/93
+    - See this file for the raw data https://data.nlr.gov/submissions/93
 
     Args:
         file_path: str
@@ -511,7 +511,7 @@ class EfsBuildingData(EfsSectorData):
             & (df.Metric == "Installed Cost")
             & (df.Units.str.startswith("2016$/kBtu/hr"))
         ].copy()
-        source = "NREL EFS at https://data.nrel.gov/submissions/78"
+        source = "NREL EFS at https://data.nlr.gov/submissions/78"
         description = ""
         df["Metric"] = "investment"
         df = self._format_data_structure(df, source=source, description=description)
@@ -529,7 +529,7 @@ class EfsBuildingData(EfsSectorData):
     def get_efficiency(self):  # noqa: D102
         df = self.data.copy()
         df = df[(df.Sector == "Buildings") & (df["EFS Case"] == self.efs_case) & (df.Metric == "Efficiency")].copy()
-        source = "NREL EFS at https://data.nrel.gov/submissions/78"
+        source = "NREL EFS at https://data.nlr.gov/submissions/78"
         df["Metric"] = "efficiency"
         df["Units"] = "per unit"
         df = self._format_data_structure(df, source=source, description="")

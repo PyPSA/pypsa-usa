@@ -12,11 +12,6 @@ from _helpers import configure_logging, weighted_avg
 logger = logging.getLogger(__name__)
 
 
-def initialize_duckdb():
-    duckdb.connect(database=":memory:", read_only=False)
-    duckdb.query("INSTALL httpfs;")
-
-
 def load_eia_operable_data(parquet_path: str):
     """Queries the parquet files directly for operable plant data."""
     return duckdb.query(
@@ -694,9 +689,9 @@ if __name__ == "__main__":
     start_date = f"{data_year}-01-01"
     end_date = f"{data_year + 1}-01-01"
 
-    initialize_duckdb()
-    eia_data_operable = load_eia_operable_data(snakemake.params.pudl_path)
-    heat_rates = load_heat_rates_data(snakemake.params.pudl_path, start_date, end_date)
+    pudl_path = snakemake.params.pudl_path
+    eia_data_operable = load_eia_operable_data(pudl_path)
+    heat_rates = load_heat_rates_data(pudl_path, start_date, end_date)
 
     eia_data_operable = merge_fc_hr_data(
         eia_data_operable,
