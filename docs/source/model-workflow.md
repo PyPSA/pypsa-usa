@@ -105,7 +105,7 @@ non-netCDF metadata used downstream.
 | `cluster_network` | `cluster_network.py` | `resources/networks/elec_s{simpl}_c{clusters}.nc`, `resources/busmaps/busmap_s{simpl}_{clusters}.csv` |
 | `add_extra_components` | `add_extra_components.py` | `..._ec.nc` |
 | `prepare_network` | `prepare_network.py` | `..._ec_l{ll}_{opts}.nc` |
-| `add_sectors` | `build_sector.py` (sector runs) | `..._ec_l{ll}_{opts}_{sector}.nc` |
+| `add_sectors` | `add_sectors.py` (sector runs) | `..._ec_l{ll}_{opts}_{sector}.nc` |
 
 `cluster_network` reduces the network to its final `{clusters}` resolution (kmeans or
 modularity), with optional suffixes controlling how existing transmission is treated
@@ -124,7 +124,7 @@ the natural-gas, buildings, transport, and industry representations here
 |------|--------|-------------|
 | `solve_network` | `solve_network.py` | `results/{run}/{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc` |
 | `plot_network_maps`, `plot_statistics`, ... | `plot_*.py` | `results/{run}/{interconnect}/figures/` |
-| `export_statistics` | `export_statistics.py` | `results/{run}/{interconnect}/` summary CSVs |
+| `export_statistics` | `plot_statistics.py` (in `export` mode) | `results/{run}/{interconnect}/` summary CSVs |
 
 `solve_network` builds the optimization problem with [Linopy](https://linopy.readthedocs.io/),
 registers PyPSA-USA's custom constraints (policy standards, reserve margins, capacity

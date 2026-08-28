@@ -53,7 +53,8 @@ gives you the flexibility to:
 - Cluster the network to a user-defined number of zones, respecting county lines,
   balancing areas, states, or REeDS zone boundaries.
 - Use **historical EIA-930 demand** (2018-2023), **NREL EFS electrification
-  scenarios**, or **EER forecasted demand** (2030, 2040, 2050).
+  scenarios** (2030, 2040, 2050), or **EER forecasted demand** (2021, 2025, 2030,
+  2035, 2040, 2045, 2050).
 - Build renewable capacity-factor profiles from the **GODEEEP** dataset (default) or
   compute them with **Atlite** from ERA5 weather data.
 - Incorporate **historical daily/monthly fuel prices** from ISOs/EIA for your chosen

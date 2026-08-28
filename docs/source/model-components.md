@@ -50,8 +50,8 @@ renewable profiles, and generators are built, and finally to 4 `{clusters}` zone
 :::
 
 Clustering respects administrative boundaries: with
-`model_topology: topological_boundaries` set to `county`, `reeds_zone`, `state`, or
-`balancing_area`, no cluster crosses a boundary of that type. This is what lets
+`model_topology: topological_boundaries` set to `county`, `reeds_zone`, or `state`, no
+cluster crosses a boundary of that type. This is what lets
 state-level policies (RPS, emissions caps) and zonal interface limits stay well-defined
 on the clustered network: every bus belongs unambiguously to a state, REeDS zone, and
 balancing authority, recorded as bus attributes ({doc}`model-network-schema`).

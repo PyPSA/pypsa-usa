@@ -29,9 +29,9 @@ changes you will notice:
 - **`resources/` is organized category-first**: `networks/`, `busmaps/`, `profiles/`,
   `geospatial/`, `costs/`, `prices/`, `demand/`, `powerplants/`, ... — instead of
   per-interconnect flat folders. File names are unchanged.
-- Unused config keys and never-read rule parameters were removed, and
-  `workflow/config/` is kept in sync with the canonical templates in
-  `workflow/repo_data/config/`.
+- Unused config keys and never-read rule parameters were removed. The canonical config
+  templates live in `workflow/repo_data/config/`; `workflow/config/` is no longer tracked in
+  git and is generated from those templates by `init_pypsa_usa.sh`.
 
 ### Correctness fixes validated by an equivalence harness
 

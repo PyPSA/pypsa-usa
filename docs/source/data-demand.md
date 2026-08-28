@@ -26,17 +26,27 @@ historical weather year, so `renewable_weather_years` must contain exactly one y
 All of the demand sources above arrive at a coarser resolution than the network: EIA930
 historical demand is reported per balancing area, while EFS and EER forecasts are reported per
 state. `add_demand` distributes each zone's hourly profile across the network buses within that
-zone using population-based load-allocation factors. Every bus carries a demand weight (`Pd`)
-inherited from the Breakthrough Energy base network, which reflects the population served by
-each substation; a bus's allocation factor is its share of the summed weight in its state or
-balancing area (state-level factors are precomputed in `build_base_network` so that states
-split across interconnects are handled consistently). These weights are summed as the network
-is aggregated to substations and clustered to `{simpl}` resolution, so demand is allocated at
-the same resolution the rest of the model is built at: `add_demand` reads `elec_s{simpl}.nc`
-and writes `elec_s{simpl}_dem.nc` before generators are attached in `add_electricity`. The
-county-level 2020 Decennial Census population data shown below underpins the population layers
-used for population-based allocation across the workflow, including the urban/rural splits used
-in sector-coupling studies.
+zone using load-allocation factors. Every bus carries a demand weight (`load_weight`) assigned
+in `build_base_network`, and `electricity: demand: bus_allocation:` selects how that weight is
+computed:
+
+- **`population`** (the default) weights each bus by 2020 Decennial Census county population.
+  A county's population is split evenly across the substations in that county, and each
+  substation's share is then split evenly across its buses (`build_bus_population.py`), so a
+  multi-bus substation does not absorb a multiple of a single-bus substation's weight. Buses
+  with no county assignment (offshore, unmapped) get weight 0.
+- **`breakthrough`** reproduces the legacy behaviour by using the nominal-demand column (`Pd`)
+  inherited from the 2016-vintage Breakthrough Energy base network.
+
+Either way, a bus's allocation factor is its share of the summed weight in its state or
+balancing area (state-level factors, `LAF_state`, are precomputed in `build_base_network` so
+that states split across interconnects are handled consistently). These weights are summed as
+the network is aggregated to substations and clustered to `{simpl}` resolution, so demand is
+allocated at the same resolution the rest of the model is built at: `add_demand` reads
+`elec_s{simpl}.nc` and writes `elec_s{simpl}_dem.nc` before generators are attached in
+`add_electricity`. The county-level 2020 Decennial Census population data shown below is the
+same source that underpins the population layers used elsewhere in the workflow, including the
+urban/rural splits used in sector-coupling studies.
 
 :::{figure} _static/pop_layout/population.png
 :width: 90%
