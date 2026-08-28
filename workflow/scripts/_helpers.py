@@ -12,6 +12,7 @@ import pandas as pd
 import pypsa
 import requests
 import yaml
+from constants import HOURS_PER_YEAR
 from snakemake.utils import update_config
 
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
@@ -153,9 +154,46 @@ def calculate_annuity(n, r):
         return 1 / n
 
 
-def load_costs(tech_costs: str) -> pd.DataFrame:
+def load_costs(tech_costs: str, costs_config: dict | None = None) -> pd.DataFrame:
+    """Load tech costs and select the configured ATB scenario/model_case per carrier.
+
+    The CSV emitted by ``build_cost_data`` carries every (atb_scenario, atb_model_case)
+    combination plus scenario-independent rows (EGS, sector_costs CSVs) where those
+    columns are NA. ``costs_config["atb"]`` provides global defaults
+    (``scenario``, ``model_case``) and an optional per-carrier ``overrides`` map. If the
+    file predates these columns or no config is supplied, the data is pivoted as-is.
+    """
     df = pd.read_csv(tech_costs)
-    return df.pivot(index="pypsa-name", columns="parameter", values="value").fillna(0)
+
+    if "atb_scenario" not in df.columns or "atb_model_case" not in df.columns:
+        return df.pivot(index="pypsa-name", columns="parameter", values="value").fillna(0)
+
+    atb_cfg = (costs_config or {}).get("atb") or {}
+    default_scenario = atb_cfg.get("scenario", "Moderate")
+    default_case = atb_cfg.get("model_case", "Market")
+    overrides = atb_cfg.get("overrides") or {}
+
+    has_scenario = df["atb_scenario"].notna() & df["atb_model_case"].notna()
+    atb_rows = df[has_scenario].copy()
+    static_rows = df[~has_scenario].copy()
+
+    carriers = atb_rows["pypsa-name"].unique()
+    scenario_map = {c: (overrides.get(c) or {}).get("scenario", default_scenario) for c in carriers}
+    case_map = {c: (overrides.get(c) or {}).get("model_case", default_case) for c in carriers}
+    selected = atb_rows[
+        (atb_rows["atb_scenario"] == atb_rows["pypsa-name"].map(scenario_map))
+        & (atb_rows["atb_model_case"] == atb_rows["pypsa-name"].map(case_map))
+    ]
+
+    combined = pd.concat(
+        [
+            selected[["pypsa-name", "parameter", "value"]],
+            static_rows[["pypsa-name", "parameter", "value"]],
+        ],
+        ignore_index=True,
+    )
+    combined = combined.drop_duplicates(subset=["pypsa-name", "parameter"], keep="first")
+    return combined.pivot(index="pypsa-name", columns="parameter", values="value").fillna(0)
 
 
 def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
@@ -184,7 +222,7 @@ def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
     # bus_carrier = n.storage_units.bus.map(n.buses.carrier)
     # n.storage_units.loc[bus_carrier == "heat","carrier"] = "water tanks"
 
-    num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / 8760.0
+    num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / HOURS_PER_YEAR
     costs = load_costs(tech_costs, config["costs"], config["electricity"], num_years)
     update_transmission_costs(n, costs)
 

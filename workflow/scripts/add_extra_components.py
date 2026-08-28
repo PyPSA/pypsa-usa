@@ -6,8 +6,9 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import calculate_annuity, configure_logging
+from _helpers import calculate_annuity, configure_logging, load_costs
 from add_electricity import add_missing_carriers
+from constants import HOURS_PER_YEAR
 from eia import FuelCosts
 from opts._helpers import get_region_buses
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
@@ -79,8 +80,8 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
             marginal_cost=0,  # costs.at[carrier, "marginal_cost"], # TODO: FIX THIS ISSUE IN BUILD_COST_DATA
             efficiency_store=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             efficiency_dispatch=costs.at[carrier, "efficiency"] ** roundtrip_correction,
-            max_hours=max_hours,
-            cyclic_state_of_charge=False,
+            max_hours=max_hours / (costs.at[carrier, "efficiency"] ** roundtrip_correction),
+            cyclic_state_of_charge=True,
             build_year=investment_year,
             lifetime=costs.at[carrier, "cost_recovery_period_years"],
         )
@@ -154,7 +155,7 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts, costs: pd.DataFrame):
             * region_onshore_psh_grp["cost_kw_round"]
             * 1e3
             * n.snapshot_weightings.objective.sum()
-            / 8760.0
+            / HOURS_PER_YEAR
         )
 
         region_onshore_psh_grp["marginal_cost"] = psh_vom
@@ -178,7 +179,7 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts, costs: pd.DataFrame):
             marginal_cost=region_onshore_psh_grp.marginal_cost,
             efficiency_store=efficiency_store,
             efficiency_dispatch=efficiency_dispatch,
-            max_hours=max_hours,
+            max_hours=max_hours / efficiency_dispatch,
             cyclic_state_of_charge=True,
         )
 
@@ -1342,7 +1343,7 @@ def add_co2_network(n: pypsa.Network, config: dict):
         connections = n.lines
 
     # calculate annualized capital cost
-    number_years = n.snapshot_weightings.generators.sum() / 8760
+    number_years = n.snapshot_weightings.generators.sum() / HOURS_PER_YEAR
     cost = (
         config["co2"]["network"]["capital_cost"]
         * calculate_annuity(config["co2"]["network"]["lifetime"], config["co2"]["network"]["discount_rate"])
@@ -1365,6 +1366,54 @@ def add_co2_network(n: pypsa.Network, config: dict):
         carrier="co2",
         lifetime=config["co2"]["network"]["lifetime"],
     )
+
+
+def apply_ucap(n: pypsa.Network, ucap_config: dict) -> None:
+    """
+    Apply UCAP (Unforced Capacity) derating to conventional generators.
+
+    Sets p_max_pu = 1 - FOR (Forced Outage Rate) for each carrier specified
+    in the configuration. This converts ICAP to UCAP using the formula:
+    UCAP = ICAP * (1 - FOR)
+
+    For generators with time-varying p_max_pu values in n.generators_t.p_max_pu,
+    the time series is multiplied by (1 - FOR).
+
+    Arguments:
+        n: pypsa.Network
+        ucap_config: dict with 'enable' boolean and 'forced_outage_rates' dict
+            mapping carrier names to FOR values in percent
+    """
+    if not ucap_config.get("enable", False):
+        return
+
+    forced_outage_rates = ucap_config.get("forced_outage_rates", {})
+    if not forced_outage_rates:
+        logger.warning("UCAP enabled but no forced_outage_rates defined")
+        return
+
+    for carrier, for_pct in forced_outage_rates.items():
+        ucap_factor = 1 - (for_pct / 100)
+        mask = n.generators["carrier"] == carrier
+        if not mask.any():
+            logger.debug(f"No generators found for carrier {carrier} when applying UCAP")
+            continue
+
+        gen_names = n.generators.index[mask]
+
+        # Apply to static p_max_pu
+        n.generators.loc[mask, "p_max_pu"] *= ucap_factor
+
+        # Apply to time-varying p_max_pu if present
+        gens_with_time_varying = [g for g in gen_names if g in n.generators_t.p_max_pu.columns]
+        if gens_with_time_varying:
+            n.generators_t.p_max_pu[gens_with_time_varying] *= ucap_factor
+            logger.info(
+                f"Applied UCAP derating to {carrier}: factor = {ucap_factor:.4f} (FOR = {for_pct}%) "
+                f"[{len(gen_names)} static, {len(gens_with_time_varying)} time-varying]",
+            )
+        else:
+            logger.info(f"Applied UCAP derating to {carrier}: factor = {ucap_factor:.4f} (FOR = {for_pct}%)")
 
 
 def add_dac(n: pypsa.Network, config: dict, sector: bool):
@@ -1459,7 +1508,7 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
     )
 
     # calculate annualized capital cost
-    number_years = n.snapshot_weightings.generators.sum() / 8760
+    number_years = n.snapshot_weightings.generators.sum() / HOURS_PER_YEAR
     cost = (
         config["dac"]["capital_cost"]
         * calculate_annuity(config["dac"]["lifetime"], config["dac"]["discount_rate"])
@@ -1499,10 +1548,9 @@ if __name__ == "__main__":
     elec_config = snakemake.config["electricity"]
 
     costs_dict = {
-        n.investment_periods[i]: pd.read_csv(snakemake.input.tech_costs[i]).pivot(
-            index="pypsa-name",
-            columns="parameter",
-            values="value",
+        n.investment_periods[i]: load_costs(
+            snakemake.input.tech_costs[i],
+            snakemake.params.costs,
         )
         for i in range(len(n.investment_periods))
     }
@@ -1564,6 +1612,13 @@ if __name__ == "__main__":
         # Remove duplicate generators from first investment period,
         # created by attach_multihorizon_generators
         n.mremove("Generator", multi_horizon_gens.index)
+
+    if not egs_gens.empty and not len(n.investment_periods) == 1:
+        # Remove original EGS generators now that vintaged copies exist for
+        # each investment period. Without this, the originals (build_year=0)
+        # are always active, accumulate capacity through prepare_brownfield,
+        # and compound across periods.
+        n.mremove("Generator", egs_gens.index)
 
     apply_itc(n, snakemake.config["costs"]["itc_modifier"])
     apply_ptc(n, snakemake.config["costs"]["ptc_modifier"], costs)
@@ -1667,14 +1722,18 @@ if __name__ == "__main__":
         add_elec_imports_exports(n, "exports", export_flowgates, fuel_costs, co2_emissions)
 
     if snakemake.config["scenario"]["sector"] == "E":
+        co2_storage = snakemake.config.get("co2", {}).get("storage", False)
+        co2_network_enable = snakemake.config.get("co2", {}).get("network", {}).get("enable", False)
+        dac_enable = snakemake.config.get("dac", {}).get("enable", False)
+
         # add node level CO2 (underground) storage
-        if snakemake.config["co2"]["storage"]:
+        if co2_storage:
             logger.info("Adding node level CO2 (underground) storage")
             add_co2_storage(n, snakemake.config, snakemake.input.co2_storage, costs, False)
 
         # add CO2 (transportation) network
-        if snakemake.config["co2"]["network"]["enable"]:
-            if snakemake.config["co2"]["storage"]:
+        if co2_network_enable:
+            if co2_storage:
                 logger.info("Adding CO2 (transportation) network")
                 add_co2_network(n, snakemake.config)
             else:
@@ -1683,14 +1742,20 @@ if __name__ == "__main__":
                 )
 
         # add node level DAC capabilities
-        if snakemake.config["dac"]["enable"]:
-            if snakemake.config["co2"]["storage"]:
+        if dac_enable:
+            if co2_storage:
                 logger.info("Adding DAC capabilities")
                 add_dac(n, snakemake.config, False)
             else:
                 logger.warning(
                     "Not adding DAC capabilities given that CO2 (underground) storage is not enabled",
                 )
+
+    # Apply UCAP derating to conventional generators
+    ucap_config = snakemake.config.get("ucap", {})
+    if ucap_config.get("enable", False):
+        logger.info("Applying UCAP derating to conventional generators")
+        apply_ucap(n, ucap_config)
 
     n.consistency_check()
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))

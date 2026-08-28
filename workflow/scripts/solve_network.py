@@ -23,7 +23,6 @@ Additionally, some extra constraints specified in :mod:`solve_network` are added
     based on the rule :mod:`solve_network`.
 """
 
-import copy
 import logging
 
 import numpy as np
@@ -34,6 +33,7 @@ from _helpers import (
     configure_logging,
     update_config_from_wildcards,
 )
+from constants import HOURS_PER_YEAR
 from opts.bidirectional_link import add_bidirectional_link_constraints
 from opts.interchange import add_interchange_constraints
 from opts.land import add_land_use_constraints
@@ -42,6 +42,7 @@ from opts.policy import (
     add_RPS_constraints,
     add_RPS_constraints_sector,
     add_technology_capacity_target_constraints,
+    apply_forced_retirements,
 )
 from opts.reserves import (
     add_ERM_constraints,
@@ -124,7 +125,7 @@ def prepare_network(n, solve_opts=None):
             names=n.snapshots.names,
         )
         n.set_snapshots(first_nhours)
-        n.snapshot_weightings[:] = 8760.0 / nhours
+        n.snapshot_weightings[:] = HOURS_PER_YEAR / nhours
 
     return n
 
@@ -251,78 +252,66 @@ def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
             f"Solving status '{status}' with termination condition '{condition}'",
         )
     if "infeasible" in condition:
-        # n.model.print_infeasibilities()
+        n.model.print_infeasibilities()
         raise RuntimeError("Solving status 'infeasible'")
 
 
-def prepare_brownfield(n, planning_horizon):
-    """Prepare the network for the next planning horizon by setting up brownfield constraints.
-    Used for myopic foresight.
+def _stash_original_nominal(n: pypsa.Network) -> None:
+    """Snapshot the pre-solve p_nom / e_nom into `*_initial` once, on first call.
 
-    This function:
-    1. Sets minimum capacities for transmission lines and DC links
-    2. Updates generator, link, and storage unit capacities
-    3. Handles time-dependent data transfer between planning periods
+    PyPSA's statistics use `n.df(c)[p_nom]` as the "installed" baseline. The
+    myopic freeze loop overwrites p_nom with p_nom_opt between horizons, which
+    erases the original baseline. Stashing it lets us restore it after the
+    final horizon so downstream tools can recover (p_nom_opt - p_nom_initial)
+    as "what was actually built across all horizons".
     """
-    # electric transmission grid set optimised capacities of previous as minimum
-    n.lines.s_nom_min = n.lines.s_nom_opt  # for lines
-    dc_i = n.links[n.links.carrier == "DC"].index
-    n.links.loc[dc_i, "p_nom_min"] = n.links.loc[dc_i, "p_nom_opt"]  # for links
+    for c in n.iterate_components(["Generator", "Link", "StorageUnit", "Store"]):
+        attr = "e_nom" if c.name == "Store" else "p_nom"
+        col = f"{attr}_initial"
+        if col not in c.df.columns:
+            c.df[col] = c.df[attr]
 
-    for c in n.iterate_components(["Generator", "Link", "StorageUnit"]):
-        nm = c.name
-        # limit our components that we remove/modify to those prior to this time horizon
-        c_lim = c.df.loc[n.get_active_assets(nm, planning_horizon)]
 
-        logger.info(f"Preparing brownfield for the component {nm}")
-        # attribute selection for naming convention
-        attr = "p"
-        # copy over asset sizing from previous period
-        c_lim[f"{attr}_nom"] = c_lim[f"{attr}_nom_opt"]
-        c_lim[f"{attr}_nom_extendable"] = False
-        df = copy.deepcopy(c_lim)
-        time_df = copy.deepcopy(c.pnl)
+def _restore_original_nominal(n: pypsa.Network) -> None:
+    """Restore stashed pre-solve p_nom / e_nom so statistics see original baseline."""
+    for c in n.iterate_components(["Generator", "Link", "StorageUnit", "Store"]):
+        attr = "e_nom" if c.name == "Store" else "p_nom"
+        col = f"{attr}_initial"
+        if col in c.df.columns:
+            c.df[attr] = c.df[col]
 
-        for c_idx in c_lim.index:
-            n.remove(nm, c_idx)
 
-        for df_idx in df.index:
-            if nm == "Generator":
-                n.madd(
-                    nm,
-                    [df_idx],
-                    carrier=df.loc[df_idx].carrier,
-                    bus=df.loc[df_idx].bus,
-                    p_nom_min=df.loc[df_idx].p_nom_min,
-                    p_nom=df.loc[df_idx].p_nom,
-                    p_nom_max=df.loc[df_idx].p_nom_max,
-                    p_nom_extendable=df.loc[df_idx].p_nom_extendable,
-                    ramp_limit_up=df.loc[df_idx].ramp_limit_up,
-                    ramp_limit_down=df.loc[df_idx].ramp_limit_down,
-                    efficiency=df.loc[df_idx].efficiency,
-                    marginal_cost=df.loc[df_idx].marginal_cost,
-                    capital_cost=df.loc[df_idx].capital_cost,
-                    build_year=df.loc[df_idx].build_year,
-                    lifetime=df.loc[df_idx].lifetime,
-                    heat_rate=df.loc[df_idx].heat_rate,
-                    fuel_cost=df.loc[df_idx].fuel_cost,
-                    vom_cost=df.loc[df_idx].vom_cost,
-                    carrier_base=df.loc[df_idx].carrier_base,
-                    p_min_pu=df.loc[df_idx].p_min_pu,
-                    p_max_pu=df.loc[df_idx].p_max_pu,
-                    land_region=df.loc[df_idx].land_region,
-                )
-            else:
-                n.add(nm, df_idx, **df.loc[df_idx])
-        logger.info(n.consistency_check())
+def freeze_prior_periods(n: pypsa.Network, prior_period: int):
+    renewable_carriers = set(n.config["electricity"].get("renewable_carriers", []))
+    for c in n.iterate_components(["Generator", "Link", "StorageUnit", "Store"]):
+        attr = "e_nom" if c.name == "Store" else "p_nom"
 
-        # copy time-dependent
-        selection = n.component_attrs[nm].type.str.contains("series")
-        for tattr in n.component_attrs[nm].index[selection]:
-            n.import_series_from_dataframe(time_df[tattr], nm, tattr)
+        prior = c.df.build_year <= prior_period
+        # Only assets explicitly tagged "existing" in their name (split out by
+        # attach_multihorizon_existing_generators in add_extra_components.py) AND
+        # not on a renewable carrier are eligible for economic retirement. Renewables
+        # attrite via lifetime, not economics, so they're excluded even if their name
+        # happens to match.
+        existing = c.df.index.str.contains("existing", case=False, na=False)
+        not_renewable = ~c.df["carrier"].isin(renewable_carriers)
+        retirable = prior & existing & not_renewable
 
-    # roll over the last snapshot of time varying storage state of charge to be the state_of_charge_initial for the next time period
-    n.storage_units.loc[:, "state_of_charge_initial"] = n.storage_units_t.state_of_charge.loc[planning_horizon].iloc[-1]
+        # lock in the optimized capacity from the prior period as the starting point
+        # for the next period — without this, p_nom still holds the pre-solve value
+        # (e.g. 0 for a new-build), so the next period's dispatch constraints would
+        # see the wrong installed capacity
+        c.df.loc[prior, attr] = c.df.loc[prior, attr + "_opt"]
+
+        # freeze all prior-period assets by default; the optimizer cannot add more
+        # capacity through assets that have already been built
+        c.df.loc[prior, attr + "_extendable"] = False
+
+        # "existing" vintage assets carry p_nom_min=0 already (set by the split in
+        # add_extra_components.py), so flipping them back to extendable lets the
+        # optimizer retire them by shrinking p_nom toward zero; p_nom_max is capped
+        # at the locked-in capacity so no new capacity can be added through this asset
+        c.df.loc[retirable, attr + "_extendable"] = True
+        c.df.loc[retirable, attr + "_max"] = c.df.loc[retirable, attr]
 
 
 def solve_network(n, config, solving, opts="", **kwargs):
@@ -330,7 +319,7 @@ def solve_network(n, config, solving, opts="", **kwargs):
     cf_solving = solving["options"]
 
     foresight = snakemake.params.foresight
-    kwargs["multi_investment_periods"] = config["foresight"] == "perfect"
+    kwargs["multi_investment_periods"] = True
 
     kwargs["solver_options"] = solving["solver_options"][set_of_options] if set_of_options else {}
     kwargs["solver_name"] = solving["solver"]["name"]
@@ -365,18 +354,23 @@ def solve_network(n, config, solving, opts="", **kwargs):
         case "perfect":
             run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
         case "myopic":
+            _stash_original_nominal(n)
             for i, planning_horizon in enumerate(n.investment_periods):
                 sns_horizon = n.snapshots[n.snapshots.get_level_values(0) == planning_horizon]
                 kwargs["snapshots"] = sns_horizon
 
+                if "TCT" in opts:
+                    apply_forced_retirements(n, planning_horizon, config)
+
                 run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs)
 
-                if i == len(n.investment_periods) - 1:
-                    logger.info(f"Final time horizon {planning_horizon}")
-                    continue
                 logger.info(f"Preparing brownfield from {planning_horizon}")
-                prepare_brownfield(n, planning_horizon)
-
+                freeze_prior_periods(n, planning_horizon)
+            # Restore the pre-solve p_nom/e_nom baseline so downstream statistics
+            # and plots can compute (p_nom_opt - p_nom) = what was actually built
+            # across the myopic horizons. Without this, the inter-period freeze
+            # leaves p_nom == p_nom_opt and the "new capacity" signal is zero.
+            _restore_original_nominal(n)
         case _:
             raise ValueError(f"Invalid foresight option: '{foresight}'. Must be 'perfect' or 'myopic'.")
 

@@ -53,9 +53,22 @@ rule retrieve_zenodo_databundles:
         "../scripts/retrieve_databundles.py"
 
 
+# EGS seismic risk mask (Zenodo 10.5281/zenodo.18793962)
+rule retrieve_seismic_risk_mask:
+    output:
+        DATA + "seismic_risk_exclusion/seismic_risk_mask.geojson",
+    resources:
+        mem_mb=5000,
+        walltime="00:10:00",
+    log:
+        "logs/retrieve/retrieve_seismic_risk_mask.log",
+    script:
+        "../scripts/retrieve_seismic_risk_mask.py"
+
+
 def efs_databundle(wildcards):
     return {
-        "EFS": f"https://data.nrel.gov/system/files/126/EFSLoadProfile_{wildcards.efs_case}_{wildcards.efs_speed}.zip"
+        "EFS": f"https://data.nlr.gov/system/files/126/EFSLoadProfile_{wildcards.efs_case}_{wildcards.efs_speed}.zip"
     }
 
 
@@ -73,6 +86,21 @@ rule retrieve_nrel_efs_data:
         "logs/retrieve/retrieve_efs_{efs_case}_{efs_speed}.log",
     script:
         "../scripts/retrieve_databundles.py"
+
+
+rule retrieve_eer_demand_data:
+    wildcard_constraints:
+        eer_file="demand_EER2025_100by2050|demand_EER2025_Baseline_AEO2023|demand_EER2025_IRAlow",
+    params:
+        url=lambda wildcards: f"https://zenodo.org/records/18435264/files/{wildcards.eer_file}.h5?download=1",
+    output:
+        DATA + "eer/{eer_file}.h5",
+    resources:
+        mem_mb=5000,
+    log:
+        "logs/retrieve/retrieve_eer_{eer_file}.log",
+    script:
+        "../scripts/retrieve_eer_data.py"
 
 
 sector_datafiles = [
@@ -252,6 +280,25 @@ rule retrieve_pudl:
         mem_mb=5000,
     script:
         "../scripts/retrieve_pudl.py"
+
+
+rule retrieve_nrel_exclusion_artifact:
+    """
+    Download a single NREL land-access availability/caps artifact from the
+    Zenodo bundle (record nrel_exclusion_v1). Triggered on-demand by
+    build_renewable_profiles when avail_*.nc / caps_*.nc are missing locally.
+    """
+    wildcard_constraints:
+        nrel_artifact=r"(avail|caps)_(solar|onwind|offwind|offwind_floating)_(reference|limited|open)(_cec|_boem)?",
+    output:
+        DATA + "nrel_exclusion/derived/{nrel_artifact}.nc",
+    log:
+        LOGS + "retrieve/nrel_exclusion_{nrel_artifact}.log",
+    resources:
+        walltime="00:10:00",
+        mem_mb=2000,
+    script:
+        "../scripts/retrieve_nrel_exclusion.py"
 
 
 if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:

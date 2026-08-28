@@ -19,6 +19,7 @@ from _helpers import (
     calculate_annuity,
     configure_logging,
     export_network_for_gis_mapping,
+    load_costs,
     update_p_nom_max,
     weighted_avg,
 )
@@ -398,6 +399,9 @@ def attach_renewable_capacities_to_atlite(
     plants = plants_df.query(
         "bus_assignment in @n.buses.index",
     )
+    if "prime_mover_code" in plants:
+        plants = plants[plants.prime_mover_code != "PS"]
+
     for tech in renewable_carriers:
         plants_filt = plants.query("carrier == @tech").copy()
         if plants_filt.empty:
@@ -707,6 +711,10 @@ def attach_egs(
             .drop("interconnect", axis=1)
             .rename(columns={"Bus": "bus_id"})
         )
+        # bus2sub stores sub_id as float strings (e.g. "39763.0") while the
+        # EGS profile stores sub_id as integer strings (e.g. "39763").
+        # Normalize to integer strings so the merge key matches.
+        bus2sub["sub_id"] = bus2sub["sub_id"].apply(lambda x: str(int(float(x))))
 
         # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
         df_specs = pd.merge(
@@ -739,11 +747,33 @@ def attach_egs(
 
         df_specs = df_specs.loc[~(df_specs.index == "nan")]
 
-        # TODO: review what qualities need to be included. Currently limited for speedup.
-        qualities = [1]  # df_specs.Quality.unique()
+        seismic_path = getattr(input_profiles, "seismic_exclusion", [])
+        if seismic_path:
+            seismic_gdf = gpd.read_file(seismic_path).rename(
+                columns={"seismic risk": "seismic_risk"},
+            )
+            egs_buses = df_specs.index.intersection(n.buses.index)
+            bus_coords = n.buses.loc[egs_buses, ["x", "y"]]
+            bus_gdf = gpd.GeoDataFrame(
+                bus_coords,
+                geometry=gpd.points_from_xy(bus_coords["x"], bus_coords["y"]),
+                crs="EPSG:4326",
+            ).to_crs(seismic_gdf.crs)
+            bus_with_risk = gpd.sjoin_nearest(
+                bus_gdf[["geometry"]],
+                seismic_gdf[["geometry", "seismic_risk"]],
+                how="left",
+            )
+            excluded_buses = bus_with_risk[bus_with_risk["seismic_risk"] == 1].index
+            df_specs = df_specs[~df_specs.index.isin(excluded_buses)]
+            logger.info(
+                f"Seismic risk mask excluded {len(excluded_buses)} EGS buses. {len(df_specs)} buses remaining.",
+            )
+
+        qualities = snakemake.config["renewable"]["EGS"].get("quality", [1])
 
         for q in qualities:
-            suffix = " " + car  # + f" Q{q}"
+            suffix = " " + car + f" Q{q}"
             df_q = df_specs[df_specs["Quality"] == q]
 
             bus_list = df_q.index.values
@@ -765,6 +795,23 @@ def attach_egs(
                 values="capacity_factor",
             )
 
+            # Align bus_profiles to network snapshots.
+            # The EGS data has year=float (2030.0) and Date using the
+            # investment year (2030-01-01...) at hourly resolution.
+            # n.snapshots has period=int (2030) at the network's resolution.
+            # Cast the outer level to int and reindex so that:
+            #   (a) the float→int type is resolved, and
+            #   (b) the hourly profile is downsampled to the network's timestep.
+            # This also preserves the per-period production decline since the
+            # EGS data already has different CF values for 2030/2040/2050.
+            if hasattr(n.snapshots, "levels"):
+                bus_profiles.index = bus_profiles.index.set_levels(
+                    bus_profiles.index.levels[0].astype(int),
+                    level=0,
+                )
+                bus_profiles = bus_profiles.reindex(n.snapshots)
+            bus_profiles = bus_profiles.reindex(columns=bus_list)
+
             logger.info(
                 f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network.",
             )
@@ -782,6 +829,7 @@ def attach_egs(
                 p_max_pu=bus_profiles,
                 build_year=n.investment_periods[0],
                 lifetime=capital_recovery_period,
+                land_region=bus_list,
             )
 
 
@@ -811,11 +859,45 @@ def attach_battery_storage(
         p_nom_min=0,
         p_nom_extendable=False,  # Only Allow lifetime retirments for existing BESS
         capital_cost=costs.at["4hr_battery_storage", "opex_fixed_per_kw"] * 1e3,
-        max_hours=plants_filt.energy_storage_capacity_mwh / plants_filt.p_nom,
+        max_hours=plants_filt.energy_storage_capacity_mwh / plants_filt.p_nom / 0.85**0.5,
         build_year=plants_filt.build_year,
         lifetime=costs.at["4hr_battery_storage", "lifetime"],
         efficiency_store=0.85**0.5,
         efficiency_dispatch=0.85**0.5,
+        cyclic_state_of_charge=True,
+    )
+
+
+def attach_phs_storage(
+    n: pypsa.Network,
+    plants: pd.DataFrame,
+):
+    """Attach existing pumped hydro storage from EIA prime mover PS units."""
+    efficiency_dispatch = 0.894427191
+    plants_filt = plants.query(
+        "prime_mover_code == 'PS' and bus_assignment in @n.buses.index",
+    ).copy()
+    plants_filt = plants_filt.dropna(subset=["p_nom"])
+    if plants_filt.empty:
+        logger.info("No PHS storage units found in powerplants.csv.")
+        return
+
+    logger.info(
+        f"Added PHS as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum() / 1000, 2)} GW Power Capacity",
+    )
+
+    n.madd(
+        "StorageUnit",
+        plants_filt.index,
+        carrier="PHS",
+        bus=plants_filt.bus_assignment,
+        p_nom=plants_filt.p_nom,
+        p_nom_extendable=False,
+        build_year=plants_filt.build_year.astype(int),
+        lifetime=np.inf,
+        max_hours=24.0 / efficiency_dispatch,
+        efficiency_store=efficiency_dispatch,
+        efficiency_dispatch=efficiency_dispatch,
         cyclic_state_of_charge=True,
     )
 
@@ -1034,8 +1116,7 @@ def main(snakemake):
     all_reeds_shapes = gpd.read_file(snakemake.input.all_reeds_shapes)
     reeds_memberships = pd.read_csv(snakemake.input.reeds_memberships)
 
-    costs = pd.read_csv(snakemake.input.tech_costs)
-    costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
+    costs = load_costs(snakemake.input.tech_costs, params.costs)
     update_transmission_costs(n, costs, params.length_factor)
 
     renewable_carriers = set(params.renewable_carriers)
@@ -1099,6 +1180,10 @@ def main(snakemake):
     attach_battery_storage(
         n,
         costs,
+        plants,
+    )
+    attach_phs_storage(
+        n,
         plants,
     )
 

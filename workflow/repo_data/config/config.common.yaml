@@ -4,6 +4,8 @@ pudl_path: s3://pudl.catalyst.coop/v2025.5.0
 renewable:
   EGS:
     dispatch: baseload # baseload or flexible
+    drilling_cost: advanced
+    seismic_exclusion: true
   onwind:
     cutout: era5
     resource:
@@ -92,6 +94,17 @@ renewable:
 
 
 # docs :
+## NREL land-access exclusion settings for the GODEEEP workflow.
+## When renewable.dataset == "godeeep", `renewable_land_access` is REQUIRED and the
+## workflow downloads `data/nrel_exclusion/derived/{avail,caps}_*.nc` from Zenodo
+## to apply per-cell availability weighting and NREL supply-curve capacities.
+renewable_land_access:                # required for godeeep: reference | limited | open
+apply_cec_basescreen: false           # overlay CEC Wind/Solar BaseScreen on onwind+solar (CA-only)
+apply_boem_osw: false                 # overlay BOEM OSW planning areas on offwind+offwind_floating
+godeeep_wind_height: "_100m"          # raw GODEEEP wind-CF hub height (e.g. "_100m", "_125m")
+
+
+# docs :
 atlite:
   default_cutout: era5_2019
   nprocesses: 8
@@ -153,3 +166,16 @@ offshore_shape:
 
 offshore_network:
   bus_spacing: 25000 # km
+
+# docs :
+# UCAP (Unforced Capacity) calculation based on Forced Outage Rates (FOR)
+# UCAP = ICAP * (1 - FOR), applied as p_max_pu = 1 - FOR for conventional generators
+ucap:
+  enable: false  # [false, true]
+  forced_outage_rates:  # Forced outage rates in percent
+    coal: 11.061
+    oil: 11.061
+    hydro: 8.127
+    CCGT: 6.107
+    nuclear: 2.207
+    OCGT: 6.259

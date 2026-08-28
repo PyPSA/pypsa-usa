@@ -77,6 +77,9 @@ def base_network():
     n.buses.loc["z1", "reeds_zone"] = "CA_Z1"
     n.buses.loc["z2", "reeds_zone"] = "TX_Z1"
     n.buses.loc["z3", "reeds_zone"] = "TX_Z1"
+    n.buses.loc["z1", "rec_trading_zone"] = "CA"
+    n.buses.loc["z2", "rec_trading_zone"] = "TX"
+    n.buses.loc["z3", "rec_trading_zone"] = "TX"
 
     # Add versatile generators for different test scenarios
     # Wind generators
@@ -339,6 +342,9 @@ def multi_period_base_network():
     n.buses.loc["z1", "reeds_zone"] = "CA_Z1"
     n.buses.loc["z2", "reeds_zone"] = "TX_Z1"
     n.buses.loc["z3", "reeds_zone"] = "TX_Z1"
+    n.buses.loc["z1", "rec_trading_zone"] = "CA"
+    n.buses.loc["z2", "rec_trading_zone"] = "TX"
+    n.buses.loc["z3", "rec_trading_zone"] = "TX"
 
     # Wind generators (extendable, active in both periods)
     n.add(
@@ -410,6 +416,7 @@ def multi_period_base_network():
 
     # Retiring gas generator: active in 2030 but retires before 2040
     # build_year=2025, lifetime=10 -> retires in 2035
+    # p_max_pu is scalar (not a Series) to avoid overriding PyPSA's activity mask
     n.add(
         "Generator",
         "gas_retiring",
@@ -419,7 +426,7 @@ def multi_period_base_network():
         carrier="gas",
         capital_cost=500,
         marginal_cost=25,
-        p_max_pu=pd.Series(1.0, index=n.snapshots),
+        p_max_pu=1.0,
         build_year=2025,
         lifetime=10,
     )

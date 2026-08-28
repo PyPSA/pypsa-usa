@@ -19,10 +19,11 @@ Store,--,Any subset of {``battery``},Adds extendable storage units (battery and/
 Links,--,Any subset of {},Adds extendable linksat every connection where there are lines or HVDC links without capacity limits and with zero initial capacity. Hydrogen pipelines require hydrogen storage to be modelled as ``Store``.
 ,,,
 demand:,,,
-profile,--,"One of {``efs``, ``eia``}",Datasource for electrical load data. ``EFS`` pulls future state level electrical demand data. ``EIA`` pulls historical balancing level electrical demand dataa.
+profile,--,"One of {``efs``, ``eia``, ``eer``}","Datasource for electrical load data. ``EFS`` pulls future state level electrical demand data. ``EIA`` pulls historical balancing level electrical demand data. ``EER`` pulls future state-level profiles from the EER dataset; when selected, ``planning_horizons`` must be one of 2021, 2025, 2030, 2035, 2040, 2045, or 2050 and ``renewable_weather_years`` must contain exactly one year from 2007-2013 or 2016-2023."
 scenario:,,,
 -efs_case,--,"One of {``reference``, ``medium``, ``high``}",(UNDER DEVELOPMENT) Extracts EFS data according to level of adoption
 -efs_speed,--,"One of {``slow``, ``moderate``, ``fast``}",(UNDER DEVELOPMENT) Extracts EFS data according to speed of electrification
+-eer_file,--,"One of {``demand_EER2025_100by2050.h5``, ``demand_EER2025_Baseline_AEO2023.h5``, ``demand_EER2025_IRAlow.h5``}",Selects the EER demand dataset file to download and use when ``profile`` is ``eer``.
 -aeo,--,One of the AEO scenarios `here <https://www.eia.gov/outlooks/aeo/data/browser/>`_,(UNDER DEVELOPMENT) Scales future demand according to the AEO scenario
 ,,,
 demand_response:,,,Settings to activate and configure demand response

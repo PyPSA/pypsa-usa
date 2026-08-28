@@ -100,7 +100,7 @@ rule build_bus_regions:
 
 rule build_cost_data:
     params:
-        costs=config_provider("costs"),
+        aeo=config_provider("costs", "aeo"),
         pudl_path=config_provider("pudl_path"),
     input:
         efs_tech_costs="repo_data/costs/EFS_Technology_Data.xlsx",
@@ -164,6 +164,7 @@ rule build_renewable_profiles:
             int(w.planning_horizon) if godeeep_planning_horizon else None
         ),
         renewable_scenarios=config_provider("renewable_scenarios"),
+        mapping_cache_dir=RESOURCES + "{interconnect}/nrel_mapping_cache",
     input:
         corine=ancient(
             DATA
@@ -188,6 +189,48 @@ rule build_renewable_profiles:
             RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson"
             if w.technology in ("onwind", "solar")
             else RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson"
+        ),
+        nrel_avail=lambda w: (
+            DATA
+            + "nrel_exclusion/derived/avail_{tech}_{acc}{cec}{boem}.nc".format(
+                tech=w.technology,
+                acc=config["renewable_land_access"],
+                cec=(
+                    "_cec"
+                    if config.get("apply_cec_basescreen")
+                    and w.technology in ("onwind", "solar")
+                    else ""
+                ),
+                boem=(
+                    "_boem"
+                    if config.get("apply_boem_osw")
+                    and w.technology.startswith("offwind")
+                    else ""
+                ),
+            )
+            if config.get("renewable_land_access")
+            else []
+        ),
+        nrel_caps=lambda w: (
+            DATA
+            + "nrel_exclusion/derived/caps_{tech}_{acc}{cec}{boem}.nc".format(
+                tech=w.technology,
+                acc=config["renewable_land_access"],
+                cec=(
+                    "_cec"
+                    if config.get("apply_cec_basescreen")
+                    and w.technology in ("onwind", "solar")
+                    else ""
+                ),
+                boem=(
+                    "_boem"
+                    if config.get("apply_boem_osw")
+                    and w.technology.startswith("offwind")
+                    else ""
+                ),
+            )
+            if config.get("renewable_land_access")
+            else []
         ),
         cutout=lambda wildcards: (
             expand(
@@ -247,6 +290,25 @@ INTERCONNECT_2_STATE["eastern"].extend(["NH", "NJ", "NY", "NC", "ND", "OH", "OK"
 INTERCONNECT_2_STATE["eastern"].extend(["RI", "SC", "SD", "TN", "VT", "VA", "WV", "WI"])
 INTERCONNECT_2_STATE["usa"] = sum(INTERCONNECT_2_STATE.values(), [])
 
+EER_DEMAND_FILES = (
+    "demand_EER2025_100by2050.h5",
+    "demand_EER2025_Baseline_AEO2023.h5",
+    "demand_EER2025_IRAlow.h5",
+)
+
+
+def eer_demand_file():
+    filename = config["electricity"]["demand"]["scenario"].get(
+        "eer_file",
+        "demand_EER2025_100by2050.h5",
+    )
+    if filename not in EER_DEMAND_FILES:
+        raise ValueError(
+            "electricity.demand.scenario.eer_file must be one of "
+            f"{EER_DEMAND_FILES}; received {filename}."
+        )
+    return filename
+
 
 def demand_raw_data(wildcards):
     # get profile to use
@@ -277,6 +339,8 @@ def demand_raw_data(wildcards):
             "efs_speed"
         ].capitalize()
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
+    elif profile == "eer":
+        return DATA + f"eer/{eer_demand_file()}"
     elif profile == "ferc":
         return [
             DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
@@ -342,6 +406,8 @@ def demand_scaling_data(wildcards):
         return []
     elif profile == "ferc":
         return []
+    elif profile == "eer":
+        return []
     else:
         return ""
 
@@ -354,6 +420,7 @@ rule build_electrical_demand:
         eia_api=config["api"]["eia"],
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         planning_horizons=config["scenario"]["planning_horizons"],
+        renewable_weather_years=config["renewable_weather_years"],
         snapshots=config["snapshots"],
         pudl_path=config_provider("pudl_path"),
     input:
@@ -599,7 +666,6 @@ def dynamic_fuel_price_files(wildcards):
 rule build_powerplants:
     params:
         pudl_path=config_provider("pudl_path"),
-        renewable_weather_year=config_provider("renewable_weather_years"),
     input:
         wecc_ads="repo_data/WECC_ADS_public",
         eia_ads_generator_mapping="repo_data/WECC_ADS_public/eia_ads_generator_mapping_updated.csv",
@@ -683,6 +749,14 @@ rule add_electricity:
             if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
             else []
         ),
+        seismic_exclusion=(
+            DATA + "seismic_risk_exclusion/seismic_risk_mask.geojson"
+            if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
+            and config.get("renewable", {})
+            .get("EGS", {})
+            .get("seismic_exclusion", False)
+            else []
+        ),
     output:
         RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
     log:
@@ -763,10 +837,10 @@ rule cluster_network:
         itl_reeds_zone="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
         itl_county="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_county_NARIS2024.csv",
         itl_trans_grp="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_transgrp_NARIS2024.csv",
-        itl_costs_reeds_zone="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_ba.csv",
+        itl_costs_reeds_zone="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_ba.csv",
         itl_costs_county="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_county.csv",
         itl_state="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_state_NARIS2024.csv",
-        itl_costs_state="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVdc_state.csv",
+        itl_costs_state="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_state.csv",
     output:
         network=RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
         regions_onshore=RESOURCES
@@ -833,6 +907,8 @@ rule add_extra_components:
             "model_topology", "topological_boundaries"
         ),
         transmission_network=config_provider("model_topology", "transmission_network"),
+        costs=config_provider("costs"),
+        ucap=config_provider("ucap", default={}),
     output:
         RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:

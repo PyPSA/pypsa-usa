@@ -15,6 +15,7 @@ from _helpers import (
     calculate_annuity,
     configure_logging,
     is_transport_model,
+    load_costs,
     update_p_nom_max,
 )
 from add_electricity import update_transmission_costs
@@ -31,6 +32,8 @@ warnings.filterwarnings(action="ignore", category=UserWarning)
 idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
+
+TRANSMISSION_LIFETIME = 60  # years; matches HVAC/HVDC cost_recovery_period_years in build_cost_data.py
 
 
 def normed(x):
@@ -347,7 +350,7 @@ def clustering_for_n_clusters(
     line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
-    bus_strategies = {"Pd": "sum"}
+    bus_strategies = {"Pd": "sum", "rec_trading_zone": "first", "original_reeds_zone": "first"}
     clustering = get_clustering_from_busmap(
         n,
         busmap,
@@ -365,13 +368,20 @@ def clustering_for_n_clusters(
     return clustering
 
 
-def add_itls(buses, itls, itl_cost, expansion=True):
+def add_itls(buses, itls, itl_cost, planning_horizons, lifetime, expansion=True):
     """
     Adds ITL limits to the network.
 
     Adds bi-directional links for all ITLS which are non-expandable.
     Adds a second link that is expandable with equal expansion in each
     direction.
+
+    For each ITL, the original fwd/rev links are stamped at the first planning
+    horizon and carry the existing REEDS capacity (mw_f0/mw_r0). For every
+    subsequent horizon, a vintaged duplicate is added with p_nom=0 and
+    build_year set to that horizon, so prepare_network can flip them to
+    extendable and the optimizer can build new vintage-tagged transmission
+    capacity in each period.
     """
     if itl_cost is not None:
         itl_cost["interface"] = itl_cost.r + "||" + itl_cost.rr
@@ -391,6 +401,16 @@ def add_itls(buses, itls, itl_cost, expansion=True):
 
     itls["efficiency"] = 1 - ((itls.length_miles / 100) * 0.01)
 
+    sorted_horizons = sorted(int(h) for h in planning_horizons)
+    first_horizon = sorted_horizons[0]
+    future_horizons = sorted_horizons[1:]
+
+    length_km = 0 if itl_cost is None else itls.length_miles.values * 1.6093  # mile to km
+    capital_cost = (
+        0 if itl_cost is None else itls.USD2023perMWyr.values / 2
+    )  # divide by 2 to avoid accounting for the capital cost repeatedly
+    efficiency = 1 if itl_cost is None else itls.efficiency.values
+
     # The fwd and rev links will be made extendable in prepare_network, so no need to add AC_exp
     clustering.network.madd(
         "Link",
@@ -402,13 +422,13 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         p_nom_min=itls.mw_f0.values,
         p_max_pu=1.0,
         p_min_pu=0.0,
-        length=0 if itl_cost is None else itls.length_miles.values * 1.6093,  # mile to km
-        capital_cost=0
-        if itl_cost is None
-        else itls.USD2023perMWyr.values / 2,  # divide by 2 to avoid accounting for the capital cost repeatedly
+        length=length_km,
+        capital_cost=capital_cost,
         p_nom_extendable=False,
-        efficiency=1 if itl_cost is None else itls.efficiency.values,
+        efficiency=efficiency,
         carrier="AC",
+        build_year=first_horizon,
+        lifetime=lifetime,
     )
 
     clustering.network.madd(
@@ -421,14 +441,55 @@ def add_itls(buses, itls, itl_cost, expansion=True):
         p_nom_min=itls.mw_r0.values,
         p_max_pu=1.0,
         p_min_pu=0.0,
-        length=0 if itl_cost is None else itls.length_miles.values * 1.6093,  # mile to km
-        capital_cost=0
-        if itl_cost is None
-        else itls.USD2023perMWyr.values / 2,  # divide by 2 to avoid accounting for the capital cost repeatedly
+        length=length_km,
+        capital_cost=capital_cost,
         p_nom_extendable=False,
-        efficiency=1 if itl_cost is None else itls.efficiency.values,
+        efficiency=efficiency,
         carrier="AC",
+        build_year=first_horizon,
+        lifetime=lifetime,
     )
+
+    # Vintaged duplicates: one per future horizon, starting at p_nom=0. prepare_network
+    # will flip these to extendable alongside the originals so each period can build
+    # new transmission capacity tagged with its own build_year.
+    for horizon in future_horizons:
+        clustering.network.madd(
+            "Link",
+            names=itls.interface,
+            suffix=f"_fwd_{horizon}",
+            bus0=buses.loc[itls.r].index,
+            bus1=buses.loc[itls.rr].index,
+            p_nom=0.0,
+            p_nom_min=0.0,
+            p_max_pu=1.0,
+            p_min_pu=0.0,
+            length=length_km,
+            capital_cost=capital_cost,
+            p_nom_extendable=False,
+            efficiency=efficiency,
+            carrier="AC",
+            build_year=horizon,
+            lifetime=lifetime,
+        )
+        clustering.network.madd(
+            "Link",
+            names=itls.interface,
+            suffix=f"_rev_{horizon}",
+            bus0=buses.loc[itls.rr].index,
+            bus1=buses.loc[itls.r].index,
+            p_nom=0.0,
+            p_nom_min=0.0,
+            p_max_pu=1.0,
+            p_min_pu=0.0,
+            length=length_km,
+            capital_cost=capital_cost,
+            p_nom_extendable=False,
+            efficiency=efficiency,
+            carrier="AC",
+            build_year=horizon,
+            lifetime=lifetime,
+        )
 
 
 def convert_to_transport(
@@ -439,6 +500,8 @@ def convert_to_transport(
     itl_agg_costs_fn,
     topological_boundaries,
     topology_aggregation,
+    planning_horizons,
+    lifetime,
 ):
     """
     Replaces all Lines according to Links with the transfer capacity specified
@@ -459,7 +522,7 @@ def convert_to_transport(
             itls.r.isin(clustering.network.buses[f"{topological_boundaries}"])
             & itls.rr.isin(clustering.network.buses[f"{topological_boundaries}"])
         ]
-    add_itls(buses, itls_filt, itl_cost)
+    add_itls(buses, itls_filt, itl_cost, planning_horizons, lifetime)
 
     if itl_agg_fn:
         # Aggregating the ITLs to lower resolution
@@ -473,7 +536,8 @@ def convert_to_transport(
         itl_lower_res = itl_lower_res[  # Filter low-res ITLs to only include those that have an end in the network
             itl_lower_res.r.isin(buses["country"]) | itl_lower_res.rr.isin(buses["country"])
         ]
-        aggregated_buses = agg_busmap.rename(index=lambda x: x.strip(" 0"))
+        aggregated_buses = agg_busmap.rename(index=lambda x: x.rsplit(" ", 1)[0])
+        aggregated_buses = aggregated_buses[~aggregated_buses.index.duplicated(keep="first")]
         non_agg_buses = buses[~buses.index.isin(agg_busmap.values)]
         non_agg_buses = non_agg_buses[
             non_agg_buses[topology_aggregation_key].isin(itl_lower_res.r)
@@ -505,7 +569,7 @@ def convert_to_transport(
 
         itl_lower_res = pd.concat([itl_lower_res, itls_between])
         itl_agg_costs = None if itl_agg_costs_fn is None else pd.concat([itl_cost, pd.read_csv(itl_agg_costs_fn)])
-        add_itls(buses, itl_lower_res, itl_agg_costs, expansion=True)
+        add_itls(buses, itl_lower_res, itl_agg_costs, planning_horizons, lifetime, expansion=True)
         itls = pd.concat([itls_filt, itl_lower_res])
     else:
         itls = itls_filt
@@ -523,6 +587,9 @@ def convert_to_transport(
         buses_p20 = clustering.network.buses[clustering.network.buses.reeds_zone == "p20"]
         existing_links = clustering.network.links[clustering.network.links.bus0.isin(buses_p19.index)]
         if existing_links.empty:
+            sorted_horizons = sorted(int(h) for h in planning_horizons)
+            first_horizon = sorted_horizons[0]
+            future_horizons = sorted_horizons[1:]
             clustering.network.madd(
                 "Link",
                 names=["p19_to_p20"],
@@ -533,7 +600,23 @@ def convert_to_transport(
                 p_min_pu=-1,
                 p_nom_extendable=False,
                 carrier="AC",
+                build_year=first_horizon,
+                lifetime=lifetime,
             )
+            for horizon in future_horizons:
+                clustering.network.madd(
+                    "Link",
+                    names=[f"p19_to_p20_{horizon}"],
+                    bus0=buses_p19.iloc[0].name,
+                    bus1=buses_p20.iloc[0].name,
+                    p_nom=0,
+                    length=0,
+                    p_min_pu=-1,
+                    p_nom_extendable=False,
+                    carrier="AC",
+                    build_year=horizon,
+                    lifetime=lifetime,
+                )
 
     # Remove any disconnected buses
     unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
@@ -593,6 +676,8 @@ def calibrate_tamu_transmission_capacity(
     s_max_pu,
     length_factor,
     costs,
+    build_year,
+    lifetime,
     use_original_region=False,
 ):
     """
@@ -615,6 +700,10 @@ def calibrate_tamu_transmission_capacity(
         Factor to multiply air-line distance for line length calculation
     costs : pd.DataFrame
         Technology costs dataframe with transmission line cost parameters
+    build_year : int
+        Build year stamped on calibrated existing TAMU lines and new REEDS-backfill lines.
+    lifetime : int | float
+        Lifetime stamped on calibrated existing TAMU lines and new REEDS-backfill lines.
     use_original_region : bool
         If True, use original region info saved before aggregation
     """
@@ -717,6 +806,9 @@ def calibrate_tamu_transmission_capacity(
 
             # Update s_nom
             clustering.network.lines.loc[line_idx, "s_nom"] = new_s_nom
+            # Stamp these as existing brownfield infrastructure
+            clustering.network.lines.loc[line_idx, "build_year"] = build_year
+            clustering.network.lines.loc[line_idx, "lifetime"] = lifetime
 
             # Update electrical parameters based on power system principles
             if capacity_ratio != 1.0:
@@ -867,6 +959,8 @@ def calibrate_tamu_transmission_capacity(
             capital_cost=new_lines_df["capital_cost"].values,
             interconnect=new_lines_df["interconnect"].values,
             num_parallel=new_lines_df["num_parallel"].values,
+            build_year=build_year,
+            lifetime=lifetime,
         )
 
     logger.info(
@@ -894,6 +988,11 @@ if __name__ == "__main__":
     n.set_investment_periods(
         periods=snakemake.params.planning_horizons,
     )
+
+    # Stamp REEDS-derived and existing transmission as pre-existing brownfield infrastructure
+    # so PyPSA's per-period active-asset logic treats them correctly across investment periods.
+    transmission_build_year = int(min(snakemake.params.planning_horizons))
+    transmission_lifetime = TRANSMISSION_LIFETIME
 
     topological_boundaries = params.topological_boundaries
     transport_model = is_transport_model(params.transmission_network)
@@ -969,12 +1068,10 @@ if __name__ == "__main__":
             linemap,
         )
 
-        costs = pd.read_csv(snakemake.input.tech_costs)
-        costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
+        costs = load_costs(snakemake.input.tech_costs, params.costs)
         hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
     else:
-        costs = pd.read_csv(snakemake.input.tech_costs)
-        costs = costs.pivot(index="pypsa-name", columns="parameter", values="value")
+        costs = load_costs(snakemake.input.tech_costs, params.costs)
         hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
 
         custom_busmap = params.custom_busmap
@@ -1086,6 +1183,8 @@ if __name__ == "__main__":
                 itl_agg_costs_fn,
                 topological_boundaries,
                 topology_aggregation,
+                snakemake.params.planning_horizons,
+                transmission_lifetime,
             )
         else:
             # Use standard transmission cost estimates
@@ -1125,8 +1224,25 @@ if __name__ == "__main__":
             s_max_pu,
             params.length_factor,
             costs,
+            transmission_build_year,
+            transmission_lifetime,
             use_original_region=use_original_region,
         )
+
+    # Defensive backstop: stamp any transmission Line/Link still carrying PyPSA's default
+    # build_year=0 / lifetime=inf so existing infrastructure (e.g. TAMU lines from
+    # build_base_network.py) is treated as pre-existing brownfield in myopic per-period
+    # accounting. The targeted edits in convert_to_transport/calibrate_tamu_transmission_capacity
+    # already cover the REEDS path; this catches everything else.
+    lines = clustering.network.lines
+    if not lines.empty:
+        lines.loc[lines["build_year"] == 0, "build_year"] = transmission_build_year
+        lines.loc[~np.isfinite(lines["lifetime"]), "lifetime"] = transmission_lifetime
+    links = clustering.network.links
+    if not links.empty:
+        transmission_link_mask = links["carrier"].isin(["AC", "DC"])
+        links.loc[transmission_link_mask & (links["build_year"] == 0), "build_year"] = transmission_build_year
+        links.loc[transmission_link_mask & ~np.isfinite(links["lifetime"]), "lifetime"] = transmission_lifetime
 
     update_p_nom_max(clustering.network)
     clustering.network.generators.land_region = clustering.network.generators.land_region.fillna(

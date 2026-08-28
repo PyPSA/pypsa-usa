@@ -2,13 +2,53 @@
 # Costs
 ## Costs and Candidate Resources
 
- In PyPSA-USA, candidate resource forecasted capital and operating costs are defined by the NREL Annual Technology Baseline (ATB) accessed through the PUDL project. The model currently uses the 2024 ATB which provides data for expected costs across the years 2025 - 2050. Users are able to configure which ATB model case and scenario to reference:
+ In PyPSA-USA, candidate resource forecasted capital and operating costs are defined by the NREL Annual Technology Baseline (ATB) accessed through the PUDL project. The model currently uses the 2024 ATB which provides data for expected costs across the years 2025 - 2050. The full ATB scenario grid is exported by `build_cost_data` for every planning horizon, and the configuration below selects which slice of that grid each carrier ultimately uses.
 
- ```yaml
-   atb:
-    model_case: "Market" # Market, R&D
-    scenario: "Moderate" # Advanced, Conservative, Moderate
+### Selecting an ATB scenario and model case
+
+ATB exposes two orthogonal axes that bound the cost trajectory of every technology:
+
+- **`scenario`** — `Moderate` (default), `Advanced`, or `Conservative`. Reflects how aggressively technology costs decline over time. `Advanced` is most optimistic; `Conservative` is most pessimistic.
+- **`model_case`** — `Market` (default) or `R&D`. `Market` bakes current policy incentives (PTC/ITC) into the financing assumptions; `R&D` strips those out and isolates pure technology learning.
+
+The global default applies to every carrier unless an override is set:
+
+```yaml
+costs:
+  atb:
+    model_case: "Market"   # Market, R&D
+    scenario: "Moderate"   # Moderate, Advanced, Conservative
 ```
+
+#### Per-carrier overrides
+
+To stress-test specific carriers under a different scenario without touching the global default, add an `overrides` block keyed by the carrier's pypsa-name. Either field can be set independently — anything left out falls back to the global default:
+
+```yaml
+costs:
+  atb:
+    model_case: "Market"
+    scenario: "Moderate"
+    overrides:
+      solar:
+        scenario: "Advanced"            # cheaper solar
+      onwind:
+        scenario: "Advanced"
+        model_case: "R&D"               # no-PTC view of onshore wind
+      nuclear:
+        scenario: "Conservative"        # higher-cost nuclear
+```
+
+Resolution order, highest priority first:
+1. Per-carrier override under `costs.atb.overrides[<pypsa-name>]`
+2. Global `costs.atb.scenario` / `costs.atb.model_case`
+3. Hardcoded fallback (`Moderate` / `Market`)
+
+Carrier names must match the keys in `ATB_TECH_MAPPER` (`workflow/scripts/constants.py`) — e.g. `solar`, `onwind`, `offwind`, `offwind_floating`, `nuclear`, `SMR`, `CCGT`, `CCGT-95CCS`, `coal`, `coal-95CCS`, `geothermal`, `biomass`, `4hr_battery_storage`, etc.
+
+#### How selection happens
+
+`build_cost_data` writes one row per `(pypsa-name, parameter, atb_scenario, atb_model_case)` into `resources/costs/costs_{year}.csv`, so every ATB combination is available without rerunning the rule. Scenario-independent rows (EGS supply curves, transmission costs, emissions factors) carry `NA` in the scenario columns and apply universally. The `load_costs` helper in `_helpers.py` reads the config and selects the right row per carrier before pivoting, so changing `costs.atb` only requires re-running the downstream rules — not `build_cost_data`.
 
 To reflect regional differences, capital costs are adjusted using [EIA state-level CapEx multipliers](https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2020.pdf).
 
