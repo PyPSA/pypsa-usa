@@ -137,9 +137,9 @@ def add_sector_foundation(
 
     points = points[~points.index.isin(existing)]
 
-    n.madd(
+    n.add(
         "Bus",
-        names=points.index,
+        name=points.index,
         suffix=f" {carrier}",
         x=points.x,
         y=points.y,
@@ -173,9 +173,9 @@ def add_sector_foundation(
         marginal_cost = 0
 
     if add_supply:
-        n.madd(
+        n.add(
             "Store",
-            names=points.index,
+            name=points.index,
             suffix=f" {carrier}",
             bus=[f"{x} {carrier}" for x in points.index],
             e_nom_extendable=False,
@@ -355,7 +355,7 @@ def get_dynamic_marginal_costs(
     hourly_index = pd.date_range(
         start=f"{year}-01-01",
         end=f"{year}-12-31 23:00:00",
-        freq="H",
+        freq="h",
     )
 
     # need ffill and bfill as some data is not provided at the resolution or
@@ -396,8 +396,8 @@ def convert_generators_2_links(
     pnl = {}
 
     # copy over pnl parameters
-    for c in n.iterate_components(["Generator"]):
-        for param, df in c.pnl.items():
+    for c in [n.components["Generator"]]:
+        for param, df in c.dynamic.items():
             # skip result vars
             if param not in (
                 "p_min_pu",
@@ -414,9 +414,9 @@ def convert_generators_2_links(
             if cols:
                 pnl[param] = df[cols]
 
-    n.madd(
+    n.add(
         "Link",
-        names=plants.index,
+        name=plants.index,
         bus0=plants.STATE + bus0_suffix,
         bus1=plants.bus,
         bus2=plants.STATE + " pwr-co2",
@@ -439,7 +439,7 @@ def convert_generators_2_links(
     for param, df in pnl.items():
         n.links_t[param] = n.links_t[param].join(df, how="inner")
 
-    n.mremove("Generator", plants.index)
+    n.remove("Generator", plants.index)
 
     # existing links will give a 'nan in efficiency2' warning
     n.links["efficiency2"] = n.links.efficiency2.fillna(0)
@@ -459,7 +459,7 @@ def split_loads_by_carrier(n: pypsa.Network):
     for bus in n.buses.index.unique():
         df = n.loads[n.loads.bus == bus][["bus", "carrier"]]
 
-        n.madd(
+        n.add(
             "Bus",
             df.index,
             v_nom=1,

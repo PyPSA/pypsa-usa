@@ -19,7 +19,7 @@ def add_land_use_constraints(n):
     model = n.model
     generators = n.generators.query(
         "p_nom_extendable & land_region != '' ",
-    ).rename_axis(index="Generator-ext")
+    ).rename_axis(index="name")
 
     if generators.empty:
         return

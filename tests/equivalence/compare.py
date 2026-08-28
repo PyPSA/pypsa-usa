@@ -3,7 +3,9 @@
 Tolerance policy (spec D2/D7):
 - floats: ``np.allclose(rtol=1e-3, atol=1e-8, equal_nan=True)``
 - indexes / integers / strings: exact, after sorting
-- solved network: objective within 0.1%, per-carrier capacity within 0.5%
+- solved network: objective within 0.1%, per-carrier capacity within 0.5%;
+  the objective is normalized to ``objective + objective_constant`` on both
+  sides so the pypsa 0.30 vs v1 reporting conventions compare like for like
 - row-set and column-set differences are first-class findings
 - representation-only differences are normalized before comparing: float-
   formatted integer labels ('35827.0' vs '35827') and Load names carrying a
@@ -55,6 +57,11 @@ _T_SKIP_EMPTY = True
 
 def load_network(path: Path):
     import pypsa
+
+    # Keep network frames on numpy object dtype under pandas 3 (matches
+    # _helpers), so candidate and anchor networks compare on equal footing.
+    if hasattr(pypsa, "options"):
+        pypsa.options.api.legacy_string_dtype = True
 
     if path.suffix == ".pkl":
         import dill
@@ -283,10 +290,10 @@ def compare_networks(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
         _compare_solved(pair, nc, na, findings)
         return
     comps = sorted(
-        {c.name for c in nc.iterate_components()} | {c.name for c in na.iterate_components()},
+        {c.name for c in nc.components if not c.static.empty} | {c.name for c in na.components if not c.static.empty},
     )
     for name in comps:
-        dfc, dfa = nc.df(name), na.df(name)
+        dfc, dfa = nc.components[name].static, na.components[name].static
         if dfc.empty and dfa.empty:
             continue
         map_c = map_a = None
@@ -307,7 +314,7 @@ def compare_networks(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
                 dfc, map_c = kc
                 dfa, map_a = ka
         compare_frames(pair.stage, name, dfc, dfa, findings)
-        pnl_c, pnl_a = nc.pnl(name), na.pnl(name)
+        pnl_c, pnl_a = nc.components[name].dynamic, na.components[name].dynamic
         for attr in sorted(set(pnl_c) | set(pnl_a)):
             tc = pnl_c.get(attr, pd.DataFrame())
             ta = pnl_a.get(attr, pd.DataFrame())
@@ -339,8 +346,34 @@ def _capacity_by_carrier(n) -> pd.DataFrame:
     return pd.DataFrame(out).fillna(0.0)
 
 
+def _objective_constant(n) -> float:
+    """``objective_constant`` of a network, 0.0 when absent/NaN."""
+    val = getattr(n, "objective_constant", 0.0)
+    try:
+        val = float(val)
+    except (TypeError, ValueError):
+        return 0.0
+    return val if np.isfinite(val) else 0.0
+
+
+def _total_objective(n) -> float:
+    """Total system cost, independent of the reporting convention.
+
+    pypsa 0.30 reported ``Network.objective`` as the solver's objective value
+    only and carried the fixed-cost offset separately in
+    ``Network.objective_constant``; pypsa v1 / linopy 0.9 fold that constant
+    into ``objective`` and leave ``objective_constant`` at 0. Comparing raw
+    ``objective`` across the two conventions therefore manufactures a
+    difference exactly the size of the constant, even when the two solves are
+    identical. Both sides are normalized to ``objective + objective_constant``
+    — the total system cost either way — and the existing tolerance applies to
+    that. Each side's constant is read from its own file (missing -> 0.0).
+    """
+    return float(n.objective) + _objective_constant(n)
+
+
 def _compare_solved(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
-    oc, oa = float(nc.objective), float(na.objective)
+    oc, oa = _total_objective(nc), _total_objective(na)
     if not np.isclose(oc, oa, rtol=OBJECTIVE_RTOL):
         findings.append(
             {
@@ -351,6 +384,10 @@ def _compare_solved(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
                 "detail": {
                     "candidate": oc,
                     "anchor": oa,
+                    "candidate_raw": float(nc.objective),
+                    "anchor_raw": float(na.objective),
+                    "candidate_constant": _objective_constant(nc),
+                    "anchor_constant": _objective_constant(na),
                     "rel": abs(oc - oa) / max(abs(oa), 1e-9),
                     "rel_pct": round(abs(oc - oa) / max(abs(oa), 1e-9) * 100.0, 4),
                 },

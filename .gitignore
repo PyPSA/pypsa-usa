@@ -270,5 +270,10 @@ connect.sh
 /workflow/repo_data/dag.png
 !.pre-commit-config.yaml
 
+# machine-local equivalence-harness scaffolding (symlinks into the main checkout)
+.worktrees/
+workflow/data
+workflow/cutouts
+
 # transient equivalence-harness forced-rerun marker
 /.eq-force-rerun
