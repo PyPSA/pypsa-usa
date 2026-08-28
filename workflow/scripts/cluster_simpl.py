@@ -6,7 +6,7 @@ topology produced by :mod:`aggregate_to_substations` (buses, lines, links only â
 no loads, generators, or storage attached) and either:
 
 - When ``{simpl}`` is empty: pass-through the substation-level network and regions.
-- When ``{simpl}=N``: k-means cluster to N buses using ``n.buses.Pd`` as the static
+- When ``{simpl}=N``: k-means cluster to N buses using ``n.buses.load_weight`` as the static
   per-bus weight (i.e. ``weighting_strategy=population``), then dissolve the
   substation Voronoi cells accordingly.
 
@@ -96,7 +96,7 @@ if __name__ == "__main__":
         if configured_strategy != "population":
             logger.info(
                 "cluster_simpl runs before loads/generators are attached; using "
-                "weighting_strategy='population' (n.buses.Pd) regardless of "
+                "weighting_strategy='population' (n.buses.load_weight) regardless of "
                 "configured '%s'.",
                 configured_strategy,
             )

@@ -65,7 +65,7 @@ def weighting_for_region(n, x, weighting_strategy=None):
     weighting = gen_weight + load_weight
 
     if weighting_strategy == "population":
-        weighting = normed(n.buses.loc[x.index].Pd)
+        weighting = normed(n.buses.loc[x.index].load_weight)
 
     return (weighting * (100.0 / weighting.max())).clip(lower=1.0).astype(int)
 
@@ -79,7 +79,7 @@ def distribute_clusters(
 ):
     """Determine the number of clusters per region."""
     if weighting_strategy == "population":
-        bus_distribution_factor = n.buses.Pd
+        bus_distribution_factor = n.buses.load_weight
     else:
         bus_distribution_factor = n.loads_t.p_set.mean().groupby(n.loads.bus).sum()
     factors = bus_distribution_factor.groupby([n.buses.country, n.buses.sub_network]).sum().pipe(normed)
@@ -266,6 +266,7 @@ def clustering_for_n_clusters(
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
     bus_strategies = {
         "Pd": "sum",
+        "load_weight": "sum",
         "LAF_state": "sum",
         "rec_trading_zone": "first",
         "original_reeds_zone": "first",

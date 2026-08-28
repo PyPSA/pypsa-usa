@@ -1787,7 +1787,12 @@ class WriteStrategy(ABC):
 
 
 class WritePopulation(WriteStrategy):
-    """Based on Population Density from Breakthrough Energy."""
+    """
+    Based on the per-bus demand-allocation weight from build_base_network.
+
+    ``n.buses.load_weight`` is census county population or legacy Breakthrough
+    Energy nominal demand, per ``electricity.demand.bus_allocation``.
+    """
 
     def __init__(self, n: pypsa.Network) -> None:
         super().__init__(n)
@@ -1799,15 +1804,17 @@ class WritePopulation(WriteStrategy):
         **kwargs,
     ) -> pd.Series:
         """Pulls weighting from 'build_base_network'."""
-        logger.info("Setting load allocation factors based on BE population density")
+        logger.info("Setting load allocation factors based on bus load_weight")
         n = self.n
         if zone == "state":
             return n.buses.LAF_state.fillna(0)
         else:
-            n.buses.Pd = n.buses.Pd.fillna(0)
-            bus_load = n.buses.Pd.to_frame(name="Pd").join(df.to_frame(name="zone"))
-            zone_loads = bus_load.groupby("zone")["Pd"].transform("sum")
-            return bus_load.Pd / zone_loads
+            n.buses.load_weight = n.buses.load_weight.fillna(0)
+            bus_load = n.buses.load_weight.to_frame(name="load_weight").join(
+                df.to_frame(name="zone"),
+            )
+            zone_loads = bus_load.groupby("zone")["load_weight"].transform("sum")
+            return bus_load.load_weight / zone_loads
 
 
 class WriteIndustrial(WriteStrategy):
@@ -1913,11 +1920,12 @@ class WriteIndustrial(WriteStrategy):
         """
         Gets a list of load buses, indexed by county.
 
-        Note, load buses follow BE mapping of Pd
+        Note, load buses are those carrying demand-allocation weight
+        (``n.buses.load_weight``).
         """
         n = self.n
-        buses_per_county = n.buses[["Pd", "county"]].fillna(0)
-        buses_per_county = buses_per_county[buses_per_county.Pd != 0]
+        buses_per_county = n.buses[["load_weight", "county"]].fillna(0)
+        buses_per_county = buses_per_county[buses_per_county.load_weight != 0]
 
         mapper = {}
 
