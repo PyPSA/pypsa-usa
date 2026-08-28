@@ -213,3 +213,17 @@
   ledger: DL-15
   reason: attribute absent from the anchor file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
   justification: see the clustered_network entry - same absent-attribute mechanism, same stage-invariant proof
+- stage: '*'
+  component: Bus
+  column: load_weight
+  kind: column_set
+  ledger: DL-16
+  reason: >-
+    candidate-added schema column (PyPSA#777 population-based demand
+    allocation); absent on the anchor
+  justification: >-
+    numerically inert for equivalence: both config.equivalence.yaml and
+    config.equivalence-usa.yaml pin demand.bus_allocation to breakthrough, so
+    the column carries the anchor's legacy Breakthrough Pd weighting. Demand
+    itself stays guarded by the UNWAIVED Load / Load_t.p_set comparisons; this
+    waives only the presence of the column, not its content
