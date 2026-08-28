@@ -466,9 +466,22 @@ def plot_capacity_map_by_horizon(
         bus_scale = get_bus_scale(interconnect) if interconnect else 1
         line_scale = get_line_scale(interconnect) if interconnect else 1
 
-        if bus_values.empty and kind == "new":
+        has_new_capacity = (
+            bus_values.fillna(0).gt(0).any() or line_values.fillna(0).gt(0).any() or link_values.fillna(0).gt(0).any()
+        )
+
+        if kind == "new" and not has_new_capacity:
+            logger.info("No new capacity found; creating an empty new-capacity map.")
             fig, ax = plt.subplots(figsize=(10, 10))
-            ax.text(0.5, 0.5, "No new capacity built", ha="center", va="center", fontsize=14)
+            ax.text(
+                0.5,
+                0.5,
+                "No new capacity built",
+                ha="center",
+                va="center",
+                fontsize=14,
+                transform=ax.transAxes,
+            )
             ax.set_title(title, fontsize=TITLE_SIZE, pad=20)
             ax.axis("off")
         else:
@@ -550,6 +563,25 @@ def plot_capacity_map_by_horizon(
         bus_values = (
             remove_sector_buses(bus_values).groupby(["bus", "carrier"]).sum() if not bus_values.empty else bus_values
         )
+
+        has_new_capacity = (
+            bus_values.fillna(0).gt(0).any() or line_values.fillna(0).gt(0).any() or link_values.fillna(0).gt(0).any()
+        )
+
+        if kind == "new" and not has_new_capacity:
+            logger.info("No new capacity found for horizon %s.", horizon)
+            ax.text(
+                0.5,
+                0.5,
+                "No new capacity built",
+                ha="center",
+                va="center",
+                fontsize=14,
+                transform=ax.transAxes,
+            )
+            ax.set_title(f"{horizon}", fontsize=TITLE_SIZE)
+            ax.axis("off")
+            continue
 
         artifacts = _plot_capacity_on_ax(
             n,

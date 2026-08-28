@@ -853,7 +853,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         expanded_costs = []
         for invesetment_period in n.investment_periods:
             # reindex to match any tsa
-            cost = costs.copy()
+            cost = costs.loc[costs.index.year == self.year].copy()
             cost.index = cost.index.map(lambda x: x.replace(year=invesetment_period))
             cost = cost.reindex(n.snapshots.get_level_values(1), method="nearest")
             # set investment periods

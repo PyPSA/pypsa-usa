@@ -420,7 +420,8 @@ def add_ng_import_export_limits(n, config):
     # add domestic limits
 
     trade = Trade("gas", False, "exports", year, api).get_data()
-    trade = _format_data(trade, " trade")
+    trade = trade.loc[trade.index == year]
+    trade = _format_data(trade, " trade").groupby(level=0).sum()
 
     add_import_limits(n, trade, "min", import_min)
     add_export_limits(n, trade, "min", export_min)
@@ -433,7 +434,8 @@ def add_ng_import_export_limits(n, config):
     # add international limits
 
     trade = Trade("gas", True, "exports", year, api).get_data()
-    trade = _format_data(trade, " trade")
+    trade = trade.loc[trade.index == year]
+    trade = _format_data(trade, " trade").groupby(level=0).sum()
 
     add_import_limits(n, trade, "min", import_min)
     add_export_limits(n, trade, "min", export_min)
@@ -595,7 +597,7 @@ def add_ev_generation_constraint(n, config, snakemake):
 
     Default limits taken from:
     - (Fig ES2) https://www.nrel.gov/docs/fy18osti/71500.pdf
-    - (Sheet 6.3 - high case) https://data.nrel.gov/submissions/90
+    - (Sheet 6.3 - high case) https://data.nlr.gov/submissions/90
     """
     mode_mapper = {
         "light_duty": "lgt",

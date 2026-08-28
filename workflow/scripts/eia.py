@@ -1607,7 +1607,7 @@ class _GasStorage(DataExtractor):
     @staticmethod
     def map_state_names(state: str) -> str:
         """Maps state name to code."""
-        return "U.S." if state == "U.S. Total" else STATE_CODES[state]
+        return "U.S." if state in {"U.S.", "U.S. Total"} else STATE_CODES[state]
 
 
 class _GasProduction(DataExtractor):
