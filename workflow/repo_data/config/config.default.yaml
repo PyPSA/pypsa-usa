@@ -158,6 +158,7 @@ electricity:
   # ---------------- Demand ----------------
   demand:
     profile: efs                           # demand time series source; efs (EIA-EFS) | eia (historical actuals) | eer (EER scenarios)
+    bus_allocation: population             # per-bus demand weight; population (2020 census counties) | breakthrough (legacy BE Pd)
     scenario:                              # EFS/EER scenario knobs (ignored if profile=eia)
       efs_case:  reference                 # reference | medium | high
       efs_speed: moderate                  # slow | moderate | rapid

@@ -147,7 +147,7 @@ def set_transmission_limit(n, ll_type, factor):
 
 def average_every_nhours(n, offset):
     logger.info(f"Resampling the network to {offset}")
-    m = n.copy(with_time=False)
+    m = n.copy(snapshots=[])
 
     def resample_multi_index(df, offset, func):
         sw = []
@@ -169,9 +169,9 @@ def average_every_nhours(n, offset):
     m.snapshot_weightings = snapshot_weightings
     m.investment_periods = n.investment_periods
 
-    for c in n.iterate_components():
+    for c in n.components:
         pnl = getattr(m, c.list_name + "_t")
-        for k, df in c.pnl.items():
+        for k, df in c.dynamic.items():
             if not df.empty:
                 pnl[k] = resample_multi_index(df, offset, "mean")
     return m
@@ -196,8 +196,8 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
     # get all time-dependent data
     columns = pd.MultiIndex.from_tuples([], names=["component", "key", "asset"])
     raw = pd.DataFrame(index=n.snapshots, columns=columns)
-    for c in n.iterate_components():
-        for attr, pnl in c.pnl.items():
+    for c in n.components:
+        for attr, pnl in c.dynamic.items():
             # exclude e_min_pu which is used for SOC of EVs in the morning
             if not pnl.empty and attr != "e_min_pu":
                 df = pnl.copy()
@@ -311,7 +311,9 @@ if __name__ == "__main__":
     time_resolution = params.time_resolution
     is_string = isinstance(time_resolution, str)
     if is_string and time_resolution.lower().endswith("h"):
-        n = average_every_nhours(n, time_resolution)
+        # pandas 3 only accepts the lowercase 'h' offset alias, and this config
+        # knob is documented as "int H", so normalise before resampling.
+        n = average_every_nhours(n, time_resolution.lower())
 
     # segments with package tsam
 

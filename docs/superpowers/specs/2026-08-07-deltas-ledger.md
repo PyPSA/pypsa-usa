@@ -400,3 +400,137 @@ classes; waivers finalized in tests/equivalence/waivers.yaml.
   lines (vs 24 at CA); anchor usa log 0 lines. equivalence_report_usa.html
   regenerated, superseding the stale 2026-08-22 usa artifacts. |
   countersigned (ktehranchi, 2026-08-23) |
+
+- **DL-15 (western, prong 1, all network stages; env-move re-baseline):
+  pypsa 0.30 -> 1.3 SERIALIZATION AND OBJECTIVE-REPORTING CONVENTIONS.**
+  (DL-14 is reserved by the `proto/nearshore-crs-fix` branch; this entry
+  takes the next free id so the two merge without collision.) The
+  candidate branch `claude/pypsa-v1-migration-data-storage-26840f` moves
+  the stack to `pypsa==1.3.0` / `linopy==0.9.1` / `pandas==3.0.5` /
+  `xarray==2026.7.0` while the anchor stays on `pypsa==0.30.2`, so the
+  Tier-C comparison was re-baselined from scratch. CLEAN-BASELINE RESULT
+  BEFORE ADJUDICATION: prong 1 FAIL, 16 live / 88 total; prong 2 PASS, 0
+  live / 3 (unchanged, all DL-9-class). Every one of the 16 live findings
+  falls into exactly three classes, each verified to carry zero physics
+  content.
+  (A) **`sub_network` topology metadata — 11 findings.** The candidate
+  (pypsa v1) computes and serializes connected-component labels into
+  `Bus.sub_network` ('0','1',...) and `Line.sub_network`, and exports
+  `SubNetwork` component rows (7 at `assembled_substation_network`, 1 at
+  each of `clustered_network` / `extra_components` / `prepared_network` /
+  `sectored_network`); the 0.30 anchor wrote empty strings and no
+  `SubNetwork` rows at all. Bus/Line diffs are total-population (1975/1975
+  buses, 2811/2811 lines at assembled; 4/4 buses thereafter) precisely
+  because one side is uniformly empty. `sub_network` is bookkeeping
+  recomputed by `determine_network_topology` from Bus/Line/Link topology
+  that is itself finding-free; the LOPF/expansion problem never reads it.
+  (B) **`StorageUnit.cyclic_state_of_charge_per_period` — 4 findings**
+  (clustered_network, extra_components, prepared_network,
+  sectored_network; n=5 then 9 storage units). The candidate stores
+  explicit `True` because the migration deliberately pins the pypsa-0.30
+  default that v1 flipped True->False, preserving per-investment-period
+  cyclicity. ANCHOR-FILE PROOF: the attribute IS NOT STORED IN THE ANCHOR
+  NETCDF AT ALL — no `storage_units_cyclic_state_of_charge_per_period`
+  data_var exists at any of the four stages (verified by opening each
+  anchor file with xarray; only `storage_units_cyclic_state_of_charge` is
+  present), because 0.30 omitted attributes left at their default. The
+  harness loads BOTH sides under pypsa 1.3, whose default is now `False`,
+  so the reader backfills `False` onto the anchor even though the anchor's
+  actual solve-time behaviour was `True`. Both sides therefore behaved
+  identically; the comparison manufactures the difference on read.
+  (C) **`solved_network` `Network.objective` — 1 finding.** Candidate
+  928,590,425.0093 with `objective_constant` 0.00; anchor
+  -204,665,929.1272 with `objective_constant` 1,133,255,860.00. IDENTITY
+  VERIFIED: candidate `objective` vs anchor `objective + objective_constant`
+  gives 928,590,425.0093 vs 928,589,930.8728, relative difference
+  **5.321e-07** — three orders of magnitude inside the 1e-3 objective gate
+  and of the same order as the August baseline's own 6.7e-05 match. pypsa
+  v1 / linopy 0.9 fold the fixed-cost offset into `objective` and leave
+  `objective_constant` at 0; 0.30 reported the solver objective only and
+  carried the offset separately.
+  ADJUDICATION — two changes, deliberately different in kind.
+  (1) CLASS C IS FIXED AS A COMPARATOR NORMALIZATION, NOT WAIVED:
+  `compare.py::_compare_solved` now compares
+  `objective + objective_constant` on both sides (each side's constant read
+  from its own file, missing/NaN -> 0.0) via the new `_total_objective` /
+  `_objective_constant` helpers, keeping the existing `OBJECTIVE_RTOL`
+  (1e-3). This is a harness-correctness repair: the old raw-`objective`
+  comparison was only valid while both sides used the same reporting
+  convention, and would have silently mis-stated any future cross-version
+  run. The prong-1 objective gate therefore stays LIVE — it is not
+  suppressed, it is measured correctly. The finding detail now also carries
+  `candidate_raw` / `anchor_raw` / `*_constant` for traceability. NOTE: the
+  DL-9 prong-2 `solved_network` `Network.objective` waiver is unaffected
+  (it suppresses a genuine physics difference, not this convention).
+  (2) CLASSES A AND B ARE WAIVED. Class B was considered for normalization
+  too — the correct generic rule is "a column absent from one side's file
+  should be compared against that side's WRITING-era default, not the
+  reading-era default" — but the harness has no clean hook for it:
+  `compare_frames` sees fully-materialized DataFrames with defaults already
+  backfilled, one compared pair is a dill pickle with no netCDF to
+  interrogate, and a writing-era default table would have to be maintained
+  per pypsa version per attribute. That is speculative machinery for a
+  one-attribute problem, so the pragmatic targeted waiver was taken with
+  the file-level proof recorded in the waiver's own `justification` field.
+  SEVEN NEW WAIVERS in `tests/equivalence/waivers.yaml`, all
+  `ledger: DL-15`: `Bus.sub_network` value, `Line.sub_network` value and
+  `SubNetwork.<index>` row_set at `stage: '*'`; and
+  `StorageUnit.cyclic_state_of_charge_per_period` value at each of the four
+  named stages. All are scoped `interconnect: western` — the leg actually
+  measured — and left unscoped by prong, which is symmetric but inert for
+  prong 2 (whose only compared stages are `prong2_aggregates` and
+  `solved_network`). KNOWN FOLLOW-UP: the usa leg's last baseline predates
+  this environment move, so the same three classes must be re-verified —
+  and these waivers extended to `interconnect: usa` — when usa is rebuilt
+  on the 1.3 stack.
+  RESULTS EFFECT: **None — all three are comparison artifacts of the
+  pypsa 0.30 -> 1.3 serialization and reporting conventions.** Class A is
+  metadata the optimizer never reads; class B is a default the anchor never
+  stored and never behaved by; class C is the same total system cost under
+  two accounting conventions, agreeing to 5.3e-07. No physical quantity
+  moved: with the adjudication in place prong 1 is PASS, 0 live / **87**
+  total findings, and prong 2 stays PASS, 0 live / 3 total. The total falls
+  by one rather than staying at 88 precisely because class C was normalized
+  rather than waived — the objective finding is no longer raised at all,
+  whereas the 15 waived class-A/B findings are still counted and reported. |
+  PENDING COUNTERSIGNATURE |
+
+## Amendment (2026-08-28) — DL-16, harness recalibration after PyPSA#777
+
+| DL-16 | all network stages (both prongs) | `Bus.load_weight` is a
+  candidate-only column, and the `usa` leg compared two different demand
+  pipelines | PyPSA#777 ("Population-based demand allocation") added a
+  `load_weight` column that `build_base_network.py:54` writes on every Bus
+  unconditionally, and made `population` the default `bus_allocation`. The
+  anchor (`e7f8bd70`) has no census-population method at all. TWO SEPARATE
+  DEFECTS followed. (1) `config.equivalence.yaml:77` pins
+  `bus_allocation: breakthrough` so the western leg stays apples-to-apples,
+  but `config.equivalence-usa.yaml` carried no such pin — and since
+  `build.py` copies the candidate's config into the anchor worktree, BOTH
+  sides ran unpinned. The candidate therefore weighted demand by 2020 census
+  county population while the anchor weighted by Breakthrough `Pd`,
+  diverging `Load_t.p_set`, `Bus.LAF_state`, the kmeans geometry
+  (`cluster_network.py:68,82` weights on `load_weight`) and the objective by
+  the full reallocation — every one of which would read as a migration
+  regression. DL-13's recorded `usa` leg stopped reproducing. (2) The
+  `load_weight` column survives every compared stage (`cols2drop` in
+  `aggregate_to_substations.py:165-188` omits it; `cluster_network.py:269`
+  sums it; `clean_bus_data` in `add_electricity.py:1058-1067` drops only
+  `load_dissag`/`LAF`/`LAF_state`), so `compare.py:174-184` raised an
+  unwaived `column_set` finding at five stages and `compare.py:546-549` set
+  prong 1 to `pass: false` for a non-migration reason. | FIX, not a waiver
+  of substance: the missing `bus_allocation: breakthrough` pin was added to
+  `config.equivalence-usa.yaml`, restoring the like-for-like comparison. The
+  column-presence finding is then waived (`Bus`/`load_weight`/`column_set`,
+  stage `*`), and that waiver is only sound BECAUSE of the pin — with
+  `breakthrough` pinned the column carries the anchor's own legacy `Pd`
+  weighting, so it is numerically inert. Demand content remains guarded by
+  the UNWAIVED `Load` / `Load_t.p_set` comparisons, and `load_weight`
+  *value* findings are deliberately NOT waived (verified: the waiver matches
+  `kind: column_set` only). | PENDING COUNTERSIGNATURE |
+
+Note: both defects were present on `develop` from the moment PyPSA#777
+merged; they were surfaced by the adversarial review of PyPSA#778 but are
+not caused by it. Neither has been exercised against a live harness run —
+the Tier-C re-baseline that PyPSA#778 requires is still outstanding, and
+this amendment does not discharge it.

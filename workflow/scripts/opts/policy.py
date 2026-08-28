@@ -10,7 +10,6 @@ from opts._helpers import (
     get_model_horizon,
     get_region_buses,
 )
-from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +121,7 @@ def add_technology_capacity_target_constraints(n, config):
                 [lhs_gens_ext.bus.map(n.buses.country), lhs_gens_ext.carrier],
                 axis=1,
             ).rename_axis(
-                "Generator-ext",
+                "name",
             )
             lhs_g = n.model["Generator-p_nom"].loc[lhs_gens_ext.index].groupby(grouper_g).sum().rename(bus="country")
         else:
@@ -133,7 +132,7 @@ def add_technology_capacity_target_constraints(n, config):
                 [lhs_storage_ext.bus.map(n.buses.country), lhs_storage_ext.carrier],
                 axis=1,
             ).rename_axis(
-                "StorageUnit-ext",
+                "name",
             )
             lhs_s = n.model["StorageUnit-p_nom"].loc[lhs_storage_ext.index].groupby(grouper_s).sum()
         else:
@@ -144,7 +143,7 @@ def add_technology_capacity_target_constraints(n, config):
                 [lhs_link_ext.bus1.map(n.buses.country), lhs_link_ext.carrier],
                 axis=1,
             ).rename_axis(
-                "Link-ext",
+                "name",
             )
             lhs_l = n.model["Link-p_nom"].loc[lhs_link_ext.index].groupby(grouper_l).sum()
         else:
@@ -415,7 +414,7 @@ def add_RPS_constraints(n, config, snakemake=None):
         # Eligible generation
         p_eligible = n.model["Generator-p"].sel(
             period=planning_horizon,
-            Generator=region_gens_eligible.index,
+            name=region_gens_eligible.index,
         )
         renewable_gen = zone_constraints.rps_rhs.sum()
         lhs = p_eligible.sum() - renewable_gen
@@ -442,12 +441,12 @@ def _get_state_generation(n, planning_horizon, state, carriers):
         n.model["Generator-p"]
         .sel(
             period=planning_horizon,
-            Generator=state_gens.index,
+            name=state_gens.index,
         )
         .sum()
     )
     links_demand = (
-        n.model["Link-p"].sel(period=planning_horizon, Link=state_links.index).mul(state_links.efficiency).sum()
+        n.model["Link-p"].sel(period=planning_horizon, name=state_links.index).mul(state_links.efficiency).sum()
     )
 
     return gens_demand + links_demand
@@ -568,8 +567,7 @@ def add_regional_co2limit(n, config):
         if planning_horizon not in model_horizon:
             continue
 
-        efficiency = get_as_dense(
-            n,
+        efficiency = n.get_switchable_as_dense(
             "Generator",
             "efficiency",
             inds=region_gens_em.index,

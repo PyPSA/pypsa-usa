@@ -32,15 +32,27 @@ rule build_shapes:
         "../scripts/build_shapes.py"
 
 
+def bus_allocation_data(wildcards):
+    """2020 census county populations, only when bus_allocation=population."""
+    method = config["electricity"]["demand"].get("bus_allocation", "population")
+    if method == "population":
+        return {"county_population": DATA + "population/DECENNIALDHC2020.P1-Data.csv"}
+    return {}
+
+
 rule build_base_network:
     params:
         build_offshore_network=config_provider("offshore_network"),
+        bus_allocation=config_provider(
+            "electricity", "demand", "bus_allocation", default="population"
+        ),
         model_topology=config_provider("model_topology", "include"),
         topological_boundaries=config_provider(
             "model_topology", "topological_boundaries"
         ),
         length_factor=config["lines"]["length_factor"],
     input:
+        unpack(bus_allocation_data),
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
         lines=DATA + "breakthrough_network/base_grid/branch.csv",
         links=DATA + "breakthrough_network/base_grid/dcline.csv",

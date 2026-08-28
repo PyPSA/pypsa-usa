@@ -14,6 +14,16 @@ import requests
 import yaml
 from snakemake.utils import update_config
 
+# pandas 3 infers `str` dtype for string data; pypsa (until 2.0) converts
+# network frames back to numpy object dtype on import. Pin the legacy
+# behavior explicitly so every script that imports _helpers is consistent
+# and the per-import FutureWarning is silenced.
+# Guarded because this module is also imported at DAG-construction time by
+# rules/common.smk, which runs under the snakemake launcher's interpreter --
+# that may still carry pypsa <1.0, where `pypsa.options` does not exist.
+if hasattr(pypsa, "options"):
+    pypsa.options.api.legacy_string_dtype = True
+
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
 
 logger = logging.getLogger(__name__)
@@ -148,8 +158,8 @@ def log_network_schema(
         Pass this back as baseline= on the matching exit call.
     """
     snapshot: dict[str, dict] = {}
-    for component in n.iterate_components():
-        df = component.df
+    for component in n.components:
+        df = component.static
         if df.empty:
             continue
         snapshot[component.name] = {
@@ -190,59 +200,6 @@ def log_network_schema(
                 removed,
             )
     return snapshot
-
-
-def load_network(import_name=None, custom_components=None):
-    """
-    Helper for importing a pypsa.Network with additional custom components.
-
-    Parameters
-    ----------
-    import_name : str
-        As in pypsa.Network(import_name)
-    custom_components : dict
-        Dictionary listing custom components.
-        For using ``snakemake.config['override_components']``
-        in ``config.yaml`` define:
-
-        .. code:: yaml
-
-            override_components:
-                ShadowPrice:
-                    component: ["shadow_prices","Shadow price for a global constraint.",np.nan]
-
-    Attributes
-    ----------
-                    name: ["string","n/a","n/a","Unique name","Input (required)"]
-                    value: ["float","n/a",0.,"shadow value","Output"]
-
-    Returns
-    -------
-    pypsa.Network
-    """
-    from pypsa.descriptors import Dict
-
-    override_components = None
-    override_component_attrs = None
-
-    if custom_components is not None:
-        override_components = pypsa.components.components.copy()
-        override_component_attrs = Dict(
-            {k: v.copy() for k, v in pypsa.components.component_attrs.items()},
-        )
-        for k, v in custom_components.items():
-            override_components.loc[k] = v["component"]
-            override_component_attrs[k] = pd.DataFrame(
-                columns=["type", "unit", "default", "description", "status"],
-            )
-            for attr, val in v["attributes"].items():
-                override_component_attrs[k].loc[attr] = val
-
-    return pypsa.Network(
-        import_name=import_name,
-        override_components=override_components,
-        override_component_attrs=override_component_attrs,
-    )
 
 
 def calculate_annuity(n, r):
@@ -322,7 +279,7 @@ def update_p_nom_max(n):
     # the installed capacity might exceed the expansion limit.
     # Hence, we update the assumptions.
 
-    n.generators.p_nom_max = n.generators[["p_nom_min", "p_nom_max"]].max(1)
+    n.generators.p_nom_max = n.generators[["p_nom_min", "p_nom_max"]].max(axis=1)
 
 
 def progress_retrieve(url, file):
@@ -385,7 +342,7 @@ def mock_snakemake(rulename, **wildcards):
 
     import snakemake as sm
     from packaging.version import Version, parse
-    from pypsa.descriptors import Dict
+    from pypsa.definitions.structures import Dict
     from snakemake.script import Snakemake
 
     script_dir = Path(__file__).parent.resolve()
@@ -839,4 +796,4 @@ def get_multiindex_snapshots(
         sns = sns.append(
             get_snapshots(sns_config).map(lambda x: x.replace(year=year)),
         )
-    return pd.MultiIndex.from_arrays([sns.year, sns])
+    return pd.MultiIndex.from_arrays([sns.year, sns], names=["period", "timestep"])
