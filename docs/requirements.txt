@@ -1,21 +1,9 @@
-# Requirements file for ReadTheDocs, check .readthedocs.yml.
-# To build the module reference correctly, make sure every external package
-# under `install_requires` in `setup.cfg` is also listed here!
+# Documentation build requirements (ReadTheDocs uses this via .readthedocs.yaml).
+# The docs build no longer imports the workflow code (autodoc is disabled), so
+# runtime dependencies (pypsa, atlite, snakemake, ...) are intentionally absent.
 
-pypsa
-atlite>=0.2.9
-dask[distributed]
-matplotlib
-scikit-learn
-pyyaml
-seaborn
-snakemake
-cartopy
-plotly
-
-# docs
-myst-parser
-pydata-sphinx-theme
-sphinx-book-theme
-sphinxcontrib-bibtex
-# docutils
+sphinx>=7
+myst-parser>=3
+sphinx-book-theme>=1.1
+sphinx-copybutton>=0.5
+sphinxcontrib-bibtex>=2.6

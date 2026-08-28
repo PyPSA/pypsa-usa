@@ -53,12 +53,14 @@ renewable:
   dataset: godeeep                         # atlite | godeeep
 
   # ---------- Enhanced Geothermal Systems ----------
+  # docs : EGS
   EGS:
     dispatch: baseload                     # baseload (constant) | flexible (dispatchable like CCGT)
     drilling_cost: advanced                # base | advanced — selects EGS supply-curve capex column
     seismic_exclusion: true                # apply the EGS seismic-risk mask (upstream PR #750)
 
   # ---------- Onshore wind ----------
+  # docs : ONWIND
   onwind:
     cutout: era5                           # atlite cutout name (must match an entry under atlite.cutouts below)
     resource:
@@ -80,6 +82,7 @@ renewable:
     clip_p_max_pu: 1.e-2                   # treat CFs below this as zero
     extendable: true                       # eligible for capacity expansion
 
+  # docs : OFFWIND
   offwind:
     cutout: era5
     resource:
@@ -100,6 +103,7 @@ renewable:
     extendable: true
 
   # ---------- Offshore wind (floating) ----------
+  # docs : OFFWIND_FLOATING
   offwind_floating:
     cutout: era5
     resource:
@@ -120,6 +124,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
 
+  # docs : SOLAR
   solar:
     cutout: era5
     resource:
@@ -136,6 +141,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     extendable: true
 
+  # docs : HYDRO
   hydro:
     cutout: era5
     carriers: [ror, PHS, hydro]            # ror = run-of-river; PHS = pumped hydro storage; hydro = reservoir hydro
@@ -222,10 +228,11 @@ lines:
 # ====================================================================
 # OFFSHORE — offshore-shape source and OSW bus spacing
 # ====================================================================
-# docs : OFFSHORE
+# docs : OFFSHORE_SHAPE
 offshore_shape:
   use: eez                               # offshore region polygons; ca_osw (CA-only) | eez (federal EEZ)
 
+# docs : OFFSHORE_NETWORK
 offshore_network:
   bus_spacing: 25000                     # meters between adjacent offshore buses (OSW network density)
 
@@ -261,3 +268,5 @@ ucap:
     CCGT:     6.107
     nuclear:  2.207
     OCGT:     6.259
+
+# docs : end
