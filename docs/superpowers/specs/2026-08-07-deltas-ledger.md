@@ -494,3 +494,43 @@ classes; waivers finalized in tests/equivalence/waivers.yaml.
   rather than waived — the objective finding is no longer raised at all,
   whereas the 15 waived class-A/B findings are still counted and reported. |
   PENDING COUNTERSIGNATURE |
+
+## Amendment (2026-08-28) — DL-16, harness recalibration after PyPSA#777
+
+| DL-16 | all network stages (both prongs) | `Bus.load_weight` is a
+  candidate-only column, and the `usa` leg compared two different demand
+  pipelines | PyPSA#777 ("Population-based demand allocation") added a
+  `load_weight` column that `build_base_network.py:54` writes on every Bus
+  unconditionally, and made `population` the default `bus_allocation`. The
+  anchor (`e7f8bd70`) has no census-population method at all. TWO SEPARATE
+  DEFECTS followed. (1) `config.equivalence.yaml:77` pins
+  `bus_allocation: breakthrough` so the western leg stays apples-to-apples,
+  but `config.equivalence-usa.yaml` carried no such pin — and since
+  `build.py` copies the candidate's config into the anchor worktree, BOTH
+  sides ran unpinned. The candidate therefore weighted demand by 2020 census
+  county population while the anchor weighted by Breakthrough `Pd`,
+  diverging `Load_t.p_set`, `Bus.LAF_state`, the kmeans geometry
+  (`cluster_network.py:68,82` weights on `load_weight`) and the objective by
+  the full reallocation — every one of which would read as a migration
+  regression. DL-13's recorded `usa` leg stopped reproducing. (2) The
+  `load_weight` column survives every compared stage (`cols2drop` in
+  `aggregate_to_substations.py:165-188` omits it; `cluster_network.py:269`
+  sums it; `clean_bus_data` in `add_electricity.py:1058-1067` drops only
+  `load_dissag`/`LAF`/`LAF_state`), so `compare.py:174-184` raised an
+  unwaived `column_set` finding at five stages and `compare.py:546-549` set
+  prong 1 to `pass: false` for a non-migration reason. | FIX, not a waiver
+  of substance: the missing `bus_allocation: breakthrough` pin was added to
+  `config.equivalence-usa.yaml`, restoring the like-for-like comparison. The
+  column-presence finding is then waived (`Bus`/`load_weight`/`column_set`,
+  stage `*`), and that waiver is only sound BECAUSE of the pin — with
+  `breakthrough` pinned the column carries the anchor's own legacy `Pd`
+  weighting, so it is numerically inert. Demand content remains guarded by
+  the UNWAIVED `Load` / `Load_t.p_set` comparisons, and `load_weight`
+  *value* findings are deliberately NOT waived (verified: the waiver matches
+  `kind: column_set` only). | PENDING COUNTERSIGNATURE |
+
+Note: both defects were present on `develop` from the moment PyPSA#777
+merged; they were surfaced by the adversarial review of PyPSA#778 but are
+not caused by it. Neither has been exercised against a live harness run —
+the Tier-C re-baseline that PyPSA#778 requires is still outstanding, and
+this amendment does not discharge it.
