@@ -51,7 +51,7 @@ gives you the flexibility to:
 - Choose between multiple transmission networks (ReEDS zonal topologies or the
   synthetic TAMU/Breakthrough Energy nodal network).
 - Cluster the network to a user-defined number of zones, respecting county lines,
-  balancing areas, states, or REeDS zone boundaries.
+  states, or REeDS zone boundaries.
 - Use **historical EIA-930 demand** (2018-2023), **NREL EFS electrification
   scenarios** (2030, 2040, 2050), or **EER forecasted demand** (2021, 2025, 2030,
   2035, 2040, 2045, 2050).

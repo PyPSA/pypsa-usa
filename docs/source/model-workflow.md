@@ -70,7 +70,7 @@ resources and demand.
 their substations, preserving electrical connectivity. `cluster_resources` then runs
 kmeans (or modularity) clustering to the `{simpl}` resolution, honoring the
 `model_topology: topological_boundaries` setting so clusters never straddle county,
-state, REeDS-zone, or balancing-area lines. Its outputs — the clustered network, the
+state, or REeDS-zone lines. Its outputs — the clustered network, the
 matching cluster regions, and the busmap — define the spatial frame everything below
 is built in. (In configuration, this stage's options live under
 `clustering: simplify_network:`, a historical name kept for compatibility.)

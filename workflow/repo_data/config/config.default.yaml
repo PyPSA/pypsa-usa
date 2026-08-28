@@ -70,7 +70,7 @@ foresight: 'perfect'                     # multi-horizon solve mode; perfect (mo
 # docs : MODEL_TOPOLOGY
 model_topology:
   transmission_network: 'reeds'          # transmission dataset; reeds | tamu
-  topological_boundaries: 'reeds_zone'   # post-cluster zone type; county | reeds_zone | state | balancing_area
+  topological_boundaries: 'reeds_zone'   # post-cluster zone type; county | reeds_zone | state
   interface_transmission_limits: false   # apply NARIS2024 inter-region transfer caps (requires reeds backbone)
   include:                               # subset the network to specific zones (mixed zone types NOT supported)
     # reeds_zone: []                     #   restrict by REeDS zone ids
