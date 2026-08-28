@@ -9,20 +9,18 @@ rule plot_network_maps:
             config["custom_files"]["files_path"]
             + "regions_onshore_s{simpl}_{clusters}.geojson"
             if config["custom_files"].get("activate", False)
-            else RESOURCES
-            + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson"
+            else GEOSPATIAL
+            + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson"
         ),
         regions_offshore=(
             config["custom_files"]["files_path"]
             + "regions_offshore_s{simpl}_{clusters}.geojson"
             if config["custom_files"].get("activate", False)
-            else RESOURCES
-            + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson"
+            else GEOSPATIAL
+            + "{interconnect}/regions_offshore_s{simpl}_{clusters}.geojson"
         ),
     params:
         electricity=config["electricity"],
-        plotting=config["plotting"],
-        retirement=config["electricity"].get("retirement", "technical"),
     output:
         **{
             fig: RESULTS
@@ -48,19 +46,18 @@ rule export_statistics:
             config["custom_files"]["files_path"]
             + "regions_onshore_s_{clusters}.geojson"
             if config["custom_files"].get("activate", False)
-            else RESOURCES
-            + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson"
+            else GEOSPATIAL
+            + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson"
         ),
         regions_offshore=(
             config["custom_files"]["files_path"]
             + "regions_offshore_s_{clusters}.geojson"
             if config["custom_files"].get("activate", False)
-            else RESOURCES
-            + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson"
+            else GEOSPATIAL
+            + "{interconnect}/regions_offshore_s{simpl}_{clusters}.geojson"
         ),
     params:
         electricity=config["electricity"],
-        plotting=config["plotting"],
         retirement=config["electricity"].get("retirement", "technical"),
         mode="export",
     output:
@@ -98,17 +95,17 @@ rule plot_statistics:
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         regions_onshore=(
             config["custom_files"]["files_path"]
-            + "regions_onshore_s_{clusters}.geojson"
+            + "regions_onshore_s{simpl}_{clusters}.geojson"
             if config["custom_files"].get("activate", False)
-            else RESOURCES
-            + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson"
+            else GEOSPATIAL
+            + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson"
         ),
         regions_offshore=(
             config["custom_files"]["files_path"]
-            + "regions_offshore_s_{clusters}.geojson"
+            + "regions_offshore_s{simpl}_{clusters}.geojson"
             if config["custom_files"].get("activate", False)
-            else RESOURCES
-            + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson"
+            else GEOSPATIAL
+            + "{interconnect}/regions_offshore_s{simpl}_{clusters}.geojson"
         ),
         statistics_summary=rules.export_statistics.output.statistics_summary,
     params:

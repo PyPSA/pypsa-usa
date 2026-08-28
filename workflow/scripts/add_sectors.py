@@ -12,7 +12,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, get_snapshots, load_costs
+from _helpers import configure_logging, get_snapshots, load_costs, log_network_schema
 from add_electricity import sanitize_carriers
 from add_extra_components import add_co2_network, add_co2_storage, add_dac
 from build_electricity_sector import build_electricty
@@ -537,6 +537,7 @@ if __name__ == "__main__":
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
+    schema_entry = log_network_schema(n, stage="entry")
 
     eia_api = snakemake.params.api["eia"]
 
@@ -544,6 +545,7 @@ if __name__ == "__main__":
 
     # exit if only electricity network
     if all(s == "E" for s in sectors):
+        log_network_schema(n, stage="exit", baseline=schema_entry)
         n.export_to_netcdf(snakemake.output.network)
         sys.exit()
 
@@ -800,4 +802,5 @@ if __name__ == "__main__":
     # emission tracking for electricity imports
     add_elec_import_emission(n)
 
+    log_network_schema(n, stage="exit", baseline=schema_entry)
     n.export_to_netcdf(snakemake.output.network)

@@ -20,6 +20,7 @@ from _helpers import (
     configure_logging,
     export_network_for_gis_mapping,
     load_costs,
+    log_network_schema,
     update_p_nom_max,
     weighted_avg,
 )
@@ -96,8 +97,9 @@ def update_capital_costs(
     multiplier: pd.DataFrame,
 ):
     """Applies regional multipliers to capital cost data."""
-    # map generators to states
-    bus_state_mapper = n.buses.to_dict()["state"]
+    # map generators to states (multiplier CSVs are indexed by full state name;
+    # post-aggregation buses only carry reeds_state 2-letter codes)
+    bus_state_mapper = n.buses["reeds_state"].map(const.CODE_2_STATE).to_dict()
     gen = n.generators[n.generators.carrier == carrier].copy()
     gen["state"] = gen.bus.map(bus_state_mapper)
     gen = gen[gen["state"].isin(multiplier.index)]  # drops any regions that do not have cost multipliers
@@ -288,15 +290,18 @@ def match_plant_to_bus(n, plants):
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
 
-    # First pass: Assign each plant to the nearest bus in the same reeds zone
-    for zone_id in buses["reeds_zone"].unique():
-        buses_in_zone = buses[buses["reeds_zone"] == zone_id]
-        plants_in_zone = plants_matched[
-            (plants_matched["country"] == zone_id) & (plants_matched["bus_assignment"].isnull())
-        ]
+    # First pass: Assign each plant to the nearest bus in the same reeds zone.
+    # Only runs when plants carry a `country` column (sjoined from regions_onshore);
+    # absent that, fall through to the zone-agnostic second pass.
+    if "country" in plants_matched.columns:
+        for zone_id in buses["reeds_zone"].unique():
+            buses_in_zone = buses[buses["reeds_zone"] == zone_id]
+            plants_in_zone = plants_matched[
+                (plants_matched["country"] == zone_id) & (plants_matched["bus_assignment"].isnull())
+            ]
 
-        # Update plants_matched with the nearest bus within the same REEDS zone
-        plants_matched.update(match_nearest_bus(plants_in_zone, buses_in_zone))
+            # Update plants_matched with the nearest bus within the same REEDS zone
+            plants_matched.update(match_nearest_bus(plants_in_zone, buses_in_zone))
 
     # Second pass: Assign any remaining unmatched plants to the nearest bus regardless of REEDS zone
     unmatched_plants = plants_matched[plants_matched["bus_assignment"].isnull()]
@@ -408,8 +413,10 @@ def attach_renewable_capacities_to_atlite(
             continue
 
         generators_tech = n.generators[n.generators.carrier == tech].copy()
-        generators_tech["sub_assignment"] = generators_tech.bus.map(n.buses.sub_id)
-        plants_filt["sub_assignment"] = plants_filt.bus_assignment.map(n.buses.sub_id)
+        # After aggregate_to_substations, each bus is one substation, so sub_id is
+        # collapsed into the bus index; use bus identity directly for grouping.
+        generators_tech["sub_assignment"] = generators_tech.bus
+        plants_filt["sub_assignment"] = plants_filt.bus_assignment
 
         build_year_avg = plants_filt.groupby(["sub_assignment"])[plants_filt.columns].apply(
             lambda x: pd.Series(
@@ -549,12 +556,8 @@ def attach_wind_and_solar(
 
         capital_cost = costs.at[car, "annualized_capex_fom"]
 
-        bus2sub = (
-            pd.read_csv(input_profiles.bus2sub, dtype=str)
-            .drop("interconnect", axis=1)
-            .rename(columns={"Bus": "bus_id"})
-            .drop_duplicates(subset="sub_id")
-        )
+        # Profile bus index already matches the network bus index after
+        # cluster_simpl runs upstream — both are keyed by simpl-cluster bus.
 
         # For GODEEEP future scenarios, load horizon-specific profiles
         if godeeep_future:
@@ -575,44 +578,41 @@ def attach_wind_and_solar(
                     if ds.indexes["bus"].empty:
                         continue
 
-                    # Get bus list
+                    # Get bus list (profile bus = network bus, both at cluster level)
                     if bus_list is None:
-                        bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+                        bus_list = ds.bus.values.astype(str)
 
-                        # Get p_nom_max and weight
                         p_nom_max_bus = (
                             ds["p_nom_max"]
-                            .to_dataframe()
-                            .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                            .set_index("bus_id")
-                            .p_nom_max
+                            .to_pandas()
+                            .rename(
+                                index=lambda b: str(b),
+                            )
                         )
                         weight_bus = (
                             ds["weight"]
-                            .to_dataframe()
-                            .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                            .set_index("bus_id")
-                            .weight
+                            .to_pandas()
+                            .rename(
+                                index=lambda b: str(b),
+                            )
                         )
 
-                    # Get profile for this horizon
-                    horizon_profile = (
-                        ds["profile"]
-                        .transpose("time", "bus")
-                        .to_pandas()
-                        .T.merge(
-                            bus2sub[["bus_id", "sub_id"]],
-                            left_on="bus",
-                            right_on="sub_id",
-                        )
-                        .set_index("bus_id")
-                        .drop(columns="sub_id")
-                        .T
-                    )
+                    # Get profile for this horizon — index already at bus level
+                    horizon_profile = ds["profile"].transpose("time", "bus").to_pandas()
+                    horizon_profile.columns = horizon_profile.columns.astype(str)
 
                     # Update timestamps to match the horizon year
                     horizon_profile.index = horizon_profile.index.map(lambda x: x.replace(year=int(horizon)))
                     all_profiles.append(horizon_profile)
+
+            # No horizon contributed any buses (e.g. no eligible sites for
+            # this carrier in the modeled region) — skip the carrier, matching
+            # the single-profile branch's empty-bus `continue`.
+            if not all_profiles:
+                logger.warning(
+                    f"No {car} profile buses found in any planning horizon; skipping {car}.",
+                )
+                continue
 
             # Concatenate all horizon profiles
             bus_profiles = pd.concat(all_profiles)
@@ -627,34 +627,23 @@ def attach_wind_and_solar(
                 if ds.indexes["bus"].empty:
                     continue
 
-                bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+                bus_list = ds.bus.values.astype(str)
                 p_nom_max_bus = (
                     ds["p_nom_max"]
-                    .to_dataframe()
-                    .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                    .set_index("bus_id")
-                    .p_nom_max
+                    .to_pandas()
+                    .rename(
+                        index=lambda b: str(b),
+                    )
                 )
                 weight_bus = (
                     ds["weight"]
-                    .to_dataframe()
-                    .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                    .set_index("bus_id")
-                    .weight
-                )
-                bus_profiles = (
-                    ds["profile"]
-                    .transpose("time", "bus")
                     .to_pandas()
-                    .T.merge(
-                        bus2sub[["bus_id", "sub_id"]],
-                        left_on="bus",
-                        right_on="sub_id",
+                    .rename(
+                        index=lambda b: str(b),
                     )
-                    .set_index("bus_id")
-                    .drop(columns="sub_id")
-                    .T
                 )
+                bus_profiles = ds["profile"].transpose("time", "bus").to_pandas()
+                bus_profiles.columns = bus_profiles.columns.astype(str)
                 # Broadcast single profile across all horizons
                 bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
 
@@ -706,26 +695,11 @@ def attach_egs(
             getattr(input_profiles, "profile_egs"),
         ) as ds_profile,
     ):
-        bus2sub = (
-            pd.read_csv(input_profiles.bus2sub, dtype=str)
-            .drop("interconnect", axis=1)
-            .rename(columns={"Bus": "bus_id"})
-        )
-        # bus2sub stores sub_id as float strings (e.g. "39763.0") while the
-        # EGS profile stores sub_id as integer strings (e.g. "39763").
-        # Normalize to integer strings so the merge key matches.
-        bus2sub["sub_id"] = bus2sub["sub_id"].apply(lambda x: str(int(float(x))))
-
-        # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
-        df_specs = pd.merge(
-            ds_specs.to_dataframe().reset_index().dropna(),
-            bus2sub,
-            on="sub_id",
-            how="left",
-        )
+        # After aggregate_egs runs, the ``sub_id`` dimension contains the
+        # simpl-cluster bus IDs already, so it can be used as ``bus_id`` directly.
+        df_specs = ds_specs.to_dataframe().reset_index().dropna()
+        df_specs = df_specs.rename(columns={"sub_id": "bus_id"})
         df_specs["bus_id"] = df_specs["bus_id"].astype(str)
-
-        # bus_id must be in index for pypsa to read it
         df_specs = df_specs.set_index("bus_id")
 
         # columns must be renamed to refer to the right quantities for pypsa to read it correctly
@@ -781,13 +755,9 @@ def attach_egs(
             p_nom_max_bus = df_q["p_nom_max"]
             efficiency = df_q["efficiency"]  # for now.
 
-            # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
-            df_q_profile = pd.merge(
-                ds_profile.sel(Quality=q).to_dataframe().dropna().reset_index(),
-                bus2sub,
-                on="sub_id",
-                how="left",
-            )
+            df_q_profile = ds_profile.sel(Quality=q).to_dataframe().dropna().reset_index()
+            df_q_profile = df_q_profile.rename(columns={"sub_id": "bus_id"})
+            df_q_profile["bus_id"] = df_q_profile["bus_id"].astype(str)
             bus_profiles = pd.pivot_table(
                 df_q_profile,
                 columns="bus_id",
@@ -1008,10 +978,32 @@ def attach_breakthrough_renewable_plants(
 ):
     add_missing_carriers(n, renewable_carriers)
 
-    plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query(
-        "bus_id in @n.buses.index",
-    )
+    plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0)
     plants = plants.replace(["wind_offshore"], ["offwind"])
+
+    # The network at this stage is substation-level (post aggregate_to_substations
+    # and cluster_simpl), while the breakthrough base-grid files reference RAW
+    # base-network bus_ids. Remap every plant through the busmap chain
+    # (raw bus_id -> sub_id -> cluster bus) before matching against n.buses,
+    # patterned after aggregate_egs. Raw ids belonging to other interconnects are
+    # absent from bus2sub and drop out naturally, which also removes accidental
+    # attachments where a foreign raw id collides with a local substation id.
+    # All ids are compared as plain integer-strings ("35827", never "35827.0").
+    bus2sub = pd.read_csv(snakemake.input.bus2sub, dtype=str)
+    raw_to_sub = bus2sub.assign(
+        sub_id=bus2sub["sub_id"].str.replace(r"\.0$", "", regex=True),
+    ).set_index("Bus")["sub_id"]
+    busmap_s = pd.read_csv(snakemake.input.busmap_s, dtype=str)
+    sub_to_cluster = busmap_s.assign(
+        sub_id=busmap_s["sub_id"].str.replace(r"\.0$", "", regex=True),
+        cluster_bus=busmap_s["cluster_bus"].str.replace(r"\.0$", "", regex=True),
+    ).set_index("sub_id")["cluster_bus"]
+    n_plants_raw = len(plants)
+    plants["bus_id"] = plants["bus_id"].map(raw_to_sub).map(sub_to_cluster)
+    plants = plants.dropna(subset=["bus_id"]).query("bus_id in @n.buses.index")
+    logger.info(
+        f"Remapped breakthrough plants through bus2sub/busmap_s: kept {len(plants)} of {n_plants_raw} plants on this network.",
+    )
 
     for tech in renewable_carriers:
         assert tech == "hydro"
@@ -1109,6 +1101,7 @@ def main(snakemake):
     interconnection = snakemake.wildcards["interconnect"]
 
     n = pypsa.Network(snakemake.input.base_network)
+    schema_entry = log_network_schema(n, stage="entry")
 
     regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
     regions_offshore = gpd.read_file(snakemake.input.regions_offshore)
@@ -1117,7 +1110,11 @@ def main(snakemake):
     reeds_memberships = pd.read_csv(snakemake.input.reeds_memberships)
 
     costs = load_costs(snakemake.input.tech_costs, params.costs)
-    update_transmission_costs(n, costs, params.length_factor)
+    # In the simplify-early DAG this network comes from aggregate_to_substations,
+    # whose assign_line_lengths already folded lines.length_factor into `length`.
+    # Passing the factor again here would compound it (25% CAPEX inflation on
+    # every line) — the pre-refactor pipeline applied it exactly once.
+    update_transmission_costs(n, costs, length_factor=1.0)
 
     renewable_carriers = set(params.renewable_carriers)
     extendable_carriers = params.extendable_carriers
@@ -1295,6 +1292,7 @@ def main(snakemake):
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
 
+    log_network_schema(n, stage="exit", baseline=schema_entry)
     # n.export_to_netcdf(snakemake.output[0])
     pickle.dump(n, open(snakemake.output[0], "wb"))
 

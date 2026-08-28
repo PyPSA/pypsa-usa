@@ -84,6 +84,11 @@ dev = [
     "pytest",
     "sphinxcontrib-bibtex>=2.6.5",
 ]
+test = [
+    "pytest>=8.0",
+    "pyyaml>=6.0",
+    "snakemake==7.32.4",
+]
 
 [tool.setuptools.package-dir]
 myproj = "workflow/scripts"
@@ -150,6 +155,10 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.pytest.ini_options]
-testpaths = [
-    "workflow/scripts/test"
+testpaths = ["tests", "workflow/scripts/test"]
+markers = [
+    "fast: tier A — static checks, no data deps, target <30s",
+    "integration: tier B — runs snakemake build, target <5min (needs data/, cutouts/, repo_data/)",
+    "equivalence: tier C — compares candidate vs anchor builds (run tests.equivalence.run first)",
 ]
+addopts = "--strict-markers -ra"

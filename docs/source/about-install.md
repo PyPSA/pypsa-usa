@@ -29,7 +29,11 @@ bash init_pypsa_usa.sh
 
 ## Step 3: Set-up Environment (mamba or UV)
 
-PyPSA-USA can be managed though either [`UV`](https://github.com/astral-sh/uv) or [`mamba`](https://github.com/mamba-org/mamba). Users only need to install one, not both!
+PyPSA-USA can be managed through either [`UV`](https://github.com/astral-sh/uv) or [`mamba`](https://github.com/mamba-org/mamba). Users only need to install one, not both!
+
+PyPSA-USA requires **Python 3.11** (`>=3.11, <3.12`). Core dependencies are pinned
+(`pypsa==0.30.2`, `atlite==0.3.0`, `linopy==0.3.14`); newer PyPSA releases (1.x) are not yet
+supported, so please install from the lock files below rather than upgrading packages manually.
 
 ```{seealso}
 If you are planning to develop `PyPSA-USA`, please see our [contribution guidelines](./contributing.md#code-contributions) for installing additional dependencies.
@@ -37,17 +41,24 @@ If you are planning to develop `PyPSA-USA`, please see our [contribution guideli
 
 ### Step 3a: `uv` installation
 
-[`UV`](https://docs.astral.sh/uv/) is a new python package managment tool from [`Astral`](https://astral.sh/), the creators of [`ruff`](https://github.com/astral-sh/ruff). It replaces `mamba`, `conda`, and `pip` commands for one package and virtual environment managment tool. Instructions for installing `UV` can be found [here](https://docs.astral.sh/uv/getting-started/installation/).
+[`UV`](https://docs.astral.sh/uv/) is a new python package management tool from [`Astral`](https://astral.sh/), the creators of [`ruff`](https://github.com/astral-sh/ruff). It replaces `mamba`, `conda`, and `pip` commands for one package and virtual environment management tool. Instructions for installing `UV` can be found [here](https://docs.astral.sh/uv/getting-started/installation/).
 
-Once `UV` is installed, you can activate the environemnt with:
+Once `UV` is installed, create the Python 3.11 environment, activate it, and install the
+pinned dependencies with:
 
 ```console
-uv venv
+uv venv --python 3.11
 source .venv/bin/activate
+uv sync
 ```
 
+If Python 3.11 is not available on your system, `UV` can install it for you with
+`uv python install 3.11`. Prefixing commands with `uv run` (as shown on the
+[usage page](https://pypsa-usa.readthedocs.io/en/latest/about-usage.html)) also keeps the
+environment in sync automatically.
+
 ```{warning}
-If you are migrating from `mamba`/`conda`, you may need to install system level dependencies that conda has previously handeled. These include, `HDF5` and `GDAL>=3.1` libraries.
+If you are migrating from `mamba`/`conda`, you may need to install system level dependencies that conda has previously handled. These include the `HDF5` and `GDAL>=3.1` libraries.
 ```
 
 ### Step 3b: `mamba` Installation
@@ -77,6 +88,16 @@ and the non-free, commercial software (for some of which free academic licenses 
 
 - [Gurobi](https://www.gurobi.com/documentation/quickstart.html)
 - [CPLEX](https://www.ibm.com/products/ilog-cplex-optimization-studio)
+
+```{note}
+`config/config.default.yaml` is set up for Gurobi (`solving: solver: name: gurobi`), and the
+example commands on the [usage page](https://pypsa-usa.readthedocs.io/en/latest/about-usage.html)
+pass `--scheduler-ilp-solver GUROBI_CMD`. If you do not have a Gurobi license, set
+`solving: solver: name: highs` in your configuration — the HiGHS python package (`highspy`)
+is already installed with the environment — and simply drop the
+`--scheduler-ilp-solver GUROBI_CMD` flag from your `snakemake` commands (it only configures
+Snakemake's internal job scheduler, not the optimization solver).
+```
 
 ## Step 5: Get an EIA API Key
 

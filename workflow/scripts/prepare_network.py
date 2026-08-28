@@ -20,6 +20,7 @@ from _helpers import (
     configure_logging,
     is_transport_model,
     load_costs,
+    log_network_schema,
     set_scenario_config,
     update_config_from_wildcards,
 )
@@ -289,6 +290,7 @@ if __name__ == "__main__":
     transport_model = is_transport_model(params.transmission_network)
 
     n = pypsa.Network(snakemake.input[0])
+    schema_entry = log_network_schema(n, stage="entry")
     num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / HOURS_PER_YEAR
     costs = load_costs(snakemake.input.tech_costs, params.costs)
     # Set Investment Period Year Weightings
@@ -343,4 +345,5 @@ if __name__ == "__main__":
     )
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    log_network_schema(n, stage="exit", baseline=schema_entry)
     n.export_to_netcdf(snakemake.output[0])

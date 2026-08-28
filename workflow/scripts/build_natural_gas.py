@@ -1392,7 +1392,9 @@ def build_natural_gas(
 
 
 if __name__ == "__main__":
-    n = pypsa.Network("../resources/Washington/western/elec_s10_c4m_ec_lv1.0_3h.nc")
+    n = pypsa.Network(
+        "../resources/Washington/networks/western/elec_s10_c4m_ec_lv1.0_3h.nc",
+    )
     year = 2018
     with open("./../config/config.api.yaml") as file:
         yaml_data = yaml.safe_load(file)

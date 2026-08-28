@@ -60,7 +60,15 @@ In addition to filtering by `reeds_zone` and `reeds_state`, you can filter by `r
 ```
 
 ## Configuring Resource Resolution
-PyPSA-USA allows you to independently configure the resolution of resource zones from the transmission network. You can control this using the simpl and clusters parameters in the configuration file.
+PyPSA-USA allows you to configure the resolution at which resources are built independently
+from the resolution of the final transmission network, using the `simpl` and `clusters`
+wildcards in the configuration file.
+
+- `{simpl}` sets the number of zones the network is clustered to early in the workflow (rule
+  `cluster_simpl`). Demand, renewable profiles, and generators are all built at this
+  resolution.
+- `{clusters}` sets the final transmission resolution (rule `cluster_network`), which
+  aggregates the `{simpl}`-resolution network down to the zones the optimization runs on.
 
 For example, if you want a transmission network with 10 nodes and a resource model with 100 nodes, you would configure it as follows:
 
@@ -70,7 +78,7 @@ scenario:
    simpl: [100]
 ```
 
-This setup, using an `m` after the `clusters` wildcard, results in a model with 10 transmission nodes and 100 distinct renewable resource zones, allowing for more granular modeling of renewable resource distribution while keeping the transmission network simplified. If you use a `c` after the `clusters` wildcard, all conventional resources from the `simpl` step will not be clustered. If you input an `a` after the `clusters` wildcard, all resources will not be clustered beyond the `simpl` level.
+This setup, using an `m` after the `clusters` wildcard, results in a model with 10 transmission nodes and 100 distinct renewable resource zones, allowing for more granular modeling of renewable resource distribution while keeping the transmission network simplified: only conventional generators are aggregated to the 10 transmission zones, while renewable resources remain at the 100 `simpl` zones. If you use a `c` after the `clusters` wildcard, the reverse applies — conventional resources from the `simpl` step will not be clustered, while all other resources are. If you input an `a` after the `clusters` wildcard, no resources will be clustered beyond the `simpl` level.
 
 ## Configuring Transmission Resolution
 
@@ -80,11 +88,11 @@ You can specify the transmission network you want to use by setting the `model_t
 - 'reeds': The ReEDS NARIS networks.
 - 'tamu': The synthetic BE-TAMU nodal network.
 
-When selecting between the three ReEDS NARIS networks, you will need to also specify the `model_topology: topological_boundaries:`. Currently you can set either `county` or `reeds_zone`. To use the FERC 1000 regions, you will need to use the custom network topologies described in the example below.
+When selecting between the ReEDS NARIS networks, you will need to also specify the `model_topology: topological_boundaries:`. Currently you can set `county`, `reeds_zone`, or `state` (note that `state` does not support `model_topology: include:` regional filtering). To use the FERC 1000 regions, you will need to use the custom network topologies described in the example below.
 
 ### Transmission Network Resolution
 
-IF you are using the TAMU/BE network, you can flexibly set an arbitrary number of clusters between the min and max number of nodes. If using a ReEDS NARIS network, you need to specify the minimum number of clusters (nodes) for your modeled interconnection. The number of nodes for each zone is **detailed in the table below**.
+If you are using the TAMU/BE network, you can flexibly set an arbitrary number of clusters between the min and max number of nodes. If using a ReEDS NARIS network, you need to specify the minimum number of clusters (nodes) for your modeled interconnection. The number of nodes for each zone is **detailed in the table below**.
 
 If you're working with custom configurations, PyPSA-USA will notify you during the cluster_network stage, indicating the correct number of nodes to set in the clusters configuration.
 
