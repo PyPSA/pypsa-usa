@@ -152,9 +152,9 @@ def add_technology_capacity_target_constraints(n, config):
         if lhs_g is None and lhs_s is None and lhs_l is None:
             continue
         else:
-            gen = lhs_g.sum() if lhs_g else 0
-            lnk = lhs_l.sum() if lhs_l else 0
-            sto = lhs_s.sum() if lhs_s else 0
+            gen = lhs_g.sum() if lhs_g is not None else 0
+            lnk = lhs_l.sum() if lhs_l is not None else 0
+            sto = lhs_s.sum() if lhs_s is not None else 0
 
         lhs = gen + lnk + sto
 

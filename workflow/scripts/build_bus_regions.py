@@ -12,6 +12,8 @@ from scipy.spatial import Voronoi
 from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
 
+logger = logging.getLogger(__name__)
+
 
 def voronoi_partition_pts(points, outline):
     """
@@ -108,8 +110,6 @@ def main(snakemake):
     logger.info("Building Onshore Regions")
     onshore_regions = []
     for region in bus2sub_onshore["county"].unique():
-        if region == "p06069":
-            pass
         region_shape = agg_region_shapes.loc[f"{region}"]  # current shape
         region_subs = bus2sub_onshore["county"][
             bus2sub_onshore["county"] == region
@@ -117,9 +117,6 @@ def main(snakemake):
         region_locs = all_locs.loc[region_subs.index]  # locations of substations in the current county
         if region_locs.empty:
             continue  # skip empty counties which are not in the bus dataframe. ex. portions of eastern texas counties when using the WECC interconnect
-
-        if region == "MISO-0001":
-            region_shape = gpd.GeoDataFrame(geometry=region_shape).dissolve().iloc[0].geometry
 
         onshore_regions.append(
             gpd.GeoDataFrame(
@@ -255,7 +252,6 @@ def main(snakemake):
 
 
 if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 

@@ -9,7 +9,6 @@ import logging
 
 import pandas as pd
 import pypsa
-from _helpers import configure_logging
 from pypsa.statistics import StatisticsAccessor
 
 logger = logging.getLogger(__name__)
@@ -58,43 +57,6 @@ def get_primary_energy_use(n: pypsa.Network) -> pd.DataFrame:
         .groupby(["bus", "carrier"])
         .sum()
     )
-
-
-def get_energy_total(n: pypsa.Network):
-    """Gets energy production totals."""
-
-    def _get_energy_one_port(n: pypsa.Network, c: str) -> pd.DataFrame:
-        return (
-            c.dynamic.p.multiply(n.snapshot_weightings.generators, axis=0)
-            .sum()
-            .multiply(c.static.sign)
-            .groupby(c.static.carrier)
-            .sum()
-        )
-
-    def _get_energy_multi_port(n: pypsa.Network, c: str) -> pd.DataFrame:
-        c_energies = pd.Series(0.0, c.static.carrier.unique())
-        for port in [col[3:] for col in c.static.columns if col[:3] == "bus"]:
-            totals = c.dynamic["p" + port].multiply(n.snapshot_weightings.generators, axis=0).sum()
-            # remove values where bus is missing (bug in nomopyomo)
-            no_bus = c.static.index[c.static["bus" + port] == ""]
-            totals.loc[no_bus] = float(
-                n.components[c.name].defaults.loc["p" + port, "default"],
-            )
-            c_energies -= totals.groupby(c.static.carrier).sum()
-        return c_energies
-
-    energy = []
-    for c in _iter_components(n, n.one_port_components | n.branch_components):
-        if c.name in ("Generator", "StorageUnit", "Store"):
-            e = _get_energy_one_port(n, c)
-        elif c.name in ("Link"):
-            e = _get_energy_multi_port(n, c)
-        else:
-            continue
-        energy.append(e)
-
-    return pd.concat(energy, axis=1)
 
 
 def get_energy_timeseries(n: pypsa.Network) -> pd.DataFrame:
@@ -156,119 +118,9 @@ def get_demand_timeseries(n: pypsa.Network) -> pd.DataFrame:
     return pd.DataFrame(n.loads_t.p.sum(axis=1)).rename(columns={0: "Demand"})
 
 
-def get_demand_base(n: pypsa.Network) -> pd.DataFrame:
-    """
-    Gets Nodal Sum of Demand.
-
-    This groups all demand per node togheter.
-    """
-    df = pd.DataFrame(n.loads_t.p).rename(columns=n.loads.bus).sum(axis=0).groupby(level=0).sum()
-    assert len(df) == len(df.index.unique())
-    return df
-
-
-###
-# ENERGY CAPACITY
-###
-
-
-def get_capacity_base(n: pypsa.Network) -> pd.DataFrame:
-    """
-    Gets starting capacities.
-
-    NOTE: Link capacities are grouped by both bus0 and bus1!!
-    It is up to the user to filter this by bus on the returned dataframe
-    """
-    totals = []
-    for c in _iter_components(n, n.one_port_components | n.branch_components):
-        if c.name in ("Generator", "StorageUnit"):
-            totals.append((c.static.p_nom).groupby(by=[c.static.bus, c.static.carrier]).sum())
-        elif c.name == "Link":
-            (
-                totals.append(
-                    (c.static.p_nom)
-                    .groupby(by=[c.static.bus0, c.static.carrier])
-                    .sum()
-                    .rename_axis(index={"bus0": "bus"}),
-                ),
-            )
-            totals.append(
-                (c.static.p_nom).groupby(by=[c.static.bus1, c.static.carrier]).sum().rename_axis(index={"bus1": "bus"}),
-            )
-    return pd.concat(totals)
-
-
-def get_capacity_brownfield(
-    n: pypsa.Network,
-    retirement_method="economic",
-) -> pd.DataFrame:
-    """
-    Gets optimal brownfield pnom capacity.
-
-    NOTE: Link capacities are grouped by both bus0 and bus1!!
-    It is up to the user to filter this by bus on the returned dataframe
-    """
-
-    def _technical_retirement(c) -> pd.DataFrame:
-        if c.name == "Link":
-            return pd.concat(
-                [
-                    (c.static.p_nom_opt)
-                    .groupby(by=[c.static.bus0, c.static.carrier])
-                    .sum()
-                    .rename_axis(index={"bus0": "bus"}),
-                    (c.static.p_nom_opt)
-                    .groupby(by=[c.static.bus1, c.static.carrier])
-                    .sum()
-                    .rename_axis(index={"bus1": "bus"}),
-                ],
-            )
-        else:
-            return (c.static.p_nom_opt).groupby(by=[c.static.bus, c.static.carrier]).sum()
-
-    def _economic_retirement(c: str) -> pd.DataFrame:
-        if c.name == "Link":
-            return pd.concat(
-                [
-                    (c.static.p_nom_opt)
-                    .groupby(by=[c.static.bus0, c.static.carrier])
-                    .sum()
-                    .rename_axis(index={"bus0": "bus"}),
-                    (c.static.p_nom_opt)
-                    .groupby(by=[c.static.bus1, c.static.carrier])
-                    .sum()
-                    .rename_axis(index={"bus1": "bus"}),
-                ],
-            )
-        else:
-            return (c.static.p_nom_opt).groupby(by=[c.static.bus, c.static.carrier]).sum()
-
-    totals = []
-    if retirement_method == "technical":
-        for c in _iter_components(n, n.one_port_components | n.branch_components):
-            if c.name in ("Generator", "StorageUnit", "Link"):
-                totals.append(_technical_retirement(c))
-        return pd.concat(totals)
-    elif retirement_method == "economic":
-        for c in _iter_components(n, n.one_port_components | n.branch_components):
-            if c.name in ("Generator", "StorageUnit", "Link"):
-                totals.append(_economic_retirement(c))
-        return pd.concat(totals)
-    else:
-        logger.error(
-            f"Retirement method must be one of 'technical' or 'economic'. Recieved {retirement_method}.",
-        )
-        raise NotImplementedError
-
-
 ###
 # COSTS
 ###
-
-
-def get_capital_costs(n: pypsa.Network) -> pd.DataFrame:
-    """Returns statistics capex - installed_capex."""
-    return n.statistics.capex() - n.statistics.installed_capex()
 
 
 def get_generator_marginal_costs(
@@ -368,22 +220,3 @@ def get_tech_emissions_timeseries(n: pypsa.Network) -> pd.DataFrame:
         .sum()
         .T
     )
-
-
-if __name__ == "__main__":
-    if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
-        snakemake = mock_snakemake(
-            "plot_figures",
-            interconnect="texas",
-            clusters=40,
-            ll="v1.25",
-            opts="Co2L1.25",
-            sector="E",
-        )
-    configure_logging(snakemake)
-
-    n = pypsa.Network(snakemake.input.network)
-    # get_energy_total(n)
-    # get_energy_timeseries(n)

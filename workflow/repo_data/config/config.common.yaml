@@ -28,16 +28,29 @@ pudl_path: s3://pudl.catalyst.coop/v2025.5.0   # versioned S3 prefix to PUDL par
 
 
 # ====================================================================
+# GODEEEP renewable scenario selection
+# ====================================================================
+# Consumed together with `renewable.dataset` below. `add_electricity.py:646`
+# and `build_electricity.smk:166` index `renewable_scenarios[0]` directly
+# whenever the dataset is godeeep, so both keys must be defined here.
+# docs : RENEWABLE_SCENARIOS
+renewable_weather_years: [2019]
+renewable_scenarios: ["rcp85cooler"]   # historical | rcp45hotter | rcp45cooler | rcp85hotter | rcp85cooler
+
+
+# ====================================================================
 # RENEWABLE — per-technology resource and land-availability settings
 # ====================================================================
 # These knobs feed `build_renewable_profiles`. The atlite resource:
 # method, capacity_per_sqkm, and the corine/natura/cec/boem land
 # screens together define each cell's potential and per-hour CF.
 # docs : RENEWABLE
-renewable_weather_years: [2019]            # always defined here; main configs may override
-
 renewable:
-  dataset: godeeep                         # godeeep | atlite — always defined here; main configs may override
+  # Resource-quality source for wind/solar capacity factors. Required: the
+  # rules dereference it directly (retrieve.smk:231 gates rule retrieve_cutout
+  # on `config["renewable"]["dataset"]`), so every config that sets
+  # `enable.build_cutout: false` needs it defined here.
+  dataset: godeeep                         # atlite | godeeep
 
   # ---------- Enhanced Geothermal Systems ----------
   # docs : EGS
@@ -51,7 +64,7 @@ renewable:
   onwind:
     cutout: era5                           # atlite cutout name (must match an entry under atlite.cutouts below)
     resource:
-      method: wind
+      method:  wind
       turbine: Vestas_V112_3MW             # atlite turbine config (see atlite.resource.windturbines)
       add_cutout_windspeed: true           # store raw windspeeds in profile output (used by GODEEEP scaling)
     capacity_per_sqkm: 3                   # MW/km^2 of available land (conservative; ScholzPhD Tab 4.3.1 cites 10)
@@ -73,7 +86,7 @@ renewable:
   offwind:
     cutout: era5
     resource:
-      method: wind
+      method:  wind
       turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
       # add_cutout_windspeed: true
     capacity_per_sqkm: 3                   # MW/km^2 (2021–2022 CAISO Transmission Plan)
@@ -94,7 +107,7 @@ renewable:
   offwind_floating:
     cutout: era5
     resource:
-      method: wind
+      method:  wind
       turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
       add_cutout_windspeed: true
     capacity_per_sqkm: 3                   # MW/km^2
@@ -230,7 +243,7 @@ offshore_network:
 # Per-scenario configs override; keeping the keys defined here ensures every
 # rule that reads ``config["co2"][...]`` resolves even when a config does not
 # opt in.
-# docs : CO2_COMMON
+# docs :
 co2:
   storage: false                         # [false, true]
   network:
@@ -249,11 +262,11 @@ co2:
 ucap:
   enable: false                          # true = apply FOR derate to conventional generators
   forced_outage_rates:                   # FOR per carrier, in PERCENT
-    coal: 11.061
-    oil: 11.061
-    hydro: 8.127
-    CCGT: 6.107
-    nuclear: 2.207
-    OCGT: 6.259
+    coal:    11.061
+    oil:     11.061
+    hydro:    8.127
+    CCGT:     6.107
+    nuclear:  2.207
+    OCGT:     6.259
 
 # docs : end

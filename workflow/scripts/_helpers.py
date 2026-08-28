@@ -12,7 +12,6 @@ import pandas as pd
 import pypsa
 import requests
 import yaml
-from constants import HOURS_PER_YEAR
 from snakemake.utils import update_config
 
 # pandas 3 infers `str` dtype for string data; pypsa (until 2.0) converts
@@ -137,20 +136,6 @@ def configure_logging(snakemake, skip_handlers=False):
     logging.basicConfig(**kwargs)
 
 
-def setup_custom_logger(name):
-    formatter = logging.Formatter(
-        fmt="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
-    )
-
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
-
-    logger = logging.getLogger(name)
-    # logger.setLevel(logging.DEBUG)
-    logger.addHandler(handler)
-    return logger
-
-
 def log_network_schema(
     n: "pypsa.Network",
     stage: str,
@@ -217,14 +202,6 @@ def log_network_schema(
     return snapshot
 
 
-def pdbcast(v, h):
-    return pd.DataFrame(
-        v.values.reshape((-1, 1)) * h.values,
-        index=v.index,
-        columns=h.index,
-    )
-
-
 def calculate_annuity(n, r):
     """
     Calculate the annuity factor for an asset with lifetime n years and.
@@ -284,39 +261,6 @@ def load_costs(tech_costs: str, costs_config: dict | None = None) -> pd.DataFram
     return combined.pivot(index="pypsa-name", columns="parameter", values="value").fillna(0)
 
 
-def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
-    import pypsa
-    from add_electricity import load_costs, update_transmission_costs
-
-    n = pypsa.Network(fn)
-
-    n.loads["carrier"] = n.loads.bus.map(n.buses.carrier) + " load"
-    n.stores["carrier"] = n.stores.bus.map(n.buses.carrier)
-
-    n.links["carrier"] = n.links.bus0.map(n.buses.carrier) + "-" + n.links.bus1.map(n.buses.carrier)
-    n.lines["carrier"] = "AC line"
-    n.transformers["carrier"] = "AC transformer"
-
-    n.lines["s_nom"] = n.lines["s_nom_min"]
-    n.links["p_nom"] = n.links["p_nom_min"]
-
-    if combine_hydro_ps:
-        n.storage_units.loc[
-            n.storage_units.carrier.isin({"PHS", "hydro"}),
-            "carrier",
-        ] = "hydro+PHS"
-
-    # if the carrier was not set on the heat storage units
-    # bus_carrier = n.storage_units.bus.map(n.buses.carrier)
-    # n.storage_units.loc[bus_carrier == "heat","carrier"] = "water tanks"
-
-    num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / HOURS_PER_YEAR
-    costs = load_costs(tech_costs, config["costs"], config["electricity"], num_years)
-    update_transmission_costs(n, costs)
-
-    return n
-
-
 def is_transport_model(transmission_network):
     match transmission_network:
         case "reeds":
@@ -338,92 +282,6 @@ def update_p_nom_max(n):
     n.generators.p_nom_max = n.generators[["p_nom_min", "p_nom_max"]].max(axis=1)
 
 
-def aggregate_p_nom(n):
-    return pd.concat(
-        [
-            n.generators.groupby("carrier").p_nom_opt.sum(),
-            n.storage_units.groupby("carrier").p_nom_opt.sum(),
-            n.links.groupby("carrier").p_nom_opt.sum(),
-            # pandas 3 removed groupby(axis=1); transpose-group-transpose is
-            # the shape-preserving equivalent of grouping the columns.
-            n.loads_t.p.T.groupby(n.loads.carrier).sum().T.mean(),
-        ],
-    )
-
-
-def aggregate_p(n):
-    return pd.concat(
-        [
-            n.generators_t.p.sum().groupby(n.generators.carrier).sum(),
-            n.storage_units_t.p.sum().groupby(n.storage_units.carrier).sum(),
-            n.stores_t.p.sum().groupby(n.stores.carrier).sum(),
-            -n.loads_t.p.sum().groupby(n.loads.carrier).sum(),
-        ],
-    )
-
-
-def aggregate_e_nom(n):
-    return pd.concat(
-        [
-            (n.storage_units["p_nom_opt"] * n.storage_units["max_hours"]).groupby(n.storage_units["carrier"]).sum(),
-            n.stores["e_nom_opt"].groupby(n.stores.carrier).sum(),
-        ],
-    )
-
-
-def aggregate_p_curtailed(n):
-    return pd.concat(
-        [
-            (
-                (n.generators_t.p_max_pu.sum().multiply(n.generators.p_nom_opt) - n.generators_t.p.sum())
-                .groupby(n.generators.carrier)
-                .sum()
-            ),
-            ((n.storage_units_t.inflow.sum() - n.storage_units_t.p.sum()).groupby(n.storage_units.carrier).sum()),
-        ],
-    )
-
-
-def aggregate_costs(n, flatten=False, opts=None, existing_only=False):
-    components = dict(
-        Link=("p_nom", "p0"),
-        Generator=("p_nom", "p"),
-        StorageUnit=("p_nom", "p"),
-        Store=("e_nom", "p"),
-        Line=("s_nom", None),
-        Transformer=("s_nom", None),
-    )
-
-    costs = {}
-    for c, (p_nom, p_attr) in zip(
-        (n.components[name] for name in components),
-        components.values(),
-    ):
-        if c.static.empty:
-            continue
-        if not existing_only:
-            p_nom += "_opt"
-        costs[(c.list_name, "capital")] = (c.static[p_nom] * c.static.capital_cost).groupby(c.static.carrier).sum()
-        if p_attr is not None:
-            p = c.dynamic[p_attr].sum()
-            if c.name == "StorageUnit":
-                p = p.loc[p > 0]
-            costs[(c.list_name, "marginal")] = (p * c.static.marginal_cost).groupby(c.static.carrier).sum()
-    costs = pd.concat(costs)
-
-    if flatten:
-        assert opts is not None
-        conv_techs = opts["conv_techs"]
-
-        costs = costs.reset_index(level=0, drop=True)
-        costs = costs["capital"].add(
-            costs["marginal"].rename({t: t + " marginal" for t in conv_techs}),
-            fill_value=0.0,
-        )
-
-    return costs
-
-
 def progress_retrieve(url, file):
     import urllib
 
@@ -435,23 +293,6 @@ def progress_retrieve(url, file):
         pbar.update(int(count * block_size * 100 / total_size))
 
     urllib.request.urlretrieve(url, file, reporthook=dlProgress)
-
-
-def get_aggregation_strategies(aggregation_strategies):
-    # default aggregation strategies that cannot be defined in .yaml format must be specified within
-    # the function, otherwise (when defaults are passed in the function's definition) they get lost
-    # when custom values are specified in the config.
-
-    import numpy as np
-    from pypsa.clustering.spatial import _make_consense
-
-    bus_strategies = dict(country=_make_consense("Bus", "country"))
-    bus_strategies.update(aggregation_strategies.get("buses", {}))
-
-    generator_strategies = {"build_year": lambda x: 0, "lifetime": lambda x: np.inf}
-    generator_strategies.update(aggregation_strategies.get("generators", {}))
-
-    return bus_strategies, generator_strategies
 
 
 def export_network_for_gis_mapping(n, output_path):

@@ -215,9 +215,6 @@ def plot_capacity_additions_bar(
     existing_gen, existing_su = _capacity_existing_at_start(n)
     existing_capacity = existing_gen.to_frame(name="Existing Capacity")
     storage_units = existing_su.to_frame(name="Existing Capacity")
-    existing_gen, existing_su = _capacity_existing_at_start(n)
-    existing_capacity = existing_gen.to_frame(name="Existing Capacity")
-    storage_units = existing_su.to_frame(name="Existing Capacity")
     existing_capacity = pd.concat([existing_capacity, storage_units])
     existing_capacity.index = existing_capacity.index.map(n.carriers.nice_name)
 
@@ -300,12 +297,6 @@ def plot_global_constraint_shadow_prices(
 
 
 def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
-    """Returns a DataFrame with capacity existing at start of first period (by region/carrier)."""
-    first_period = (
-        n.investment_periods[0]
-        if hasattr(n, "investment_periods") and n.investment_periods is not None and len(n.investment_periods)
-        else None
-    )
     """Returns a DataFrame with capacity existing at start of first period (by region/carrier)."""
     first_period = (
         n.investment_periods[0]
@@ -1135,8 +1126,6 @@ def plot_seasonal_generation(
     **wildcards,
 ) -> None:
     """Multi-panel generation analysis showing total monthly energy by technology."""
-    from plot_network_maps import get_color_palette
-
     # Get energy timeseries (power in GW)
     energy_mix = get_energy_timeseries(n).mul(1e-3)  # convert MW to GW
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
@@ -1381,9 +1370,6 @@ if __name__ == "__main__":
     retirement_method = snakemake.params.retirement
 
     sanitize_carriers(n, snakemake.config)
-
-    # mappers
-    generating_link_carrier_map = {"fuel cell": "H2", "battery discharger": "battery"}
 
     # carriers to plot
     carriers = (

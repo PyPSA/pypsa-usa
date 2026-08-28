@@ -11,8 +11,6 @@ from constants_sector import SecCarriers, SecNames
 
 logger = logging.getLogger(__name__)
 
-VALID_HEAT_SYSTEMS = ("urban", "rural", "total")
-
 
 def build_heat(
     n: pypsa.Network,
