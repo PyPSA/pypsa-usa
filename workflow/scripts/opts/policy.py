@@ -14,6 +14,7 @@ from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 logger = logging.getLogger(__name__)
 
+
 RPS_CARRIERS = [
     "onwind",
     "offwind",

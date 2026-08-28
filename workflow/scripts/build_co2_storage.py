@@ -7,7 +7,10 @@ from _helpers import configure_logging
 
 def build_co2_storage(regions_onshore_geojson, co2_storage_geojson, output_csv, logger):
     # get PyPSA-USA network nodes and CO2 storage information at a county level
-    logger.info("Calculate CO2 storage potentials and costs")
+
+    if logger is not None:
+        logger.info("Calculate CO2 storage potentials and costs")
+
     regions_onshore = geopandas.read_file(regions_onshore_geojson)
     co2_storage = geopandas.read_file(co2_storage_geojson)
 
