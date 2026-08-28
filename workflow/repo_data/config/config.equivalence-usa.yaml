@@ -1,4 +1,6 @@
-# PyPSA-USA equivalence-harness config — Tier C (see
+# PyPSA-USA equivalence-harness config — WHOLE-US variant (data stages only;
+# stop before solve_network). Identical to config.equivalence.yaml except the
+# footprint: interconnect usa, no reeds_state include filter. (see
 # docs/superpowers/specs/2026-08-07-pipeline-equivalence-and-perf-design.md).
 # One shared file drives BOTH the v1-epic candidate and the anchor
 # (upstream/develop e7f8bd70) baseline builds. The harness driver passes
@@ -18,7 +20,7 @@ run:
 foresight: 'perfect'
 
 scenario:
-  interconnect: [western]
+  interconnect: [usa]
   clusters: [4]            # reeds transport model: must equal CA's ReEDS zone count (p8-p11); plain 4 = all carriers aggregate to zones (user choice 2026-08-07)
   simpl: ['']            # prong 1 (pass-through); prong 2 targets use s20
   opts: [REM-3h]
@@ -31,8 +33,7 @@ model_topology:
   transmission_network: 'reeds'
   topological_boundaries: 'reeds_zone'
   interface_transmission_limits: false
-  include:
-    reeds_state: ['CA']
+  include: {}
   aggregate: {}
 
 enable:
@@ -72,9 +73,6 @@ electricity:
     Link: []
   demand:
     profile: efs
-    # pin the legacy Breakthrough Pd weight: the anchor branch has no
-    # census-population method, so equivalence requires the legacy path
-    bus_allocation: breakthrough
     scenario:
       efs_case: reference
       efs_speed: moderate

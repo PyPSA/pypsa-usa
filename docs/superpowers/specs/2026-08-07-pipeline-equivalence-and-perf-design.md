@@ -47,7 +47,7 @@ profiling-driven performance work.
 | D7 | Solve stage: objective within 0.1%, per-carrier capacities within 0.5%. |
 | D8 | Accepted deltas: markdown **deltas ledger** (human-signed) + machine-readable **waivers** consumed by the comparison. 1:1 correspondence enforced. |
 | D9 | Upstream sync: land test-stack PRs #20→#16→#17 first, then **merge** (not rebase) `upstream/develop` into `v1-epic`; create fork `develop` tracking upstream. |
-| D10 | **Two-prong protocol** (below): config-only determinism — no pinned fixtures, no anchor-side patches (revised per user 2026-08-07). |
+| D10 | **Two-prong protocol** (below): config-only determinism — no pinned fixtures, no anchor-side patches (revised per user 2026-08-07). *Amended 2026-08-23:* two narrow, documented anchor-patch categories now exist — BUILD-INFRA (cannot change numbers; the #764 constants source-cache fix) and ADOPTED-FIX (changes numbers by design, applied identically to both sides after user countersignature; first instance DL-11, footprint-scoped empty-county sweep). Both live in `tests/equivalence/build.py` and are marker-idempotent. |
 | D11 | Visual report ships the standard plot set (extensible). |
 | D12 | Performance: profile-first. No pre-committed hit-list beyond county fast-path wiring and the `custom_busmap` repair. |
 | D13 | Baseline builds are recomputed on demand (cheap at CA scale); no baseline artifacts or busmap fixtures in git. |

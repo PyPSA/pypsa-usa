@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 
 from .compare import load_network, load_waivers
-from .paths import CLUSTERS, prong_pairs
+from .paths import CLUSTERS, INTERCONNECT, UNTIL, prong_pairs
 
 REPO = Path(__file__).resolve().parents[2]
 ANCHOR_ROOT = REPO / ".worktrees" / "anchor-e7f8bd70" / "workflow"
@@ -41,6 +41,7 @@ RESULTS = CAND_ROOT / "results" / "equivalence"
 LEDGER_MD = REPO / "docs" / "superpowers" / "specs" / "2026-08-07-deltas-ledger.md"
 
 LABELS = {"candidate": "V1-epic", "anchor": "anchor"}
+_SUF = "" if INTERCONNECT == "western" else f"_{INTERCONNECT}"
 
 # Build-order stage spine (prong-1 stage keys from paths.prong_pairs).
 STAGE_ORDER = [
@@ -78,9 +79,9 @@ def load_regions(side: str, simpl: str, clusters: str | None = None):
 
     suffix = f"s{simpl}" + (f"_{clusters}" if clusters else "")
     if side == "candidate":
-        p = CAND_ROOT / f"resources/equivalence/geospatial/western/regions_onshore_{suffix}.geojson"
+        p = CAND_ROOT / f"resources/equivalence/geospatial/{INTERCONNECT}/regions_onshore_{suffix}.geojson"
     else:
-        p = ANCHOR_ROOT / f"resources/equivalence/western/Geospatial/regions_onshore_{suffix}.geojson"
+        p = ANCHOR_ROOT / f"resources/equivalence/{INTERCONNECT}/Geospatial/regions_onshore_{suffix}.geojson"
     gdf = gpd.read_file(p)
     gdf["name"] = gdf["name"].map(norm_label)
     return gdf.set_index("name")
@@ -121,11 +122,11 @@ def parse_ledger_rows() -> list[dict]:
 def build_ctx() -> dict:
     findings = {}
     for prong in (1, 2):
-        p = RESULTS / f"findings_{prong}.json"
+        p = RESULTS / f"findings_{prong}{_SUF}.json"
         findings[prong] = json.loads(p.read_text()) if p.exists() else {"findings": []}
     manifests = {}
     for side in ("candidate", "anchor"):
-        p = RESULTS / f"manifest_{side}.json"
+        p = RESULTS / f"manifest_{side}{_SUF}.json"
         manifests[side] = json.loads(p.read_text()) if p.exists() else {}
     cfg = CAND_ROOT / "config" / "config.equivalence.yaml"
     fingerprint = {
@@ -133,6 +134,9 @@ def build_ctx() -> dict:
         "anchor sha": _git_sha(ANCHOR_ROOT),
         "config sha256": hashlib.sha256(cfg.read_bytes()).hexdigest()[:12] if cfg.exists() else "n/a",
         "clusters": CLUSTERS,
+        "interconnect": INTERCONNECT,
+        "until": UNTIL,
+        "suffix": _SUF,
         "generated": time.strftime("%Y-%m-%d %H:%M"),
     }
     return {
@@ -149,6 +153,9 @@ def build_ctx() -> dict:
         "fingerprint": fingerprint,
         "stage_order": STAGE_ORDER,
         "clusters": CLUSTERS,
+        "interconnect": INTERCONNECT,
+        "until": UNTIL,
+        "suffix": _SUF,
         "prong_pairs": prong_pairs,
         "png": _png,
         "img": _img,
@@ -189,9 +196,9 @@ def build_report() -> Path:
     ]
     html = (
         "<!doctype html><html><head><meta charset='utf-8'>"
-        "<title>Equivalence report - V1-epic vs anchor</title>"
+        f"<title>Equivalence report ({INTERCONNECT}) - V1-epic vs anchor</title>"
         f"<style>{CSS}</style></head><body>" + "".join(parts) + "</body></html>"
     )
-    out = RESULTS / "equivalence_report.html"
+    out = RESULTS / f"equivalence_report{_SUF}.html"
     out.write_text(html)
     return out
