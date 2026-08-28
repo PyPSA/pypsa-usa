@@ -297,6 +297,9 @@ if __name__ == "__main__":
         )
         n = clustering.network
 
+        # Extend the original bus mapping through simplification clustering.
+        busmaps = busmaps.map(clustering.busmap)
+
         cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
     else:
         for which in ("regions_onshore", "regions_offshore"):  # pass through regions
@@ -305,4 +308,6 @@ if __name__ == "__main__":
 
     update_p_nom_max(n)
 
+    # Preserve original bus assignments for sector-demand aggregation.
+    busmaps.rename("bus").to_csv(snakemake.output.busmap)
     n.export_to_netcdf(snakemake.output[0])

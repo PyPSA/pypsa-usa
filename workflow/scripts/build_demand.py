@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
-from _helpers import configure_logging, get_multiindex_snapshots
+from _helpers import configure_logging, get_multiindex_snapshots, prepare_sector_demand
 from constants_sector import FIPS_2_STATE, NAICS, VMT_UNIT_CONVERSION, DemandFuels
 from eia import EnergyDemand, TransportationDemand
 
@@ -63,7 +63,7 @@ class Context:
 
     def _write(self, demand: pd.DataFrame, zone: str, **kwargs) -> pd.DataFrame:
         """Delegate writing to the strategy."""
-        return self._write_strategy.dissagregate_demand(demand, zone, **kwargs)
+        return self._write_strategy.prepare_profiles(demand, zone, **kwargs)
 
     def prepare_demand(self, **kwargs) -> pd.DataFrame:
         """Read in and dissagregate demand."""
@@ -255,9 +255,6 @@ class ReadFERC714(ReadStrategy):
 
     def _read_census_data(self) -> pd.DataFrame:
         """Reads in census data for population weighting using parquet."""
-        duckdb.connect(database=":memory:", read_only=False)
-        duckdb.query("INSTALL httpfs;")
-
         parquet_path = snakemake.params.pudl_path
 
         sql = f"""
@@ -699,7 +696,7 @@ class ReadCliu(ReadStrategy):
     - MECS is used to scale county level data
 
     Sources:
-    - https://data.nrel.gov/submissions/97
+    - https://data.nlr.gov/submissions/97
     - https://www.eia.gov/consumption/manufacturing/data/2014/#r3 (Table 3.2)
     - https://loadshape.epri.com/enduse
     - https://github.com/NREL/Industry-Energy-Tool/
@@ -1590,7 +1587,7 @@ class WriteStrategy(ABC):
         """
         pass
 
-    def dissagregate_demand(
+    def prepare_profiles(
         self,
         df: pd.DataFrame,
         zone: str,
@@ -1600,53 +1597,77 @@ class WriteStrategy(ABC):
         sns: pd.DatetimeIndex | None = None,
     ) -> pd.DataFrame:
         """
-        Public load dissagregation method.
+        Prepare filtered zonal profiles and the original bus allocation table.
 
-        df: pd.DataFrame
-            Demand dataframe
-        zone: str
-            Zones of demand ('ba', 'state', 'reeds')
-        sector: Optional[str | List[str]] = None,
-            Sectors to group
-        subsector: Optional[str | List[str]] = None,
-            Subsectors to group
-        fuel: Optional[str | List[str]] = None,
-            End use fules to group
-        sns: Optional[pd.DatetimeIndex] = None
-            Filter data over this period. If not provided, use network snapshots
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Source demand with source-zone columns and a MultiIndex containing
+            snapshot, sector, subsector, and fuel levels.
+        zone : {"ba", "state", "reeds"}
+            Spatial classification associating original network buses with
+            source zones. The selected allocation strategy must support it.
+        sector : str, list[str], or None, default None
+            Sector labels to retain. If None, no sector filter is applied.
+        subsector : str, list[str], or None, default None
+            Subsector labels to retain. If None, no subsector filter is applied.
+        fuel : str, list[str], or None, default None
+            End-use labels to retain. If None, no fuel filter is applied.
+        sns : pd.DatetimeIndex or None, default None
+            Source timestamps to retain. If None, no explicit timestamp filter
+            is applied.
 
-        Data is returned in the format of:
+        Returns
+        -------
+        pd.DataFrame
+            Selected demand summed by timestamp, with source-zone columns:
 
-        |                     | BusName_1 | BusName_2 | ... | BusName_n |
-        |---------------------|-----------|-----------|-----|-----------|
-        | 2019-01-01 00:00:00 |    ###    |    ###    |     |    ###    |
-        | 2019-01-01 01:00:00 |    ###    |    ###    |     |    ###    |
-        | 2019-01-01 02:00:00 |    ###    |    ###    |     |    ###    |
-        | ...                 |           |           |     |    ###    |
-        | 2019-12-31 23:00:00 |    ###    |    ###    |     |    ###    |
+            |                     | Zone 1 | Zone 2 | ... | Zone n |
+            |---------------------|--------|--------|-----|--------|
+            | 2019-01-01 00:00:00 |  ###   |  ###   |     |  ###   |
+            | 2019-01-01 01:00:00 |  ###   |  ###   |     |  ###   |
+            | ...                 |        |        |     |        |
+
+        Raises
+        ------
+        AssertionError
+            If the zone classification is invalid or the source demand fails
+            the existing input-structure checks.
+
+        Notes
+        -----
+        The method sets ``self.allocation`` to a DataFrame indexed by original
+        buses, with ``zone`` and ``laf`` columns. Allocation factors are
+        calculated using the existing population or industrial strategy.
+
+        If filtering produces no demand, the existing zero-demand replacement
+        based on network snapshots is used.
+
+        Returned values have not been multiplied by nodal allocation factors.
+        Investment-year projection, unit conversion, and final rounding are
+        handled by subsequent processing steps.
         """
-        # 'state' is states based on power regions
-        # 'full_state' is actual geographic boundaries
         assert zone in ("ba", "state", "reeds")
         self._check_datastructure(df)
 
-        # get zone area demand for specific sector and fuel
+        # Select and aggregate source demand without expanding it to buses.
         demand = self._filter_demand(df, sector, subsector, fuel, sns)
         demand = self._group_demand(demand)
         if demand.empty:
             demand = self._make_empty_demand(columns=df.columns)
 
-        # assign buses to dissagregation zone
+        # Preserve the allocation calculated on the original network.
         dissagregation_zones = self._get_load_dissagregation_zones(zone)
-
-        # get implementation specific dissgregation factors
-        laf = self._get_load_allocation_factor(df=dissagregation_zones, zone=zone)
-
-        # disaggregate load to buses
+        laf = self._get_load_allocation_factor(
+            df=dissagregation_zones,
+            zone=zone,
+        )
         zone_data = dissagregation_zones.to_frame(name="zone").join(
             laf.to_frame(name="laf"),
         )
-        return self._disaggregate_demand_to_buses(demand, zone_data)
+
+        self.allocation = zone_data
+        return demand
 
     def _get_load_dissagregation_zones(self, zone: str) -> pd.Series:
         """Map each bus to the load dissagregation zone (states, ba, ...)."""
@@ -1814,7 +1835,7 @@ class WriteIndustrial(WriteStrategy):
     """
     Based on county level energy use from 2014.
 
-    https://data.nrel.gov/submissions/97
+    https://data.nlr.gov/submissions/97
     """
 
     def __init__(self, n: pypsa.Network, filepath: str) -> None:
@@ -1978,37 +1999,134 @@ class DemandFormatter:
         else:
             self.scaler = None
 
-    def format_demand(self, df: pd.DataFrame, sector: str, **kwargs) -> pd.DataFrame:
-        """Public method to format demand ready to be ingested into the model."""
+    def format_profiles(
+        self,
+        df: pd.DataFrame,
+        sector: str,
+        **kwargs,
+    ) -> tuple[pd.DataFrame, pd.Series]:
+        """
+        Align demand profiles to investment years and calculate growth factors.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Demand indexed by timestamps from the available source years.
+            Columns may identify source zones or original network buses.
+        sector : str
+            Category passed to the configured growth scaler. Transport demand
+            uses the corresponding vehicle or transport category.
+        **kwargs
+            Additional keyword arguments retained for call compatibility.
+            They are not used by this implementation.
+
+        Returns
+        -------
+        profiles : pd.DataFrame
+            Profiles reindexed to the configured investment years, with
+            unchanged source values and unchanged columns.
+        growth : pd.Series
+            Multiplicative growth factors indexed exactly like ``profiles``.
+            Profiles already supplied for an investment year receive 1.0.
+
+        Raises
+        ------
+        AssertionError
+            If the existing scaling check requires a DemandScaler but none
+            is available, no source year precedes or matches the first
+            investment year, or the assembled profile length differs from
+            the snapshot count.
+
+        Notes
+        -----
+        Each missing investment year uses the latest available source year
+        that does not exceed it. For example, a 2020 profile can provide a
+        missing 2030 profile, while an available 2040 profile can provide a
+        missing 2045 profile.
+
+        Growth factors are returned separately so sector demand can retain
+        the multiplication order of nodal allocation followed by demand
+        growth. This method performs neither unit conversion nor rounding.
+
+        If source years already match the investment periods, the supplied
+        profiles are returned directly with unit growth factors.
+        """
         if self.need_scaling(df):
             assert isinstance(self.scaler, DemandScaler)
 
         demand_periods = df.index.year.unique().to_list()
         if demand_periods == self.investment_periods:
             logger.info("No demand formatting required")
-            return df
+            return df, pd.Series(1.0, index=df.index, name="growth")
 
-        # need a starting reference year for scaling
         assert min(demand_periods) <= min(self.investment_periods)
-        demand_per_period = []
+
+        profiles_per_period = []
+        growth_per_period = []
+
         for investment_year in self.investment_periods:
-            formatted_demand = df[df.index.year == investment_year]
-            if not formatted_demand.empty:
-                demand_per_period.append(formatted_demand)
-            else:
-                nearest_year = max([x for x in demand_periods if x <= investment_year])
-                formatted_demand = df[df.index.year == nearest_year]
-                demand_per_period.append(
-                    self.scaler.scale(
-                        formatted_demand,
-                        nearest_year,
-                        investment_year,
-                        sector,
-                    ),
+            profile = df[df.index.year == investment_year]
+            factor = 1.0
+
+            if profile.empty:
+                nearest_year = max(x for x in demand_periods if x <= investment_year)
+                profile = self.scaler.reindex(
+                    df[df.index.year == nearest_year],
+                    investment_year,
                 )
-        demand = pd.concat(demand_per_period)
-        assert len(demand) == len(self.sns)
-        return demand
+                factor = self.scaler.get_growth(
+                    nearest_year,
+                    investment_year,
+                    sector,
+                )
+
+            profiles_per_period.append(profile)
+            growth_per_period.append(
+                pd.Series(factor, index=profile.index, name="growth"),
+            )
+
+        profiles = pd.concat(profiles_per_period)
+        growth = pd.concat(growth_per_period)
+
+        assert len(profiles) == len(self.sns)
+        return profiles, growth
+
+    def format_demand(
+        self,
+        df: pd.DataFrame,
+        sector: str,
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        Return demand projected onto the configured investment periods.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Demand indexed by source timestamps. Columns identify the spatial
+            units whose demand is being projected.
+        sector : str
+            Demand category used by the configured growth scaler.
+        **kwargs
+            Additional arguments forwarded to ``format_profiles``.
+
+        Returns
+        -------
+        pd.DataFrame
+            Investment-year demand after applying the corresponding growth
+            factors. Columns are unchanged and rows use a DatetimeIndex.
+
+        Notes
+        -----
+        Electricity demand calls this method after nodal disaggregation,
+        preserving the existing allocation-before-growth order.
+
+        Sector demand instead consumes the separate outputs of
+        ``format_profiles`` so nodal allocation and growth can be applied
+        together during aggregation onto the clustered network.
+        """
+        profiles, growth = self.format_profiles(df, sector, **kwargs)
+        return profiles.mul(growth, axis=0)
 
     def need_scaling(self, df: pd.DataFrame) -> bool:
         """Checks if any demand needs to be scaled."""
@@ -2022,9 +2140,7 @@ class DemandFormatter:
             assert self.api, "Must provide eia api key"
             return AeoEnergyScaler(self.api)
         elif self.scaling_method == "aeo_electricity":
-            assert self.filepath.startswith(
-                "s3://pudl.catalyst.coop/",
-            ), "Must provide pudl S3 URL (s3://pudl.catalyst.coop/...)"
+            assert self.filepath, "Must provide a local PUDL directory"
             return AeoElectricityScaler(self.filepath)
         elif self.scaling_method == "efs":
             assert self.filepath.endswith(".csv"), "Must provide EFS.csv data"
@@ -2126,9 +2242,6 @@ class AeoElectricityScaler(DemandScaler):
         | 2049 |  ###  |  ###  |
         | 2050 |  ###  |  ###  |
         """
-        duckdb.connect(database=":memory:", read_only=False)
-        duckdb.query("INSTALL httpfs;")
-
         query = f"""
         SELECT
             projection_year,
@@ -2610,8 +2723,14 @@ if __name__ == "__main__":
     # extract demand based on strategies
     # this is raw demand, not scaled or garunteed to align to network snapshots
 
-    if end_use == "power":  # only one demand for electricity only studies
-        demand = demand_converter.prepare_demand(sns=sns)  # pd.DataFrame
+    if end_use == "power":
+        demand = demand_converter.prepare_demand(sns=sns)
+
+        # Electricity demand is attached before network simplification.
+        demand = writer._disaggregate_demand_to_buses(
+            demand,
+            writer.allocation,
+        )
         demands = {"electricity": demand}
     else:
         fuels = _get_sector_fuels(end_use, vehicle)
@@ -2636,13 +2755,30 @@ if __name__ == "__main__":
     )
 
     formatted_demand = {}
-    if end_use == "transport":  # transport fuel is actually vehicle types
-        for fuel, demand in demands.items():
-            vmt_conversion = VMT_UNIT_CONVERSION.get(fuel, 1)  # for buses
-            formatted_demand[fuel] = demand_formatter.format_demand(demand, fuel).mul(vmt_conversion)
-    else:
-        for fuel, demand in demands.items():
-            formatted_demand[fuel] = demand_formatter.format_demand(demand, end_use)
+
+    for fuel, demand in demands.items():
+        if end_use == "power":
+            formatted_demand[fuel] = demand_formatter.format_demand(
+                demand,
+                end_use,
+            )
+            continue
+
+        # Transport growth projections are selected by transport category.
+        scaling_sector = fuel if end_use == "transport" else end_use
+
+        profiles, growth = demand_formatter.format_profiles(
+            demand,
+            scaling_sector,
+        )
+        unit_conversion = VMT_UNIT_CONVERSION.get(fuel, 1) if end_use == "transport" else 1
+
+        formatted_demand[fuel] = prepare_sector_demand(
+            profiles,
+            writer.allocation,
+            growth,
+            unit_conversion,
+        )
 
     # electricity sector study
     if end_use == "power":
@@ -2659,6 +2795,4 @@ if __name__ == "__main__":
                     out_f = snakemake.output[0]
                 else:
                     raise KeyError(e)
-            formatted_demand[fuel].round(4).to_pickle(
-                out_f,
-            )
+            pd.to_pickle(formatted_demand[fuel], out_f)

@@ -985,6 +985,8 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
 
+    input_buses = n.buses.index.copy()
+
     n.set_investment_periods(
         periods=snakemake.params.planning_horizons,
     )
@@ -1265,11 +1267,9 @@ if __name__ == "__main__":
 
     clustering.network.export_to_netcdf(snakemake.output.network)
 
-    for attr in (
-        "busmap",
-        "linemap",
-    ):  # also available: linemap_positive, linemap_negative
-        getattr(clustering, attr).to_csv(snakemake.output[attr])
+    # Retain explicit null destinations for buses removed during processing.
+    clustering.busmap.reindex(input_buses).to_csv(snakemake.output.busmap)
+    clustering.linemap.to_csv(snakemake.output.linemap)
 
     cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
     n.consistency_check()
