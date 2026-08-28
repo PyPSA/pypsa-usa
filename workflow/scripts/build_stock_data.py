@@ -808,7 +808,7 @@ def add_road_transport_brownfield(
             vehicles["p_nom"] = vehicles.p_nom.mul(percent).round(2)
             vehicles = vehicles.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 vehicles.index,
                 bus0=vehicles.bus0,
@@ -904,7 +904,7 @@ def add_road_transport_brownfield(
             vehicles["p_nom"] = vehicles.p_nom.mul(percent).round(2)
             vehicles = vehicles.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 vehicles.index,
                 bus0=vehicles.bus0,
@@ -1028,7 +1028,7 @@ def add_service_brownfield(
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 furnaces.index,
                 bus0=furnaces.bus0,
@@ -1092,7 +1092,7 @@ def add_service_brownfield(
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 furnaces.index,
                 bus0=furnaces.bus0,
@@ -1151,7 +1151,7 @@ def add_service_brownfield(
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 furnaces.index,
                 bus0=furnaces.bus0,
@@ -1216,7 +1216,7 @@ def add_service_brownfield(
             aircon["p_nom"] = aircon.p_nom.mul(percent).div(100).round(2)
             aircon = aircon.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 aircon.index,
                 bus0=aircon.bus0,
@@ -1294,7 +1294,7 @@ def add_service_brownfield(
             heater["p_nom"] = heater.p_nom.mul(percent).div(100).div(efficiency).round(2)
             heater = heater.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 heater.index,
                 suffix="-discharger",
@@ -1373,7 +1373,7 @@ def add_service_brownfield(
             heater["p_nom"] = heater.p_nom.mul(percent).div(100).round(2)
             heater = heater.set_index("name")
 
-            n.madd(
+            n.add(
                 "Store",
                 heater.index,
                 bus=heater.bus,
@@ -1500,7 +1500,7 @@ def add_industrial_brownfield(
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 furnaces.index,
                 bus0=furnaces.bus0,
@@ -1563,7 +1563,7 @@ def add_industrial_brownfield(
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 furnaces.index,
                 bus0=furnaces.bus0,

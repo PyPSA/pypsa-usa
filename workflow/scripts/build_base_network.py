@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 from _helpers import configure_logging, log_network_schema
+from build_bus_population import assign_load_weight, load_county_population
 from build_shapes import load_na_shapes
 from constants import REC_TRADING_ZONE_MAPPER
 from shapely.geometry import Polygon
@@ -46,10 +47,11 @@ def add_buses_from_file(
 
     logger.info(f"Adding {len(buses)} buses to the network.")
 
-    n.madd(
+    n.add(
         "Bus",
         buses.index,
-        Pd=buses.Pd,  # used to decompose zone demand to bus demand
+        Pd=buses.Pd,  # BE nominal demand, kept for reference
+        load_weight=buses.load_weight,  # used to decompose zone demand to bus demand
         v_nom=buses.baseKV,
         balancing_area=buses.balancing_area,
         state=buses.state,
@@ -83,7 +85,7 @@ def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
         logger.info(f"Adding {len(tech_branches)} branches as {tech}s to the network.")
 
         # S_base = 100 MVA
-        n.madd(
+        n.add(
             tech,
             tech_branches.index,
             bus0=tech_branches.from_bus_id,
@@ -121,7 +123,7 @@ def add_dclines_from_file(n: pypsa.Network, fn_dclines: str) -> pypsa.Network:
 
     logger.info(f"Adding {len(dclines)} dc-lines as Links to the network.")
 
-    n.madd(
+    n.add(
         "Link",
         dclines.index,
         suffix="_fwd",
@@ -132,7 +134,7 @@ def add_dclines_from_file(n: pypsa.Network, fn_dclines: str) -> pypsa.Network:
         underwater_fraction=0.0,  # DC line in bay is underwater, but does network have this line?
     )
 
-    n.madd(
+    n.add(
         "Link",
         dclines.index,
         suffix="_rev",
@@ -286,10 +288,11 @@ def build_offshore_buses(
 
 def add_offshore_buses(n: pypsa.Network, offshore_buses: pd.DataFrame) -> pypsa.Network:
     """Add offshore buses to network and assigns it a POI."""
-    n.madd(
+    n.add(
         "Bus",
         offshore_buses.index,
         Pd=0,
+        load_weight=0,
         v_nom=230,
         balancing_area="Offshore",
         state="Offshore",
@@ -356,7 +359,7 @@ def match_missing_buses(buses_to_match_to, missing_buses):
         missing_buses[["x", "y"]].values,  # The input array for the query
         k=1,  # The number of nearest neighbors
     )
-    missing_buses["bus_assignment"] = buses_to_match_to.reset_index().iloc[missing_buses.id_nearest].Bus.values
+    missing_buses["bus_assignment"] = buses_to_match_to.index.to_numpy()[missing_buses.id_nearest]
     missing_buses = missing_buses.drop(columns=["id_nearest"])
     return missing_buses
 
@@ -367,11 +370,11 @@ def remove_breakthrough_offshore(n: pypsa.Network) -> pypsa.Network:
     original BE network.
     """
     # rm any lines/buses associated with offshore substation buses
-    n.mremove(
+    n.remove(
         "Line",
         n.lines.loc[n.lines.bus0.isin(n.buses.loc[n.buses.substation_off].index)].index,
     )
-    n.mremove("Bus", n.buses.loc[n.buses.substation_off].index)
+    n.remove("Bus", n.buses.loc[n.buses.substation_off].index)
     return n
 
 
@@ -549,10 +552,26 @@ def main(snakemake):
     # assign load allocation factors to buses for state level dissagregation
     gdf_bus = assign_missing_state_regions(gdf_bus)
 
-    # if dissagregating based with breakthrough energy on states, the LAF must
-    # be calculated here to capture splitting of states from the interconnect
-    group_sums = gdf_bus.groupby("full_state")["Pd"].transform("sum")
-    gdf_bus["LAF_state"] = gdf_bus["Pd"] / group_sums
+    # canonical per-bus demand-allocation weight; the source is selected by
+    # electricity.demand.bus_allocation (population = 2020 census county
+    # populations, breakthrough = legacy BE nominal demand Pd)
+    if snakemake.params.bus_allocation == "population":
+        county_population = load_county_population(
+            snakemake.input.county_population,
+        )
+        gdf_bus["load_weight"] = assign_load_weight(gdf_bus, county_population)
+    elif snakemake.params.bus_allocation == "breakthrough":
+        gdf_bus["load_weight"] = gdf_bus["Pd"]
+    else:
+        raise ValueError(
+            "electricity.demand.bus_allocation must be 'population' or "
+            f"'breakthrough'; received '{snakemake.params.bus_allocation}'.",
+        )
+
+    # the LAF must be calculated on the national bus set to capture splitting
+    # of states across interconnects
+    group_sums = gdf_bus.groupby("full_state")["load_weight"].transform("sum")
+    gdf_bus["LAF_state"] = gdf_bus["load_weight"] / group_sums
     gdf_bus = gdf_bus.drop(columns=["full_state"])
 
     # Removing few duplicated shapes where GIS shapes were overlapping. TODO: Fix GIS shapes
@@ -599,10 +618,10 @@ def main(snakemake):
                 (n.transformers.bus0.isin(rm_buses.index)) | (n.transformers.bus1.isin(rm_buses.index))
             ]
             rm_links = n.links.loc[(n.links.bus0.isin(rm_buses.index)) | (n.links.bus1.isin(rm_buses.index))]
-            n.mremove("Line", rm_lines.index.tolist())
-            n.mremove("Transformer", rm_transformers.index.tolist())
-            n.mremove("Link", rm_links.index.tolist())
-            n.mremove("Bus", rm_buses.index.tolist())
+            n.remove("Line", rm_lines.index.tolist())
+            n.remove("Transformer", rm_transformers.index.tolist())
+            n.remove("Link", rm_links.index.tolist())
+            n.remove("Bus", rm_buses.index.tolist())
             logger.info(
                 f"Filtered network to {model_topology[region_type]}. Removed {len(rm_buses)} buses, {len(n.buses)} remaining.",
             )
@@ -637,7 +656,9 @@ def main(snakemake):
         ]
     ]
 
-    bus2sub.to_csv(snakemake.output.bus2sub)
+    # pypsa v1 renamed the buses index to 'name'; keep the legacy 'Bus' header
+    # so downstream readers of this artifact are unaffected
+    bus2sub.to_csv(snakemake.output.bus2sub, index_label="Bus")
     subs = (
         n.buses[["sub_id", "x", "y", "interconnect"]]
         .set_index("sub_id")

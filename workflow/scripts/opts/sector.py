@@ -342,7 +342,7 @@ def add_ng_import_export_limits(n, config):
                 except KeyError:
                     # logger.warning(f"Can not set gas import limit for {link}")
                     continue
-                lhs = n.model["Link-p"].mul(weights).sel(snapshot=year, Link=link).sum()
+                lhs = n.model["Link-p"].mul(weights).sel(snapshot=year, name=link).sum()
 
                 if constraint == "min":
                     n.model.add_constraints(
@@ -373,7 +373,7 @@ def add_ng_import_export_limits(n, config):
                 except KeyError:
                     # logger.warning(f"Can not set gas import limit for {link}")
                     continue
-                lhs = n.model["Link-p"].mul(weights).sel(snapshot=year, Link=link).sum()
+                lhs = n.model["Link-p"].mul(weights).sel(snapshot=year, name=link).sum()
 
                 if constraint == "min":
                     n.model.add_constraints(
@@ -614,7 +614,7 @@ def add_ev_generation_constraint(n, config, snakemake):
         for investment_period in n.investment_periods:
             ratio = policy.at[investment_period, mode] / 100  # input is percentage
             eff = n.links.loc[evs].efficiency.round(1)
-            lhs = n.model["Link-p"].loc[investment_period].sel(Link=evs).mul(eff).sum()
+            lhs = n.model["Link-p"].loc[investment_period].sel(name=evs).mul(eff).sum()
             rhs = round(dem.loc[investment_period].sum().sum() * ratio, 2)
 
             n.model.add_constraints(lhs <= rhs, name=f"Link-ev_gen_{mode}_{investment_period}")

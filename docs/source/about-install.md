@@ -32,8 +32,8 @@ bash init_pypsa_usa.sh
 PyPSA-USA can be managed through either [`UV`](https://github.com/astral-sh/uv) or [`mamba`](https://github.com/mamba-org/mamba). Users only need to install one, not both!
 
 PyPSA-USA requires **Python 3.11** (`>=3.11, <3.12`). Core dependencies are pinned
-(`pypsa==0.30.2`, `atlite==0.3.0`, `linopy==0.3.14`); newer PyPSA releases (1.x) are not yet
-supported, so please install from the lock files below rather than upgrading packages manually.
+(`pypsa==1.3.0`, `atlite==0.3.0`, `linopy==0.9.1`, `pandas==3.0.5`), so please install from the
+lock files below rather than upgrading packages manually.
 
 ```{seealso}
 If you are planning to develop `PyPSA-USA`, please see our [contribution guidelines](./contributing.md#code-contributions) for installing additional dependencies.

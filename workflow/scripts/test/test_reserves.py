@@ -10,12 +10,6 @@ import sys
 import numpy as np
 import pandas as pd
 import pytest
-from pypsa.descriptors import (
-    get_activity_mask,
-)
-from pypsa.descriptors import (
-    get_switchable_as_dense as get_as_dense,
-)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from opts.reserves import add_ERM_constraints, store_ERM_duals
@@ -81,7 +75,6 @@ def multi_period_reserve_network(multi_period_base_network):
     return n
 
 
-@pytest.mark.skip(reason="pre-existing failure on v1-epic, unrelated to PR 1")
 def test_erm_constraint_binding(reserve_margin_network):
     """Test that ERM constraint correctly limits generation capacity."""
     n = reserve_margin_network.copy()
@@ -98,7 +91,7 @@ def test_erm_constraint_binding(reserve_margin_network):
     nodal_reserve_requirement = nodal_demand * (1.0 + erm_value)
 
     nodal_generator_capacity = (
-        (n.generators.p_nom_opt * get_as_dense(n, "Generator", "p_max_pu", n.snapshots))
+        (n.generators.p_nom_opt * n.get_switchable_as_dense("Generator", "p_max_pu", n.snapshots))
         .T.groupby(n.generators.bus)
         .sum()
         .T
@@ -106,7 +99,7 @@ def test_erm_constraint_binding(reserve_margin_network):
     nodal_storage_capacity = (
         (
             n.storage_units.p_nom_opt
-            * get_as_dense(n, "StorageUnit", "p_max_pu", n.snapshots)
+            * n.get_switchable_as_dense("StorageUnit", "p_max_pu", n.snapshots)
             * n.storage_units.efficiency_store
         )
         .T.groupby(n.storage_units.bus)
@@ -135,7 +128,6 @@ def test_erm_constraint_binding(reserve_margin_network):
     )
 
 
-@pytest.mark.skip(reason="pre-existing failure on v1-epic, unrelated to PR 1")
 def test_multiple_non_overlapping_erms(reserve_margin_network):
     """Test that multiple ERM constraints work correctly for non-overlapping regions."""
     n = reserve_margin_network.copy()
@@ -196,7 +188,6 @@ def test_multiple_non_overlapping_erms(reserve_margin_network):
     assert not erm_price_data.isnull().values.any(), "ERM price data should not contain any NaN values"
 
 
-@pytest.mark.skip(reason="pre-existing failure on v1-epic, unrelated to PR 1")
 def test_erm_increases_capacity(reserve_margin_network):
     """Test that ERM constraint of 0.14 results in more capacity built than no ERM."""
     # First run without ERM constraints
@@ -234,7 +225,6 @@ def test_erm_increases_capacity(reserve_margin_network):
     )
 
 
-@pytest.mark.skip(reason="pre-existing failure on v1-epic, unrelated to PR 1")
 def test_erm_increases_capacity_no_expandable_transmission(reserve_margin_network):
     """Test that ERM constraint of 0.14 results in more capacity built than no ERM, with no expandable lines or links."""
 
@@ -297,7 +287,6 @@ def test_erm_increases_capacity_no_expandable_transmission(reserve_margin_networ
     )
 
 
-@pytest.mark.skip(reason="pre-existing failure on v1-epic, unrelated to PR 1")
 def test_multi_period_erm_optimization(multi_period_reserve_network):
     """Test that multi-period network with ERM solves and creates one constraint (not per period)."""
     n = multi_period_reserve_network.copy()
@@ -317,7 +306,6 @@ def test_multi_period_erm_optimization(multi_period_reserve_network):
     assert "GlobalConstraint-all_ERM" in n.model.constraints
 
 
-@pytest.mark.skip(reason="pre-existing failure on v1-epic, unrelated to PR 1")
 def test_multi_period_erm_increases_capacity(multi_period_reserve_network):
     """Test that ERM increases capacity across multiple investment periods."""
     # Without ERM
@@ -346,7 +334,6 @@ def test_multi_period_erm_increases_capacity(multi_period_reserve_network):
     )
 
 
-@pytest.mark.skip(reason="pre-existing failure on v1-epic, unrelated to PR 1")
 def test_multi_period_erm_activity_masking(multi_period_reserve_network):
     """Verify that retiring generators don't contribute to reserves in periods after retirement."""
     n = multi_period_reserve_network.copy()
@@ -360,7 +347,7 @@ def test_multi_period_erm_activity_masking(multi_period_reserve_network):
     # n._multi_invest must be True for get_activity_mask to use build_year/lifetime logic;
     # it is normally set by n.optimize(multi_investment_periods=True).
     n._multi_invest = True
-    activity = get_activity_mask(n, "Generator", n.snapshots)
+    activity = n.components["Generator"].get_activity_mask(n.snapshots)
     period_2030_mask = n.snapshots.get_level_values(0) == 2030
     period_2040_mask = n.snapshots.get_level_values(0) == 2040
 

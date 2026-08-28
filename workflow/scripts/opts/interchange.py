@@ -109,7 +109,7 @@ def add_interchange_constraints(n, config, direction, sector=False):
             lhs = (
                 n.model["Link-p"]
                 .mul(weights)
-                .sel(period=year, Link=links)
+                .sel(period=year, name=links)
                 .sel(timestep=timesteps_in_period)  # Seperate cause slicing on multi-index is not supported
                 .sum()
             )
@@ -124,7 +124,7 @@ def add_interchange_constraints(n, config, direction, sector=False):
                 demand = (
                     n.model["Link-p"]
                     .mul(weights)
-                    .sel(period=year, Link=demand_links)
+                    .sel(period=year, name=demand_links)
                     .sel(timestep=timesteps_in_period)  # Seperate cause slicing on multi-index is not supported
                     .sum()
                 )

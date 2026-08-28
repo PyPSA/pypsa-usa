@@ -179,6 +179,133 @@ Conventions:
   (own follow-up): the `plants_must_add` seam-plant fallback still leaks
   ~1.9 GW of out-of-footprint plants into scoped runs.
 
+- **PyPSA v1 migration: `pypsa==1.3.0` / `linopy==0.9.1` / `pandas==3.0.5`**
+  (branch `claude/pypsa-v1-migration-data-storage-26840f`; redo of upstream
+  [PyPSA#762](https://github.com/PyPSA/pypsa-usa/pull/762) against the
+  v1-epic tree). Every removed pre-1.0 API is migrated: `madd`/`mremove` →
+  `add`/`remove` (with `names=` → `name=`; v1 `add` returns `None`),
+  `clustering.network` → `clustering.n`, `n.df/n.pnl/iterate_components` →
+  `n.components[c].static/.dynamic` iteration, `pypsa.descriptors` imports →
+  `n.get_switchable_as_dense` / component methods / `pypsa.common.expand_series`,
+  `pypsa.components.component_attrs` → `n.components[c].defaults`,
+  `n.copy(with_time=False)` → `n.copy(snapshots=[])`, statistics groupers
+  (`get_bus_and_carrier` → `groupby=["bus", "carrier"]`; `comps`/`aggregate_time`
+  → `components`/`groupby_time`), `pypsa.pf` logger → `pypsa.network.power_flow`.
+  linopy 0.9 dim alignment: model variables now live on dim `"name"` (not
+  `"Generator"`/`"Generator-ext"`), fixed across `opts/policy.py`,
+  `opts/reserves.py`, `opts/land.py`, `opts/sector.py`, `opts/interchange.py`;
+  the two RESERVES operational-constraint builders were rewritten to mirror
+  pypsa v1's internal implementations (`c.get_bounds_pu` xarray form), and
+  pandas MultiIndex coefficient frames are wrapped in `DataArray(...)` so linopy
+  keeps the flat `snapshot` dim instead of unstacking to `period × timestep`.
+  *Results effect: None intended for non-UC runs, with two pinned exceptions:*
+  (1) pypsa v1 flipped `e_cyclic_per_period` / `cyclic_state_of_charge_per_period`
+  defaults True→False — all 15 cyclic stores/storage-unit adds now pin
+  `*_per_period=True` explicitly to preserve per-investment-period cyclicity;
+  (2) unit-commitment runs may see small deltas from pypsa's UC ramp-limit fixes
+  (first-snapshot ramp limits now enforced; `ramp_limit_start_up/shut_down`
+  defaults 1→NaN). The bus index is named `"name"` under v1; `bus2sub.csv` keeps
+  its legacy `Bus` header via `index_label="Bus"` so downstream readers and
+  artifacts are unchanged, and in-memory nearest-bus matching was made
+  index-based (this also fixes two latent `.Bus`-attribute bugs in
+  `build_base_network.match_missing_buses` when called with `n.buses`-derived
+  frames). Dead `load_network` custom-component helper deleted (no callers;
+  used removed `pypsa.components.components`). Unit-commitment defaults now
+  read from `n.components["Generator"].defaults` instead of the removed
+  module-level `component_attrs` (all-zero defaults, identical behavior; the
+  upstream PR's `data/unit_commitment.csv` was deliberately not adopted to
+  keep behavior byte-identical). Test suite: 45 passed / 1 skipped — the
+  migration fixed 9 previously skip-marked "pre-existing failure on v1-epic"
+  tests (RPS, TCT, regional CO2, ERM zero-emission) whose failures were
+  old-stack artifacts; their skip markers are removed. The one remaining skip
+  (`test_e2e_solve_network_myopic`) was verified pre-existing: the fixture
+  model is infeasible on the old stack (pypsa 0.32) too. A pypsa bug
+  (still in 1.3.0) where `Network.copy()` drops the hidden
+  `name="snapshot"` attribute of MultiIndex snapshots (breaking `c.da`
+  accessors) is worked around in `workflow/scripts/test/conftest.py`; netCDF
+  round-trips are unaffected. `pyproject.toml` gains an explicit
+  `tables==3.10.2` pin (previously an implicit transitive dependency that the
+  re-lock dropped). The port was first proven on `pypsa==1.2.4` /
+  `pandas==2.2.2` (identical v1 API behavior, pandas held constant), then the
+  same branch took the stack the rest of the way: `pypsa==1.3.0`,
+  `pandas==3.0.5`, `xarray==2026.7.0` (floor forced by pandas 3, which needs
+  `xarray>=2024.10`) and `geopandas==1.1.4` (the pandas-3-compatible line),
+  with `numpy` deliberately held at 1.26.0 to protect the binary compatibility
+  of the pinned `rasterio==1.3.8` / `atlite==0.3.0` wheels and
+  `dask`/`distributed` held at 2024.12.0 (import-verified under pandas 3) — the
+  1.2.4 / pandas 2.2.2 pin set remains a working fallback. Under xarray 2026
+  the pypsa-0.30-era copy of the StorageUnit energy-balance constraint in
+  `opts/reserves.py` raised `AlignmentError` (conflicting `period` indexes from
+  mixing pandas-converted DataArrays with model-space coords), so
+  `define_SU_reserve_constraints` was rewritten to mirror pypsa 1.3's internal
+  `define_storage_unit_constraints` exactly — `n.optimize._window`
+  (`subset` / snapshot weightings / `roll_within_periods` /
+  `period_start_mask`) plus `c.da.*` accessors, entirely in xarray model space,
+  differing from upstream only in the `*_RESERVES` variable names and the
+  absence of a spill term. A second v1 index-rename bug in the same file: the
+  ERM nodal-balance RHS DataFrame inherited the columns-axis name `"name"` from
+  `region_buses.index`, so linopy broadcast the constraint over a spurious
+  `name` dim (warning `Constant RHS contains dimensions {'name'}`) and the dual
+  was no longer pivotable in `store_ERM_duals`; fixed by pinning
+  `rhs.columns.name = "Bus"`. *Results effect of both:* restorative — the SU
+  reserve energy balance is the same constraint re-expressed in model space
+  (it otherwise fails to build), and the ERM fix restores the per-bus dual that
+  the spurious dim was mis-broadcasting.
+  `pypsa.options.api.legacy_string_dtype = True` is pinned in `_helpers.py`
+  and the test conftest so component frames keep `object` dtype under pandas 3 (a deliberate holding position; flipping
+  it off is the pypsa-2.0-era follow-up), and the workflow scripts were swept
+  for pandas-3 breakage — removed APIs (`groupby(axis=1)` and relatives),
+  retired lower-case frequency aliases, chained-assignment patterns that
+  copy-on-write turns into silent no-ops, `object`-dtype string checks — all
+  intended behavior-preserving. Test counts are unchanged on the pandas-3
+  stack (unit 45 passed / 1 skipped, static 72 passed); the Tier-C equivalence
+  harness was re-baselined from scratch under the new environment (outcome at
+  the end of this entry), the environment having moved twice. Follow-up hardening: pandas 3 also raised its *optional*-dependency
+  floors, which only error at use time — `openpyxl` 3.1.2→3.1.5 (found via
+  the MECS `read_excel` path, uncovered by tests), `matplotlib`
+  3.8.0→3.9.3, `scipy` 1.11.3→1.14.1; all 36 floors in
+  `pandas.compat._optional.VERSIONS` now audited clean against the lock.
+  The vacuous `assert not (mecs == np.NaN).any().any()` in
+  `build_demand.py` (always-true; `np.NaN` also removed in numpy 2) is now
+  a real `mecs.isna()` check, verified passing against the actual MECS
+  workbook (405×9, zero NaNs) — *results effect: none*. The Tier-C re-baseline under the new env then caught two silent pandas-3
+  `astype(str)` regressions (pandas 3 preserves NaN through `astype(str)`
+  from EVERY source dtype instead of stringifying to "nan"): ADS
+  `Long Name` match keys (343 NaN, loud crash) and — via a systematic
+  82-site audit — `build_powerplants` `build_decade`, an inner-merge
+  imputation key whose NaN silently dropped 767 proposed generators /
+  74.7 GW (411 solar, 173 batteries, 47 onwind) that pandas 2 kept via its
+  "nan0s" bucket. Both fixed byte-identical to pandas-2 semantics
+  (`.fillna("nan")`); two latent config-gated sites flagged
+  (cluster_simpl county busmap, cluster_network efficiency classes).
+  *Tier-C equivalence re-baseline (2026-08-24), clean runs on the 1.3 /
+  pandas-3 stack against the unchanged pypsa-0.30.2 anchor:* prong 2 PASS
+  (0 live / 3, unchanged DL-9 class) and prong 1 initially FAIL at 16 live /
+  88, with every live finding in one of three verified serialization /
+  reporting classes and none carrying physics — (A) `sub_network` topology
+  metadata pypsa v1 computes and serializes where 0.30 left empty strings and
+  exported no `SubNetwork` rows (11 findings), (B)
+  `StorageUnit.cyclic_state_of_charge_per_period`, which the anchor netCDF
+  **does not store at any stage** (0.30 omitted default-valued attributes), so
+  the pypsa-1.3 loader backfills the *new* `False` default onto an anchor whose
+  actual solve-time behaviour was `True` — the same value the migration pins
+  explicitly on the candidate (4 findings), and (C) the solved objective, where
+  candidate 928,590,425.01 (`objective_constant` 0) equals anchor
+  -204,665,929.13 + `objective_constant` 1,133,255,860.00 = 928,589,930.87 to a
+  **relative difference of 5.3e-07**, v1/linopy 0.9 folding the constant into
+  `objective` where 0.30 split it out. Class C was fixed as a comparator
+  normalization rather than waived — `compare.py::_compare_solved` now compares
+  `objective + objective_constant` on both sides at the unchanged 1e-3 gate, so
+  the prong-1 objective check stays live and correct across conventions; classes
+  A and B took seven targeted `interconnect: western` waivers. Result: prong 1
+  PASS, 0 live / 87 total; prong 2 PASS, 0 live / 3. *Results effect: none —
+  comparison artifacts of the 0.30→1.3 conventions.* Full adjudication in
+  ledger entry **DL-15** (`docs/superpowers/specs/2026-08-07-deltas-ledger.md`),
+  pending countersignature; the usa leg still needs re-baselining on this stack.
+  See `docs/pypsa-v1-migration.md` for the migration map,
+  the pandas-3 bump detail, and the pypsa-v1 data-storage features we can now
+  adopt.
+
 - **Out-of-footprint NREL caps: loud accounting + opt-in nearest-bus
   reassignment** (`workflow/scripts/build_renewable_profiles.py`,
   `workflow/scripts/nrel_exclusion/build_nrel_bus_capacities.py`, new
@@ -389,6 +516,24 @@ these. Each still gets its equivalence verdict from the harness comparison
   affected plants — needs an explicit equivalence verdict.
 - **`cluster_network.py`** — `cluster_regions` preserves the `country` column
   through dissolves (consumed by `match_plant_to_bus`).
+
+## Population-based demand allocation (2026-08-18)
+
+- New `electricity.demand.bus_allocation` toggle (default `population`):
+  per-bus demand-allocation weights now come from 2020 Decennial Census
+  county populations (`data/population/DECENNIALDHC2020.P1-Data.csv`, county
+  population split evenly across substations, then buses) instead of the
+  2016-vintage Breakthrough Energy `Pd` column. `breakthrough` restores the
+  legacy behavior and is pinned in `config.equivalence.yaml` (the anchor has
+  no population method).
+- Canonical weight lives in `n.buses.load_weight` (new helper
+  `workflow/scripts/build_bus_population.py`); `Pd` is retained untouched for
+  reference. Consumers switched: `LAF_state`, `WritePopulation`,
+  `WriteIndustrial` load-bus filter, clustering `population` weighting,
+  substation aggregation.
+- A/B harness: `uv run python -m tests.equivalence.ab` builds the pipeline
+  twice (`ab_pd` vs `ab_pop` run names), checks conservation invariants and
+  reports per-zone/per-bus allocation shifts and solve-level deltas.
 
 ## Planned (spec in progress)
 

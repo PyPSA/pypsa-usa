@@ -62,9 +62,9 @@ def sanitize_carriers(n, config):
     --------
     Raises a warning if any carrier's "tech_colors" are not defined in the config dictionary.
     """
-    for c in n.iterate_components():
-        if "carrier" in c.df:
-            add_missing_carriers(n, c.df.carrier)
+    for c in n.components:
+        if "carrier" in c.static:
+            add_missing_carriers(n, c.static.carrier)
 
     carrier_i = n.carriers.index
     nice_names = (
@@ -83,9 +83,12 @@ def sanitize_carriers(n, config):
 
 def add_missing_carriers(n, carriers):
     """Function to add missing carriers to the network without raising errors."""
-    missing_carriers = set(carriers) - set(n.carriers.index)
+    # sorted: set iteration order is hash-seed dependent, which makes the
+    # Carrier table order (and thus the .nc files) differ between otherwise
+    # identical runs
+    missing_carriers = sorted(set(carriers) - set(n.carriers.index))
     if len(missing_carriers) > 0:
-        n.madd("Carrier", missing_carriers)
+        n.add("Carrier", missing_carriers)
 
 
 def clean_locational_multiplier(df: pd.DataFrame):
@@ -273,7 +276,7 @@ def match_nearest_bus(plants_subset, buses_subset):
     )
 
     # Map the nearest bus information back to the plants subset
-    plants_subset["bus_assignment"] = buses_subset.reset_index().iloc[indices.flatten()]["Bus"].values
+    plants_subset["bus_assignment"] = buses_subset.index.to_numpy()[indices.flatten()]
     plants_subset["distance_nearest"] = distances.flatten()
 
     return plants_subset
@@ -571,7 +574,7 @@ def attach_conventional_generators(
     plants["efficiency"] = plants.efficiency.astype(float).fillna(plants.efficiency_r)
 
     committable_fields = ["start_up_cost", "min_down_time", "min_up_time"]
-    defaults = pypsa.components.component_attrs["Generator"].default
+    defaults = n.components["Generator"].defaults["default"]
     if unit_commitment:
         for attr in committable_fields:
             plants[attr] = plants[attr].astype(float).fillna(defaults[attr])
@@ -593,7 +596,7 @@ def attach_conventional_generators(
     # Define generators using modified ppl DataFrame
     caps = plants.groupby("carrier").p_nom.sum().div(1e3).round(2)
     logger.info(f"Adding {len(plants)} generators with capacities [GW] \n{caps}")
-    n.madd(
+    n.add(
         "Generator",
         plants.index,
         carrier=plants.carrier,
@@ -742,7 +745,7 @@ def attach_wind_and_solar(
 
         logger.info(f"Adding {car} capacity-factor profiles to the network.")
 
-        n.madd(
+        n.add(
             "Generator",
             bus_list,
             " " + car,
@@ -879,7 +882,7 @@ def attach_egs(
                 f"Adding EGS (Resource Quality-{q}) capacity-factor profiles to the network.",
             )
 
-            n.madd(
+            n.add(
                 "Generator",
                 bus_list,
                 suffix,
@@ -912,7 +915,7 @@ def attach_battery_storage(
     )
 
     plants_filt = plants_filt.dropna(subset=["energy_storage_capacity_mwh"])
-    n.madd(  # Adds storage units which can retire economically or at their lifetime
+    n.add(  # Adds storage units which can retire economically or at their lifetime
         "StorageUnit",
         plants_filt.index,
         carrier="battery",
@@ -928,6 +931,7 @@ def attach_battery_storage(
         efficiency_store=0.85**0.5,
         efficiency_dispatch=0.85**0.5,
         cyclic_state_of_charge=True,
+        cyclic_state_of_charge_per_period=True,  # pypsa v1 flipped this default to False
     )
 
 
@@ -949,7 +953,7 @@ def attach_phs_storage(
         f"Added PHS as Storage Units to the network.\n{np.round(plants_filt.p_nom.sum() / 1000, 2)} GW Power Capacity",
     )
 
-    n.madd(
+    n.add(
         "StorageUnit",
         plants_filt.index,
         carrier="PHS",
@@ -962,6 +966,7 @@ def attach_phs_storage(
         efficiency_store=efficiency_dispatch,
         efficiency_dispatch=efficiency_dispatch,
         cyclic_state_of_charge=True,
+        cyclic_state_of_charge_per_period=True,  # pypsa v1 flipped this default to False
     )
 
 
@@ -1127,7 +1132,7 @@ def attach_breakthrough_renewable_plants(
         p_max_pu = p_max_pu.drop(leap_day.index)
         p_max_pu = broadcast_investment_horizons_index(n, p_max_pu)
 
-        n.madd(
+        n.add(
             "Generator",
             tech_plants.index,
             bus=tech_plants.bus_id,

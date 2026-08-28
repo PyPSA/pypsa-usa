@@ -425,7 +425,7 @@ def get_sector_production_timeseries(
     Rememeber units! Transport will be in units of kVMT or similar.
 
     Note: can not use statistics module as multi-output links for co2 tracking
-    > n.statistics.supply("Link", nice_names=False, aggregate_time=False).T
+    > n.statistics.supply("Link", nice_names=False, groupby_time=False).T
     """
     links = _filter_link_on_sector(n, sector).index.to_list()
 
@@ -461,7 +461,7 @@ def get_power_production_timeseries(
     Rememeber units! Transport will be in units of kVMT or similar.
 
     Note: can not use statistics module as multi-output links for co2 tracking
-    > n.statistics.supply("Link", nice_names=False, aggregate_time=False).T
+    > n.statistics.supply("Link", nice_names=False, groupby_time=False).T
     """
     links = _filter_link_on_sector(n, "pwr").index.to_list()
     gens = _filter_gens_on_sector(n, "pwr").index.to_list()

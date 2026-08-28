@@ -65,22 +65,23 @@ def remove_transformers(n):
     trafo_map = trafo_map.reindex(n.buses.index)
 
     for c in n.one_port_components | n.branch_components:
-        df = n.df(c)
+        df = n.components[c].static
         for col in df.columns:
             if col.startswith("bus"):
                 df[col] = df[col].map(trafo_map)
 
-    # Transfer additive bus statics (Pd, LAF_state) from the buses about to be
-    # removed onto their surviving mapped bus, so demand weight is conserved.
-    # min_count=1 keeps all-NaN groups NaN (the base network carries LAF_state
-    # only on Pd-bearing buses) instead of coercing them to 0.
-    for col in ("Pd", "LAF_state"):
+    # Transfer additive bus statics (Pd, load_weight, LAF_state) from the
+    # buses about to be removed onto their surviving mapped bus, so demand
+    # weight is conserved. min_count=1 keeps all-NaN groups NaN (the base
+    # network carries LAF_state only on weight-bearing buses) instead of
+    # coercing them to 0.
+    for col in ("Pd", "load_weight", "LAF_state"):
         if col in n.buses.columns:
             transferred = n.buses[col].groupby(trafo_map).sum(min_count=1)
             n.buses.loc[transferred.index, col] = transferred
 
-    n.mremove("Transformer", n.transformers.index)
-    n.mremove("Bus", n.buses.index.difference(trafo_map))
+    n.remove("Transformer", n.transformers.index)
+    n.remove("Bus", n.buses.index.difference(trafo_map))
     return n, trafo_map
 
 
@@ -104,6 +105,7 @@ def aggregate_to_substations(
         bus_strategies={
             "type": "max",
             "Pd": "sum",
+            "load_weight": "sum",
             "LAF_state": "sum",
         },
         generator_strategies=generator_strategies,
@@ -140,7 +142,7 @@ def aggregate_to_substations(
                 "zonal_aggregation must be either balancing_area, country, or state",
             )
 
-    network_s = clustering.network
+    network_s = clustering.n
 
     network_s.buses["interconnect"] = substations.interconnect
     network_s.buses["x"] = substations.x
