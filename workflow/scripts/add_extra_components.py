@@ -1556,6 +1556,9 @@ if __name__ == "__main__":
             snakemake.input.busmap_c,
         )
 
+        # Register sector carriers before assigning their metadata.
+        add_missing_carriers(n, n.loads.carrier)
+
     elec_config = snakemake.config["electricity"]
 
     costs_dict = {

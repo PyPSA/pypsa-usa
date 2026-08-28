@@ -190,7 +190,11 @@ def attach_sector_demand(n, demand_files, busmap_s, busmap_c):
             )
 
         attach_demand(n, df, carrier, suffix=f" {carrier}")
-        logger.info("%s demand added to clustered network", carrier)
+        logger.info(
+            "%s %s demand added to network",
+            sector.upper(),
+            end_use,
+        )
 
 
 if __name__ == "__main__":
