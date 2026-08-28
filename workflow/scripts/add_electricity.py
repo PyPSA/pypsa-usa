@@ -20,6 +20,7 @@ from _helpers import (
     configure_logging,
     export_network_for_gis_mapping,
     load_costs,
+    log_network_schema,
     update_p_nom_max,
     weighted_avg,
 )
@@ -28,6 +29,11 @@ from sklearn.neighbors import BallTree
 idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
+
+# Maximum distance from the model footprint at which a "must add" seam plant is
+# still attached. Only applied to footprint-scoped runs (model_topology.include);
+# see filter_plants_by_region / _drop_distant_seam_plants.
+SEAM_PLANT_MAX_KM = 100.0
 
 
 def sanitize_carriers(n, config):
@@ -96,8 +102,9 @@ def update_capital_costs(
     multiplier: pd.DataFrame,
 ):
     """Applies regional multipliers to capital cost data."""
-    # map generators to states
-    bus_state_mapper = n.buses.to_dict()["state"]
+    # map generators to states (multiplier CSVs are indexed by full state name;
+    # post-aggregation buses only carry reeds_state 2-letter codes)
+    bus_state_mapper = n.buses["reeds_state"].map(const.CODE_2_STATE).to_dict()
     gen = n.generators[n.generators.carrier == carrier].copy()
     gen["state"] = gen.bus.map(bus_state_mapper)
     gen = gen[gen["state"].isin(multiplier.index)]  # drops any regions that do not have cost multipliers
@@ -288,15 +295,18 @@ def match_plant_to_bus(n, plants):
     buses = n.buses.copy()
     buses["geometry"] = gpd.points_from_xy(buses["x"], buses["y"])
 
-    # First pass: Assign each plant to the nearest bus in the same reeds zone
-    for zone_id in buses["reeds_zone"].unique():
-        buses_in_zone = buses[buses["reeds_zone"] == zone_id]
-        plants_in_zone = plants_matched[
-            (plants_matched["country"] == zone_id) & (plants_matched["bus_assignment"].isnull())
-        ]
+    # First pass: Assign each plant to the nearest bus in the same reeds zone.
+    # Only runs when plants carry a `country` column (sjoined from regions_onshore);
+    # absent that, fall through to the zone-agnostic second pass.
+    if "country" in plants_matched.columns:
+        for zone_id in buses["reeds_zone"].unique():
+            buses_in_zone = buses[buses["reeds_zone"] == zone_id]
+            plants_in_zone = plants_matched[
+                (plants_matched["country"] == zone_id) & (plants_matched["bus_assignment"].isnull())
+            ]
 
-        # Update plants_matched with the nearest bus within the same REEDS zone
-        plants_matched.update(match_nearest_bus(plants_in_zone, buses_in_zone))
+            # Update plants_matched with the nearest bus within the same REEDS zone
+            plants_matched.update(match_nearest_bus(plants_in_zone, buses_in_zone))
 
     # Second pass: Assign any remaining unmatched plants to the nearest bus regardless of REEDS zone
     unmatched_plants = plants_matched[plants_matched["bus_assignment"].isnull()]
@@ -306,6 +316,76 @@ def match_plant_to_bus(n, plants):
     return plants_matched
 
 
+def _drop_distant_seam_plants(
+    plants_must_add: pd.DataFrame,
+    regions_onshore: gpd.GeoDataFrame,
+    regions_offshore: gpd.GeoDataFrame,
+    max_km: float = SEAM_PLANT_MAX_KM,
+) -> pd.DataFrame:
+    """
+    Drop "must add" seam plants lying further than ``max_km`` from the model footprint.
+
+    ``plants_must_add`` collects plants that fall outside every ReEDS shape of the
+    run's interconnect and whose ReEDS membership disagrees with their EIA
+    ``interconnection`` column. They are re-added unconditionally so imprecise ReEDS
+    shapes never silently delete a legitimate border plant. In a footprint-scoped run
+    (model_topology.include) the regions layers only tile the model footprint, so that
+    unconditional add-back lets plants thousands of km away survive the filter and then
+    attach to the nearest in-footprint bus — match_plant_to_bus applies no distance
+    bound. Bounding the population here keeps nearby seam plants while cutting the leak.
+
+    Plants inside the footprint have distance 0 and are always kept.
+    """
+    if plants_must_add.empty:
+        return plants_must_add
+
+    region_geoms = [
+        regions.to_crs(epsg=5070).geometry
+        for regions in (regions_onshore, regions_offshore)
+        if regions is not None and not regions.empty
+    ]
+    if not region_geoms:
+        return plants_must_add
+    footprint = pd.concat(region_geoms)
+    footprint = footprint[footprint.notna() & ~footprint.is_empty]
+    if footprint.empty:
+        return plants_must_add
+
+    points = gpd.GeoSeries(
+        gpd.points_from_xy(plants_must_add.longitude, plants_must_add.latitude),
+        crs="EPSG:4326",
+    ).to_crs(epsg=5070)
+    # The distance to the footprint is the smallest distance to any one of its
+    # regions, so take that minimum directly instead of unioning them first.
+    # Reprojecting the region layer into EPSG:5070 can leave coarse cluster
+    # polygons invalid (9 of 29 self-intersecting or degenerate at simpl=20,
+    # none at simpl=''), and union_all() then dies with a GEOSException
+    # "side location conflict"; pairwise distance is robust to that. Where the
+    # union does succeed the two agree to 0.0 m, verified on the simpl='' layer.
+    distance_km = points.apply(lambda point: footprint.distance(point).min()).to_numpy() / 1e3
+
+    keep = distance_km <= max_km
+    if keep.all():
+        return plants_must_add
+
+    dropped = plants_must_add[~keep]
+    for (name, plant), distance in zip(dropped.iterrows(), distance_km[~keep], strict=False):
+        logger.warning(
+            f"Out-of-footprint seam plant dropped: '{name}' "
+            f"(carrier={plant.get('carrier', 'n/a')}, state={plant.get('state', 'n/a')}, "
+            f"{plant.get('p_nom', float('nan')):.1f} MW) sits {distance:.0f} km from the model "
+            f"regions, beyond the {max_km:.0f} km seam bound.",
+        )
+    dropped_mw = float(dropped["p_nom"].sum()) if "p_nom" in dropped.columns else float("nan")
+    logger.warning(
+        f"Footprint-scoped run: dropped {int((~keep).sum())} of {len(plants_must_add)} 'must add' "
+        f"seam plants ({dropped_mw:.1f} MW) further than {max_km:.0f} km from the model regions. "
+        "Without this bound match_plant_to_bus attaches them to the nearest in-footprint bus at "
+        "unbounded distance.",
+    )
+    return plants_must_add[keep]
+
+
 def filter_plants_by_region(
     plants: pd.DataFrame,
     regions_onshore: gpd.GeoDataFrame,
@@ -313,10 +393,17 @@ def filter_plants_by_region(
     reeds_shapes: gpd.GeoDataFrame,
     all_reeds_shapes: gpd.GeoDataFrame,
     reeds_memberships: pd.DataFrame,
+    footprint_scoped: bool = False,
 ) -> pd.DataFrame:
     """
     Filters the plants dataframe to remove plants not within the onshore and
     offshore geometries.
+
+    ``footprint_scoped`` must be set when the run was scoped with
+    model_topology.include. It bounds the "must add" seam-plant fallback below to
+    SEAM_PLANT_MAX_KM of the (footprint-sized) regions. Left false, the fallback keeps
+    its legacy unconditional behavior, so unfiltered interconnect/usa runs are
+    unchanged.
     """
     plants = plants.copy()
     plants["geometry"] = gpd.points_from_xy(
@@ -372,6 +459,17 @@ def filter_plants_by_region(
             remaining_plants = pd.DataFrame()
         plants_must_add.set_index("generator_name", inplace=True)
 
+        # The regions layers only tile the model footprint when the run is scoped with
+        # model_topology.include, so the unconditional add-back above leaks far-away
+        # plants into the model. Bound it — but only for scoped runs, so unfiltered
+        # interconnect/usa runs stay byte-identical.
+        if footprint_scoped:
+            plants_must_add = _drop_distant_seam_plants(
+                plants_must_add,
+                regions_onshore,
+                regions_offshore,
+            )
+
         if not remaining_plants.empty:
             remaining_clean = remaining_plants.drop(columns=["index_right"], errors="ignore")
             plants_nearshore = gpd.sjoin_nearest(
@@ -408,8 +506,10 @@ def attach_renewable_capacities_to_atlite(
             continue
 
         generators_tech = n.generators[n.generators.carrier == tech].copy()
-        generators_tech["sub_assignment"] = generators_tech.bus.map(n.buses.sub_id)
-        plants_filt["sub_assignment"] = plants_filt.bus_assignment.map(n.buses.sub_id)
+        # After aggregate_to_substations, each bus is one substation, so sub_id is
+        # collapsed into the bus index; use bus identity directly for grouping.
+        generators_tech["sub_assignment"] = generators_tech.bus
+        plants_filt["sub_assignment"] = plants_filt.bus_assignment
 
         build_year_avg = plants_filt.groupby(["sub_assignment"])[plants_filt.columns].apply(
             lambda x: pd.Series(
@@ -549,12 +649,8 @@ def attach_wind_and_solar(
 
         capital_cost = costs.at[car, "annualized_capex_fom"]
 
-        bus2sub = (
-            pd.read_csv(input_profiles.bus2sub, dtype=str)
-            .drop("interconnect", axis=1)
-            .rename(columns={"Bus": "bus_id"})
-            .drop_duplicates(subset="sub_id")
-        )
+        # Profile bus index already matches the network bus index after
+        # cluster_simpl runs upstream — both are keyed by simpl-cluster bus.
 
         # For GODEEEP future scenarios, load horizon-specific profiles
         if godeeep_future:
@@ -575,44 +671,41 @@ def attach_wind_and_solar(
                     if ds.indexes["bus"].empty:
                         continue
 
-                    # Get bus list
+                    # Get bus list (profile bus = network bus, both at cluster level)
                     if bus_list is None:
-                        bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+                        bus_list = ds.bus.values.astype(str)
 
-                        # Get p_nom_max and weight
                         p_nom_max_bus = (
                             ds["p_nom_max"]
-                            .to_dataframe()
-                            .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                            .set_index("bus_id")
-                            .p_nom_max
+                            .to_pandas()
+                            .rename(
+                                index=lambda b: str(b),
+                            )
                         )
                         weight_bus = (
                             ds["weight"]
-                            .to_dataframe()
-                            .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                            .set_index("bus_id")
-                            .weight
+                            .to_pandas()
+                            .rename(
+                                index=lambda b: str(b),
+                            )
                         )
 
-                    # Get profile for this horizon
-                    horizon_profile = (
-                        ds["profile"]
-                        .transpose("time", "bus")
-                        .to_pandas()
-                        .T.merge(
-                            bus2sub[["bus_id", "sub_id"]],
-                            left_on="bus",
-                            right_on="sub_id",
-                        )
-                        .set_index("bus_id")
-                        .drop(columns="sub_id")
-                        .T
-                    )
+                    # Get profile for this horizon — index already at bus level
+                    horizon_profile = ds["profile"].transpose("time", "bus").to_pandas()
+                    horizon_profile.columns = horizon_profile.columns.astype(str)
 
                     # Update timestamps to match the horizon year
                     horizon_profile.index = horizon_profile.index.map(lambda x: x.replace(year=int(horizon)))
                     all_profiles.append(horizon_profile)
+
+            # No horizon contributed any buses (e.g. no eligible sites for
+            # this carrier in the modeled region) — skip the carrier, matching
+            # the single-profile branch's empty-bus `continue`.
+            if not all_profiles:
+                logger.warning(
+                    f"No {car} profile buses found in any planning horizon; skipping {car}.",
+                )
+                continue
 
             # Concatenate all horizon profiles
             bus_profiles = pd.concat(all_profiles)
@@ -627,34 +720,23 @@ def attach_wind_and_solar(
                 if ds.indexes["bus"].empty:
                     continue
 
-                bus_list = ds.bus.to_dataframe("sub_id").merge(bus2sub).bus_id.astype(str).values
+                bus_list = ds.bus.values.astype(str)
                 p_nom_max_bus = (
                     ds["p_nom_max"]
-                    .to_dataframe()
-                    .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                    .set_index("bus_id")
-                    .p_nom_max
+                    .to_pandas()
+                    .rename(
+                        index=lambda b: str(b),
+                    )
                 )
                 weight_bus = (
                     ds["weight"]
-                    .to_dataframe()
-                    .merge(bus2sub[["bus_id", "sub_id"]], left_on="bus", right_on="sub_id")
-                    .set_index("bus_id")
-                    .weight
-                )
-                bus_profiles = (
-                    ds["profile"]
-                    .transpose("time", "bus")
                     .to_pandas()
-                    .T.merge(
-                        bus2sub[["bus_id", "sub_id"]],
-                        left_on="bus",
-                        right_on="sub_id",
+                    .rename(
+                        index=lambda b: str(b),
                     )
-                    .set_index("bus_id")
-                    .drop(columns="sub_id")
-                    .T
                 )
+                bus_profiles = ds["profile"].transpose("time", "bus").to_pandas()
+                bus_profiles.columns = bus_profiles.columns.astype(str)
                 # Broadcast single profile across all horizons
                 bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
 
@@ -706,26 +788,11 @@ def attach_egs(
             getattr(input_profiles, "profile_egs"),
         ) as ds_profile,
     ):
-        bus2sub = (
-            pd.read_csv(input_profiles.bus2sub, dtype=str)
-            .drop("interconnect", axis=1)
-            .rename(columns={"Bus": "bus_id"})
-        )
-        # bus2sub stores sub_id as float strings (e.g. "39763.0") while the
-        # EGS profile stores sub_id as integer strings (e.g. "39763").
-        # Normalize to integer strings so the merge key matches.
-        bus2sub["sub_id"] = bus2sub["sub_id"].apply(lambda x: str(int(float(x))))
-
-        # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
-        df_specs = pd.merge(
-            ds_specs.to_dataframe().reset_index().dropna(),
-            bus2sub,
-            on="sub_id",
-            how="left",
-        )
+        # After aggregate_egs runs, the ``sub_id`` dimension contains the
+        # simpl-cluster bus IDs already, so it can be used as ``bus_id`` directly.
+        df_specs = ds_specs.to_dataframe().reset_index().dropna()
+        df_specs = df_specs.rename(columns={"sub_id": "bus_id"})
         df_specs["bus_id"] = df_specs["bus_id"].astype(str)
-
-        # bus_id must be in index for pypsa to read it
         df_specs = df_specs.set_index("bus_id")
 
         # columns must be renamed to refer to the right quantities for pypsa to read it correctly
@@ -781,13 +848,9 @@ def attach_egs(
             p_nom_max_bus = df_q["p_nom_max"]
             efficiency = df_q["efficiency"]  # for now.
 
-            # IGNORE: Remove dropna(). Rather, apply dropna when creating the original dataset
-            df_q_profile = pd.merge(
-                ds_profile.sel(Quality=q).to_dataframe().dropna().reset_index(),
-                bus2sub,
-                on="sub_id",
-                how="left",
-            )
+            df_q_profile = ds_profile.sel(Quality=q).to_dataframe().dropna().reset_index()
+            df_q_profile = df_q_profile.rename(columns={"sub_id": "bus_id"})
+            df_q_profile["bus_id"] = df_q_profile["bus_id"].astype(str)
             bus_profiles = pd.pivot_table(
                 df_q_profile,
                 columns="bus_id",
@@ -1008,10 +1071,32 @@ def attach_breakthrough_renewable_plants(
 ):
     add_missing_carriers(n, renewable_carriers)
 
-    plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0).query(
-        "bus_id in @n.buses.index",
-    )
+    plants = pd.read_csv(fn_plants, dtype={"bus_id": str}, index_col=0)
     plants = plants.replace(["wind_offshore"], ["offwind"])
+
+    # The network at this stage is substation-level (post aggregate_to_substations
+    # and cluster_simpl), while the breakthrough base-grid files reference RAW
+    # base-network bus_ids. Remap every plant through the busmap chain
+    # (raw bus_id -> sub_id -> cluster bus) before matching against n.buses,
+    # patterned after aggregate_egs. Raw ids belonging to other interconnects are
+    # absent from bus2sub and drop out naturally, which also removes accidental
+    # attachments where a foreign raw id collides with a local substation id.
+    # All ids are compared as plain integer-strings ("35827", never "35827.0").
+    bus2sub = pd.read_csv(snakemake.input.bus2sub, dtype=str)
+    raw_to_sub = bus2sub.assign(
+        sub_id=bus2sub["sub_id"].str.replace(r"\.0$", "", regex=True),
+    ).set_index("Bus")["sub_id"]
+    busmap_s = pd.read_csv(snakemake.input.busmap_s, dtype=str)
+    sub_to_cluster = busmap_s.assign(
+        sub_id=busmap_s["sub_id"].str.replace(r"\.0$", "", regex=True),
+        cluster_bus=busmap_s["cluster_bus"].str.replace(r"\.0$", "", regex=True),
+    ).set_index("sub_id")["cluster_bus"]
+    n_plants_raw = len(plants)
+    plants["bus_id"] = plants["bus_id"].map(raw_to_sub).map(sub_to_cluster)
+    plants = plants.dropna(subset=["bus_id"]).query("bus_id in @n.buses.index")
+    logger.info(
+        f"Remapped breakthrough plants through bus2sub/busmap_s: kept {len(plants)} of {n_plants_raw} plants on this network.",
+    )
 
     for tech in renewable_carriers:
         assert tech == "hydro"
@@ -1109,6 +1194,7 @@ def main(snakemake):
     interconnection = snakemake.wildcards["interconnect"]
 
     n = pypsa.Network(snakemake.input.base_network)
+    schema_entry = log_network_schema(n, stage="entry")
 
     regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
     regions_offshore = gpd.read_file(snakemake.input.regions_offshore)
@@ -1117,7 +1203,16 @@ def main(snakemake):
     reeds_memberships = pd.read_csv(snakemake.input.reeds_memberships)
 
     costs = load_costs(snakemake.input.tech_costs, params.costs)
-    update_transmission_costs(n, costs, params.length_factor)
+    # In the simplify-early DAG this network comes from aggregate_to_substations,
+    # whose assign_line_lengths already folded lines.length_factor into `length`.
+    # Passing the factor again here would compound it (25% CAPEX inflation on
+    # every line) — the pre-refactor pipeline applied it exactly once.
+    # DECISION (user, 2026-08-18): keep length_factor=1.0 here so this stage
+    # never edits the length data. NOTE: these capital costs only reach the
+    # solve on the TAMU (line-preserving) network; under the reeds transport
+    # model, lines/DC links are dropped at clustering and ITL link costs are
+    # rebuilt from the ReEDS distance-cost tables (see deltas ledger DL-1/DL-2).
+    update_transmission_costs(n, costs, length_factor=1.0)
 
     renewable_carriers = set(params.renewable_carriers)
     extendable_carriers = params.extendable_carriers
@@ -1129,6 +1224,9 @@ def main(snakemake):
         n.investment_periods,
         interconnect=interconnection,
     )
+    # A run scoped with model_topology.include tiles regions over the footprint only;
+    # the seam-plant fallback in filter_plants_by_region must then be distance-bounded.
+    include_filter = snakemake.config.get("model_topology", {}).get("include") or {}
     plants = filter_plants_by_region(
         plants,
         regions_onshore,
@@ -1136,6 +1234,7 @@ def main(snakemake):
         reeds_shapes,
         all_reeds_shapes,
         reeds_memberships,
+        footprint_scoped=bool(include_filter),
     )
     plants = match_plant_to_bus(n, plants)
 
@@ -1295,6 +1394,7 @@ def main(snakemake):
     sanitize_carriers(n, snakemake.config)
     n.meta = snakemake.config
 
+    log_network_schema(n, stage="exit", baseline=schema_entry)
     # n.export_to_netcdf(snakemake.output[0])
     pickle.dump(n, open(snakemake.output[0], "wb"))
 

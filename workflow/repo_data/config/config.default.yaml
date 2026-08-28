@@ -1,181 +1,288 @@
-# PyPSA-USA Default Configuration File for developing and testing county transmission network from Reeds
+# ====================================================================
+# PyPSA-USA — Default Configuration (canonical example)
+# ====================================================================
+# This file documents every user-facing option supported by the
+# PyPSA-USA workflow with sensible defaults for a Western Interconnect
+# capacity-expansion run at REeDS-zone resolution.
+#
+# Audience: users authoring a new scenario. Copy this file to
+# `config/config.<your-scenario>.yaml`, edit only the keys you care
+# about, and pass `--configfile config/config.<your-scenario>.yaml`.
+#
+# How configs are merged: Snakemake auto-loads, in order,
+#   config/config.common.yaml      (always-loaded layered base)
+#   config/config.api.yaml         (API keys; gitignored)
+#   config/config.cluster.yaml     (HPC scheduler settings)
+#   config/config.plotting.yaml    (figure styling)
+#   config/config.sector.yaml      (sector-coupling defaults)
+# beneath whatever main config you pass via --configfile. Keys here
+# override anything in those layered files.
+#
+# Option reference: docs/source/config-configuration.md (Sphinx tables)
+# Wildcard reference: docs/source/config-wildcards.md
+# Sector reference:   docs/source/config-sectors.md
+# ====================================================================
+
+
+# ====================================================================
+# RUN — run identity and shared-resource toggles
+# ====================================================================
+# docs : RUN
 run:
-  name: "Default" # use this to keep track of runs with different settings
-  disable_progressbar: false # set to true to disable the progressbar
-  shared_resources: false # set to true to share the default resources across runs
-  shared_cutouts: true # set to true to share the default cutout(s) across runs
-  validation: false # set to true to run back-casting plots
+  name: "Default"                 # label that becomes the resources/<name>/ subdir; pick something unique per scenario
+  disable_progressbar: false      # silence atlite/snakemake progress bars in non-interactive shells
+  shared_resources: false         # true = reuse resources/ across all runs (DAG-keyed); false = isolate per run.name
+  shared_cutouts: true            # true = share atlite cutouts across runs (recommended; cutouts are large and slow)
+  validation: false               # true = wire in back-casting validation plots (historical-only)
 
+# ====================================================================
+# RENEWABLE DATASET — capacity-factor source for wind & solar
+# ====================================================================
+# Sets which precomputed/atlite-derived CF time series the renewable
+# attach pipeline consumes. `godeeep` requires `renewable_land_access`
+# below; `atlite` requires a populated cutout (see config.common.yaml).
 renewable:
-  dataset: godeeep # [atlite, godeeep]
+  dataset: godeeep                # atlite | godeeep — see docs/source/config-configuration.md#renewable-godeeep
 
-# docs :
+
+# ====================================================================
+# SCENARIO — workflow wildcards and planning horizons
+# ====================================================================
+# Each list entry becomes a separate run in the Snakemake DAG. Most
+# users set a single value per wildcard. See docs/source/config-wildcards.md.
+# docs : SCENARIO
 scenario:
-  interconnect: [western] #"usa|texas|western|eastern"
-  clusters: [33]
-  simpl: [75]
-  opts: [REM-3h]
-  ll: [v1.0]
-  sector: "" # G
-  planning_horizons: [2030, 2040, 2050]    #(2018-2023, 2030, 2040, 2050)
-foresight:  'perfect' # myopic, perfect
+  interconnect: [western]                # geographic scope; one of: usa | texas | western | eastern
+  planning_horizons: [2030, 2040, 2050]  # investment-period years (2018-2023 | 2030 | 2040 | 2050)
+  clusters: [33]                         # final cluster count; integer, optionally suffixed m / a / c, or "all"
+  simpl: [75]                            # pre-clustering kmeans granularity; alphanumeric or "all"
+  ll: [v1.0]                             # line-limit scenario; v|c + number/opt/all (e.g. v1.0, copt)
+  opts: [REM-3h]                         # dash/plus-separated options string (REM = renewable-energy mix, 3h = 3-hour temporal resolution)
+  sector: ""                             # sector-coupling; "" (electricity-only) | E | G | E-G
 
+foresight: 'perfect'                     # multi-horizon solve mode; perfect (monolithic) | myopic (sequential)
+
+
+# ====================================================================
+# MODEL TOPOLOGY — transmission backbone and zonal aggregation
+# ====================================================================
 model_topology:
-  transmission_network: 'reeds' # [reeds, tamu]
-  topological_boundaries: 'reeds_zone' # [county, reeds_zone, state]
-  interface_transmission_limits: false
-  include: # mixed zone types not supported
-    # reeds_zone: []
-    # reeds_state: ['CA']
-    # reeds_ba: []
-  aggregate: # eligible keys: [reeds_zone, trans_reg]
+  transmission_network: 'reeds'          # transmission dataset; reeds | tamu
+  topological_boundaries: 'reeds_zone'   # post-cluster zone type; county | reeds_zone | state | balancing_area
+  interface_transmission_limits: false   # apply NARIS2024 inter-region transfer caps (requires reeds backbone)
+  include:                               # subset the network to specific zones (mixed zone types NOT supported)
+    # reeds_zone: []                     #   restrict by REeDS zone ids
+    # reeds_state: ['CA']                #   restrict by state code(s)
+    # reeds_ba: []                       #   restrict by balancing authority
+  aggregate:                             # pre-aggregate buses; eligible keys: reeds_zone | trans_reg
     # trans_grp: []
     # reeds_zone: []
 
 
-# docs :
+# ====================================================================
+# ENABLE — top-level feature flags
+# ====================================================================
+# docs : ENABLE
 enable:
-  build_cutout: false
+  build_cutout: false                    # true = build a fresh atlite cutout from raw ERA5 (slow); false = consume prebuilt
+  # custom_busmap: false                 # OPTIONAL: read a user-provided busmap from data/ instead of computing one
 
-## For Atlite (future/historical) and GODEEEP (just historical), configure this
-renewable_weather_years: [2019]
+
+# ====================================================================
+# SNAPSHOTS & WEATHER YEARS — temporal scope
+# ====================================================================
+# For Atlite (any year) and GODEEEP-historical, configure renewable_weather_years.
+# For GODEEEP future scenarios, the year is taken from planning_horizons above.
+renewable_weather_years: [2019]         # weather years to use (single year unless multi-horizon godeeep)
+# renewable_weather_years_by_horizon:   # OPTIONAL: map planning-horizon → weather year (multi-horizon atlite)
+#   2030: 2019
+#   2040: 2019
+
 snapshots:
-  start: "2019-01-01"
-  end: "2020-01-01"
-  inclusive: "left"
+  start: "2019-01-01"                   # ISO date string; first snapshot timestamp
+  end: "2020-01-01"                     # ISO date string; one past the last snapshot if inclusive=left
+  inclusive: "left"                     # pandas.date_range inclusive arg; left | right | both | neither
 
-## For GODEEEP inputs for future scenarios, configure this
-renewable_scenarios: ["rcp85cooler"] #["historical", "rcp45hotter", "rcp45cooler", "rcp85hotter", "rcp85cooler"]
+# GODEEEP future-scenario controls. Used only when renewable.dataset = godeeep
+# and renewable_scenarios != "historical".
+renewable_scenarios: ["rcp85cooler"]   # climate scenario; historical | rcp45cooler | rcp45hotter | rcp85cooler | rcp85hotter
+# renewable_scenario_years: [2030]     # OPTIONAL: explicit list of GODEEEP scenario years; defaults to planning_horizons
 
-# For multiple planning horizons, only specify the month and day - the year will automatically match each planning horizon (e.g., planning_horizons: [2030, 2040, 2050])
+# For multi-horizon godeeep, the YEAR is taken from each planning_horizon
+# automatically — these knobs only set the month/day slice within that year.
 renewable_snapshots:
-  start_month: 1
-  start_day: 1
-  end_month: 12
-  end_day: 31
-  end_inclusive: true  # if true, includes the end day; if false, stops before end day
+  start_month: 1                        # int 1-12; first month of the snapshot window
+  start_day: 1                          # int 1-31
+  end_month: 12                         # int 1-12; last month of the snapshot window
+  end_day: 31                           # int 1-31
+  end_inclusive: true                   # true = include full end day; false = stop before end day
 
-# docs :
+
+# ====================================================================
+# ELECTRICITY — generators, storage, demand, reserves, trade
+# ====================================================================
+# docs : ELECTRICITY
 electricity:
-  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste] # Choose the conventional plant types to include in network
-  renewable_carriers: [onwind, offwind_floating, solar, hydro] # Choose the renewable plant types to include in network
-  retirement: economic # "economic" or "technical"
-  SAFE_reservemargin: 0.14
-  regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
-  technology_capacity_targets: 'config/policy_constraints/technology_capacity_targets.csv'
-  portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
-  SAFE_regional_reservemargins: 'config/policy_constraints/SAFE_regional_prm.csv'
-  transmission_interface_limits: 'config/policy_constraints/transmission_interface_limits.csv'
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste]   # plant types attached as existing capacity from EIA-860
+  renewable_carriers:   [onwind, offwind_floating, solar, hydro]                        # variable renewables attached as existing capacity
+  retirement: economic                   # economic = allow early retirement at fixed cost; technical = lock p_nom_min to p_nom
 
-  operational_reserve:
-    activate: false
-    epsilon_load: 0.02
-    epsilon_vres: 0.02
-    contingency: 4000
-
-  erm:  # Energy Reserve Margin - used when ERM opt is enabled
-    all: 0.15  # 15% reserve margin for all regions (default)
-
+  # Capacity-expansion candidates. Carriers listed here get extendable
+  # p_nom and pay annualized capex; carriers listed only above are
+  # fixed (brownfield-only).
   extendable_carriers:
-    Generator: [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, coal, nuclear, hydrogen_ct] #include CCGT-CCS
-    StorageUnit: [4hr_battery_storage, 8hr_battery_storage] # [Xhr-battery-storage (2-10 hours)]
-    Store: []
-    Link: [] 
+    Generator:    [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, coal, nuclear, hydrogen_ct]
+    StorageUnit:  [4hr_battery_storage, 8hr_battery_storage]                            # Xhr_battery_storage (X = 2..10)
+    Store: []                              # candidate Store carriers (e.g. H2_tank); requires sector coupling
+    Link:  []                              # candidate Link carriers (e.g. HVDC)
 
-  demand: 
-    profile: efs # efs, eia, eer
-    scenario: 
-      efs_case: reference # reference, medium, high
-      efs_speed: moderate # slow, moderate, rapid
-      eer_file: demand_EER2025_100by2050.h5 # demand_EER2025_100by2050.h5, demand_EER2025_Baseline_AEO2023.h5, demand_EER2025_IRAlow.h5
-      aeo: reference
+  # ---------------- Reserves & resource adequacy ----------------
+  SAFE_reservemargin: 0.14                 # SAFE planning reserve margin (fraction of peak load); used with SAFE opt
+  SAFE_regional_reservemargins:   'config/policy_constraints/SAFE_regional_prm.csv'
 
-  demand_response:
-    shift: 0
-    marginal_cost: 999999
+  operational_reserve:                     # GenX-style reserve requirement; only active when activate=true
+    activate: false
+    epsilon_load: 0.02                     # share of total load held as reserve
+    epsilon_vres:  0.02                    # share of VRE supply held as reserve
+    contingency: 4000                      # fixed reserve floor in MW
 
+  erm:                                     # Energy Reserve Margin — only consumed when the ERM opt is enabled
+    all: 0.15                              # default ERM applied to every region (fraction of annual energy)
+
+  # ---------------- Policy & emissions ----------------
+  regional_Co2_limits:            'config/policy_constraints/regional_Co2_limits.csv'           # per-region CO2 caps (tCO2/yr)
+  technology_capacity_targets:    'config/policy_constraints/technology_capacity_targets.csv'   # forced min/max build by tech & region
+  portfolio_standards:            'config/policy_constraints/portfolio_standards.csv'           # RPS/CES fractions by region
+  transmission_interface_limits:  'config/policy_constraints/transmission_interface_limits.csv' # MW caps on inter-region flows
+
+  # ---------------- Demand ----------------
+  demand:
+    profile: efs                           # demand time series source; efs (EIA-EFS) | eia (historical actuals) | eer (EER scenarios)
+    scenario:                              # EFS/EER scenario knobs (ignored if profile=eia)
+      efs_case:  reference                 # reference | medium | high
+      efs_speed: moderate                  # slow | moderate | rapid
+      eer_file: demand_EER2025_100by2050.h5 # EER h5 (profile=eer): demand_EER2025_100by2050 | demand_EER2025_Baseline_AEO2023 | demand_EER2025_IRAlow
+      aeo:       reference                 # AEO (EIA Annual Energy Outlook) scaling case; reference | high | low
+
+  demand_response:                         # price-responsive shiftable load; 0 = disabled
+    shift: 0                               # fraction of hourly load that can shift in time
+    marginal_cost: 999999                  # $/MWh for shifted energy (set high to deter use unless needed)
+    # by_carrier: false                    # OPTIONAL: enable per-end-use DR controls (sector-coupling only)
+
+  # ---------------- Inter-regional trade ----------------
+  # When enable=true and transmission_network=reeds, the model adds
+  # virtual imports/exports between the modeled footprint and external
+  # neighbors using historical EIA interchange data.
   imports:
-    enable: false 
-    costs: wholesale # wholesale|carrier|float
-    co2_emissions: 0.428 
-    capacity_limit: true 
-    volume_limit: inf # 0 > x > 100 | 'inf'
-    balancing_period: month # day|week|month|year
+    enable: false
+    costs: wholesale                       # wholesale | carrier | float — how imported energy is priced
+    co2_emissions: 0.428                   # tCO2/MWh assigned to imported energy
+    capacity_limit: true                   # cap import power to historical maxima
+    volume_limit: inf                      # cap import energy in TWh per balancing period; 0 < x < 100 or 'inf'
+    balancing_period: month                # day | week | month | year
 
   exports:
-    enable: false 
-    costs: wholesale # wholesale|carrier|float
-    capacity_limit: true 
-    volume_limit: inf # 0 > x > 100 | 'inf'
-    balancing_period: month # day|week|month|year
-
-
-
-# docs :
-conventional:
-  unit_commitment: false
-  must_run: false
-  dynamic_fuel_price:
     enable: false
-    pudl: true
-    wholesale: true
+    costs: wholesale                       # wholesale | carrier | float
+    capacity_limit: true
+    volume_limit: inf                      # 0 < x < 100 or 'inf'
+    balancing_period: month                # day | week | month | year
 
-# docs :
+
+# ====================================================================
+# CONVENTIONAL — unit-commitment and fuel-price overrides
+# ====================================================================
+# docs : CONVENTIONAL
+conventional:
+  unit_commitment: false                   # true = enforce min-up/down, startup costs (LP relaxation by default)
+  must_run: false                          # true = apply ADS must-run minimum loading to flagged thermal plants
+  dynamic_fuel_price:
+    enable: false                          # true = use time-varying fuel prices instead of constant
+    pudl: true                             # PUDL receipts-based fuel cost time series (monthly resolution)
+    wholesale: true                        # CAISO/wholesale natural-gas hub prices (overrides PUDL for NG)
+
+
+# ====================================================================
+# LINES — AC transmission lines
+# ====================================================================
+# docs : LINES
 lines:
-  s_max_pu: 0.7
-  s_nom_max: .inf
-  max_extension: 20000 #MW
-  length_factor: 1.25
+  s_max_pu: 0.7                            # apparent-power utilization cap (fraction of s_nom); 0.7 = N-1 derate
+  s_nom_max: .inf                          # MVA cap on expanded line capacity per corridor (.inf = unbounded)
+  max_extension: 20000                     # MW cap on total network-wide line expansion
+  length_factor: 1.25                      # multiplier on geographic length to account for routing/right-of-way
 
 
-# docs :
+# ====================================================================
+# LINKS — HVDC and controllable links (DC ties, internal HVDC)
+# ====================================================================
+# docs : LINKS
 links:
-  p_max_pu: 1.0
-  p_nom_max: .inf
-  max_extension: 20000 #MW
+  p_max_pu: 1.0                            # active-power utilization cap (fraction of p_nom)
+  p_nom_max: .inf                          # MW cap on expanded link capacity per corridor
+  max_extension: 20000                     # MW cap on total network-wide HVDC expansion
 
-# docs :
+
+# ====================================================================
+# CO2 — sequestration storage and pipeline transport
+# ====================================================================
+# docs : CO2
 co2:
-  storage: false   # [false, true]
-  network:
-    enable: false   # [false, true]
-    capital_cost: 2736000   # in USD/12-inch diameter/mile
-    marginal_cost: 4   # in USD/tCO2
-    lifetime: 40   # in years
-    discount_rate: 0.07
+  storage: false                           # true = enable underground CO2 sequestration at each node (Roads2Removal potentials)
+  network:                                 # CO2 pipeline transport between nodes
+    enable: false
+    capital_cost:  2736000                 # USD per 12-inch-diameter mile
+    marginal_cost: 4                       # USD per tCO2 transported
+    lifetime: 40                           # years
+    discount_rate: 0.07                    # annual real discount rate (fraction)
 
-# docs :
+
+# ====================================================================
+# DAC — Direct Air Capture
+# ====================================================================
+# docs : DAC
 dac:
-  enable: false   # [false, true]
-  granularity: "node"   # ["node", "state", "nation"]
-  capital_cost: 6000000   # in USD/tCO2/h
-  electricity_input: 2.5   # in MWh/tCO2
-  lifetime: 20   # in years
-  discount_rate: 0.07
+  enable: false
+  granularity: "node"                      # CO2 atmosphere scope; node | state | nation
+  capital_cost: 6000000                    # USD per (tCO2/h) of capture capacity
+  electricity_input: 2.5                   # MWh of electricity consumed per tCO2 captured
+  lifetime: 20                             # years
+  discount_rate: 0.07                      # annual real discount rate (fraction)
 
-# docs :
+
+# ====================================================================
+# COSTS — capex/opex scenarios and policy incentives
+# ====================================================================
+# docs : COSTS
 costs:
+  # NREL Annual Technology Baseline (ATB) — primary capex/fom source
   atb:
-    model_case: "Market" # Market, R&D
-    scenario: "Moderate" # Advanced, Conservative, Moderate
-    overrides: # Optional per-carrier overrides for scenario and/or model_case. Falls back to defaults above when unset.
+    model_case: "Market"                   # Market (commercial) | R&D (advanced research)
+    scenario:   "Moderate"                 # Advanced | Conservative | Moderate
+    overrides:                             # OPTIONAL: per-carrier overrides; falls back to defaults above
       # solar:
       #   scenario: "Advanced"
       # nuclear:
-      #   scenario: "Conservative"
+      #   scenario:   "Conservative"
       #   model_case: "R&D"
+
+  # EIA Annual Energy Outlook — used for fuel-price escalation
   aeo:
-    scenario: "reference" # reference, high, low
-  social_discount_rate: 0.02
-  ng_fuel_year: 2019 # year of the natural gas price from CAISO [2019- 2023]
-  emission_prices: # in currency per tonne emission, only used with the option Ep
+    scenario: "reference"                  # reference | high | low
+
+  social_discount_rate: 0.02               # fraction; applied to annualization of capex
+  ng_fuel_year: 2019                       # CAISO NG price vintage year; 2019..2023
+
+  emission_prices:                         # CO2/SOx/NOx adder (only with Ep opt)
     enable: false
-    co2: 0.
-    co2_monthly_prices: false
-  ptc_modifier:
+    co2: 0.                                # USD/tCO2 flat price
+    co2_monthly_prices: false              # true = use a monthly time series instead of flat co2 above
+
+  ptc_modifier:                            # Production Tax Credit; subtracted from marginal cost ($/MWh)
     onwind: 27.50
     biomass: 27.50
-  itc_modifier:
+
+  itc_modifier:                            # Investment Tax Credit; fraction of capex reduced
     solar: 0.3
     offwind: 0.3
     offwind_floating: 0.3
@@ -184,93 +291,107 @@ costs:
     SMR: 0.3
     nuclear: 0.3
     hydro: 0.3
-    2hr_battery_storage: 0.3
-    4hr_battery_storage: 0.3
-    6hr_battery_storage: 0.3
-    8hr_battery_storage: 0.3
+    2hr_battery_storage:  0.3
+    4hr_battery_storage:  0.3
+    6hr_battery_storage:  0.3
+    8hr_battery_storage:  0.3
     10hr_battery_storage: 0.3
-    8hr_PHS: 0.3
+    8hr_PHS:  0.3                          # PHS = pumped hydro storage
     10hr_PHS: 0.3
     12hr_PHS: 0.3
-  min_year: # {carrier: year}
-    hydrogen_ct: 2040
-  max_growth: # {carrier: {base:, rate:}}
 
-# docs :
+  min_year:                                # earliest commercial-availability year per carrier; carrier excluded before this year
+    hydrogen_ct: 2040
+  max_growth:                              # per-carrier annual build-rate caps; {carrier: {base: MW, rate: fraction}}
+
+
+# ====================================================================
+# CLUSTERING — pre-cluster (simpl) and final (cluster) settings
+# ====================================================================
+# docs : CLUSTERING
 clustering:
-  simplify_network:
-    weighting_strategy: demand-capacity # choose from: [population, demand-capacity]
-    to_substations: false # network is simplified to nodes with positive or negative power injection (i.e. substations or offwind connections)
-    algorithm: kmeans # choose from: [hac, kmeans]
-    feature: solar+onwind-time # only for hac. choose from: [solar+onwind-time, solar+onwind-cap, solar-time, solar-cap, solar+offwind-cap] etc.
-  cluster_network:
-    weighting_strategy: demand-capacity # choose from: [population, demand-capacity]
-    algorithm: kmeans # choose from: [hac, kmeans]
-    feature: solar+onwind-time
-    exclude_carriers: []
-    consider_efficiency_classes: false
+  simplify_network:                        # kmeans pre-clustering at the {simpl} wildcard
+    weighting_strategy: demand-capacity    # population | demand-capacity
+    algorithm: kmeans                      # kmeans | modularity (HAC removed in v1)
+  cluster_network:                         # final clustering at the {clusters} wildcard
+    weighting_strategy: demand-capacity    # population | demand-capacity
+    algorithm: kmeans                      # kmeans | modularity
+    exclude_carriers: []                   # carriers to drop before clustering
+    consider_efficiency_classes: false     # true = bin generators by efficiency before aggregation
+
+  # Aggregation strategies for generator attributes during clustering.
+  # Keys map PyPSA generator columns to pandas-groupby reductions.
   aggregation_strategies:
     generators:
-      build_year: 'capacity_weighted_average'
-      lifetime: 'capacity_weighted_average'
-      start_up_cost: 'capacity_weighted_average'
-      min_up_time: 'capacity_weighted_average'
-      min_down_time: 'capacity_weighted_average'
-      ramp_limit_up: max
+      build_year:      'capacity_weighted_average'
+      lifetime:        'capacity_weighted_average'
+      start_up_cost:   'capacity_weighted_average'
+      min_up_time:     'capacity_weighted_average'
+      min_down_time:   'capacity_weighted_average'
+      ramp_limit_up:   max
       ramp_limit_down: max
-      committable: any
-      vom_cost: mean
-      fuel_cost: mean
-      heat_rate: mean
-  temporal:
-    resolution_elec: false
-    resolution_sector: false
+      committable:     any
+      vom_cost:        mean
+      fuel_cost:       mean
+      heat_rate:       mean
 
-focus_weights:
+  temporal:                                # temporal aggregation (segments/typical periods)
+    resolution_elec:   false               # int H or false = native hourly
+    resolution_sector: false               # int H or false = native hourly
 
-# docs :
+focus_weights:                             # OPTIONAL: per-region weights for the clustering objective; null = uniform
+
+
+# ====================================================================
+# SOLVING — solver selection, options, and per-solver tunings
+# ====================================================================
+# docs : SOLVING
 solving:
-  #tmpdir: "path/to/tmp"
+  # tmpdir: "path/to/tmp"                  # OPTIONAL: solver scratch dir (large LP files)
+
   options:
-    load_shedding: false
-    clip_p_max_pu: 1.e-2
-    noisy_costs: true
-    skip_iterations: true
-    rolling_horizon: false
-    seed: 123
-    # options that go into the optimize function
+    load_shedding: false                   # true = add slack generators at very high cost (debug infeasibility)
+    clip_p_max_pu: 1.e-2                   # threshold below which renewable p_max_pu is set to 0
+    noisy_costs: true                      # add small random noise to costs to break LP degeneracies
+    skip_iterations: true                  # skip line-iteration loop (typically true for capacity expansion)
+    rolling_horizon: false                 # true = solve in time-overlapping windows
+    seed: 123                              # RNG seed for noisy_costs
+    # --- options passed into n.optimize() ---
     track_iterations: false
     min_iterations: 4
     max_iterations: 6
-    transmission_losses: 2
-    linearized_unit_commitment: true
-    horizon: 8760
-    assign_all_duals: true
-
+    transmission_losses: 2                 # 0 = no losses; N = N-piecewise quadratic loss approximation
+    linearized_unit_commitment: true       # LP relaxation of UC binaries
+    horizon: 8760                          # rolling-horizon window length (hours)
+    assign_all_duals: true                 # populate dual variables for every constraint
+    # snapshot_portion: null               # OPTIONAL: solve only first fraction of snapshots (smoke testing)
+    # overlap: 0                           # OPTIONAL: rolling-horizon window overlap (hours)
 
   solver:
-    name: gurobi
-    options: gurobi-default
+    name: gurobi                           # gurobi | highs | cplex | cbc | glpk
+    options: gurobi-default                # name of options block below
 
+  # Solver-native tuning blocks. The selected block above is passed
+  # verbatim to the solver. Refer to each solver's docs for the keys.
   solver_options:
     highs-default:
-      # refer to https://ergo-code.github.io/HiGHS/options/definitions.html#solver
+      # https://ergo-code.github.io/HiGHS/options/definitions.html
       threads: 4
       solver: "ipm"
       run_crossover: "off"
       small_matrix_value: 1e-6
       large_matrix_value: 1e9
       primal_feasibility_tolerance: 1e-5
-      dual_feasibility_tolerance: 1e-5
-      ipm_optimality_tolerance: 1e-4
+      dual_feasibility_tolerance:   1e-5
+      ipm_optimality_tolerance:     1e-4
       parallel: "on"
       random_seed: 123
     gurobi-default:
       threads: 8
-      method: 2 # barrier
-      crossover: 0
-      BarHomogeneous: 1     # Use homogeneous barrier if standard does not converge
-      BarConvTol: 1.e-5
+      method: 2                            # 2 = barrier
+      crossover: 0                         # 0 = barrier-only solution (no crossover)
+      BarHomogeneous: 1                    # use homogeneous barrier if standard does not converge
+      BarConvTol:    1.e-5
       OptimalityTol: 1.e-4
       FeasibilityTol: 1.e-3
       ScaleFlag: 1
@@ -280,49 +401,56 @@ solving:
       GURO_PAR_BARDENSETHRESH: 200
     gurobi-numeric-focus:
       name: gurobi
-      NumericFocus: 3       # Favour numeric stability over speed
-      method: 2             # barrier
-      crossover: 0          # do not use crossover
-      BarHomogeneous: 1     # Use homogeneous barrier if standard does not converge
-      BarConvTol: 1.e-5
+      NumericFocus: 3                      # favor numeric stability over speed
+      method: 2
+      crossover: 0
+      BarHomogeneous: 1
+      BarConvTol:    1.e-5
       FeasibilityTol: 1.e-4
-      OptimalityTol: 1.e-4
+      OptimalityTol:  1.e-4
       ObjScale: -0.5
       threads: 8
       Seed: 123
-    gurobi-fallback:        # Use gurobi defaults
+    gurobi-fallback:                       # tighter tolerances, retried after a numerical failure
       name: gurobi
       crossover: 0
-      method: 2             # barrier
-      BarHomogeneous: 1     # Use homogeneous barrier if standard does not converge
-      BarConvTol: 1.e-5
+      method: 2
+      BarHomogeneous: 1
+      BarConvTol:    1.e-5
       FeasibilityTol: 1.e-5
-      OptimalityTol: 1.e-5
+      OptimalityTol:  1.e-5
       Seed: 123
       threads: 8
     cplex-default:
       threads: 4
-      lpmethod: 4 # barrier
-      solutiontype: 2 # non basic solution, ie no crossover
+      lpmethod: 4                          # 4 = barrier
+      solutiontype: 2                      # 2 = non-basic solution (no crossover)
       barrier.convergetol: 1.e-5
-      feasopt.tolerance: 1.e-6
-    cbc-default: {} # Used in CI
-    glpk-default: {} # Used in CI
+      feasopt.tolerance:   1.e-6
+    cbc-default: {}                        # used in CI
+    glpk-default: {}                       # used in CI
 
-  mem: 30000 #memory in MB; 20 GB enough for 50+B+I+H2; 100 GB for 181+B+I+H2
-  walltime: "12:00:00"
+  walltime: "12:00:00"                     # solver wall time cap (HH:MM:SS); enforced via solver hooks
 
+
+# ====================================================================
+# WALLTIME — per-rule HPC walltime overrides (only used by SLURM driver)
+# ====================================================================
 walltime:
   build_renewable_profiles: '04:00:00'
-  build_fuel_prices: '00:20:00'
-  add_demand: '02:00:00'
-  add_electricity: '04:00:00'
-  simplify_network: '05:00:00'
-  cluster_network: '04:00:00'
-  solve_network: '20:00:00'
+  build_fuel_prices:        '00:20:00'
+  add_demand:               '02:00:00'
+  add_electricity:          '04:00:00'
+  simplify_network:         '05:00:00'
+  cluster_network:          '04:00:00'
+  solve_network:            '20:00:00'
 
-# docs :
+
+# ====================================================================
+# CUSTOM FILES — bring-your-own network or costs
+# ====================================================================
+# docs : CUSTOM_FILES
 custom_files:
-  activate: false
-  files_path: ''
-  network_name: ''
+  activate: false                          # true = use the network/costs paths below instead of pipeline outputs
+  files_path: ''                           # directory containing the custom files
+  network_name: ''                         # .nc filename inside files_path; loaded in place of cluster_network output

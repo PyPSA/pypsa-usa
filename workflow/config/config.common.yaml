@@ -6,6 +6,7 @@ renewable:
   dataset: godeeep #atlite or godeeep
   EGS:
     dispatch: baseload # baseload or flexible
+    drilling_cost: base # base or advanced — selects EGS supply-curve capex column
   onwind:
     cutout: era5
     resource:
@@ -156,6 +157,9 @@ renewable_land_access:                     # [null | reference | limited | open]
 apply_cec_basescreen: false           # overlay CEC Wind/Solar BaseScreen on onwind+solar (CA-only)
 apply_boem_osw: false                 # overlay BOEM OSW planning areas on offwind+offwind_floating
 godeeep_wind_height: "_125m"          # which raw GODEEEP wind-CF hub height to pull ["_100m", "_125m"]
+nrel_caps_reassign:                   # out-of-footprint caps recovery for footprint-scoped runs (caps are rolled up nationally)
+  enable: false                       # when true, fold unmapped caps entries onto the nearest in-footprint bus (needs x/y in the caps file)
+  max_km: 100                         # only reassign entries within this distance (km); farther entries stay dropped (prevents cross-seam teleporting)
 
 # Specify month-day range; year is pulled from planning_horizons
 # For multiple planning horizons, only specify the month and day - the year will automatically match each planning horizon (e.g., planning_horizons: [2030, 2040, 2050])
@@ -173,3 +177,16 @@ offshore_shape:
 offshore_network:
   enable: true # set to true to enable offshore network
   bus_spacing: 25000 # km
+
+# docs :
+# Defaults for the CO2 storage / pipeline-network optionality. Per-scenario
+# configs override; keeping the keys defined here ensures every rule that
+# reads ``config["co2"][...]`` resolves even when a config does not opt in.
+co2:
+  storage: false   # [false, true]
+  network:
+    enable: false   # [false, true]
+    capital_cost: 2736000   # in USD/12-inch diameter/mile
+    marginal_cost: 4   # in USD/tCO2
+    lifetime: 40   # in years
+    discount_rate: 0.07

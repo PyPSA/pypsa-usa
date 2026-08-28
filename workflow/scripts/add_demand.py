@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, get_multiindex_snapshots, mock_snakemake
+from _helpers import configure_logging, get_multiindex_snapshots, log_network_schema, mock_snakemake
 from constants_sector import (
     TRANSPORT_FUELS,
     SecCarriers,
@@ -48,6 +48,7 @@ if __name__ == "__main__":
 
     demand_files = snakemake.input.demand
     n = pypsa.Network(snakemake.input.network)
+    schema_entry = log_network_schema(n, stage="entry")
 
     sectors = snakemake.params.sectors
 
@@ -99,4 +100,5 @@ if __name__ == "__main__":
             attach_demand(n, df, carrier, suffix)
             logger.info(log_statement)
 
+    log_network_schema(n, stage="exit", baseline=schema_entry)
     n.export_to_netcdf(snakemake.output.network)

@@ -23,6 +23,160 @@ from zenodo_downloader import ZenodoScenarioDownloader
 logger = logging.getLogger(__name__)
 
 
+def _reassign_unmapped_caps(
+    df: pd.DataFrame,
+    max_km: float,
+    tech: str,
+) -> pd.DataFrame:
+    """Assign each unmapped caps entry to the cluster of the geographically
+    nearest MAPPED (in-footprint) entry, but only within ``max_km``.
+
+    Requires per-entry ``x``/``y`` (lon/lat) columns in ``df``. Caps files
+    generated before build_nrel_bus_capacities.py wrote coordinates lack
+    them — that is a hard config error, not a silent fallback.
+    """
+    if "x" not in df.columns or "y" not in df.columns:
+        raise ValueError(
+            f"nrel_caps_reassign.enable is true for '{tech}', but the NREL caps "
+            "file carries no per-entry x/y coordinates, so unmapped entries "
+            "cannot be reassigned to the nearest in-footprint bus. The published "
+            "Zenodo caps artifacts predate the coordinate-preserving rollup. "
+            "Fix: regenerate the caps files on HPC "
+            "(workflow/scripts/nrel_exclusion/build_nrel_artifacts.sh, which "
+            "runs build_nrel_bus_capacities.py — it now writes per-bus x/y), "
+            "or set nrel_caps_reassign.enable: false to keep today's "
+            "drop-unmapped behavior.",
+        )
+
+    unmapped = df["cluster"].isna()
+    anchors = df.loc[~unmapped & df["x"].notna() & df["y"].notna()]
+    candidates = df.loc[unmapped & df["x"].notna() & df["y"].notna()]
+    if anchors.empty or candidates.empty:
+        return df
+
+    anchor_xy = anchors[["x", "y"]].to_numpy(dtype=float)
+    n_recovered = 0
+    mw_recovered = 0.0
+    # Chunk the candidate side so the haversine distance matrix stays small
+    # (national caps: roughly 17k unmapped by 2k mapped entries).
+    chunk = 2000
+    idx = candidates.index.to_numpy()
+    for start in range(0, len(idx), chunk):
+        rows = idx[start : start + chunk]
+        cand_xy = df.loc[rows, ["x", "y"]].to_numpy(dtype=float)
+        dist = haversine(cand_xy, anchor_xy)  # km, shape (len(rows), n_anchors)
+        nearest = dist.argmin(axis=1)
+        nearest_km = dist[np.arange(len(rows)), nearest]
+        ok = nearest_km <= max_km
+        take = rows[ok]
+        df.loc[take, "cluster"] = anchors["cluster"].to_numpy()[nearest[ok]]
+        n_recovered += int(ok.sum())
+        if "p_nom_max" in df.columns:
+            mw_recovered += float(df.loc[take, "p_nom_max"].sum())
+
+    still = df["cluster"].isna()
+    mw_still = float(df.loc[still, "p_nom_max"].sum()) if "p_nom_max" in df.columns else float("nan")
+    logger.warning(
+        f"NREL caps reassignment ({tech}): recovered {n_recovered} out-of-footprint "
+        f"entries ({mw_recovered:.1f} MW p_nom_max) onto nearest in-footprint buses "
+        f"within {max_km:.0f} km; {int(still.sum())} entries ({mw_still:.1f} MW) "
+        f"remain beyond max_km and stay dropped.",
+    )
+    return df
+
+
+def remap_caps_to_cluster(
+    caps_ds: xr.Dataset,
+    busmap: pd.Series,
+    tech: str = "",
+    reassign: dict | None = None,
+) -> xr.Dataset:
+    """Remap NREL bus-capacity dataset from substation keys to cluster bus keys.
+
+    NREL caps files are keyed by substation ID (e.g. "0.0", "35000.0"); after
+    the simplify-early refactor, the network and regions use simpl-cluster IDs
+    (e.g. "p10 0"). Aggregate per cluster_bus:
+      * weight, p_nom_max, potential, underwater_fraction_area → sum (extensive)
+      * average_distance, avg_cf, underwater_fraction → capacity-weighted mean
+
+    Caps files are rolled up against the NATIONAL substation tessellation; in
+    footprint-scoped runs most entries have no busmap match and are dropped.
+    Dropped totals are always logged loudly. When ``reassign['enable']`` is
+    true, unmapped entries within ``reassign['max_km']`` of an in-footprint
+    entry are folded into that entry's cluster instead of being dropped
+    (requires per-entry x/y in the caps file).
+    """
+    extensive = {"p_nom_max", "potential", "weight"}
+    intensive = {"average_distance", "avg_cf", "underwater_fraction"}
+    coords_only = {"x", "y"}  # per-entry lon/lat — consumed here, never output
+
+    df = caps_ds.to_dataframe().reset_index()
+    df["bus"] = df["bus"].astype(str)
+    # Try direct match first; fall back to float→int→str normalization since
+    # NREL keys carry a ".0" suffix while busmap indices are bare ints.
+    df["cluster"] = df["bus"].map(busmap)
+    missing = df["cluster"].isna()
+    if missing.any():
+        try:
+            norm = df.loc[missing, "bus"].astype(float).astype(int).astype(str)
+            df.loc[missing, "cluster"] = norm.map(busmap).values
+        except (TypeError, ValueError):
+            pass
+
+    # Loud, unconditional accounting of what the footprint scoping drops.
+    unmapped = df["cluster"].isna()
+    if unmapped.any():
+        national_mw = float(df["p_nom_max"].sum()) if "p_nom_max" in df.columns else float("nan")
+        dropped_mw = float(df.loc[unmapped, "p_nom_max"].sum()) if "p_nom_max" in df.columns else float("nan")
+        pct = 100.0 * dropped_mw / national_mw if national_mw > 0 else float("nan")
+        logger.warning(
+            f"NREL caps remap ({tech}): {int(unmapped.sum())}/{len(df)} entries have no "
+            f"busmap match (out of the run footprint) — dropping {dropped_mw:.1f} MW "
+            f"p_nom_max, {pct:.1f}% of the national total. Border regions straddling "
+            "the footprint edge lose their out-of-footprint capacity entirely; see "
+            "nrel_caps_reassign in config.common.yaml for opt-in recovery.",
+        )
+        reassign = reassign or {}
+        if reassign.get("enable", False):
+            df = _reassign_unmapped_caps(
+                df,
+                max_km=float(reassign.get("max_km", 100.0)),
+                tech=tech,
+            )
+
+    df = df.dropna(subset=["cluster"])
+    if df.empty:
+        raise RuntimeError(
+            "NREL caps remap produced 0 rows — busmap and caps bus IDs share no overlap.",
+        )
+
+    weights = df["weight"] if "weight" in df.columns else None
+    out_cols: dict[str, pd.Series] = {}
+    for col in df.columns:
+        if col in ("bus", "cluster") or col in coords_only:
+            continue
+        if col in extensive:
+            out_cols[col] = df.groupby("cluster")[col].sum()
+        elif col in intensive and weights is not None:
+            wsum = (df[col] * weights).groupby(df["cluster"]).sum()
+            wtotal = weights.groupby(df["cluster"]).sum()
+            out_cols[col] = (wsum / wtotal).where(wtotal > 0, 0.0)
+        else:  # unknown column → sum (extensive default, since caps are capacities)
+            out_cols[col] = df.groupby("cluster")[col].sum()
+
+    out = xr.Dataset(
+        {
+            name: xr.DataArray(
+                series.values.astype("float32"),
+                coords={"bus": series.index.values},
+                dims="bus",
+            )
+            for name, series in out_cols.items()
+        },
+    )
+    return out
+
+
 # Get renewable snapshots for a given year using month/day from config
 def get_renewable_snapshots(config, year):
     ren_sns_config = config.get("renewable_snapshots", {})
@@ -330,6 +484,16 @@ if __name__ == "__main__":
         avail = xr.open_dataarray(snakemake.input.nrel_avail)
         caps_ds = xr.open_dataset(snakemake.input.nrel_caps)
 
+        # NREL caps are keyed by substation ID; remap to simpl-cluster bus IDs
+        # so they intersect with the profile/region bus space.
+        busmap_s = pd.read_csv(snakemake.input.busmap_s, index_col=0, dtype=str).iloc[:, 0]
+        busmap_s.index = busmap_s.index.astype(str)
+        # Opt-in recovery of out-of-footprint caps entries (default off);
+        # reaches the script the same way renewable_land_access does.
+        reassign_cfg = snakemake.config.get("nrel_caps_reassign") or {}
+        caps_ds = remap_caps_to_cluster(caps_ds, busmap_s, tech=tech, reassign=reassign_cfg)
+        logger.info(f"Remapped NREL caps to {caps_ds.sizes['bus']} cluster buses.")
+
         mapping = get_cell_to_bus_mapping(
             ds_cf["x"].values,
             ds_cf["y"].values,
@@ -350,6 +514,18 @@ if __name__ == "__main__":
         common_buses = sorted(
             set(profile.bus.values) & set(capacities.bus.values) & set(region_buses),
         )
+        # Empty intersection with non-empty inputs means the three bus-ID
+        # spaces are formatted differently (e.g. "35827.0" vs "35827") —
+        # writing an empty profile would only crash later in add_electricity.
+        if not common_buses and profile.sizes["bus"] > 0 and capacities.sizes["bus"] > 0:
+            raise RuntimeError(
+                f"godeeep bus IDs share no overlap for {tech}: "
+                f"profile buses e.g. {[str(b) for b in profile.bus.values[:3]]}, "
+                f"caps buses e.g. {[str(b) for b in capacities.bus.values[:3]]}, "
+                f"region buses e.g. {[str(b) for b in region_buses[:3]]}. "
+                "Check bus-ID formatting in regions_s{simpl}.geojson (cluster_simpl) "
+                "and busmap_s{simpl}.csv.",
+            )
         profile = profile.sel(bus=common_buses)
         capacities = capacities.sel(bus=common_buses)
         p_nom_max = p_nom_max.sel(bus=common_buses)

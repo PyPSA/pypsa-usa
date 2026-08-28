@@ -2,12 +2,8 @@ rule solve_network_validation:
     params:
         solving=config["solving"],
         foresight=config["foresight"],
-        planning_horizons=config["scenario"]["planning_horizons"],
-        co2_sequestration_potential=config["sector"].get(
-            "co2_sequestration_potential", 200
-        ),
     input:
-        network=RESOURCES
+        network=NETWORKS
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         flowgates="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
         safer_reeds="config/policy_constraints/reeds/prm_annual.csv",
@@ -48,10 +44,10 @@ rule plot_validation_figures:
         demand_ge=DATA + "GridEmissions/EIA_DMD_2018_2024.csv",
         ge_all=DATA + "GridEmissions/EIA_GridEmissions_all_2018_2024.csv",
         ge_co2=DATA + "GridEmissions/GridEmissions_co2_2018_2024.csv",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson",
+        regions_onshore=GEOSPATIAL
+        + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
+        regions_offshore=GEOSPATIAL
+        + "{interconnect}/regions_offshore_s{simpl}_{clusters}.geojson",
         historical_generation="repo_data/annual_generation_state.xls",
     output:
         **{

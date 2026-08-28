@@ -1,64 +1,53 @@
 # BY PyPSA-USA Authors
-"""Aggregates network to substations and simplifies to a single voltage level."""
+"""Aggregates the bare topology network to substation level and normalizes to one voltage.
+
+First stage of the topology-aggregation pipeline. Consumes ``elec_base_network.nc``
+(buses, lines, transformers only — no generators, loads, or storage attached) and
+reduces it to one bus per substation via:
+
+1. Converting line parameters to a single voltage base (230 kV).
+2. Removing transformers, collapsing voltage layers into a single bus per
+   substation.
+3. Aggregating buses by ``sub_id``.
+
+The downstream ``cluster_simpl`` rule may then optionally apply k-means
+clustering to ``{simpl}`` clusters before any per-bus heavy data (renewable
+profiles, demand) is built.
+"""
 
 import logging
-from functools import reduce
 
-import dill as pickle
-import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, update_p_nom_max
-from cluster_network import cluster_regions, clustering_for_n_clusters
+from _helpers import configure_logging, log_network_schema
 from pypsa.clustering.spatial import get_clustering_from_busmap
 
 logger = logging.getLogger(__name__)
 
 
 def convert_to_per_unit(df):
-    # Calculating base values per component
     df["base_impedance"] = df["v_nom"] ** 2 / df["s_nom"]
     df["base_susceptance"] = 1 / df["base_impedance"]
-
-    # Converting to per-unit values
     df["resistance_pu"] = df["r"] / df["base_impedance"]
     df["reactance_pu"] = df["x"] / df["base_impedance"]
     df["susceptance_pu"] = df["b"] / df["base_susceptance"]
-
-    # Dropping intermediate columns (optional)
     df = df.drop(["base_impedance", "base_susceptance"], axis=1)
-
     return df
 
 
 def convert_to_voltage_level(n, new_voltage):
-    """
-    Converts network.lines parameters to a given voltage.
-
-    Parameters
-    ----------
-    n (pypsa.Network): Network
-    new_voltage (float): New voltage level
-    """
+    """Convert network.lines parameters to a given voltage."""
     df = convert_to_per_unit(n.lines.copy())
-
     df["new_base_impedance"] = new_voltage**2 / df["s_nom"]
-
-    # Convert per-unit values back to actual values using the new base impedance
     df["r"] = df["resistance_pu"] * df["new_base_impedance"]
     df["x"] = df["reactance_pu"] * df["new_base_impedance"]
     df["b"] = df["susceptance_pu"] / df["new_base_impedance"]
-
     df.v_nom = new_voltage
-
-    # Dropping intermediate column
     df = df.drop(
         ["new_base_impedance", "resistance_pu", "reactance_pu", "susceptance_pu"],
         axis=1,
     )
-
-    # Update network lines
     df.type = "Al/St 240/40 2-bundle 220.0"
     n.buses["v_nom"] = new_voltage
     n.lines = df
@@ -73,12 +62,22 @@ def remove_transformers(n):
     missing_buses_i = n.buses.index.difference(trafo_map.index)
     missing = pd.Series(missing_buses_i, missing_buses_i)
     trafo_map = pd.concat([trafo_map, missing])
+    trafo_map = trafo_map.reindex(n.buses.index)
 
     for c in n.one_port_components | n.branch_components:
         df = n.df(c)
         for col in df.columns:
             if col.startswith("bus"):
                 df[col] = df[col].map(trafo_map)
+
+    # Transfer additive bus statics (Pd, LAF_state) from the buses about to be
+    # removed onto their surviving mapped bus, so demand weight is conserved.
+    # min_count=1 keeps all-NaN groups NaN (the base network carries LAF_state
+    # only on Pd-bearing buses) instead of coercing them to 0.
+    for col in ("Pd", "LAF_state"):
+        if col in n.buses.columns:
+            transferred = n.buses[col].groupby(trafo_map).sum(min_count=1)
+            n.buses.loc[transferred.index, col] = transferred
 
     n.mremove("Transformer", n.transformers.index)
     n.mremove("Bus", n.buses.index.difference(trafo_map))
@@ -105,6 +104,7 @@ def aggregate_to_substations(
         bus_strategies={
             "type": "max",
             "Pd": "sum",
+            "LAF_state": "sum",
         },
         generator_strategies=generator_strategies,
     )
@@ -146,7 +146,7 @@ def aggregate_to_substations(
     network_s.buses["x"] = substations.x
     network_s.buses["y"] = substations.y
     network_s.buses["substation_lv"] = True
-    network_s.buses["country"] = zone  # country field used bc pypsa algo aggregates based on country field
+    network_s.buses["country"] = zone  # `country` field drives pypsa aggregation grouping
 
     network_s.lines["type"] = np.nan
 
@@ -184,20 +184,14 @@ def aggregate_to_substations(
             "reeds_state",
         ]
 
-    # Only drop columns that exist in the DataFrame
     cols2drop = [col for col in cols2drop if col in network_s.buses.columns]
     network_s.buses = network_s.buses.drop(columns=cols2drop)
     return network_s, clustering.busmap
 
 
 def assign_line_lengths(n, line_length_factor):
-    """
-    Assign line lengths to network.
-
-    Uses haversine function to calculate line lengths.
-    """
+    """Assign line lengths to network using haversine."""
     logger.info("Assigning line lengths using haversine function...")
-
     n.lines.length = pypsa.geo.haversine_pts(
         n.buses.loc[n.lines.bus0][["x", "y"]],
         n.buses.loc[n.lines.bus1][["x", "y"]],
@@ -218,22 +212,16 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "simplify_network",
+            "aggregate_to_substations",
             interconnect="texas",
-            simpl="50",
         )
     configure_logging(snakemake)
     params = snakemake.params
-    solver_name = snakemake.config["solving"]["solver"]["name"]
 
     topological_boundaries = snakemake.params.topological_boundaries
 
-    # n = pypsa.Network(snakemake.input.network)
-    n = pickle.load(open(snakemake.input.network, "rb"))
-
-    n.generators = n.generators.drop(
-        columns=["ba_eia"],
-    )  # temp added these columns and need to drop for workflow
+    n = pypsa.Network(snakemake.input.network)
+    schema_entry = log_network_schema(n, stage="entry")
 
     n = convert_to_voltage_level(n, 230)
     n, trafo_map = remove_transformers(n)
@@ -241,14 +229,10 @@ if __name__ == "__main__":
     substations = pd.read_csv(snakemake.input.sub, index_col=0)
     substations.index = substations.index.astype(str)
 
-    # new busmap definition
     busmap_to_sub = n.buses.sub_id.astype(int).astype(str).to_frame()
-    busmaps = [trafo_map, busmap_to_sub.sub_id]
-    busmaps = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
 
-    n = assign_line_lengths(n, 1.25)  # Eventually replace with GIS analysis.
+    n = assign_line_lengths(n, 1.25)
     n.links["underwater_fraction"] = 0
-
     n.buses.drop(columns=["substation_off"], inplace=True)
 
     n, busmap = aggregate_to_substations(
@@ -262,47 +246,10 @@ if __name__ == "__main__":
     if topological_boundaries in ["reeds_zone", "state"] and "county" in n.buses.columns:
         n.buses = n.buses.drop(columns=["county"])
 
-    if snakemake.wildcards.simpl:
-        n.set_investment_periods(periods=snakemake.params.planning_horizons)
+    # `busmap` keys the post-trafo-removal buses only; compose with trafo_map
+    # so the exported busmap covers every original base-network bus.
+    busmap = trafo_map.map(busmap).rename_axis(busmap.index.name)
 
-        n.loads_t.p = n.loads_t.p.iloc[:, 0:0]
-        n.loads_t.q = n.loads_t.q.iloc[:, 0:0]
-        attr = [
-            "p",
-            "q",
-            "state_of_charge",
-            "mu_state_of_charge_set",
-            "mu_energy_balance",
-            "mu_lower",
-            "mu_upper",
-            "spill",
-            "p_dispatch",
-            "p_store",
-        ]
-        for attr in attr:
-            n.storage_units_t[attr] = n.storage_units_t[attr].iloc[:, 0:0]
-
-        # Patch for bug where pypsa io clustering will add incorrect build_years for new gens
-        n.generators.build_year += 0.001
-
-        clustering = clustering_for_n_clusters(
-            n,
-            int(snakemake.wildcards.simpl),
-            focus_weights=params.focus_weights,
-            solver_name=solver_name,
-            algorithm=params.simplify_network["algorithm"],
-            feature=params.simplify_network["feature"],
-            aggregation_strategies=params.aggregation_strategies,
-            weighting_strategy=params.simplify_network.get("weighting_strategy", None),
-        )
-        n = clustering.network
-
-        cluster_regions((clustering.busmap,), snakemake.input, snakemake.output)
-    else:
-        for which in ("regions_onshore", "regions_offshore"):  # pass through regions
-            regions = gpd.read_file(getattr(snakemake.input, which))
-            regions.to_file(getattr(snakemake.output, which))
-
-    update_p_nom_max(n)
-
-    n.export_to_netcdf(snakemake.output[0])
+    log_network_schema(n, stage="exit", baseline=schema_entry)
+    n.export_to_netcdf(snakemake.output.network)
+    busmap.to_csv(snakemake.output.busmap, header=["sub_id"])

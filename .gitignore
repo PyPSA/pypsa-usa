@@ -269,3 +269,6 @@ connect.sh
 /workflow/config/config.cluster.yaml
 /workflow/repo_data/dag.png
 !.pre-commit-config.yaml
+
+# transient equivalence-harness forced-rerun marker
+/.eq-force-rerun

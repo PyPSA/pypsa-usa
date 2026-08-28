@@ -7,7 +7,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import REGION_COLS, configure_logging
+from _helpers import REGION_COLS, configure_logging, plot_geojson
 from scipy.spatial import Voronoi
 from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
@@ -71,6 +71,7 @@ def voronoi_partition_pts(points, outline):
 def main(snakemake):
     # Params
     topological_boundaries = snakemake.params.topological_boundaries
+    include_filter = snakemake.params.model_topology_include
 
     logger.info(
         "Building bus regions for %s Interconnect",
@@ -138,7 +139,16 @@ def main(snakemake):
     ]  # removing few buses which don't have geometry
     onshore_regions_concat.set_crs(epsg=4326, inplace=True)
 
-    # Identify empty counties WITHIN the interconnect's BA shapes total footprint (using reeds BA shapes for a cleaner shape)
+    # Identify empty counties WITHIN the model footprint (using reeds BA shapes for a
+    # cleaner shape). When the network was scoped with model_topology.include, the sweep
+    # must be scoped to the ReEDS zones retained in the network - sweeping the full
+    # interconnect would glue every out-of-footprint county onto the nearest retained bus.
+    if include_filter:
+        gpd_reeds = gpd_reeds.loc[gpd_reeds.index.isin(n.buses.reeds_zone.unique())]
+        logger.info(
+            "model_topology.include set: restricting empty-county sweep to %d ReEDS zones present in the filtered network.",
+            len(gpd_reeds),
+        )
     combined_bus_regions = gpd_reeds.geometry.union_all()
 
     # Filter all counties to only those whose centroid is within the interconnect's total footprint
@@ -203,6 +213,7 @@ def main(snakemake):
         logger.info(f"Added {len(empty_counties)} empty counties assigned to nearest buses.")
 
     onshore_regions_concat.to_file(snakemake.output.regions_onshore)
+    plot_geojson(snakemake.output.regions_onshore)
     combined_onshore = onshore_regions_concat.geometry.union_all()
 
     ### Defining Offshore Regions ###
@@ -237,6 +248,7 @@ def main(snakemake):
         (pd.concat(offshore_regions, ignore_index=True).set_crs(epsg=4326).to_file(snakemake.output.regions_offshore))
     else:
         offshore_shapes.to_frame().to_file(snakemake.output.regions_offshore)
+    plot_geojson(snakemake.output.regions_offshore)
 
     if onshore_regions_concat[onshore_regions_concat.geometry.is_empty].shape[0] > 0:
         raise ValueError("Onshore Buses are missing geometry.")

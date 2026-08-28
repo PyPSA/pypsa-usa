@@ -44,8 +44,6 @@ rule plot_natural_gas:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-    params:
-        plotting=config["plotting"],
     output:
         **{
             fig: RESULTS

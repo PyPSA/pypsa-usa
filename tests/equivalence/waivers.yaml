@@ -1,0 +1,137 @@
+# Machine-readable waivers for the equivalence harness (spec D8).
+# Each entry suppresses exactly one signed-off delta and MUST reference a row
+# in docs/superpowers/specs/2026-08-07-deltas-ledger.md.
+# Fields: stage, component, column, kind ('*' wildcards allowed), ledger, reason.
+- stage: assembled_substation_network
+  component: Line
+  column: capital_cost
+  kind: value
+  ledger: DL-1
+  reason: stage-ordering artifact (anchor base-stage segment lengths); clustered ITL identical
+- stage: assembled_substation_network
+  component: Link
+  column: capital_cost
+  kind: value
+  ledger: DL-2
+  reason: stage-ordering artifact; clustered ITL identical
+- stage: '*'
+  component: Carrier
+  column: color
+  kind: value
+  ledger: DL-3
+  reason: plotting palette metadata
+- stage: '*'
+  component: Bus
+  column: control
+  kind: value
+  ledger: DL-4
+  reason: slack-bus bookkeeping; ignored by LOPF
+- stage: '*'
+  component: Bus
+  column: generator
+  kind: value
+  ledger: DL-4
+  reason: slack-bus bookkeeping; ignored by LOPF
+- stage: '*'
+  component: Generator
+  column: control
+  kind: value
+  ledger: DL-4
+  reason: PQ/Slack bookkeeping; ignored by LOPF
+- stage: '*'
+  component: Generator_t.p_max_pu
+  column: '*'
+  kind: column_set
+  ledger: DL-6
+  reason: anchor-only aggregate-named p_max_pu columns; content guarded by unwaived value compare on common names
+- stage: '*'
+  component: Generator_t.p_max_pu
+  column: '*'
+  kind: suppressed
+  ledger: DL-6
+  reason: suppression marker of the waived column_set class
+- stage: '*'
+  component: Generator
+  column: <index>
+  kind: row_set
+  ledger: DL-6
+  reason: per-plant vs pre-aggregated names; content guarded by Generator[bus,carrier]
+- stage: '*'
+  component: Generator
+  column: ba_eia
+  kind: column_set
+  ledger: DL-6
+  reason: candidate-added schema column (metadata)
+- stage: '*'
+  component: StorageUnit
+  column: <index>
+  kind: row_set
+  ledger: DL-6
+  reason: per-plant vs pre-aggregated names; totals verified equal (battery 21254.0, PHS 3978.4 MW)
+- stage: assembled_substation_network
+  component: Generator[bus,carrier]
+  column: <index>
+  kind: row_set
+  ledger: DL-5
+  reason: sole residual is Pebbly Beach (Catalina) 36973 vs 37317 placement
+- stage: '*'
+  component: Generator
+  column: fuel_cost
+  kind: value
+  ledger: DL-7
+  reason: mean-of-means aggregation composition; max 2.55 $/MWh
+- stage: '*'
+  component: Bus
+  column: Pd
+  kind: value
+  ledger: DL-8
+  reason: candidate conserves Pd through trafo removal, anchor static stale; Load_t.p_set finding-free
+- prong: 2
+  stage: prong2_aggregates
+  component: Generator.p_nom_by_carrier
+  column: p_nom
+  kind: value
+  ledger: DL-9
+  reason: existing-RE silent-drop varies with cluster geometry; candidate closer to ground truth
+- prong: 2
+  stage: solved_network
+  component: Network
+  column: objective
+  kind: value
+  ledger: DL-9
+  reason: follows from DL-9 existing-RE baselines; prong-1 objective gate (6.6e-05) stays live
+- prong: 2
+  stage: solved_network
+  component: Network
+  column: p_nom_opt_by_carrier
+  kind: value
+  ledger: DL-9
+  reason: follows from DL-9 existing-RE baselines
+- interconnect: usa
+  stage: assembled_substation_network
+  component: Load_t.p_set
+  column: '*'
+  kind: value
+  ledger: DL-10
+  reason: state-assignment split (reeds_state vs raw breakthrough state); system conserved 0.0485%, max state 1.6% (KS)
+- interconnect: usa
+  stage: assembled_substation_network
+  component: Load_t.p_set
+  column: '*'
+  kind: suppressed
+  ledger: DL-10
+  reason: suppression marker of the DL-10 class
+- interconnect: usa
+  stage: assembled_substation_network
+  component: Generator
+  column: capital_cost
+  kind: value
+  ledger: DL-10
+  reason: regional capex multiplier follows the same state assignment; 93/38,974 gens, max 8.4%
+- interconnect: usa
+  stage: assembled_substation_network
+  component: Generator[bus,carrier]
+  column: p_nom
+  kind: value
+  ledger: DL-10
+  reason: single CCGT placement flip (35790, 296 MW) - DL-5 nearest-bus class at national scale

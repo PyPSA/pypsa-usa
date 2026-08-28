@@ -102,6 +102,23 @@ DATA = "data/"
 RESOURCES = "resources/" + RDIR if not run.get("shared_resources") else "resources/"
 RESULTS = "results/" + RDIR
 
+# Category-first layout under RESOURCES (see also docs/source/about-usage.md).
+# Every grouped output file routes through one of these so the resources/
+# tree stays organized by what files ARE, not by which interconnect they
+# were built for.
+NETWORKS = RESOURCES + "networks/"
+BUSMAPS = RESOURCES + "busmaps/"
+PROFILES = RESOURCES + "profiles/"
+GEOSPATIAL = RESOURCES + "geospatial/"
+COSTS = RESOURCES + "costs/"
+PRICES = RESOURCES + "prices/"
+POWERPLANTS = RESOURCES + "powerplants/"
+DEMAND = RESOURCES + "demand/"
+HEATING_COP = RESOURCES + "heating_cop/"
+TEMPERATURE = RESOURCES + "temperature/"
+POPULATION = RESOURCES + "population/"
+CO2 = RESOURCES + "co2/"
+
 
 include: "rules/common.smk"
 include: "rules/retrieve.smk"
@@ -253,7 +270,7 @@ rule all:
 rule data_model:
     input:
         expand(
-            RESOURCES
+            NETWORKS
             + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
             **config["scenario"],
         ),

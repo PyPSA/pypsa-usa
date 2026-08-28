@@ -3,7 +3,7 @@
 
 def pop_layout_input(wildcards):
     if wildcards["sector"] != "E":
-        return RESOURCES + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv"
+        return POPULATION + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv"
     else:
         return []
 
@@ -19,11 +19,8 @@ rule solve_network:
     params:
         solving=config_provider("solving"),
         foresight=config_provider("foresight"),
-        planning_horizons=config["scenario"]["planning_horizons"],
-        transmission_network=config_provider("model_topology", "transmission_network"),
-        sector_config=config_provider("sector", default={}),
     input:
-        network=RESOURCES
+        network=NETWORKS
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         flowgates="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
         safer_reeds="config/policy_constraints/reeds/prm_annual.csv",

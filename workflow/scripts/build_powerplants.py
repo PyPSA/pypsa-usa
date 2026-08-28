@@ -19,6 +19,9 @@ def initialize_duckdb():
 
 def load_eia_operable_data(parquet_path: str):
     """Queries the parquet files directly for operable plant data."""
+    # ges and p are pre-aggregated to one row per generator/plant before joining.
+    # Without this, the LEFT JOINs multiply rows by ~24 years of EIA-860 history
+    # before the GROUP BY collapses them, producing a large intermediate table.
     return duckdb.query(
         f"""
         WITH monthly_generators AS (
@@ -29,6 +32,24 @@ def load_eia_operable_data(parquet_path: str):
             FROM read_parquet('{parquet_path}/out_eia__monthly_generators.parquet')
             WHERE report_date >= '2023-01-01'
             GROUP BY plant_id_eia, generator_id
+        ),
+        ges_latest AS (
+            SELECT
+                plant_id_eia,
+                generator_id,
+                array_agg(max_charge_rate_mw ORDER BY report_date DESC) FILTER (WHERE max_charge_rate_mw IS NOT NULL)[1] AS max_charge_rate_mw,
+                array_agg(max_discharge_rate_mw ORDER BY report_date DESC) FILTER (WHERE max_discharge_rate_mw IS NOT NULL)[1] AS max_discharge_rate_mw,
+                array_agg(storage_technology_code_1 ORDER BY report_date DESC) FILTER (WHERE storage_technology_code_1 IS NOT NULL)[1] AS storage_technology_code_1
+            FROM read_parquet('{parquet_path}/core_eia860__scd_generators_energy_storage.parquet')
+            GROUP BY plant_id_eia, generator_id
+        ),
+        plants_latest AS (
+            SELECT
+                plant_id_eia,
+                array_agg(nerc_region ORDER BY report_date DESC) FILTER (WHERE nerc_region IS NOT NULL)[1] AS nerc_region,
+                array_agg(balancing_authority_code_eia ORDER BY report_date DESC) FILTER (WHERE balancing_authority_code_eia IS NOT NULL)[1] AS balancing_authority_code_eia
+            FROM read_parquet('{parquet_path}/core_eia860__scd_plants.parquet')
+            GROUP BY plant_id_eia
         )
         SELECT
             yg.plant_id_eia,
@@ -48,20 +69,20 @@ def load_eia_operable_data(parquet_path: str):
             array_agg(yg.state ORDER BY yg.report_date DESC) FILTER (WHERE yg.state IS NOT NULL)[1] AS state,
             array_agg(yg.latitude ORDER BY yg.report_date DESC) FILTER (WHERE yg.latitude IS NOT NULL)[1] AS latitude,
             array_agg(yg.longitude ORDER BY yg.report_date DESC) FILTER (WHERE yg.longitude IS NOT NULL)[1] AS longitude,
-            array_agg(ges.max_charge_rate_mw ORDER BY ges.report_date DESC) FILTER (WHERE ges.max_charge_rate_mw IS NOT NULL)[1] AS max_charge_rate_mw,
-            array_agg(ges.max_discharge_rate_mw ORDER BY ges.report_date DESC) FILTER (WHERE ges.max_discharge_rate_mw IS NOT NULL)[1] AS max_discharge_rate_mw,
-            array_agg(ges.storage_technology_code_1 ORDER BY ges.report_date DESC) FILTER (WHERE ges.storage_technology_code_1 IS NOT NULL)[1] AS storage_technology_code_1,
-            array_agg(p.nerc_region ORDER BY p.report_date DESC) FILTER (WHERE p.nerc_region IS NOT NULL)[1] AS nerc_region,
-            array_agg(p.balancing_authority_code_eia ORDER BY p.report_date DESC) FILTER (WHERE p.balancing_authority_code_eia IS NOT NULL)[1] AS balancing_authority_code_eia,
+            first(ges.max_charge_rate_mw) AS max_charge_rate_mw,
+            first(ges.max_discharge_rate_mw) AS max_discharge_rate_mw,
+            first(ges.storage_technology_code_1) AS storage_technology_code_1,
+            first(p.nerc_region) AS nerc_region,
+            first(p.balancing_authority_code_eia) AS balancing_authority_code_eia,
             array_agg(yg.current_planned_generator_operating_date ORDER BY yg.report_date DESC) FILTER (WHERE yg.current_planned_generator_operating_date IS NOT NULL)[1] AS current_planned_generator_operating_date,
             array_agg(yg.operational_status_code ORDER BY yg.report_date DESC) FILTER (WHERE yg.operational_status_code IS NOT NULL)[1] AS operational_status_code,
             array_agg(yg.generator_retirement_date ORDER BY yg.report_date DESC) FILTER (WHERE yg.generator_retirement_date IS NOT NULL)[1] AS generator_retirement_date,
             array_agg(yg.fuel_type_code_pudl ORDER BY yg.report_date DESC) FILTER (WHERE yg.fuel_type_code_pudl IS NOT NULL)[1] AS fuel_type_code_pudl,
             first(mg.unit_heat_rate_mmbtu_per_mwh) AS unit_heat_rate_mmbtu_per_mwh
         FROM read_parquet('{parquet_path}/out_eia__yearly_generators.parquet') yg
-        LEFT JOIN read_parquet('{parquet_path}/core_eia860__scd_generators_energy_storage.parquet') ges
+        LEFT JOIN ges_latest ges
             ON yg.plant_id_eia = ges.plant_id_eia AND yg.generator_id = ges.generator_id
-        LEFT JOIN read_parquet('{parquet_path}/core_eia860__scd_plants.parquet') p
+        LEFT JOIN plants_latest p
             ON yg.plant_id_eia = p.plant_id_eia
         LEFT JOIN monthly_generators mg
             ON yg.plant_id_eia = mg.plant_id_eia AND yg.generator_id = mg.generator_id
@@ -75,6 +96,10 @@ def load_eia_operable_data(parquet_path: str):
 
 def load_heat_rates_data(parquet_path: str, start_date: str, end_date: str):
     """Queries the parquet files for heat rate and fuel cost data within the specified date range."""
+    # yg and p are pre-aggregated to one row per generator/plant before joining.
+    # Without this, monthly rows in the date range get cross-joined with all
+    # ~24 years of EIA-860 history per generator, producing a multi-GB
+    # intermediate table that downstream code only collapses with a mean().
     query = f"""
     WITH monthly_generators AS (
         SELECT
@@ -88,6 +113,28 @@ def load_heat_rates_data(parquet_path: str, start_date: str, end_date: str):
         WHERE operational_status = 'existing'
         AND report_date BETWEEN '{start_date}' AND '{end_date}'
         AND unit_heat_rate_mmbtu_per_mwh IS NOT NULL
+    ),
+    yg_latest AS (
+        SELECT
+            plant_id_eia,
+            generator_id,
+            array_agg(plant_name_eia ORDER BY report_date DESC) FILTER (WHERE plant_name_eia IS NOT NULL)[1] AS plant_name_eia,
+            array_agg(capacity_mw ORDER BY report_date DESC) FILTER (WHERE capacity_mw IS NOT NULL)[1] AS capacity_mw,
+            array_agg(energy_source_code_1 ORDER BY report_date DESC) FILTER (WHERE energy_source_code_1 IS NOT NULL)[1] AS energy_source_code_1,
+            array_agg(technology_description ORDER BY report_date DESC) FILTER (WHERE technology_description IS NOT NULL)[1] AS technology_description,
+            array_agg(operational_status ORDER BY report_date DESC) FILTER (WHERE operational_status IS NOT NULL)[1] AS operational_status,
+            array_agg(prime_mover_code ORDER BY report_date DESC) FILTER (WHERE prime_mover_code IS NOT NULL)[1] AS prime_mover_code,
+            array_agg(state ORDER BY report_date DESC) FILTER (WHERE state IS NOT NULL)[1] AS state
+        FROM read_parquet('{parquet_path}/out_eia__yearly_generators.parquet')
+        GROUP BY plant_id_eia, generator_id
+    ),
+    plants_latest AS (
+        SELECT
+            plant_id_eia,
+            array_agg(nerc_region ORDER BY report_date DESC) FILTER (WHERE nerc_region IS NOT NULL)[1] AS nerc_region,
+            array_agg(balancing_authority_code_eia ORDER BY report_date DESC) FILTER (WHERE balancing_authority_code_eia IS NOT NULL)[1] AS balancing_authority_code_eia
+        FROM read_parquet('{parquet_path}/core_eia860__scd_plants.parquet')
+        GROUP BY plant_id_eia
     )
     SELECT
         mg.plant_id_eia,
@@ -106,9 +153,9 @@ def load_heat_rates_data(parquet_path: str, start_date: str, end_date: str):
         p.nerc_region,
         p.balancing_authority_code_eia
     FROM monthly_generators mg
-    LEFT JOIN read_parquet('{parquet_path}/out_eia__yearly_generators.parquet') yg
+    LEFT JOIN yg_latest yg
         ON mg.plant_id_eia = yg.plant_id_eia AND mg.generator_id = yg.generator_id
-    LEFT JOIN read_parquet('{parquet_path}/core_eia860__scd_plants.parquet') p
+    LEFT JOIN plants_latest p
         ON mg.plant_id_eia = p.plant_id_eia
     WHERE yg.operational_status = 'existing'
     ORDER BY mg.report_date DESC
@@ -143,6 +190,12 @@ def set_derates(plants):
     plants.winter_derate = plants.winter_derate.clip(
         upper=1,
     ).clip(lower=0)
+    # EIA-860 reports summer/winter capacity only on a representative generator
+    # for multi-unit combined-cycle plants, leaving sub-units (e.g. CCGT LMB/LMC/STA)
+    # with NaN derates. Treat missing derate info as "no derate" so downstream
+    # p_max_pu construction does not propagate NaN across every snapshot.
+    plants.summer_derate = plants.summer_derate.fillna(1.0)
+    plants.winter_derate = plants.winter_derate.fillna(1.0)
 
 
 # Create DataFrames from constants for mapping

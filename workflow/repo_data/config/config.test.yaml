@@ -1,0 +1,109 @@
+# PyPSA-USA test config — used by tests/integration to build to
+# cluster_network on a minimal CA-only Western slice in <5 minutes.
+# DO NOT use as a user-facing entry point.
+run:
+  name: "test"
+  disable_progressbar: true
+  shared_resources: false
+  shared_cutouts: true
+  validation: false
+
+foresight: 'perfect'
+
+scenario:
+  interconnect: [western]
+  clusters: [4m]
+  simpl: [20]
+  opts: [REM-3h]
+  ll: [v1.0]
+  scope: "total"
+  sector: ""
+  planning_horizons: [2030]
+
+model_topology:
+  transmission_network: 'reeds'
+  topological_boundaries: 'reeds_zone'
+  interface_transmission_limits: false
+  include:
+    reeds_state: ['CA']
+  aggregate: {}
+
+enable:
+  build_cutout: false
+
+renewable_weather_years: [2019]
+
+snapshots:
+  start: "2019-01-01 00:00"
+  end: "2019-01-01 23:00"
+  inclusive: both
+
+electricity:
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste]
+  renewable_carriers: [onwind, solar, hydro]
+  retirement: economic
+  extendable_carriers:
+    Generator: [solar, onwind, OCGT, CCGT]
+    StorageUnit: [4hr_battery_storage]
+    Store: []
+    Link: []
+  demand:
+    profile: efs
+    scenario:
+      efs_case: reference
+      efs_speed: moderate
+      aeo: reference
+
+conventional:
+  unit_commitment: false
+  must_run: false
+  dynamic_fuel_price:
+    enable: false
+    pudl: true
+    wholesale: true
+
+lines:
+  s_max_pu: 0.7
+  s_nom_max: .inf
+  max_extension: 20000
+  length_factor: 1.25
+
+links:
+  p_max_pu: 1.0
+  p_nom_max: .inf
+  max_extension: 20000
+
+costs:
+  ng_fuel_year: 2019
+
+clustering:
+  simplify_network:
+    algorithm: kmeans
+  cluster_network:
+    algorithm: kmeans
+    exclude_carriers: []
+    consider_efficiency_classes: false
+  aggregation_strategies:
+    generators:
+      build_year: 'capacity_weighted_average'
+      lifetime: 'capacity_weighted_average'
+      start_up_cost: 'capacity_weighted_average'
+      min_up_time: 'capacity_weighted_average'
+      min_down_time: 'capacity_weighted_average'
+      ramp_limit_up: max
+      ramp_limit_down: max
+      committable: any
+      vom_cost: mean
+      fuel_cost: mean
+      heat_rate: mean
+  temporal:
+    resolution_elec: false
+    resolution_sector: false
+
+focus_weights:
+
+custom_files:
+  activate: false
+  files_path: ''
+  network_name: ''
+

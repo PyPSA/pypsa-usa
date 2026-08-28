@@ -8,6 +8,9 @@ from functools import partial, lru_cache
 import os, sys, glob
 
 path = workflow.source_path("../scripts/_helpers.py")
+# Materialize sibling modules _helpers.py imports (e.g. constants.py) into the
+# same source-cache dir, or its module-level imports fail under a fresh cache.
+workflow.source_path("../scripts/constants.py")
 sys.path.insert(0, os.path.dirname(path))
 
 from _helpers import validate_checksum, update_config_from_wildcards
