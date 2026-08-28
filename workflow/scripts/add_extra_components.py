@@ -185,63 +185,25 @@ def attach_phs_storageunits(n: pypsa.Network, elec_opts, costs: pd.DataFrame):
         )
 
 
-def attach_stores(n, costs, elec_opts, investment_year):
-    carriers = elec_opts["extendable_carriers"]["Store"]
+def copy_timeseries_for_suffix(
+    n: pypsa.Network,
+    source_index: pd.Index,
+    suffix: str | int,
+    attrs: tuple[str, ...] = ("marginal_cost", "p_max_pu"),
+) -> None:
+    """
+    Copy time dependent generator attributes onto suffixed duplicates.
 
-    add_missing_carriers(n, carriers)
-    add_co2_emissions(n, costs, carriers)
-
-    buses_i = n.buses.index
-    bus_sub_dict = {k: n.buses[k].values for k in ["x", "y", "country"]}
-
-    if "H2" in carriers:
-        h2_buses_i = buses_i + " H2"
-        n.add("Bus", h2_buses_i, carrier="H2", **bus_sub_dict)
-
-        n.add(
-            "Store",
-            h2_buses_i,
-            bus=h2_buses_i,
-            carrier="H2",
-            e_nom_extendable=True,
-            e_cyclic=True,
-            e_cyclic_per_period=True,  # pypsa v1 flipped this default to False
-            capital_cost=costs.at["hydrogen storage underground", "capital_cost"],
-            build_year=investment_year,
-            lifetime=costs.at["hydrogen storage underground", "lifetime"],
-            suffix=f" {investment_year}",
+    Only generators that actually carry a time series for ``attr`` are copied,
+    since not all generators are time dependent.
+    """
+    for attr in attrs:
+        source = n.generators_t[attr]
+        columns = [x for x in source_index if x in source.columns]
+        renamed = source[columns].rename(
+            columns={x: f"{x} {suffix}" for x in columns},
         )
-
-        n.add(
-            "Link",
-            h2_buses_i + " Electrolysis",
-            bus0=buses_i,
-            bus1=h2_buses_i,
-            carrier="H2 electrolysis",
-            p_nom_extendable=True,
-            efficiency=costs.at["electrolysis", "efficiency"],
-            capital_cost=costs.at["electrolysis", "capital_cost"],
-            marginal_cost=costs.at["electrolysis", "marginal_cost"],
-            build_year=investment_year,
-            lifetime=costs.at["electrolysis", "lifetime"],
-            suffix=str(investment_year),
-        )
-
-        n.add(
-            "Link",
-            h2_buses_i + " Fuel Cell",
-            bus0=h2_buses_i,
-            bus1=buses_i,
-            carrier="H2 fuel cell",
-            p_nom_extendable=True,
-            efficiency=costs.at["fuel cell", "efficiency"],
-            # NB: fixed cost is per MWel
-            capital_cost=costs.at["fuel cell", "capital_cost"] * costs.at["fuel cell", "efficiency"],
-            marginal_cost=costs.at["fuel cell", "marginal_cost"],
-            build_year=investment_year,
-            lifetime=costs.at["fuel cell", "lifetime"],
-            suffix=str(investment_year),
-        )
+        n.generators_t[attr] = source.join(renamed)
 
 
 def split_retirement_gens(
@@ -339,23 +301,7 @@ def split_retirement_gens(
     )
 
     # time dependent factors added after as not all generators are time dependent
-    marginal_cost_t = n.generators_t["marginal_cost"][
-        [x for x in retirement_gens.index if x in n.generators_t.marginal_cost.columns]
-    ]
-    marginal_cost_t = marginal_cost_t.rename(
-        columns={x: f"{x} existing" for x in marginal_cost_t.columns},
-    )
-    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
-        marginal_cost_t,
-    )
-
-    p_max_pu_t = n.generators_t["p_max_pu"][
-        [x for x in retirement_gens.index if x in n.generators_t["p_max_pu"].columns]
-    ]
-    p_max_pu_t = p_max_pu_t.rename(
-        columns={x: f"{x} existing" for x in p_max_pu_t.columns},
-    )
-    n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
+    copy_timeseries_for_suffix(n, retirement_gens.index, "existing")
 
 
 def attach_multihorizon_existing_generators(
@@ -409,21 +355,7 @@ def attach_multihorizon_existing_generators(
     )
 
     # time dependent factors added after as not all generators are time dependent
-    marginal_cost_t = n.generators_t["marginal_cost"][
-        [x for x in gens.index if x in n.generators_t.marginal_cost.columns]
-    ]
-    marginal_cost_t = marginal_cost_t.rename(
-        columns={x: f"{x} {investment_year}" for x in marginal_cost_t.columns},
-    )
-    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
-        marginal_cost_t,
-    )
-
-    p_max_pu_t = n.generators_t["p_max_pu"][[x for x in gens.index if x in n.generators_t["p_max_pu"].columns]]
-    p_max_pu_t = p_max_pu_t.rename(
-        columns={x: f"{x} {investment_year}" for x in p_max_pu_t.columns},
-    )
-    n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
+    copy_timeseries_for_suffix(n, gens.index, investment_year)
 
 
 def attach_multihorizon_egs(
@@ -473,23 +405,7 @@ def attach_multihorizon_egs(
     )
 
     # time dependent factors added after
-    marginal_cost_t = n.generators_t["marginal_cost"][
-        [x for x in gens.index if x in n.generators_t.marginal_cost.columns]
-    ]
-    marginal_cost_t = marginal_cost_t.rename(
-        columns={x: f"{x} {investment_year}" for x in marginal_cost_t.columns},
-    )
-    n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"].join(
-        marginal_cost_t,
-    )
-
-    p_max_pu_t = n.generators_t["p_max_pu"][[x for x in gens.index if x in n.generators_t["p_max_pu"].columns]]
-
-    p_max_pu_t = p_max_pu_t.rename(
-        columns={x: f"{x} {investment_year}" for x in p_max_pu_t.columns},
-    )
-
-    n.generators_t["p_max_pu"] = n.generators_t["p_max_pu"].join(p_max_pu_t)
+    copy_timeseries_for_suffix(n, gens.index, investment_year)
 
     # shift over time to capture decline
     investment_year_idx = np.where(n.investment_periods == investment_year)[0][0]
@@ -650,7 +566,7 @@ def add_demand_response(
 
     shift = dr_config.get("shift", 0)
     if shift == 0:
-        logger.info(f"DR not applied as allowable sift is {shift}")
+        logger.info(f"DR not applied as allowable shift is {shift}")
         return
 
     marginal_cost_storage = dr_config.get("marginal_cost", 0)
@@ -1537,18 +1453,8 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
     )
 
 
-if __name__ == "__main__":
-    if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
-        snakemake = mock_snakemake(
-            "add_extra_components",
-            interconnect="western",
-            simpl="20",
-            clusters="4m",
-        )
-    configure_logging(snakemake)
-
+def main(snakemake) -> None:
+    """Add the extra extendable components to the clustered network."""
     n = pypsa.Network(snakemake.input.network)
     schema_entry = log_network_schema(n, stage="entry")
     elec_config = snakemake.config["electricity"]
@@ -1612,7 +1518,6 @@ if __name__ == "__main__":
         )
         attach_multihorizon_egs(n, costs, costs_dict, egs_gens, investment_year)
         attach_multihorizon_new_generators(n, costs, new_carriers, investment_year)
-        # attach_stores(n, costs, elec_config, investment_year)
 
     if not multi_horizon_gens.empty and not len(n.investment_periods) == 1:
         # Remove duplicate generators from first investment period,
@@ -1767,3 +1672,17 @@ if __name__ == "__main__":
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     log_network_schema(n, stage="exit", baseline=schema_entry)
     n.export_to_netcdf(snakemake.output[0])
+
+
+if __name__ == "__main__":
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+
+        snakemake = mock_snakemake(
+            "add_extra_components",
+            interconnect="western",
+            simpl="20",
+            clusters="4m",
+        )
+    configure_logging(snakemake)
+    main(snakemake)

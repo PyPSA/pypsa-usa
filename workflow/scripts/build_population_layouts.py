@@ -223,7 +223,6 @@ if __name__ == "__main__":
         title = "Population Density by County (person/km2)"
         column = "density_person_per_km2"
         description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Total population - 2020: DEC Demographic and Housing Characteristics"
-        save = Path(save_path, "population_density.png")
         save = Path(save_path, "density.png")
         plot_county_data(plotting_data, column, title, description, str(save))
 
@@ -233,65 +232,6 @@ if __name__ == "__main__":
         description = "Source: https://data.census.gov/ \nDecennial Census - Universe: Housing units - 2020: DEC Demographic and Housing Characteristics"
         plot_county_data(plotting_data, column, title, description, str(save))
 
-    # Below is akin to the PyPSA-Eur implementation of rural/urbal areas. They
-    # build up cells based on population density to hit a generic urbanization rate
-    # for a country. As we have urban rates at a county level, for the time
-    # being we will just use that
-
-    """
-    # in km^2
-    cell_areas = grid_cells.to_crs(3035).area / 1e6
-
-    # pop per km^2
-    density_cells = cell_pop / cell_areas
-
-    # Indicator matrix grid_cells -> counties; inprinciple Iinv*I is identity
-    # but imprecisions mean not perfect
-    Iinv = cutout.indicatormatrix(counties.geometry)
-
-    # calcualte rural and urban population per cell
-    cell_rural_pop = pd.Series(0.0, density_cells.index)
-    cell_urban_pop = pd.Series(0.0, density_cells.index)
-
-    for geoid in counties.index:
-        logger.debug(
-            f"The urbanization rate for county {geoid} is {round(urban_fraction.loc[geoid]*100)}%"
-        )
-
-        # get cells within the county (geoid)
-        indicator_geoid = pop.county.apply(lambda x: 1.0 if x == geoid else 0.0)
-        indicator_cells_geoid = pd.Series(Iinv.T.dot(indicator_geoid))
-
-        # get population and density withing the county (geoid)
-        density_cells_geoid = indicator_cells_geoid * density_cells
-        pop_cells_geoid = indicator_cells_geoid * pop_cells
-
-        # correct for imprecision of Iinv*I
-        pop_geoid = pop.loc[pop.county == geoid, "pop"].sum()
-        pop_cells_geoid *= pop_geoid / pop_cells_geoid.sum()
-
-        # The first low density grid cells to reach rural fraction are rural
-        asc_density_i = density_cells_geoid.sort_values().index
-        asc_density_cumsum = pop_cells_geoid[asc_density_i].cumsum() / pop_cells_geoid.sum()
-        rural_fraction_ct = 1 - urban_fraction[geoid]
-        pop_geoid_rural_b = asc_density_cumsum < rural_fraction_ct
-        pop_geoid_urban_b = ~pop_geoid_rural_b
-
-        pop_geoid_rural_b[indicator_cells_geoid == 0.0] = False
-        pop_geoid_urban_b[indicator_cells_geoid == 0.0] = False
-
-        pop_rural += pop_geoid_rural_b.where(pop_geoid_rural_b, 0.0)
-        pop_urban += pop_geoid_rural_b.where(pop_geoid_urban_b, 0.0)
-
-    pop_cells = {"total": pop_cells}
-    pop_cells["rural"] = pop_rural
-    pop_cells["urban"] = pop_urban
-
-    for key, pop in pop_cells.items():
-        ycoords = ("y", cutout.coords["y"].data)
-        xcoords = ("x", cutout.coords["x"].data)
-        values = pop.values.reshape(cutout.shape)
-        layout = xr.DataArray(values, [ycoords, xcoords])
-
-        layout.to_netcdf(snakemake.output[f"pop_layout_{key}"])
-    """
+    # PyPSA-Eur builds up cells based on population density to hit a generic
+    # urbanization rate for a country. As we have urban rates at a county
+    # level, for the time being we will just use that

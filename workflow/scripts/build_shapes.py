@@ -9,6 +9,8 @@ from _helpers import configure_logging, mock_snakemake, plot_geojson
 from constants import GPS_CRS, MEASUREMENT_CRS
 from shapely.geometry import MultiPolygon
 
+logger = logging.getLogger(__name__)
+
 
 def filter_small_polygons_gpd(
     geo_series: gpd.GeoSeries,
@@ -82,9 +84,6 @@ def filter_shapes(
     add_regions: list | None = None,
 ) -> gpd.GeoDataFrame:
     """Filters breakthrough energy zone data by interconnect region."""
-    if interconnect not in ("western", "texas", "eastern", "usa"):
-        logger.warning(f"Interconnector of {interconnect} is not valid")
-
     regions = zones.state
     if add_regions:
         if not isinstance(add_regions, list):
@@ -227,32 +226,14 @@ def main(snakemake):
     gdf_na = gdf_na.query("name not in ['Alaska', 'Hawaii']")
 
     # Build State Shapes filtered by interconnect
-    if interconnect == "western":  # filter states that have any portion in interconnect
-        gdf_states = filter_shapes(
-            data=gdf_na,
-            zones=breakthrough_zones,
-            interconnect=interconnect,
-        )
-    elif interconnect == "texas":
-        gdf_states = filter_shapes(
-            data=gdf_na,
-            zones=breakthrough_zones,
-            interconnect=interconnect,
-        )
-    elif interconnect == "eastern":
-        gdf_states = filter_shapes(
-            data=gdf_na,
-            zones=breakthrough_zones,
-            interconnect=interconnect,
-        )
-    elif interconnect == "usa":
-        gdf_states = filter_shapes(
-            data=gdf_na,
-            zones=breakthrough_zones,
-            interconnect=interconnect,
-        )
-    else:
-        raise NotImplementedError
+    # filter states that have any portion in interconnect
+    if interconnect not in ("western", "texas", "eastern", "usa"):
+        raise NotImplementedError(f"Unsupported interconnect: {interconnect}")
+    gdf_states = filter_shapes(
+        data=gdf_na,
+        zones=breakthrough_zones,
+        interconnect=interconnect,
+    )
 
     # Trim gdf_states to only include portions of texas in NERC Interconnect
     gdf_nerc = gpd.read_file(snakemake.input.nerc_shapes)
@@ -371,7 +352,6 @@ def main(snakemake):
 
 
 if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
     if "snakemake" not in globals():
         snakemake = mock_snakemake("build_shapes", interconnect="eastern")
     configure_logging(snakemake)

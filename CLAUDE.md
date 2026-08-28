@@ -33,7 +33,7 @@ HPC: edit `config/config.cluster.yaml` (account/partition/email) and `workflow/r
   ```
 - `conftest.py` provides a `base_network` PyPSA fixture (3-bus network with wind/solar/gas) — extend it rather than building fresh networks per test.
 - Pre-commit hooks (snakefmt, ruff, ruff format, blackdoc, pyupgrade, pretty-format-yaml, add-trailing-comma, jupyter-notebook-cleanup) run on `git commit`. Hooks modify files on first run; re-stage and re-commit. **Do not bypass with `--no-verify`.**
-- `.github/workflows/main.yml` runs `./test.sh` which **does not exist in the repo** — CI's "Test snakemake workflow" step is effectively a no-op today. Treat green CI accordingly.
+- `.github/workflows/main.yml` runs two jobs on every push/PR to `master`/`develop`/`v1-epic`: `fast-tests` (`pytest -m fast`, Tier A static checks) and `e2e-tests` (`pytest -m integration`, Tier B build under micromamba with cached `data/` and `cutouts/`). A scheduled Tuesday job (`upstream-regression`) re-runs the whole suite against upstream PyPSA/atlite/linopy master.
 
 ## Architecture: the DAG and the resources/ layout
 

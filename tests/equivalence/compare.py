@@ -50,11 +50,6 @@ def _norm_label(x) -> str:
     return s[:-2] if _FLOAT_INT_LABEL.fullmatch(s) else s
 
 
-# Candidate-only bookkeeping columns that exist because of the DAG
-# restructuring itself (not results): compared as schema info, never values.
-_T_SKIP_EMPTY = True
-
-
 def load_network(path: Path):
     import pypsa
 

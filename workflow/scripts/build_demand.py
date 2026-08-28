@@ -42,20 +42,10 @@ class Context:
         """The Context maintains a reference to the Strategy objects."""
         return self._read_strategy
 
-    @read_strategy.setter
-    def strategy(self, strategy) -> None:  # arg is ReadStrategy
-        """Usually, the Context allows replacing a Strategy object at runtime."""
-        self._read_strategy = strategy
-
     @property
     def write_strategy(self):  # returns WriteStrategy:
         """The Context maintains a reference to the Strategy objects."""
         return self._write_strategy
-
-    @write_strategy.setter
-    def strategy(self, strategy) -> None:  # arg is WriteStrategy  # noqa: F811
-        """Usually, the Context allows replacing a Strategy object at runtime."""
-        self._write_strategy = strategy
 
     def _read(self) -> pd.DataFrame:
         """Delegate reading to the strategy."""
@@ -108,10 +98,6 @@ class ReadStrategy(ABC):
 
     def __init__(self, filepath: str | list[str] | None = None) -> None:
         self.filepath = filepath
-
-    @property
-    def units():  # noqa: D102
-        return "MW"
 
     @abstractmethod
     def _read_data(self, **kwargs) -> Any:
@@ -404,44 +390,6 @@ class ReadEfs(ReadStrategy):
         )
         df["time"] = time
         return df.drop(columns=["Year", "UtcHourID", "hoy"])
-
-    def get_growth_rate(self):
-        """
-        Public method to get yearly energy totals.
-
-        Yearly values are linearlly interpolated between EFS planning years
-
-        Returns
-        -------
-        |      | State 1 | State 2 | ... | State n |
-        |----- |---------|---------|-----|---------|
-        | 2018 |  ###    |   ###   |     |   ###   |
-        | 2019 |  ###    |   ###   |     |   ###   |
-        | 2020 |  ###    |   ###   |     |   ###   |
-        | 2021 |  ###    |   ###   |     |   ###   |
-        | 2022 |  ###    |   ###   |     |   ###   |
-        | ...  |         |         |     |   ###   |
-        | 2049 |  ###    |   ###   |     |   ###   |
-        | 2050 |  ###    |   ###   |     |   ###   |
-        """
-        # extract efs provided data
-        efs_years = self._read_data()[["Year", "State", "LoadMW"]]
-        efs_years = efs_years.groupby(["Year", "State"]).sum().reset_index()
-        efs_years = efs_years.pivot(index="Year", columns="State", values="LoadMW")
-        efs_years.index = pd.to_datetime(efs_years.index, format="%Y")
-
-        # interpolate in between years
-        new_index = pd.date_range(
-            str(efs_years.index.min()),
-            str(efs_years.index.max()),
-            freq="YS",
-        )
-        all_years = efs_years.reindex(efs_years.index.union(new_index)).interpolate(
-            method="linear",
-        )
-        all_years.index = all_years.index.year
-
-        return all_years
 
 
 class ReadEer(ReadStrategy):
@@ -1835,7 +1783,7 @@ class WriteIndustrial(WriteStrategy):
         elif zone == "reeds":
             return self._dissagregate_on_reeds()
         elif zone == "ba":
-            # return self._dissagregate_on_ba()
+            # BA-level industrial LAFs are not implemented; state-level is used as a proxy
             return self._dissagregate_on_state()
         else:
             raise NotImplementedError
@@ -1865,9 +1813,6 @@ class WriteIndustrial(WriteStrategy):
         laf_all_buses[laf_load_buses.index] = laf_load_buses
 
         return laf_all_buses
-
-    def _dissagregate_on_ba(self) -> pd.Series:
-        raise NotImplementedError
 
     def _dissagregate_on_reeds(self) -> pd.Series:
         raise NotImplementedError

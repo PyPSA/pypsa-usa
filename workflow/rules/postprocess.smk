@@ -29,7 +29,7 @@ rule plot_network_maps:
             for fig in FIGURES_MAPS
         },
     log:
-        "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}.log",
+        "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}_maps.log",
     threads: 1
     resources:
         mem_mb=7000,
@@ -133,7 +133,7 @@ rule plot_statistics:
             for fig in FIGURES_SYSTEM
         },
     log:
-        "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}.log",
+        "logs/plot_figures/{interconnect}_{simpl}_{clusters}_l{ll}_{opts}_{sector}_statistics.log",
     threads: 1
     resources:
         mem_mb=5000,
