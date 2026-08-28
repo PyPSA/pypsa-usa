@@ -67,7 +67,7 @@ Top-level feature flags. `build_cutout` switches between consuming the prebuilt 
 downloaded from Zenodo (the default) and building a fresh cutout from raw ERA5 data, which is slow
 and requires a CDS API key. The optional `custom_busmap` flag makes `cluster_network` read a
 user-provided busmap from `data/{interconnect}/custom_busmap_{clusters}.csv` instead of computing
-one; custom busmaps must key on the bus IDs produced by the `cluster_simpl` stage.
+one; custom busmaps must key on the bus IDs produced by the `cluster_resources` stage.
 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
@@ -580,7 +580,7 @@ Each clustering and interconnection option will have a different number of minim
 
 Cleaned and labeled REeDs Shapes are pulled from this github repository: https://github.com/pandaanson/NYU-law-work
 
-Note the naming trap: the `simplify_network:` config block feeds the rule named `cluster_simpl`
+Note the naming trap: the `simplify_network:` config block feeds the rule named `cluster_resources`
 (the historical rule name `simplify_network` no longer exists), while `cluster_network:` feeds the
 rule of the same name. The `temporal:` block is the primary temporal-resolution knob for solved
 networks.

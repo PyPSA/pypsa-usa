@@ -81,18 +81,6 @@
   ledger: DL-7
   reason: mean-of-means aggregation composition; max 2.55 $/MWh
 - stage: '*'
-  component: Generator
-  column: efficiency
-  kind: value
-  ledger: DL-7
-  reason: aggregation composition; max 0.0028
-- stage: '*'
-  component: Generator
-  column: marginal_cost
-  kind: value
-  ledger: DL-7
-  reason: aggregation composition; max 2.55 $/MWh
-- stage: '*'
   component: Bus
   column: Pd
   kind: value
@@ -119,3 +107,31 @@
   kind: value
   ledger: DL-9
   reason: follows from DL-9 existing-RE baselines
+- interconnect: usa
+  stage: assembled_substation_network
+  component: Load_t.p_set
+  column: '*'
+  kind: value
+  ledger: DL-10
+  reason: state-assignment split (reeds_state vs raw breakthrough state); system conserved 0.0485%, max state 1.6% (KS)
+- interconnect: usa
+  stage: assembled_substation_network
+  component: Load_t.p_set
+  column: '*'
+  kind: suppressed
+  ledger: DL-10
+  reason: suppression marker of the DL-10 class
+- interconnect: usa
+  stage: assembled_substation_network
+  component: Generator
+  column: capital_cost
+  kind: value
+  ledger: DL-10
+  reason: regional capex multiplier follows the same state assignment; 93/38,974 gens, max 8.4%
+- interconnect: usa
+  stage: assembled_substation_network
+  component: Generator[bus,carrier]
+  column: p_nom
+  kind: value
+  ledger: DL-10
+  reason: single CCGT placement flip (35790, 296 MW) - DL-5 nearest-bus class at national scale

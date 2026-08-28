@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 from ..compare import load_network
+from ..paths import INTERCONNECT as IC
 from ..paths import ArtifactPair
 
 LABELS = {"candidate": "V1-epic", "anchor": "anchor"}
@@ -141,15 +142,15 @@ def pnom_attribute_section(prong: int, cand_root: Path, anch_root: Path) -> str:
     pairings = [
         (
             "add_electricity outputs",
-            cand_root / f"resources/equivalence/networks/western/elec_s{s}_l_pp.pkl",
-            anch_root / "resources/equivalence/western/elec_base_network_l_pp.pkl",
+            cand_root / f"resources/equivalence/networks/{IC}/elec_s{s}_l_pp.pkl",
+            anch_root / f"resources/equivalence/{IC}/elec_base_network_l_pp.pkl",
             LABELS["candidate"] + " (substation)",
             "anchor (nodal)",
         ),
         (
             "simplify_network stage",
-            cand_root / f"resources/equivalence/networks/western/elec_s{s}_l_pp.pkl",
-            anch_root / f"resources/equivalence/western/elec_s{s}.nc",
+            cand_root / f"resources/equivalence/networks/{IC}/elec_s{s}_l_pp.pkl",
+            anch_root / f"resources/equivalence/{IC}/elec_s{s}.nc",
             LABELS["candidate"] + " (assembled)",
             "anchor (simplified)",
         ),

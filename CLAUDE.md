@@ -42,7 +42,7 @@ The workflow was recently refactored (the "simplify-early" stack) so that topolo
 ```
 build_base_network → build_bus_regions
   → aggregate_to_substations (elec_b.nc, busmap_b.csv)        # topology only
-  → cluster_simpl            (elec_s{simpl}.nc, regions_*_s{simpl}.geojson, busmap_s{simpl}.csv)
+  → cluster_resources            (elec_s{simpl}.nc, regions_*_s{simpl}.geojson, busmap_s{simpl}.csv)
   → build_renewable_profiles (profile_{tech}_s{simpl}.nc)
   → build_*_demand           (demand outputs keyed to cluster bus)
   → add_demand               (elec_s{simpl}_dem.nc)
@@ -96,10 +96,10 @@ Defined in `workflow/Snakefile`:
 
 ## Things to know before changing rules
 
-- The `{simpl}` wildcard is now load-bearing on most rule outputs downstream of `cluster_simpl`. Adding a new per-bus rule? Its inputs and outputs should both carry `_s{simpl}` and consume `NETWORKS + "{interconnect}/elec_s{simpl}.nc"` (or `_dem.nc` / `_l_pp.pkl` depending on stage), not `elec_base_network.nc`.
+- The `{simpl}` wildcard is now load-bearing on most rule outputs downstream of `cluster_resources`. Adding a new per-bus rule? Its inputs and outputs should both carry `_s{simpl}` and consume `NETWORKS + "{interconnect}/elec_s{simpl}.nc"` (or `_dem.nc` / `_l_pp.pkl` depending on stage), not `elec_base_network.nc`.
 - When adding precomputed substation-level data (like EGS), pattern after `aggregate_egs`: take the rule's input keyed by `sub_id`, remap through `busmap_s{simpl}.csv` (capacity-weighted means for intensive quantities, sums for extensive), output keyed by cluster bus.
 - `bus_strategies` for clustering: `Pd` sums, `reeds_zone`/`county`/`balancing_area` take `first` of the cluster (representative). If new downstream code needs the full many-to-one mapping, read `busmap_*.csv` directly rather than relying on the representative attribute.
-- Custom busmaps must now key on `cluster_simpl`-output bus IDs, not raw substation IDs.
+- Custom busmaps must now key on `cluster_resources`-output bus IDs, not raw substation IDs.
 
 ## Environment
 

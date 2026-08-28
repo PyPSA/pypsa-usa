@@ -12,14 +12,14 @@ changes you will notice:
 
 - **`simplify_network` was split and the DAG reordered.** The old single rule became
   `aggregate_to_substations` (topology-only reduction to substations) followed by
-  `cluster_simpl` (kmeans/modularity clustering to `{simpl}` zones). Renewable
+  `cluster_resources` (kmeans/modularity clustering to `{simpl}` zones). Renewable
   profiles, demand construction, and `add_electricity` now run *after* clustering, at
   `{simpl}` resolution instead of nodal resolution. This cuts peak memory of the
   heavy rules several-fold and speeds up the data pipeline substantially. See
   {doc}`model-workflow`.
 - **HAC clustering was removed.** Supported clustering algorithms are `kmeans` and
   `modularity`. The config section `clustering: simplify_network:` keeps its
-  historical name but feeds the `cluster_simpl` rule.
+  historical name but feeds the `cluster_resources` rule.
 - **EGS supply curves are remapped through the cluster busmap.** A new
   `aggregate_egs` rule converts substation-keyed NREL EGS supply curves to cluster
   buses (capacity-weighted means for intensive quantities, sums for extensive ones).

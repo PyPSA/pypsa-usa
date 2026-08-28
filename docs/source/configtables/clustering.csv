@@ -1,5 +1,5 @@
 ,Unit,Value,Description
-simplify_network:,,,"Settings for the kmeans pre-clustering stage at the ``{simpl}`` wildcard. Naming trap: this config block feeds the rule named ``cluster_simpl`` — the historical rule name ``simplify_network`` no longer exists."
+simplify_network:,,,"Settings for the kmeans pre-clustering stage at the ``{simpl}`` wildcard. Naming trap: this config block feeds the rule named ``cluster_resources`` — the historical rule name ``simplify_network`` no longer exists."
 -- weighting_strategy,str,"{population, demand-capacity}","When building multiple networks, use 'population' if you want to ensure the clusters are assigned constant names."
 -- algorithm,str,"{kmeans, modularity}",Clustering algorithm for the pre-clustering stage (HAC has been removed).
 cluster_network:,,,"Settings for the final clustering stage at the ``{clusters}`` wildcard."
@@ -13,4 +13,4 @@ temporal:,,,"Temporal aggregation — the primary temporal-resolution knob for s
 -- resolution_elec,--,"int hours or ``false``","Resample electricity-only networks to every n hours; ``false`` keeps native hourly resolution."
 -- resolution_sector,--,"int hours or ``false``","Resample sector-coupled networks to every n hours; ``false`` keeps native hourly resolution."
 focus_weights:,,,
--- {region_name},p.u.,float,"Optional per-region share of clusters in the form ``California: 0.5``, placing half of all clusters in that region. Fractions must sum to at most 1. Applied by the kmeans algorithm in both ``cluster_simpl`` and ``cluster_network``; ``null`` distributes clusters by the configured weighting."
+-- {region_name},p.u.,float,"Optional per-region share of clusters in the form ``California: 0.5``, placing half of all clusters in that region. Fractions must sum to at most 1. Applied by the kmeans algorithm in both ``cluster_resources`` and ``cluster_network``; ``null`` distributes clusters by the configured weighting."

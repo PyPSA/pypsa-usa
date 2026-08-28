@@ -99,6 +99,144 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **Seam-plant fallback bounded to the model footprint in scoped runs
+  (DL-13)** (`workflow/scripts/add_electricity.py`, commits d98cb93f and
+  103f2194; harness adoption in
+  `tests/equivalence/build.py::apply_seam_adoption`).
+  `filter_plants_by_region` re-adds "must add" plants — those outside
+  every ReEDS shape of the run's interconnect whose ReEDS membership
+  contradicts their EIA `interconnection` — without testing them against
+  the regions layers, and `match_plant_to_bus` then attaches whatever
+  survives to the nearest bus at unbounded distance. Since DL-11 shrank
+  those layers to the model footprint, a CA-only run picked up 23 plants /
+  1,887.4 MW from as far away as Indiana (Hardy Hills Solar, 2,508 km).
+  Now, when `model_topology.include` scopes the run, a must-add plant is
+  kept only if it lies within `SEAM_PLANT_MAX_KM` = 100 km of the
+  onshore+offshore regions (EPSG:5070); in-footprint plants are at
+  distance 0 and always kept, and every drop is logged at WARNING with
+  name, carrier, state, MW and distance. *Results effect:* **Accepted
+  delta for scoped runs — DL-13, countersigned 2026-08-23.** Gated on
+  `include`, so unfiltered interconnect runs (incl. the usa harness,
+  `include: {}`) are byte-identical by construction. Of the 1,887.4 MW,
+  1,725.0 MW actually reached the assembled network (onwind 1,416.5,
+  solar 281.5, oil 27.0; the 162.4 MW of Fort Peck hydro never did, since
+  hydro comes from the breakthrough files), and the change is symmetric:
+  after mirroring onto the anchor, prong 1 is PASS with 0 live findings,
+  objective rel 2.46e-06 and per-carrier existing capacity equal to
+  4.5e-13 MW, while prong 2 leaves DL-9's absolute gaps (3,680.1 /
+  3,586.6 MW) exactly unchanged. Third ADOPTED-FIX anchor patch after
+  DL-11 and DL-12, and the first done by targeted string surgery rather
+  than whole-file adoption, because `add_electricity.py` legitimately
+  differs between the branches. Note: the first implementation unioned
+  the region layers before measuring distance and crashed prong 2 with a
+  GEOS "side location conflict" — reprojecting coarse cluster polygons to
+  EPSG:5070 leaves 9 of 29 invalid — so the distance is now taken per
+  region, which is mathematically identical (0.0 m difference where the
+  union succeeds) and robust to invalid geometry.
+
+- **`build_powerplants` EIA-860 pre-aggregation adopted onto the anchor
+  (DL-12)** (candidate code already on `v1-epic`; harness adoption in
+  `tests/equivalence/build.py::apply_powerplants_adoption`). v1-epic
+  pre-aggregates the EIA-860 tables into `ges_latest` / `plants_latest` /
+  `yg_latest` CTEs before the LEFT JOINs; upstream joins them raw, so ~24
+  years of `report_date` vintages fan out per generator and reweight the
+  means behind `heat_rate`, `fuel_cost` and `efficiency` (8,231 / 10,381 /
+  8,380 differing cells in `powerplants.csv`; CA gas capacity-weighted
+  fuel cost +0.0558 $/MMBtu). *Results effect:* **Accepted delta — DL-12,
+  countersigned 2026-08-23.** Second ADOPTED-FIX anchor patch after DL-11:
+  the anchor's script is replaced at provision time with the live
+  candidate copy, sentinel-gated on the `ges_latest` CTE and guarded by an
+  interface check against the pristine e7f8bd70 file. Restores prong-1
+  solve exactness: objective rel 2.34e-2 -> ~2e-6, CCGT/OCGT `p_nom_opt`
+  split eliminated, 0 live findings (prong 2 also PASS). Also regenerated
+  the candidate's own stale `powerplants.csv` (predated its own derate
+  fix; `--rerun-triggers mtime` never noticed). Known residual (own
+  follow-up): `build_powerplants` is not bit-reproducible — DuckDB
+  `first()` / tied `array_agg` picks perturb imputations at <=1e-5
+  relative, below the harness's 1e-3 tolerance but non-zero.
+
+- **Footprint-scoped empty-county sweep in `build_bus_regions` (DL-11)**
+  (`workflow/scripts/build_bus_regions.py`,
+  `workflow/rules/build_electricity.smk`, commit 88bede47; harness adoption
+  in `tests/equivalence/build.py::apply_adopted_fix_patches`).
+  When `model_topology.include` scopes a run (e.g. `reeds_state: [CA]`), the
+  empty-county sweep now only considers counties inside the ReEDS zones
+  retained in the filtered network, instead of the whole interconnect. Before
+  the fix a CA-only run's onshore regions covered 2,930,688 km2 (86% outside
+  CA), which passed the entire WECC fleet through
+  `filter_plants_by_region`'s sjoin — 215.5 GW of existing capacity attached
+  to a CA-demand-only model (22.6 GW coal, 7.7 GW nuclear). After: 409,842
+  km2 (0.2% border slivers) and an 84.5 GW fleet matching California's
+  actual one carrier-by-carrier. Gated on `include` being set: unfiltered
+  interconnect runs (incl. the usa harness, `include: {}`) are untouched.
+  *Results effect:* **Accepted delta for scoped runs — DL-11, countersigned
+  2026-08-23.** By user decision the same patch is applied to the anchor
+  worktree (first ADOPTED-FIX anchor patch, distinct from the numbers-neutral
+  build-infra category) so the CA harness keeps comparing like-for-like;
+  patch application drops a one-shot `.eq-force-rerun` marker because
+  `--rerun-triggers mtime` neither reruns on code changes nor revisits
+  missing intermediates when the final target looks current. Known residual
+  (own follow-up): the `plants_must_add` seam-plant fallback still leaks
+  ~1.9 GW of out-of-footprint plants into scoped runs.
+
+- **Out-of-footprint NREL caps: loud accounting + opt-in nearest-bus
+  reassignment** (`workflow/scripts/build_renewable_profiles.py`,
+  `workflow/scripts/nrel_exclusion/build_nrel_bus_capacities.py`, new
+  `nrel_caps_reassign` config block in `config.common.yaml`; unit tests in
+  `workflow/scripts/test/test_remap_caps.py`). The NREL caps files are
+  rolled up against the NATIONAL substation tessellation (17,890 entries);
+  in footprint-scoped runs `remap_caps_to_cluster` silently dropna()'d
+  every out-of-footprint entry — CA prong-1: 17,340/17,890 entries,
+  9.43 TW of 9.70 TW national onwind p_nom_max (97.3%), including two
+  border regions holding 13.4% of the West's developable wind (see ledger
+  CF-coverage amendment). Now: (1) an UNCONDITIONAL WARNING reports the
+  dropped entry count, dropped MW, and % of the national total per
+  technology; (2) a config-gated, DEFAULT-OFF
+  `nrel_caps_reassign: {enable: false, max_km: 100}` reassigns each
+  unmapped entry to the cluster of the geographically nearest in-footprint
+  entry, but only within `max_km` — preventing distant-interconnect
+  capacity from teleporting across seams. The published Zenodo caps
+  artifacts carry no per-entry coordinates, so enabling the flag today
+  raises a clear config error; `build_nrel_bus_capacities.py` now writes
+  per-bus `x`/`y` (capacity-weighted site centroid, bus-centroid fallback)
+  so the NEXT HPC regeneration (`build_nrel_artifacts.sh` — raw per-site
+  NREL CSVs live only on HPC) carries them. The long-term fix (option a)
+  remains HPC-side: re-roll the caps against each run's own region
+  geometry instead of the national tessellation.
+  *Results effect:* **None by default** — flag off adds logging only
+  (verified byte-identical remap output vs pre-change code on the CA
+  prong-1 artifacts). Enabling the flag is a scenario choice that changes
+  p_nom_max/potential on border buses and needs its own ledger entry.
+
+- **Ledger amendments from the DL-2/DL-3/DL-9 + CF-coverage deep-dives**
+  (2026-08-18, four low-effort investigations; full amendments in the deltas
+  ledger): DL-2's +17.86% DC-link delta is an ANCHOR-side aggregation bug
+  (pypsa link aggregation rescales the length-independent inverter-pair term
+  by 1/1.25), not base-stage pricing — with a flagged follow-up that V1-epic
+  now under-charges the DC-link km-term by 25% (~6% of link cost, 2 links);
+  DL-3's palette diff was an uncommitted LOCAL plotting config on the
+  candidate side (co2_emissions verified 0.000% different at every stage) —
+  local config resynced from the template, class disappears on next rebuild;
+  DL-9 confirmed MW-exact with the candidate's dropped onwind shown to be
+  out-of-footprint plants snapped ~880 km into CA by the harness scoping
+  (production full-Western s385 exposure measured: 1.54% onwind / 0.12%
+  solar; prototype nearest-profiled-group fix recovers 100.0% with zero
+  residual). CF-map coverage traced: 72.4% of regions have no onwind because
+  NREL reference land access contains no eligible site (99.6% via absent
+  caps entries; anchor set identical, 0.0%) — report captions now say
+  "modeled resource exclusion, not missing data".
+  *Results effect:* None (documentation, captions, and a local-config
+  resync only).
+
+- **Rename rule `cluster_simpl` -> `cluster_resources`** (user request
+  2026-08-07; rule name, log path, walltime config key, living docs; the
+  script file stays `workflow/scripts/cluster_simpl.py`). *Results effect:*
+  None (identical code, outputs, and paths).
+- **Report: % differences on every numerical delta** — findings now carry
+  `max_rel_pct`/`rel_pct` (comparator), and all report narratives, map
+  captions, and delta quotes state relative differences alongside absolutes.
+  *Results effect:* None (reporting only).
+
 - **Equivalence report revamped into a single explanatory artifact**
   (`tests/equivalence/report_sections/`, grilling session 2026-08-07):
   one `equivalence_report.html` with executive summary (verdict, provenance

@@ -96,7 +96,7 @@ what each stage does and which files it produces.
 
 Power-sector rule graph. Data flows top-to-bottom: shapes and the base network are
 built first, the network is aggregated and clustered (`aggregate_to_substations`,
-`cluster_simpl`), then demand, renewable profiles, generators, and costs are attached
+`cluster_resources`), then demand, renewable profiles, generators, and costs are attached
 at cluster resolution before the final clustering, constraint preparation, and solve.
 :::
 

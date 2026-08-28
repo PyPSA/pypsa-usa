@@ -65,7 +65,7 @@ from the resolution of the final transmission network, using the `simpl` and `cl
 wildcards in the configuration file.
 
 - `{simpl}` sets the number of zones the network is clustered to early in the workflow (rule
-  `cluster_simpl`). Demand, renewable profiles, and generators are all built at this
+  `cluster_resources`). Demand, renewable profiles, and generators are all built at this
   resolution.
 - `{clusters}` sets the final transmission resolution (rule `cluster_network`), which
   aggregates the `{simpl}`-resolution network down to the zones the optimization runs on.

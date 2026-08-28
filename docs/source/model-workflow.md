@@ -33,7 +33,7 @@ The practical consequences:
 - `{simpl}` (set in `scenario: simpl:`) is the resolution at which *data is built*;
   `{clusters}` is the final transmission resolution the model is solved at.
 - Most intermediate files carry `_s{simpl}` in their name; anything keyed to buses
-  downstream of `cluster_simpl` refers to cluster buses, not substations.
+  downstream of `cluster_resources` refers to cluster buses, not substations.
 - The bus-to-cluster mappings for every aggregation stage are saved as busmaps
   (`resources/busmaps/`), so precomputed substation- or node-keyed datasets can be
   remapped into the clustered space (this is exactly what `aggregate_egs` does for
@@ -64,10 +64,10 @@ resources and demand.
 | Rule | Script | Key outputs |
 |------|--------|-------------|
 | `aggregate_to_substations` | `aggregate_to_substations.py` | `resources/networks/elec_b.nc`, `resources/busmaps/busmap_b.csv` |
-| `cluster_simpl` | `cluster_simpl.py` | `resources/networks/elec_s{simpl}.nc`, `resources/geospatial/regions_*_s{simpl}.geojson`, `resources/busmaps/busmap_s{simpl}.csv` |
+| `cluster_resources` | `cluster_simpl.py` | `resources/networks/elec_s{simpl}.nc`, `resources/geospatial/regions_*_s{simpl}.geojson`, `resources/busmaps/busmap_s{simpl}.csv` |
 
 `aggregate_to_substations` is a pure topology reduction: nodal buses collapse onto
-their substations, preserving electrical connectivity. `cluster_simpl` then runs
+their substations, preserving electrical connectivity. `cluster_resources` then runs
 kmeans (or modularity) clustering to the `{simpl}` resolution, honoring the
 `model_topology: topological_boundaries` setting so clusters never straddle county,
 state, REeDS-zone, or balancing-area lines. Its outputs — the clustered network, the

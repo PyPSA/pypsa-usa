@@ -449,7 +449,7 @@ walltime:
   add_demand:               '02:00:00'
   add_electricity:          '04:00:00'
   aggregate_to_substations: '02:00:00'
-  cluster_simpl:            '05:00:00'
+  cluster_resources:        '05:00:00'
   cluster_network:          '04:00:00'
   solve_network:            '20:00:00'
 

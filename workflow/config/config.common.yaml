@@ -151,6 +151,9 @@ renewable_land_access:                  # REQUIRED for godeeep; one of: referenc
 apply_cec_basescreen: false             # overlay CEC Wind/Solar BaseScreen on onwind+solar (CA-only)
 apply_boem_osw: false                   # overlay BOEM offshore-wind planning areas on offwind + offwind_floating
 godeeep_wind_height: "_100m"            # raw GODEEEP wind-CF hub height; "_100m" | "_125m"
+nrel_caps_reassign:                     # out-of-footprint caps recovery for footprint-scoped runs (caps are rolled up nationally)
+  enable: false                         # when true, fold unmapped caps entries onto the nearest in-footprint bus (needs x/y in the caps file)
+  max_km: 100                           # only reassign entries within this distance (km); farther entries stay dropped (prevents cross-seam teleporting)
 
 
 # ====================================================================

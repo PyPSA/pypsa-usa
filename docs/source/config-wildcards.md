@@ -30,13 +30,13 @@ A visual representation of each `{interconnect}` is shown below:
 ## The `{simpl}` wildcard
 
 The `{simpl}` wildcard specifies the number of buses the substation-level network is
-pre-clustered to in the rule `cluster_simpl` (which runs directly after
+pre-clustered to in the rule `cluster_resources` (which runs directly after
 `aggregate_to_substations`, before any per-bus data is built).
 
 Under the simplify-early architecture, `{simpl}` is the resolution at which the model's
 data layers are **built**: demand disaggregation, renewable resource profiles and their
 land-use potentials, and generator placement all operate on the `{simpl}`-bus network
-(`elec_s{simpl}.nc`) produced by `cluster_simpl`. The rule `cluster_network` then reduces
+(`elec_s{simpl}.nc`) produced by `cluster_resources`. The rule `cluster_network` then reduces
 the network further to the final `{clusters}` transmission resolution. `{simpl}` therefore
 controls the *resource* resolution, while `{clusters}` controls the *transmission*
 resolution — see the {ref}`spatial configuration page <spatial>` for how the two interact.

@@ -24,6 +24,8 @@ import re
 
 import pandas as pd
 
+from ..paths import INTERCONNECT as IC
+
 # Pipeline (build) order for the grouped table.
 RULE_ORDER = [
     "build_fuel_prices",
@@ -37,29 +39,29 @@ RULE_ORDER = [
 
 # Ordered (pattern, rule) lists per side; first match wins, no match => ignore.
 _CAND_PATTERNS = [
-    (r"equivalence/western/build_fuel_prices$", "build_fuel_prices"),
-    (r"equivalence/western/(power)_build_demand_s(20)?$", "build_electrical_demand"),
-    (r"equivalence/western/build_renewable_profiles_\w+_2030_s(20)?$", "build_renewable_profiles"),
-    (r"equivalence/western/elec_s(20)?_add_demand$", "add_demand"),
-    (r"equivalence/western/elec_s(20)?_add_electricity$", "add_electricity"),
-    (r"cluster_network/western/elec_s(20)?_c\d+m?$", "cluster_network"),
-    (r"equivalence/solve_network/western/.*$", "solve_network"),
+    (r"equivalence/{IC}/build_fuel_prices$", "build_fuel_prices"),
+    (r"equivalence/{IC}/(power)_build_demand_s(20)?$", "build_electrical_demand"),
+    (r"equivalence/{IC}/build_renewable_profiles_\w+_2030_s(20)?$", "build_renewable_profiles"),
+    (r"equivalence/{IC}/elec_s(20)?_add_demand$", "add_demand"),
+    (r"equivalence/{IC}/elec_s(20)?_add_electricity$", "add_electricity"),
+    (r"cluster_network/{IC}/elec_s(20)?_c\d+m?$", "cluster_network"),
+    (r"equivalence/solve_network/{IC}/.*$", "solve_network"),
 ]
 _ANCH_PATTERNS = [
-    (r"equivalence/western/build_fuel_prices$", "build_fuel_prices"),
-    (r"equivalence/western/power_build_demand$", "build_electrical_demand"),
-    (r"equivalence/western/build_renewable_profiles_\w+_2030$", "build_renewable_profiles"),
-    (r"equivalence/western/add_demand$", "add_demand"),
-    (r"equivalence/western/add_electricity$", "add_electricity"),
-    (r"cluster_network/western/elec_s(20)?_c\d+m?$", "cluster_network"),
-    (r"equivalence/solve_network/western/.*$", "solve_network"),
+    (r"equivalence/{IC}/build_fuel_prices$", "build_fuel_prices"),
+    (r"equivalence/{IC}/power_build_demand$", "build_electrical_demand"),
+    (r"equivalence/{IC}/build_renewable_profiles_\w+_2030$", "build_renewable_profiles"),
+    (r"equivalence/{IC}/add_demand$", "add_demand"),
+    (r"equivalence/{IC}/add_electricity$", "add_electricity"),
+    (r"cluster_network/{IC}/elec_s(20)?_c\d+m?$", "cluster_network"),
+    (r"equivalence/solve_network/{IC}/.*$", "solve_network"),
 ]
 _PATTERNS = {"candidate": _CAND_PATTERNS, "anchor": _ANCH_PATTERNS}
 
 
 def _classify(key: str, patterns: list[tuple[str, str]]) -> str | None:
     for pat, rule in patterns:
-        if re.match(pat, key):
+        if re.match(pat.format(IC=IC), key):
             return rule
     return None
 

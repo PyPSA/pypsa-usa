@@ -17,7 +17,7 @@ add_electricity:
 aggregate_to_substations:
   walltime: 09:00:00
 
-cluster_simpl:
+cluster_resources:
   walltime: 09:00:00
 
 aggregate_egs:

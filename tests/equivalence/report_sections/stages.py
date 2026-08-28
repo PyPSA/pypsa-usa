@@ -127,23 +127,27 @@ def _worst_value_sentence(value_findings: list[dict], labels: dict) -> str:
                 f"{_num(det.get('n_diff'))} of {_num(det.get('n_total'))} entries differ, "
                 f"max |&Delta;| = {_num(det.get('max_abs'))}"
             )
+            if det.get("max_rel_pct") is not None:
+                s += f" ({_num(det['max_rel_pct'])}% max relative)"
             if ex.get("id") is not None:
                 s += (
                     f" (e.g. {_esc(ex.get('id'))}: {_esc(labels['candidate'])} "
                     f"{_num(ex.get('candidate'))} vs {_esc(labels['anchor'])} "
-                    f"{_num(ex.get('anchor'))})"
+                    f"{_num(ex.get('anchor'))}"
                 )
+                s += f", {_num(ex['rel_pct'])}%)" if ex.get("rel_pct") is not None else ")"
             s += "."
         elif isinstance(det, list) and det:
             deltas = [abs(float(d.get("candidate", 0)) - float(d.get("anchor", 0))) for d in det]
             i = max(range(len(det)), key=lambda k: deltas[k])
             d = det[i]
             rank = (1.0, deltas[i])
+            pct = f", {_num(d['rel_pct'])}%" if d.get("rel_pct") is not None else ""
             s = (
                 f"The largest value delta is <b>{_esc(name)}</b>: {len(det)} cells outside "
                 f"tolerance; worst is {_esc(d.get('carrier', d.get('id', '?')))} "
                 f"({_esc(labels['candidate'])} {_num(d.get('candidate'))} vs "
-                f"{_esc(labels['anchor'])} {_num(d.get('anchor'))})."
+                f"{_esc(labels['anchor'])} {_num(d.get('anchor'))}{pct})."
             )
         elif isinstance(det, dict) and "rel" in det:
             rank = (1.0, abs(float(det.get("candidate", 0)) - float(det.get("anchor", 0))))
@@ -151,7 +155,7 @@ def _worst_value_sentence(value_findings: list[dict], labels: dict) -> str:
                 f"The largest value delta is <b>{_esc(name)}</b>: "
                 f"{_esc(labels['candidate'])} {_num(det.get('candidate'))} vs "
                 f"{_esc(labels['anchor'])} {_num(det.get('anchor'))} "
-                f"(relative {float(det['rel']):.3%})."
+                f"(relative difference {float(det['rel']) * 100:.4g}%)."
             )
         elif isinstance(det, dict) and "n_diff" in det:
             rank = (0.0, float(det["n_diff"]))

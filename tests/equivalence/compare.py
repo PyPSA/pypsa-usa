@@ -27,7 +27,7 @@ import pandas as pd
 import xarray as xr
 import yaml
 
-from .paths import ArtifactPair, prong_pairs
+from .paths import INTERCONNECT, ArtifactPair, prong_pairs
 
 REPO = Path(__file__).resolve().parents[2]
 RTOL = 1e-3
@@ -72,13 +72,30 @@ def load_waivers() -> list[dict]:
 
 def is_waived(finding: dict, waivers: list[dict]) -> bool:
     for w in waivers:
-        if all(w.get(k) in (None, "*", finding.get(k)) for k in ("stage", "component", "column", "kind", "prong")):
+        if all(
+            w.get(k) in (None, "*", finding.get(k))
+            for k in ("stage", "component", "column", "kind", "prong", "interconnect")
+        ):
             return True
     return False
 
 
 def _numeric(s: pd.Series) -> bool:
     return pd.api.types.is_numeric_dtype(s) and not pd.api.types.is_bool_dtype(s)
+
+
+def _rel_pct(a: float, b: float) -> float | None:
+    """Relative difference of a vs anchor b, in percent (None if undefined)."""
+    if np.isnan(a) or np.isnan(b) or b == 0:
+        return None
+    return round(abs(a - b) / abs(b) * 100.0, 3)
+
+
+def _max_rel_pct(av, bv) -> float | None:
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rel = np.abs(av - bv) / np.abs(bv)
+    rel = rel[np.isfinite(rel)]
+    return round(float(rel.max()) * 100.0, 3) if rel.size else None
 
 
 def _normalize_frame(
@@ -176,11 +193,13 @@ def compare_frames(
                             "n_diff": len(bad),
                             "n_total": len(av),
                             "max_abs": float(np.nanmax(np.abs(av[bad] - bv[bad]))),
+                            "max_rel_pct": _max_rel_pct(av[bad], bv[bad]),
                             "examples": [
                                 {
                                     "id": common[i],
                                     "candidate": None if np.isnan(av[i]) else float(av[i]),
                                     "anchor": None if np.isnan(bv[i]) else float(bv[i]),
+                                    "rel_pct": _rel_pct(av[i], bv[i]),
                                 }
                                 for i in worst
                             ],
@@ -333,6 +352,7 @@ def _compare_solved(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
                     "candidate": oc,
                     "anchor": oa,
                     "rel": abs(oc - oa) / max(abs(oa), 1e-9),
+                    "rel_pct": round(abs(oc - oa) / max(abs(oa), 1e-9) * 100.0, 4),
                 },
             },
         )
@@ -357,6 +377,7 @@ def _compare_solved(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
                         "component": str(both.columns[c]),
                         "candidate": float(both.iloc[r, c]),
                         "anchor": float(anch.iloc[r, c]),
+                        "rel_pct": _rel_pct(float(both.iloc[r, c]), float(anch.iloc[r, c])),
                     }
                     for r, c in zip(rows, cols)
                 ],
@@ -425,6 +446,7 @@ def compare_pair(pair: ArtifactPair, cand_root: Path, anch_root: Path) -> list[d
                         "candidate": tc,
                         "anchor": ta,
                         "rel": abs(tc - ta) / max(abs(ta), 1e-9),
+                        "rel_pct": round(abs(tc - ta) / max(abs(ta), 1e-9) * 100.0, 4),
                     },
                 },
             )
@@ -483,6 +505,7 @@ def run_comparison(prong: int, cand_root: Path, anch_root: Path) -> dict:
         all_findings += compare_pair(pair, cand_root, anch_root)
     for f in all_findings:
         f["prong"] = prong
+        f["interconnect"] = INTERCONNECT
         f["waived"] = is_waived(f, waivers)
     live = [f for f in all_findings if not f["waived"]]
     result = {
@@ -492,7 +515,8 @@ def run_comparison(prong: int, cand_root: Path, anch_root: Path) -> dict:
         "pass": not live,
         "findings": all_findings,
     }
-    out = REPO / "workflow" / "results" / "equivalence" / f"findings_{prong}.json"
+    suffix = "" if INTERCONNECT == "western" else f"_{INTERCONNECT}"
+    out = REPO / "workflow" / "results" / "equivalence" / f"findings_{prong}{suffix}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, indent=1, default=str))
     return result
