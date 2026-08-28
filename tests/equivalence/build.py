@@ -524,14 +524,18 @@ def apply_seam_adoption(wt: Path, applied_rules: list[str]) -> None:
     applied_rules.append("add_electricity")
 
 
-def snakemake_cmd(target: str, jobs: int = 4) -> list[str]:
+def snakemake_cmd(
+    target: str,
+    jobs: int = 4,
+    configfile: str = CONFIGFILE,
+) -> list[str]:
     return [
         "uv",
         "run",
         "snakemake",
         target,
         "--configfile",
-        CONFIGFILE,
+        configfile,
         "-j",
         str(jobs),
         "--scheduler",

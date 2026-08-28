@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 from _helpers import configure_logging, log_network_schema
+from build_bus_population import assign_load_weight, load_county_population
 from build_shapes import load_na_shapes
 from constants import REC_TRADING_ZONE_MAPPER
 from shapely.geometry import Polygon
@@ -49,7 +50,8 @@ def add_buses_from_file(
     n.madd(
         "Bus",
         buses.index,
-        Pd=buses.Pd,  # used to decompose zone demand to bus demand
+        Pd=buses.Pd,  # BE nominal demand, kept for reference
+        load_weight=buses.load_weight,  # used to decompose zone demand to bus demand
         v_nom=buses.baseKV,
         balancing_area=buses.balancing_area,
         state=buses.state,
@@ -290,6 +292,7 @@ def add_offshore_buses(n: pypsa.Network, offshore_buses: pd.DataFrame) -> pypsa.
         "Bus",
         offshore_buses.index,
         Pd=0,
+        load_weight=0,
         v_nom=230,
         balancing_area="Offshore",
         state="Offshore",
@@ -549,10 +552,26 @@ def main(snakemake):
     # assign load allocation factors to buses for state level dissagregation
     gdf_bus = assign_missing_state_regions(gdf_bus)
 
-    # if dissagregating based with breakthrough energy on states, the LAF must
-    # be calculated here to capture splitting of states from the interconnect
-    group_sums = gdf_bus.groupby("full_state")["Pd"].transform("sum")
-    gdf_bus["LAF_state"] = gdf_bus["Pd"] / group_sums
+    # canonical per-bus demand-allocation weight; the source is selected by
+    # electricity.demand.bus_allocation (population = 2020 census county
+    # populations, breakthrough = legacy BE nominal demand Pd)
+    if snakemake.params.bus_allocation == "population":
+        county_population = load_county_population(
+            snakemake.input.county_population,
+        )
+        gdf_bus["load_weight"] = assign_load_weight(gdf_bus, county_population)
+    elif snakemake.params.bus_allocation == "breakthrough":
+        gdf_bus["load_weight"] = gdf_bus["Pd"]
+    else:
+        raise ValueError(
+            "electricity.demand.bus_allocation must be 'population' or "
+            f"'breakthrough'; received '{snakemake.params.bus_allocation}'.",
+        )
+
+    # the LAF must be calculated on the national bus set to capture splitting
+    # of states across interconnects
+    group_sums = gdf_bus.groupby("full_state")["load_weight"].transform("sum")
+    gdf_bus["LAF_state"] = gdf_bus["load_weight"] / group_sums
     gdf_bus = gdf_bus.drop(columns=["full_state"])
 
     # Removing few duplicated shapes where GIS shapes were overlapping. TODO: Fix GIS shapes

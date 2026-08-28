@@ -19,6 +19,7 @@ Store,--,Any subset of {``battery``},Adds extendable storage units (battery and/
 Links,--,Any subset of {},Adds extendable linksat every connection where there are lines or HVDC links without capacity limits and with zero initial capacity. Hydrogen pipelines require hydrogen storage to be modelled as ``Store``.
 ,,,
 demand:,,,
+bus_allocation,--,"One of {``population``, ``breakthrough``}","How zone-level demand is distributed to individual buses. ``population`` (default) weights buses by 2020 Decennial Census county populations (split evenly across each county's substations, then each substation's buses). ``breakthrough`` uses the legacy nominal-demand column (``Pd``) from the 2016-vintage Breakthrough Energy grid model."
 profile,--,"One of {``efs``, ``eia``, ``eer``}","Datasource for electrical load data. ``EFS`` pulls future state level electrical demand data. ``EIA`` pulls historical balancing level electrical demand data. ``EER`` pulls future state-level profiles from the EER dataset; when selected, ``planning_horizons`` must be one of 2021, 2025, 2030, 2035, 2040, 2045, or 2050 and ``renewable_weather_years`` must contain exactly one year from 2007-2013 or 2016-2023."
 scenario:,,,
 -efs_case,--,"One of {``reference``, ``medium``, ``high``}",(UNDER DEVELOPMENT) Extracts EFS data according to level of adoption

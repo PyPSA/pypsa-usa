@@ -390,6 +390,24 @@ these. Each still gets its equivalence verdict from the harness comparison
 - **`cluster_network.py`** — `cluster_regions` preserves the `country` column
   through dissolves (consumed by `match_plant_to_bus`).
 
+## Population-based demand allocation (2026-08-18)
+
+- New `electricity.demand.bus_allocation` toggle (default `population`):
+  per-bus demand-allocation weights now come from 2020 Decennial Census
+  county populations (`data/population/DECENNIALDHC2020.P1-Data.csv`, county
+  population split evenly across substations, then buses) instead of the
+  2016-vintage Breakthrough Energy `Pd` column. `breakthrough` restores the
+  legacy behavior and is pinned in `config.equivalence.yaml` (the anchor has
+  no population method).
+- Canonical weight lives in `n.buses.load_weight` (new helper
+  `workflow/scripts/build_bus_population.py`); `Pd` is retained untouched for
+  reference. Consumers switched: `LAF_state`, `WritePopulation`,
+  `WriteIndustrial` load-bus filter, clustering `population` weighting,
+  substation aggregation.
+- A/B harness: `uv run python -m tests.equivalence.ab` builds the pipeline
+  twice (`ab_pd` vs `ab_pop` run names), checks conservation invariants and
+  reports per-zone/per-bus allocation shifts and solve-level deltas.
+
 ## Planned (spec in progress)
 
 - Merge latest `upstream/develop` into `v1-epic` and pin the new anchor
