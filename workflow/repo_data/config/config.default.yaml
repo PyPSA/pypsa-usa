@@ -81,13 +81,17 @@ model_topology:
   transmission_network: 'reeds'          # transmission dataset; reeds | tamu
   topological_boundaries: 'reeds_zone'   # post-cluster zone type; county | reeds_zone | state
   interface_transmission_limits: false   # apply NARIS2024 inter-region transfer caps (requires reeds backbone)
+  # KEEP THIS NULL, not {}. build_base_network treats "not None" as "the user
+  # asked for a footprint filter" and then asserts that topological_boundaries
+  # is not 'state'; an empty mapping would trip that assertion on every
+  # state-resolution run even though no filtering was requested.
   include:                               # subset the network to specific zones (mixed zone types NOT supported)
     # reeds_zone: []                     #   restrict by REeDS zone ids
     # reeds_state: ['CA']                #   restrict by state code(s)
     # reeds_ba: []                       #   restrict by balancing authority
-  aggregate:                             # pre-aggregate buses; eligible keys: reeds_zone | trans_reg
-    # trans_grp: []
-    # reeds_zone: []
+  aggregate: {}                          # pre-aggregate buses; eligible keys: reeds_zone | trans_reg
+    # trans_grp: []                      # (empty mapping = no aggregation; the only
+    # reeds_zone: []                     #  consumer is a truthiness check in cluster_network)
 
 
 # ====================================================================
@@ -333,6 +337,9 @@ costs:
 
   min_year:                                # earliest commercial-availability year per carrier; carrier excluded before this year
     hydrogen_ct: 2040
+  # null and {} are equivalent here (add_extra_components short-circuits on
+  # None and would otherwise iterate an empty mapping); null is kept as the
+  # "nothing configured" spelling used by the other optional maps.
   max_growth:                              # per-carrier annual build-rate caps; {carrier: {base: MW, rate: fraction}}
 
 
@@ -370,6 +377,10 @@ clustering:
     resolution_elec:   false               # int H or false = native hourly
     resolution_sector: false               # int H or false = native hourly
 
+# KEEP THIS NULL, not {}. cluster_network branches on `is not None`, and an
+# empty mapping would send it down the custom-weights path: it re-normalises
+# every region's factor and logs "using custom focus weights", for a result
+# that is only float-equal to the uniform path by luck.
 focus_weights:                             # OPTIONAL: per-region weights for the clustering objective; null = uniform
 
 
