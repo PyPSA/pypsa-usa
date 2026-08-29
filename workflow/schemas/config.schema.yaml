@@ -151,11 +151,9 @@ properties:
   renewable_land_access:
     description: >
       NREL exclusion-overlay variant. MUST be non-null when
-      renewable.dataset == godeeep - build_renewable_profiles raises otherwise.
-      The shipped templates leave it null (choose one in your own config), so
-      the conditional below requires the key to be DECLARED and, when set, to
-      carry a known value; it cannot also require non-null without failing the
-      shipped state.
+      renewable.dataset == godeeep - build_renewable_profiles raises otherwise,
+      and the conditional below enforces it at config-load time. Null is only
+      valid with dataset: atlite (the legacy availability path).
     enum: [reference, limited, open, null]
 
   apply_cec_basescreen: {type: boolean}
@@ -477,8 +475,8 @@ allOf:
         properties:
           solver_options: {type: object, minProperties: 1}
 
-# GODEEEP needs an NREL land-access overlay. See the note on the property
-# itself: the key must be declared and, when set, carry a known value.
+# GODEEEP needs an NREL land-access overlay: the key must be declared and
+# non-null (null is only valid with dataset: atlite).
 - if:
     properties:
       renewable:
@@ -490,4 +488,4 @@ allOf:
     required: [renewable_land_access]
     properties:
       renewable_land_access:
-        enum: [reference, limited, open, null]
+        enum: [reference, limited, open]

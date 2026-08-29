@@ -162,15 +162,12 @@ renewable:
 # per-bus supply-curve capacities. The variables here pick which
 # overlay variant gets loaded.
 # docs : NREL_EXCLUSION
-# NULL IS NOT A WORKING VALUE. `renewable.dataset` defaults to godeeep, and
-# build_renewable_profiles raises "renewable_land_access must be set" when this
-# is null - so the shipped templates cannot build renewable profiles until you
-# choose one in your own config. The schema requires the key to be declared and
-# to carry a known value when set; it cannot require non-null without failing
-# the shipped state. Left as-is here deliberately: picking a default would
-# change every run's DAG (it pulls in the NREL exclusion artifacts) and the
-# numbers that come out of it.
-renewable_land_access:                  # REQUIRED for godeeep; one of: reference | limited | open
+# REQUIRED (non-null) whenever `renewable.dataset` is godeeep - the schema and
+# build_renewable_profiles both enforce it. `reference` is NREL's central
+# land-access assumption and the value the equivalence harness validates
+# against. Note this key drives the DAG: any godeeep run pulls the NREL
+# exclusion artifacts (retrieve_nrel_exclusion_artifact jobs).
+renewable_land_access: reference        # reference | limited | open (null allowed only with dataset: atlite)
 apply_cec_basescreen: false             # overlay CEC Wind/Solar BaseScreen on onwind+solar (CA-only)
 apply_boem_osw: false                   # overlay BOEM offshore-wind planning areas on offwind + offwind_floating
 godeeep_wind_height: "_100m"            # raw GODEEEP wind-CF hub height; "_100m" | "_125m"
