@@ -7,7 +7,13 @@
 
 ## Set Configuration
 
-To start, you'll want to set the proper network configuration for your studies purpose. The default configuration in `config/config.default.yaml` using the `western` interconnect and 33 nodes is a good place to start!
+To start, you'll want to set the proper network configuration for your studies purpose. The
+default configuration in `config/config.default.yaml` (seeded from the tracked template by
+`init_pypsa_usa.sh`) using the `western` interconnect and 33 nodes is a good place to start!
+
+Your config file only needs to carry the keys you actually change: the workflow always
+loads `repo_data/config/config.default.yaml` and the other layered files underneath it, and
+your `--configfile` is merged on top.
 
 You can find more information on each configuration setting on the [configurations page](https://pypsa-usa.readthedocs.io/en/latest/config-configuration.html).
 
@@ -45,7 +51,7 @@ snakemake data_model -j1 --configfile config/config.default.yaml
 
 ## Running on HPC Cluster
 
-If you are running the workflow on an High-Performance Compute (HPC) cluster, you will first need to update the configuration settings in `config.cluster.yaml`. Update the account, partition, email, and chdir fields to match the information of your institutions cluster.
+If you are running the workflow on an High-Performance Compute (HPC) cluster, you will first need to update the configuration settings in `workflow/config/config.cluster.yaml` (seeded by `init_pypsa_usa.sh`). Update the account, partition, email, and chdir fields to match the information of your institutions cluster.
 
 Next, identify the name of the configuration file you would like to run by editing the `run_slurm.sh` script. The default value is the `--configfile config/config.default.yaml`.
 

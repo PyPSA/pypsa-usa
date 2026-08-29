@@ -6,17 +6,25 @@
 # capacity-expansion run at REeDS-zone resolution.
 #
 # Audience: users authoring a new scenario. Copy this file to
-# `config/config.<your-scenario>.yaml`, edit only the keys you care
-# about, and pass `--configfile config/config.<your-scenario>.yaml`.
+# `config/config.<your-scenario>.yaml`, DELETE everything you do not
+# change, and pass `--configfile config/config.<your-scenario>.yaml`.
+# A scenario config is an overlay, not a fork: anything you leave out
+# comes from this file.
 #
-# How configs are merged: Snakemake auto-loads, in order,
-#   config/config.common.yaml      (always-loaded layered base)
-#   config/config.api.yaml         (API keys; gitignored)
-#   config/config.cluster.yaml     (HPC scheduler settings)
-#   config/config.plotting.yaml    (figure styling)
-#   config/config.sector.yaml      (sector-coupling defaults)
-# beneath whatever main config you pass via --configfile. Keys here
-# override anything in those layered files.
+# How configs are merged: workflow/Snakefile auto-loads, in order,
+#   repo_data/config/config.cluster.yaml   (HPC scheduler settings)
+#   repo_data/config/config.common.yaml    (renewable/atlite plumbing)
+#   repo_data/config/config.plotting.yaml  (figure styling)
+#   repo_data/config/config.api.yaml       (API-key placeholders)
+#   repo_data/config/config.sector.yaml    (sector-coupling defaults)
+#   repo_data/config/config.default.yaml   (THIS FILE — the scenario base)
+# then the optional per-user overlays config/config.api.yaml and
+# config/config.cluster.yaml, and finally whatever you pass with
+# --configfile. Nested mappings merge; lists and scalars are REPLACED
+# wholesale, so a list you change must be restated in full.
+#
+# Editing this file changes the base for every run in the checkout.
+# Prefer putting scenario-specific values in your own config instead.
 #
 # Option reference: docs/source/config-configuration.md (Sphinx tables)
 # Wildcard reference: docs/source/config-wildcards.md
@@ -144,7 +152,7 @@ electricity:
 
   # ---------------- Reserves & resource adequacy ----------------
   SAFE_reservemargin: 0.14                 # SAFE planning reserve margin (fraction of peak load); used with SAFE opt
-  SAFE_regional_reservemargins:   'config/policy_constraints/SAFE_regional_prm.csv'
+  SAFE_regional_reservemargins:   'repo_data/config/policy_constraints/SAFE_regional_prm.csv'
 
   operational_reserve:                     # GenX-style reserve requirement; only active when activate=true
     activate: false
@@ -156,10 +164,10 @@ electricity:
     all: 0.15                              # default ERM applied to every region (fraction of annual energy)
 
   # ---------------- Policy & emissions ----------------
-  regional_Co2_limits:            'config/policy_constraints/regional_Co2_limits.csv'           # per-region CO2 caps (tCO2/yr)
-  technology_capacity_targets:    'config/policy_constraints/technology_capacity_targets.csv'   # forced min/max build by tech & region
-  portfolio_standards:            'config/policy_constraints/portfolio_standards.csv'           # RPS/CES fractions by region
-  transmission_interface_limits:  'config/policy_constraints/transmission_interface_limits.csv' # MW caps on inter-region flows
+  regional_Co2_limits:            'repo_data/config/policy_constraints/regional_Co2_limits.csv'           # per-region CO2 caps (tCO2/yr)
+  technology_capacity_targets:    'repo_data/config/policy_constraints/technology_capacity_targets.csv'   # forced min/max build by tech & region
+  portfolio_standards:            'repo_data/config/policy_constraints/portfolio_standards.csv'           # RPS/CES fractions by region
+  transmission_interface_limits:  'repo_data/config/policy_constraints/transmission_interface_limits.csv' # MW caps on inter-region flows
 
   # ---------------- Demand ----------------
   demand:

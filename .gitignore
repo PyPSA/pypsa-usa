@@ -11,8 +11,12 @@ dconf
 *.dot
 *.tar.gz
 
-# configuration files
-config/
+# per-user configuration files, seeded by init_pypsa_usa.sh. The canonical
+# templates live in workflow/repo_data/config/ and ARE tracked — the old
+# bare `config/` pattern matched that directory too and forced every template
+# edit through `git add -f`.
+/workflow/config/*
+!/workflow/config/.gitkeep
 
 # generated files
 results/
@@ -266,7 +270,6 @@ TSWLatexianTemp*
 
 # Exceptions to gitignore
 connect.sh
-/workflow/config/config.cluster.yaml
 /workflow/repo_data/dag.png
 !.pre-commit-config.yaml
 

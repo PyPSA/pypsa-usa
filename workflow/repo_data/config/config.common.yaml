@@ -1,8 +1,9 @@
 # ====================================================================
 # PyPSA-USA — Common Configuration (always-loaded layered base)
 # ====================================================================
-# This file is auto-loaded by `workflow/Snakefile` underneath every
-# main config. It holds settings that rarely change per scenario:
+# This file is auto-loaded by `workflow/Snakefile` (straight from
+# repo_data/, never a copy) underneath every main config. It holds
+# settings that rarely change per scenario:
 # the renewable resource-quality dataset (atlite cutouts or GODEEEP
 # CFs + NREL land-access exclusions), atlite cutout geometries,
 # the line-type catalog, offshore-shape source, and the UCAP

@@ -90,10 +90,10 @@ electricity:
   # opts string; technology_capacity_targets (TCT opt) and
   # portfolio_standards (RPS opt) are the sibling keys read the same way.
   # Paths mirror config.default.yaml; the CSVs ship in
-  # config/policy_constraints/ in both checkouts.
-  regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
-  technology_capacity_targets: 'config/policy_constraints/technology_capacity_targets.csv'
-  portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
+  # repo_data/config/policy_constraints/ in both checkouts.
+  regional_Co2_limits: 'repo_data/config/policy_constraints/regional_Co2_limits.csv'
+  technology_capacity_targets: 'repo_data/config/policy_constraints/technology_capacity_targets.csv'
+  portfolio_standards: 'repo_data/config/policy_constraints/portfolio_standards.csv'
 
 conventional:
   unit_commitment: false

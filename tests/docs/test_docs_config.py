@@ -11,9 +11,13 @@ Two failure modes are covered:
    ``yaml.safe_load`` to assert the top-level key set is exactly the expected
    one for each ``# docs : <NAME>`` marker.
 
-2. ``test_config_tree_sync`` — ``workflow/repo_data/config/`` is canonical and
-   ``init_pypsa_usa.sh`` copies it to ``workflow/config/``. The copies drift;
-   this test asserts they are byte-identical (excluding per-user files).
+2. ``test_init_copies_only_user_owned_files`` /
+   ``test_snakefile_reads_layered_base_from_repo_data`` —
+   ``workflow/repo_data/config/`` is canonical AND is what the Snakefile
+   loads. ``init_pypsa_usa.sh`` seeds only the handful of genuinely per-user
+   files into ``workflow/config/``. These two tests keep that split intact:
+   copying a layered config back into ``config/``, or pointing a
+   ``configfile:`` at ``config/``, reintroduces the drift the layout removes.
 
 Dependency-light on purpose: stdlib + PyYAML only.
 """
@@ -211,36 +215,51 @@ def test_scoping_check_catches_old_costs_bug():
         assert_slice_matches_marker("\n".join(sliced), "COSTS", "old-costs-bug-pattern")
 
 
-def _init_script_dirs() -> tuple[Path, Path]:
-    """Read the template/destination dirs out of init_pypsa_usa.sh."""
+def _init_script() -> tuple[Path, Path, set[str]]:
+    """Read the template dir, destination dir and copied file list from init."""
     script = (REPO_ROOT / "init_pypsa_usa.sh").read_text(encoding="utf-8")
     templates = re.search(r'templates="([^"]+)"', script)
     destination = re.search(r'destination="([^"]+)"', script)
     assert templates and destination, "could not parse init_pypsa_usa.sh"
-    return REPO_ROOT / templates.group(1), REPO_ROOT / destination.group(1)
+    block = re.search(r"user_files=\((.*?)\)", script, re.DOTALL)
+    assert block, "could not find the user_files array in init_pypsa_usa.sh"
+    names = set(re.findall(r'"([^"]+)"', block.group(1)))
+    assert names, "user_files array in init_pypsa_usa.sh is empty"
+    return REPO_ROOT / templates.group(1), REPO_ROOT / destination.group(1), names
 
 
-# Per-user files: gitignored working copies that legitimately diverge from the
-# repo_data templates (API keys, personal HPC account/walltime settings).
-PER_USER_FILES = {"config.api.yaml", "config.cluster.yaml"}
+def test_init_copies_only_user_owned_files():
+    """init must seed exactly the per-user files, and each must exist as a template.
 
-
-def test_config_tree_sync():
-    templates, destination = _init_script_dirs()
+    Everything else under ``workflow/repo_data/config/`` is loaded by
+    ``workflow/Snakefile`` straight from the tracked tree, so copying it into
+    ``workflow/config/`` would only reintroduce the drift this layout removes.
+    """
+    templates, _destination, user_files = _init_script()
     assert templates.is_dir(), f"{templates} missing"
 
-    template_yamls = sorted(p for p in templates.rglob("*.yaml") if p.name not in PER_USER_FILES)
-    assert template_yamls, "no template yamls found"
+    missing = sorted(name for name in user_files if not (templates / name).exists())
+    assert not missing, f"init_pypsa_usa.sh copies files with no template: {missing}"
 
-    if not destination.is_dir() or not any(destination.rglob("*.yaml")):
-        pytest.skip("workflow/config is empty — init_pypsa_usa.sh has not been run")
+    # A file init copies must NOT also be one the Snakefile reads from
+    # repo_data as an authoritative base layer that users cannot override —
+    # each of these is loaded as an overlay (api, cluster) or passed by hand
+    # with --configfile (default).
+    assert user_files <= {
+        "config.default.yaml",
+        "config.api.yaml",
+        "config.cluster.yaml",
+        "config.slurm.yaml",
+    }, f"unexpected per-user file in init_pypsa_usa.sh: {sorted(user_files)}"
 
-    stale = []
-    for template in template_yamls:
-        copy = destination / template.relative_to(templates)
-        if not copy.exists():
-            stale.append(f"{copy.relative_to(REPO_ROOT)} missing")
-        elif copy.read_text(encoding="utf-8") != template.read_text(encoding="utf-8"):
-            stale.append(f"{copy.relative_to(REPO_ROOT)} differs from template")
 
-    assert not stale, f"workflow/config has drifted from workflow/repo_data/config (re-copy the templates): {stale}"
+def test_snakefile_reads_layered_base_from_repo_data():
+    """The layered base must be read from the tracked templates, not from copies."""
+    snakefile = (REPO_ROOT / "workflow" / "Snakefile").read_text(encoding="utf-8")
+    layered = re.findall(r'^configfile:\s*"([^"]+)"', snakefile, re.MULTILINE)
+    assert layered, "no unconditional configfile: directives found in workflow/Snakefile"
+    strays = [p for p in layered if not p.startswith("repo_data/config/")]
+    assert not strays, (
+        "these layered configfiles are still read from the per-user config/ copy "
+        f"and will drift: {strays}"
+    )

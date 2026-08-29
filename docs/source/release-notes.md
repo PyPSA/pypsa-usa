@@ -30,8 +30,10 @@ changes you will notice:
   `geospatial/`, `costs/`, `prices/`, `demand/`, `powerplants/`, ... — instead of
   per-interconnect flat folders. File names are unchanged.
 - Unused config keys and never-read rule parameters were removed. The canonical config
-  templates live in `workflow/repo_data/config/`; `workflow/config/` is no longer tracked in
-  git and is generated from those templates by `init_pypsa_usa.sh`.
+  templates live in `workflow/repo_data/config/` and the workflow loads its whole layered
+  base from there; `workflow/config/` is untracked and holds only the per-user files
+  (`config.api.yaml`, `config.cluster.yaml`, your own scenario configs) seeded by
+  `init_pypsa_usa.sh`.
 
 ### Correctness fixes validated by an equivalence harness
 

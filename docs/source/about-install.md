@@ -20,8 +20,14 @@ git clone git@github.com:PyPSA/pypsa-usa.git
 
 ## Step 2. Initialize Configuration files
 
-From the command line, run the script `init_pypsa_usa.sh` to copy configuration file
-templates into the `workflow/config` folder.
+From the command line, run the script `init_pypsa_usa.sh` to seed the per-user
+configuration files into the `workflow/config` folder.
+
+Only three files are copied — `config.default.yaml` (a starting point for your own
+scenario config), `config.api.yaml` (API keys) and `config.cluster.yaml` (HPC account
+settings). Every other configuration file is read by the workflow directly from the
+tracked `workflow/repo_data/config/` templates, so it can never fall out of sync with
+your checkout. The script is safe to re-run: existing files are left untouched.
 
 ```console
 bash init_pypsa_usa.sh
@@ -103,4 +109,6 @@ Snakemake's internal job scheduler, not the optimization solver).
 
 The PyPSA-USA workflow leverages the EIA API in several steps. The default configuration activates dynamic fuel-cost prices, which requires EIA API key. You can quickly get your key by completing this [form](https://www.eia.gov/opendata/register.php).
 
-The API key will be emailed to you, and you can copy the key into the `config.api.yaml` file.
+The API key will be emailed to you. Paste it into `workflow/config/config.api.yaml`, or
+export it as the `EIA_API_KEY` environment variable — the environment variable takes
+precedence over the YAML value, which keeps the key out of your files entirely.

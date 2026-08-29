@@ -40,7 +40,7 @@ import time
 from collections.abc import Iterable
 from pathlib import Path
 
-from .paths import CONFIGFILE
+from .paths import ANCHOR_CONFIGFILE, CONFIGFILE
 
 REPO = Path(__file__).resolve().parents[2]
 ANCHOR_SHA = "e7f8bd70"
@@ -524,6 +524,16 @@ def apply_seam_adoption(wt: Path, applied_rules: list[str]) -> None:
     applied_rules.append("add_electricity")
 
 
+def side_configfile(side: str) -> str:
+    """Where each side's copy of the shared harness config lives.
+
+    The candidate loads it from the tracked ``repo_data/config/`` templates;
+    the anchor is a pinned upstream checkout that only looks in ``config/``,
+    and ``provision_anchor_worktree`` copies the file there.
+    """
+    return ANCHOR_CONFIGFILE if side == "anchor" else CONFIGFILE
+
+
 def snakemake_cmd(
     target: str,
     jobs: int = 4,
@@ -550,7 +560,7 @@ def build_side(side: str, target: str, jobs: int = 4, timeout: int = 10800) -> d
     assert side in ("candidate", "anchor")
     wt = provision_anchor_worktree() if side == "anchor" else REPO
     wf = wt / "workflow"
-    cmd = snakemake_cmd(target, jobs)
+    cmd = snakemake_cmd(target, jobs, side_configfile(side))
     marker = wt / FORCE_RERUN_MARKER
     forced = marker.read_text().split() if marker.exists() else []
     if forced:
@@ -572,7 +582,7 @@ def build_side(side: str, target: str, jobs: int = 4, timeout: int = 10800) -> d
 def write_manifest(side: str, wt: Path, target: str, wall: float) -> dict:
     wf = wt / "workflow"
     sha = run(["git", "rev-parse", "HEAD"], cwd=wt).stdout.strip()
-    cfg = (wf / CONFIGFILE).read_bytes()
+    cfg = (wf / side_configfile(side)).read_bytes()
     manifest = {
         "side": side,
         "sha": sha,

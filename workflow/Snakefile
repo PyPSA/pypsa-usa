@@ -7,6 +7,7 @@ from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
 
 HTTP = HTTPRemoteProvider()
 
+import os
 from os.path import normpath
 from itertools import chain
 from pathlib import Path
@@ -93,16 +94,33 @@ wildcard_constraints:
 #   config.sector.yaml    sector-coupling defaults
 #   config.default.yaml   the canonical scenario base: every user-facing knob
 #
-# config.default.yaml is loaded from the tracked repo_data/ templates rather
-# than the per-user config/ copy: it is the workflow's base layer, not a
-# user-owned file. Users copy it to config/config.<scenario>.yaml and pass
-# that with --configfile, which then only needs to carry the keys it changes.
-configfile: "config/config.cluster.yaml"
-configfile: "config/config.common.yaml"
-configfile: "config/config.plotting.yaml"
-configfile: "config/config.api.yaml"
-configfile: "config/config.sector.yaml"
+# The whole base is read straight out of the tracked repo_data/config/
+# templates. It used to be read from the per-user config/ copies that
+# init_pypsa_usa.sh seeds once and never refreshes, so the base silently
+# drifted from the checkout. Only genuinely per-user files still live in
+# config/ (see below); everything else is workflow-owned.
+#
+# Users copy config.default.yaml to config/config.<scenario>.yaml and pass it
+# with --configfile; that file then only needs the keys it actually changes.
+configfile: "repo_data/config/config.cluster.yaml"
+configfile: "repo_data/config/config.common.yaml"
+configfile: "repo_data/config/config.plotting.yaml"
+configfile: "repo_data/config/config.api.yaml"
+configfile: "repo_data/config/config.sector.yaml"
 configfile: "repo_data/config/config.default.yaml"
+
+
+# User-owned overlays, seeded by init_pypsa_usa.sh. Optional so a fresh clone
+# resolves without running init first; snakemake errors on a missing
+# configfile, hence the guards.
+if os.path.exists("config/config.api.yaml"):
+
+    configfile: "config/config.api.yaml"
+
+
+if os.path.exists("config/config.cluster.yaml"):
+
+    configfile: "config/config.cluster.yaml"
 
 
 run = config.get("run", {})
