@@ -4,3 +4,4 @@ disable_progrssbar,bool,"{true, false}",Switch to select whether progressbar sho
 shared_resources,bool,"{true, false}",Switch to select whether resources should be shared across runs.
 shared_cutouts,bool,"{true, false}",Switch to select whether cutouts should be shared across runs.
 validation,bool,"{true, false}",Switch to enable back-casting validation plotting
+benchmark_cpuc,bool,"{true, false}",Switch to enable the CPUC Baseline Generator List capacity benchmark (California runs)

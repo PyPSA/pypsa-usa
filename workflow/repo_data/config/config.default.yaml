@@ -34,6 +34,7 @@ run:
   shared_resources: false         # true = reuse resources/ across all runs (DAG-keyed); false = isolate per run.name
   shared_cutouts: true            # true = share atlite cutouts across runs (recommended; cutouts are large and slow)
   validation: false               # true = wire in back-casting validation plots (historical-only)
+  benchmark_cpuc: false           # true = compare installed capacity against the CPUC Baseline Generator List (California runs)
 
 # ====================================================================
 # RENEWABLE DATASET — capacity-factor source for wind & solar
