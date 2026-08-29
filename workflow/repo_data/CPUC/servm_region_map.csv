@@ -1,0 +1,9 @@
+balancing_area,servm_region,note
+CISO-PGAE,PGE,
+CISO-SCE,SCE,
+CISO-SDGE,SDGE,
+IID,IID,
+LDWP,LADWP,
+BANC,NCNC,
+TIDC,NCNC,
+CISO-VEA,,Nevada footprint; excluded from CA-only networks

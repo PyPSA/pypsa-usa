@@ -847,6 +847,26 @@ rule cluster_resources:
         "../scripts/cluster_simpl.py"
 
 
+rule build_servm_load_weights:
+    input:
+        network=NETWORKS + "{interconnect}/elec_base_network.nc",
+        busmap_b=BUSMAPS + "{interconnect}/busmap_b.csv",
+        busmap_s=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
+        region_map="repo_data/CPUC/servm_region_map.csv",
+    output:
+        weights=DEMAND + "{interconnect}/servm_load_weights_s{simpl}.csv",
+    log:
+        LOGS + "{interconnect}/build_servm_load_weights_s{simpl}.log",
+    threads: 1
+    resources:
+        mem_mb=lambda wildcards, input, attempt: (input.size // 200000) * attempt * 2,
+        walltime=config_provider(
+            "walltime", "build_servm_load_weights", default="00:20:00"
+        ),
+    script:
+        "../scripts/build_servm_load_weights.py"
+
+
 rule cluster_network:
     params:
         cluster_network=config_provider("clustering", "cluster_network"),
