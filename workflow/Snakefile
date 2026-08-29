@@ -81,15 +81,28 @@ wildcard_constraints:
 # -------------------------- Config and Subworkflows ------------------------- #
 
 
-# Merge subworkflow configs and main config
+# Layered configuration. Snakemake merges each `configfile:` into `config`
+# with a recursive dict update (nested mappings merge; lists and scalars are
+# REPLACED wholesale), and anything the user passes via `--configfile` is
+# merged last, on top of everything below.
+#
+#   config.cluster.yaml   HPC scheduler settings
+#   config.common.yaml    renewable/atlite plumbing that rarely changes
+#   config.plotting.yaml  figure styling
+#   config.api.yaml       API keys (gitignored)
+#   config.sector.yaml    sector-coupling defaults
+#   config.default.yaml   the canonical scenario base: every user-facing knob
+#
+# config.default.yaml is loaded from the tracked repo_data/ templates rather
+# than the per-user config/ copy: it is the workflow's base layer, not a
+# user-owned file. Users copy it to config/config.<scenario>.yaml and pass
+# that with --configfile, which then only needs to carry the keys it changes.
 configfile: "config/config.cluster.yaml"
 configfile: "config/config.common.yaml"
 configfile: "config/config.plotting.yaml"
 configfile: "config/config.api.yaml"
 configfile: "config/config.sector.yaml"
-
-
-# configfile: "config/config.default.yaml"
+configfile: "repo_data/config/config.default.yaml"
 
 
 run = config.get("run", {})

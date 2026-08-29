@@ -10,6 +10,11 @@
 # Keys the ANCHOR requires from the main config (its layered common lacks
 # them): co2.storage, clustering.cluster_network.feature,
 # clustering.simplify_network.feature (prong 2). v1-epic ignores the extras.
+#
+# DELIBERATELY NOT A SPARSE OVERLAY. Unlike config.tutorial.yaml and
+# config.test.yaml, this file must stay self-contained: the anchor checkout
+# does NOT auto-load config.default.yaml, so any key dropped here would be
+# supplied to the candidate and missing on the anchor.
 run:
   name: "equivalence"
   disable_progressbar: true
@@ -207,6 +212,11 @@ solving:
       Seed: 123
       AggFill: 0
       PreDual: 0
+      # Mirrors config.default.yaml. Required explicitly here: the candidate
+      # branch now auto-loads config.default.yaml as a base layer, so omitting
+      # this would hand the candidate a solver option the anchor never sees and
+      # break the like-for-like comparison.
+      GURO_PAR_BARDENSETHRESH: 200
 
 focus_weights:
 
