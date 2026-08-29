@@ -1,6 +1,43 @@
 (config)=
 # Configuration
 
+## How configuration is layered
+
+`workflow/Snakefile` loads its whole base out of the tracked
+`workflow/repo_data/config/` templates, in this order:
+
+| file | holds |
+| --- | --- |
+| `config.slurm.yaml` | HPC scheduler settings and the per-rule `walltime:` block |
+| `config.common.yaml` | renewable/atlite plumbing that rarely changes per scenario |
+| `config.plotting.yaml` | figure styling |
+| `config.api.yaml` | API-key placeholders |
+| `config.sector.yaml` | sector-coupling defaults |
+| `config.default.yaml` | the scenario base — every user-facing knob, with defaults |
+
+Two optional per-user overlays follow (`config/config.api.yaml`,
+`config/config.slurm.yaml`, seeded by `init_pypsa_usa.sh`), and whatever you
+pass with `--configfile` is merged last.
+
+Because `config.default.yaml` is itself a loaded layer, **your scenario config is
+an overlay, not a fork**: it only needs the keys it actually changes. Nested
+mappings merge key by key; lists and scalars are replaced wholesale, so a list
+you change must be restated in full.
+
+Every top-level key is owned by exactly one file — nothing is defined twice
+across layers.
+
+## Validation
+
+The merged configuration is checked against `workflow/schemas/config.schema.yaml`
+at parse time. The check covers the top-level structure, the enum-typed knobs
+(`foresight`, `electricity: retirement`, `renewable: dataset`, clustering
+algorithms, ATB scenario/model case, solver names, ...) and closes the
+well-bounded sections such as `electricity:` and `model_topology:` against
+unknown keys — so a misspelling like `retirment:` fails immediately instead of
+silently falling back to a default several rules later. The top level itself
+stays open, since Snakemake and the scenarios feature inject keys there.
+
 (run_cf)=
 ## `run`
 

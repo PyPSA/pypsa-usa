@@ -1,0 +1,493 @@
+# ====================================================================
+# PyPSA-USA — merged-configuration schema
+# ====================================================================
+# Validated by `snakemake.utils.validate` in workflow/Snakefile once the
+# whole configfile chain (including the user's --configfile) has merged.
+#
+# SCOPE, deliberately partial:
+#   * The TOP LEVEL allows additional properties. Snakemake, the scenarios
+#     feature and user configs all inject keys here, and closing it would
+#     turn every legitimate extension into a hard error.
+#   * Well-bounded subtrees ARE closed (`additionalProperties: false`) so a
+#     typo like `electricity: retirment:` fails loudly at parse time instead
+#     of silently falling through to a `config_provider(..., default=...)`.
+#   * Enum-typed knobs are enumerated from the inline comments in
+#     config.default.yaml / config.common.yaml. Free-form numeric leaves are
+#     mostly left untyped; depth can grow later.
+#
+# No `default:` keys anywhere: the Snakefile calls validate() with
+# set_default=False, and injecting schema defaults into the merged config
+# would make this file a silent second source of configuration.
+# ====================================================================
+
+$schema: http://json-schema.org/draft-07/schema#
+type: object
+additionalProperties: true
+
+required:
+- run
+- scenario
+- foresight
+- model_topology
+- enable
+- snapshots
+- renewable_weather_years
+- renewable_scenarios
+- electricity
+- conventional
+- lines
+- links
+- clustering
+- solving
+- costs
+- renewable
+- atlite
+
+properties:
+
+  run:
+    type: object
+    additionalProperties: false
+    required: [name]
+    properties:
+      name: {type: string}
+      disable_progressbar: {type: boolean}
+      shared_resources: {type: boolean}
+      shared_cutouts: {type: boolean}
+      validation: {type: boolean}
+      scenarios:
+        description: Optional multi-scenario driver; see rules/common.smk config_provider.
+        type: object
+
+  scenario:
+    type: object
+    additionalProperties: false
+    required: [interconnect, planning_horizons, clusters, simpl, ll, opts, sector]
+    properties:
+      interconnect:
+        type: array
+        items: {enum: [usa, texas, western, eastern]}
+      planning_horizons:
+        type: array
+        items: {type: integer}
+      clusters: {type: array}
+      simpl: {type: array}
+      ll: {type: array}
+      opts: {type: array}
+      sector: {type: string}
+      scope: {enum: [urban, rural, total]}
+
+  foresight:
+    enum: [perfect, myopic]
+
+  model_topology:
+    type: object
+    additionalProperties: false
+    required: [transmission_network, topological_boundaries]
+    properties:
+      transmission_network: {enum: [reeds, tamu]}
+      topological_boundaries: {enum: [county, reeds_zone, state]}
+      interface_transmission_limits: {type: boolean}
+      trim: {type: boolean}
+      include:
+        description: >
+          Zone subset for footprint-scoped runs. null means "no filter"; see the
+          comment in config.default.yaml - consumers distinguish null from {}.
+        type: [object, "null"]
+      aggregate:
+        description: Pre-aggregation map; null means "no aggregation".
+        type: [object, "null"]
+
+  enable:
+    type: object
+    additionalProperties: false
+    properties:
+      build_cutout: {type: boolean}
+      custom_busmap: {type: boolean}
+
+  snapshots:
+    type: object
+    additionalProperties: false
+    required: [start, end, inclusive]
+    properties:
+      start: {type: string}
+      end: {type: string}
+      inclusive: {enum: [left, right, both, neither]}
+
+  renewable_weather_years:
+    type: array
+    items: {type: integer}
+
+  renewable_weather_years_by_horizon:
+    type: [object, "null"]
+
+  renewable_scenarios:
+    type: array
+    minItems: 1
+    items:
+      enum: [historical, rcp45cooler, rcp45hotter, rcp85cooler, rcp85hotter]
+
+  renewable_scenario_years:
+    type: [array, "null"]
+
+  renewable_snapshots:
+    type: object
+    additionalProperties: false
+    properties:
+      start_month: {type: integer, minimum: 1, maximum: 12}
+      start_day: {type: integer, minimum: 1, maximum: 31}
+      end_month: {type: integer, minimum: 1, maximum: 12}
+      end_day: {type: integer, minimum: 1, maximum: 31}
+      end_inclusive: {type: boolean}
+
+  renewable:
+    description: Per-technology resource settings; owned by config.common.yaml.
+    type: object
+    additionalProperties: true
+    required: [dataset]
+    properties:
+      dataset: {enum: [atlite, godeeep]}
+
+  renewable_land_access:
+    description: >
+      NREL exclusion-overlay variant. MUST be non-null when
+      renewable.dataset == godeeep - build_renewable_profiles raises otherwise.
+      The shipped templates leave it null (choose one in your own config), so
+      the conditional below requires the key to be DECLARED and, when set, to
+      carry a known value; it cannot also require non-null without failing the
+      shipped state.
+    enum: [reference, limited, open, null]
+
+  apply_cec_basescreen: {type: boolean}
+  apply_boem_osw: {type: boolean}
+  godeeep_wind_height: {enum: ["_100m", "_125m"]}
+
+  nrel_caps_reassign:
+    type: object
+    additionalProperties: false
+    properties:
+      enable: {type: boolean}
+      max_km: {type: number}
+
+  pudl_path: {type: string}
+
+  atlite:
+    type: object
+    additionalProperties: true
+    required: [cutouts, interconnects]
+    properties:
+      default_cutout: {type: string}
+      nprocesses: {type: integer}
+      show_progress: {type: boolean}
+      cutouts: {type: object}
+      interconnects: {type: object}
+
+  offshore_shape:
+    type: object
+    additionalProperties: false
+    properties:
+      use: {enum: [ca_osw, eez]}
+
+  offshore_network:
+    type: object
+    additionalProperties: false
+    properties:
+      bus_spacing: {type: number}
+
+  electricity:
+    type: object
+    additionalProperties: false
+    required: [conventional_carriers, renewable_carriers, retirement, extendable_carriers]
+    properties:
+      conventional_carriers: {type: array, items: {type: string}}
+      renewable_carriers: {type: array, items: {type: string}}
+      retirement: {enum: [economic, technical]}
+
+      extendable_carriers:
+        type: object
+        additionalProperties: false
+        properties:
+          Generator: {type: array, items: {type: string}}
+          StorageUnit: {type: array, items: {type: string}}
+          Store: {type: array, items: {type: string}}
+          Link: {type: array, items: {type: string}}
+
+      SAFE_reservemargin: {type: number}
+      SAFE_regional_reservemargins: {type: string}
+      regional_Co2_limits: {type: string}
+      technology_capacity_targets: {type: string}
+      portfolio_standards: {type: string}
+      transmission_interface_limits: {type: string}
+
+      operational_reserve:
+        type: object
+        additionalProperties: false
+        properties:
+          activate: {type: boolean}
+          epsilon_load: {type: number}
+          epsilon_vres: {type: number}
+          contingency: {type: number}
+
+      erm:
+        type: object
+
+      demand:
+        type: object
+        additionalProperties: false
+        properties:
+          profile: {enum: [efs, eia, eer]}
+          bus_allocation: {enum: [population, breakthrough]}
+          scenario:
+            type: object
+            additionalProperties: false
+            properties:
+              efs_case: {enum: [reference, medium, high]}
+              efs_speed: {enum: [slow, moderate, rapid]}
+              eer_file: {type: string}
+              aeo: {enum: [reference, high, low]}
+
+      demand_response:
+        type: object
+        additionalProperties: false
+        properties:
+          shift: {type: number}
+          marginal_cost: {type: number}
+          by_carrier: {type: boolean}
+
+      imports:
+        type: object
+        additionalProperties: false
+        properties:
+          enable: {type: boolean}
+          costs: {enum: [wholesale, carrier, float]}
+          co2_emissions: {type: number}
+          capacity_limit: {type: boolean}
+          volume_limit: {}
+          balancing_period: {enum: [day, week, month, year]}
+
+      exports:
+        type: object
+        additionalProperties: false
+        properties:
+          enable: {type: boolean}
+          costs: {enum: [wholesale, carrier, float]}
+          capacity_limit: {type: boolean}
+          volume_limit: {}
+          balancing_period: {enum: [day, week, month, year]}
+
+  conventional:
+    type: object
+    additionalProperties: false
+    properties:
+      unit_commitment: {type: boolean}
+      must_run: {type: boolean}
+      dynamic_fuel_price:
+        type: object
+        additionalProperties: false
+        properties:
+          enable: {type: boolean}
+          pudl: {type: boolean}
+          wholesale: {type: boolean}
+
+  lines:
+    type: object
+    additionalProperties: false
+    required: [s_max_pu, types]
+    properties:
+      s_max_pu: {type: number}
+      s_nom_max: {type: number}
+      max_extension: {type: number}
+      length_factor: {type: number}
+      types: {type: object}
+
+  links:
+    type: object
+    additionalProperties: false
+    properties:
+      p_max_pu: {type: number}
+      p_nom_max: {type: number}
+      max_extension: {type: number}
+
+  co2:
+    type: object
+    additionalProperties: false
+    properties:
+      storage: {type: boolean}
+      network:
+        type: object
+        additionalProperties: false
+        properties:
+          enable: {type: boolean}
+          capital_cost: {type: number}
+          marginal_cost: {type: number}
+          lifetime: {type: number}
+          discount_rate: {type: number}
+
+  dac:
+    type: object
+    additionalProperties: false
+    properties:
+      enable: {type: boolean}
+      granularity: {enum: [node, state, nation]}
+      capital_cost: {type: number}
+      electricity_input: {type: number}
+      lifetime: {type: number}
+      discount_rate: {type: number}
+
+  costs:
+    type: object
+    additionalProperties: false
+    required: [atb, aeo]
+    properties:
+      atb:
+        type: object
+        additionalProperties: false
+        required: [model_case, scenario]
+        properties:
+          model_case: {enum: ["Market", "R&D"]}
+          scenario: {enum: ["Advanced", "Conservative", "Moderate"]}
+          overrides: {type: [object, "null"]}
+      aeo:
+        type: object
+        additionalProperties: false
+        properties:
+          scenario: {enum: [reference, high, low]}
+      social_discount_rate: {type: number}
+      ng_fuel_year: {type: integer}
+      emission_prices:
+        type: object
+        additionalProperties: false
+        properties:
+          enable: {type: boolean}
+          co2: {type: number}
+          co2_monthly_prices: {type: boolean}
+      ptc_modifier: {type: [object, "null"]}
+      itc_modifier: {type: [object, "null"]}
+      min_year: {type: [object, "null"]}
+      max_growth: {type: [object, "null"]}
+
+  clustering:
+    type: object
+    additionalProperties: false
+    required: [simplify_network, cluster_network]
+    properties:
+      simplify_network:
+        type: object
+        additionalProperties: false
+        properties:
+          weighting_strategy: {enum: [population, demand-capacity]}
+          algorithm: {enum: [kmeans, modularity]}
+          feature: {type: string}
+      cluster_network:
+        type: object
+        additionalProperties: false
+        properties:
+          weighting_strategy: {enum: [population, demand-capacity]}
+          algorithm: {enum: [kmeans, modularity]}
+          exclude_carriers: {type: array}
+          consider_efficiency_classes: {type: boolean}
+          feature: {type: string}
+      aggregation_strategies: {type: object}
+      temporal:
+        type: object
+        additionalProperties: false
+        properties:
+          resolution_elec: {type: [integer, boolean]}
+          resolution_sector: {type: [integer, boolean]}
+
+  focus_weights:
+    description: >
+      Per-region clustering weights. null (not {}) means uniform - cluster_network
+      distinguishes the two, so leave it null rather than emptying it.
+    type: [object, "null"]
+
+  solving:
+    type: object
+    additionalProperties: false
+    required: [options, solver, solver_options]
+    properties:
+      tmpdir: {type: string}
+      mem: {type: number}
+      walltime: {type: string}
+      options:
+        type: object
+        additionalProperties: false
+        properties:
+          load_shedding: {type: boolean}
+          clip_p_max_pu: {type: number}
+          noisy_costs: {type: boolean}
+          skip_iterations: {type: boolean}
+          rolling_horizon: {type: boolean}
+          seed: {type: integer}
+          track_iterations: {type: boolean}
+          min_iterations: {type: integer}
+          max_iterations: {type: integer}
+          transmission_losses: {type: integer}
+          linearized_unit_commitment: {type: boolean}
+          horizon: {type: integer}
+          assign_all_duals: {type: boolean}
+          snapshot_portion: {type: [number, "null"]}
+          overlap: {type: integer}
+      solver:
+        type: object
+        additionalProperties: false
+        required: [name, options]
+        properties:
+          name: {enum: [gurobi, highs, cplex, cbc, glpk]}
+          options: {type: string}
+      solver_options: {type: object}
+
+  walltime:
+    description: Per-rule scheduler wall times; owned by config.slurm.yaml.
+    type: object
+
+  custom_files:
+    type: object
+    additionalProperties: false
+    properties:
+      activate: {type: boolean}
+      files_path: {type: string}
+      network_name: {type: string}
+
+  ucap:
+    type: object
+    additionalProperties: false
+    properties:
+      enable: {type: boolean}
+      forced_outage_rates: {type: object}
+
+  api:
+    type: object
+    properties:
+      eia: {type: ["string", "null"]}
+
+allOf:
+# The selected solver's options block must exist in solver_options.
+- if:
+    properties:
+      solving:
+        properties:
+          solver:
+            required: [options]
+        required: [solver]
+    required: [solving]
+  then:
+    properties:
+      solving:
+        properties:
+          solver_options: {type: object, minProperties: 1}
+
+# GODEEEP needs an NREL land-access overlay. See the note on the property
+# itself: the key must be declared and, when set, carry a known value.
+- if:
+    properties:
+      renewable:
+        properties:
+          dataset: {const: godeeep}
+        required: [dataset]
+    required: [renewable]
+  then:
+    required: [renewable_land_access]
+    properties:
+      renewable_land_access:
+        enum: [reference, limited, open, null]

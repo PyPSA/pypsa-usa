@@ -1,4 +1,4 @@
-from snakemake.utils import min_version
+from snakemake.utils import min_version, validate
 
 min_version("6.0")
 
@@ -129,6 +129,14 @@ if os.path.exists("config/config.slurm.yaml"):
 # at parse time (below, via the include: statements).
 config.setdefault("api", {})
 config["api"]["eia"] = os.environ.get("EIA_API_KEY") or config["api"].get("eia")
+
+
+# Validate the fully merged config. Catches typo'd keys inside the closed
+# subtrees and out-of-range enum values at parse time, instead of letting them
+# fall through to a `config_provider(..., default=...)` fallback and surface as
+# a wrong number several rules later. set_default=False keeps the schema from
+# becoming a second, invisible source of configuration.
+validate(config, "schemas/config.schema.yaml", set_default=False)
 
 
 run = config.get("run", {})
