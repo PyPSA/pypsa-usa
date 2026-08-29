@@ -66,3 +66,32 @@ rule plot_validation_figures:
         mem_mb=5000,
     script:
         "../scripts/plot_validation_production.py"
+
+
+# Compares installed capacity against the CPUC Baseline Generator List,
+# aggregated by SERVM benchmark region and technology, per planning horizon.
+# Gated by run.benchmark_cpuc (see benchmark_figures in the Snakefile).
+rule benchmark_cpuc_baseline:
+    params:
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+    input:
+        network=NETWORKS
+        + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
+        powerplants="resources/powerplants/powerplants.csv",
+        cpuc_baseline=DATA + "cpuc/BaselineGeneratorList_CAISO.xlsx",
+        region_map="repo_data/CPUC/servm_benchmark_regions.csv",
+        tech_map="repo_data/CPUC/servm_tech_map.csv",
+    output:
+        comparison=RESULTS
+        + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/benchmark/cpuc_capacity_benchmark.csv",
+        heatmap=RESULTS
+        + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/benchmark/cpuc_capacity_deviation.pdf",
+    log:
+        LOGS
+        + "benchmark_cpuc_baseline/{interconnect}/elec_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}.log",
+    threads: 1
+    resources:
+        walltime="00:20:00",
+        mem_mb=5000,
+    script:
+        "../scripts/benchmark_cpuc_baseline.py"

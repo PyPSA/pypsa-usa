@@ -258,6 +258,28 @@ def validation_figures(wildcards):
         return []
 
 
+BENCHMARK_CPUC_OUTPUTS = [
+    "cpuc_capacity_benchmark.csv",
+    "cpuc_capacity_deviation.pdf",
+]
+
+
+def benchmark_figures(wildcards):
+    """CPUC Baseline Generator List capacity benchmark, opt-in via run.benchmark_cpuc.
+
+    Gated on its own flag rather than on the demand profile: the fleet
+    benchmark is useful for any California run, whatever drives its load.
+    """
+    if not config["run"].get("benchmark_cpuc", False):
+        return []
+    return expand(
+        RESULTS
+        + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/benchmark/{figure}",
+        **config["scenario"],
+        figure=BENCHMARK_CPUC_OUTPUTS,
+    )
+
+
 rule all:
     input:
         #"repo_data/dag.jpg",
@@ -265,6 +287,7 @@ rule all:
         electricity_figures,
         sector_figures,
         validation_figures,
+        benchmark_figures,
 
 
 rule data_model:
