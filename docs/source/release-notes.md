@@ -49,6 +49,12 @@ changes you will notice:
   default several rules later.
 - **The EIA API key can be supplied as `$EIA_API_KEY`**, which takes precedence over
   `config/config.api.yaml` and keeps the key out of your files entirely.
+- **`renewable_land_access` now defaults to `reference`.** The shipped templates previously
+  paired `renewable.dataset: godeeep` with a null land-access setting, a combination
+  `build_renewable_profiles` rejects — no shipped config could build renewable profiles from a
+  clean checkout. The default is NREL's central land-access assumption; expect
+  `retrieve_nrel_exclusion_artifact` jobs in every godeeep DAG. Null remains valid only with
+  `dataset: atlite`.
 
 ### Correctness fixes validated by an equivalence harness
 
