@@ -37,6 +37,7 @@ from _helpers import (
 from constants import HOURS_PER_YEAR
 from opts.bidirectional_link import add_bidirectional_link_constraints
 from opts.interchange import add_interchange_constraints
+from opts.interfaces import add_interface_transmission_limits
 from opts.land import add_land_use_constraints
 from opts.policy import (
     add_regional_co2limit,
@@ -201,6 +202,10 @@ def extra_functionality(n, snapshots):
     if config["electricity"].get("exports", {}).get("enable", False):
         if config["electricity"].get("exports", {}).get("volume_limit", False):
             add_interchange_constraints(n, config, "exports", sector_enabled)
+
+    # Apply aggregate interface transmission limits if configured
+    if config["model_topology"].get("interface_transmission_limits", False):
+        add_interface_transmission_limits(n, global_snakemake.input.interface_limits)
 
     # Apply sector-specific constraints if sector is enabled
     if sector_enabled:
