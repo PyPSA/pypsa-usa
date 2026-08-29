@@ -5,7 +5,7 @@
 # <5 minutes. DO NOT use as a user-facing entry point.
 #
 # This is a SPARSE OVERLAY. `workflow/Snakefile` already loads the
-# layered base (config.cluster / config.common / config.plotting /
+# layered base (config.slurm / config.common / config.plotting /
 # config.api / config.sector / config.default) underneath it, so only
 # keys that DIFFER from that merged base belong here.
 #

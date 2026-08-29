@@ -28,7 +28,7 @@ REPO_DATA_CONFIG_DIR = WORKFLOW_DIR / "repo_data" / "config"
 # config.tutorial.yaml is intentionally omitted — it's a sparse overlay used
 # for fast DAG smoke tests, not a key-vocabulary source of truth.
 DEFAULT_CONFIGFILES = [
-    "config.cluster.yaml",
+    "config.slurm.yaml",
     "config.common.yaml",
     "config.plotting.yaml",
     "config.api.yaml",

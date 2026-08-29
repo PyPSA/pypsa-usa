@@ -615,13 +615,16 @@ networks.
 (walltime_cf)=
 ## `walltime`
 
-Per-rule wall-time overrides consumed as Snakemake `walltime` resources, used by the SLURM
-profile when submitting jobs to an HPC scheduler (see `config.cluster.yaml` and
-`workflow/run_slurm.sh`). Rules not listed here fall back to per-rule defaults defined in the
-workflow. Local runs ignore these values.
+Per-rule wall-time overrides consumed as Snakemake `walltime` resources and forwarded to
+`sbatch --time` by `workflow/run_slurm.sh`. This is the single source for per-rule wall times;
+it lives in `config.slurm.yaml` (renamed from `config.cluster.yaml`, whose name collided with
+the `{clusters}` wildcard and the `clustering:` section). Rules not listed here fall back to
+per-rule defaults defined in the workflow. Local runs ignore these values.
+
+Not to be confused with `solving: walltime:`, which caps the *solver*, not the scheduler job.
 
 ```{eval-rst}
-.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+.. literalinclude:: ../../workflow/repo_data/config/config.slurm.yaml
    :language: yaml
    :start-after: # docs : WALLTIME
    :end-before: # docs :

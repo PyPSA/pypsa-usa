@@ -87,7 +87,7 @@ wildcard_constraints:
 # REPLACED wholesale), and anything the user passes via `--configfile` is
 # merged last, on top of everything below.
 #
-#   config.cluster.yaml   HPC scheduler settings
+#   config.slurm.yaml     HPC scheduler settings + per-rule wall times
 #   config.common.yaml    renewable/atlite plumbing that rarely changes
 #   config.plotting.yaml  figure styling
 #   config.api.yaml       API keys (gitignored)
@@ -102,7 +102,7 @@ wildcard_constraints:
 #
 # Users copy config.default.yaml to config/config.<scenario>.yaml and pass it
 # with --configfile; that file then only needs the keys it actually changes.
-configfile: "repo_data/config/config.cluster.yaml"
+configfile: "repo_data/config/config.slurm.yaml"
 configfile: "repo_data/config/config.common.yaml"
 configfile: "repo_data/config/config.plotting.yaml"
 configfile: "repo_data/config/config.api.yaml"
@@ -118,9 +118,9 @@ if os.path.exists("config/config.api.yaml"):
     configfile: "config/config.api.yaml"
 
 
-if os.path.exists("config/config.cluster.yaml"):
+if os.path.exists("config/config.slurm.yaml"):
 
-    configfile: "config/config.cluster.yaml"
+    configfile: "config/config.slurm.yaml"
 
 
 run = config.get("run", {})

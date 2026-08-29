@@ -51,7 +51,7 @@ snakemake data_model -j1 --configfile config/config.default.yaml
 
 ## Running on HPC Cluster
 
-If you are running the workflow on an High-Performance Compute (HPC) cluster, you will first need to update the configuration settings in `workflow/config/config.cluster.yaml` (seeded by `init_pypsa_usa.sh`). Update the account, partition, email, and chdir fields to match the information of your institutions cluster.
+If you are running the workflow on an High-Performance Compute (HPC) cluster, you will first need to update the configuration settings in `workflow/config/config.slurm.yaml` (seeded by `init_pypsa_usa.sh`). Update the account, partition, email, and chdir fields to match the information of your institutions cluster.
 
 Next, identify the name of the configuration file you would like to run by editing the `run_slurm.sh` script. The default value is the `--configfile config/config.default.yaml`.
 

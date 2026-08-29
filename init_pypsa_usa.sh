@@ -2,7 +2,7 @@
 # One-time setup: seed the per-user configuration files.
 #
 # Everything else - config.common.yaml, config.plotting.yaml,
-# config.sector.yaml, config.default.yaml, config.cluster.yaml and the
+# config.sector.yaml, config.default.yaml and the
 # policy_constraints/ CSVs - is loaded by workflow/Snakefile straight out of
 # the tracked templates directory, so there is nothing to copy and nothing to
 # keep in sync. Only the files below are genuinely user-owned.
@@ -17,11 +17,11 @@ destination="workflow/config"
 # Files copied into $destination for the user to edit.
 #   config.default.yaml  starting point for your own scenario config
 #   config.api.yaml      API keys (EIA); can be replaced by $EIA_API_KEY
-#   config.cluster.yaml  HPC/SLURM account, partition, email
+#   config.slurm.yaml    HPC/SLURM account, partition, email
 user_files=(
     "config.default.yaml"
     "config.api.yaml"
-    "config.cluster.yaml"
+    "config.slurm.yaml"
 )
 
 mkdir -p "$destination"

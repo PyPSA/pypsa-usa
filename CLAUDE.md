@@ -8,7 +8,7 @@ PyPSA-USA is a Snakemake-orchestrated PyPSA workflow for capacity expansion, pro
 
 ## Running the workflow
 
-**All `snakemake` invocations run from `workflow/`** — `cd workflow/` first. `workflow/Snakefile` auto-loads the whole layered base out of the tracked templates: `repo_data/config/config.{cluster,common,plotting,api,sector,default}.yaml`, then the optional per-user overlays `config/config.api.yaml` and `config/config.cluster.yaml`, then whatever is passed via `--configfile`. Because `config.default.yaml` is a loaded layer, a scenario config is a sparse **overlay** — it only needs the keys it changes (nested mappings merge; lists and scalars are replaced wholesale).
+**All `snakemake` invocations run from `workflow/`** — `cd workflow/` first. `workflow/Snakefile` auto-loads the whole layered base out of the tracked templates: `repo_data/config/config.{slurm,common,plotting,api,sector,default}.yaml`, then the optional per-user overlays `config/config.api.yaml` and `config/config.slurm.yaml`, then whatever is passed via `--configfile`. Because `config.default.yaml` is a loaded layer, a scenario config is a sparse **overlay** — it only needs the keys it changes (nested mappings merge; lists and scalars are replaced wholesale).
 
 ```bash
 cd workflow
@@ -22,7 +22,7 @@ Useful targets:
 - `--until <rule>` to stop early, `-R <rule>` to force re-execution.
 - Tutorial config (`repo_data/config/config.tutorial.yaml`, CA only, simpl=75, clusters=4m, 2050) is the smallest meaningful end-to-end run.
 
-HPC: edit `config/config.cluster.yaml` (account/partition/email) and `workflow/run_slurm.sh`, then `bash workflow/run_slurm.sh`.
+HPC: edit `config/config.slurm.yaml` (account/partition/email; it also holds the single per-rule `walltime:` block) and `workflow/run_slurm.sh`, then `bash workflow/run_slurm.sh`.
 
 ## Tests and lint
 
@@ -92,7 +92,7 @@ Defined in `workflow/Snakefile`:
 - `workflow/repo_data/config/` is canonical and is what the Snakefile loads. It is also the source for `docs/source/configtables/` documentation.
 - `repo_data/config/config.default.yaml` — the scenario base layer: every user-facing knob, with defaults. Auto-loaded, and also the file users copy as a starting scenario.
 - `repo_data/config/config.tutorial.yaml`, `config.test.yaml` — sparse overlays (only keys that differ from the base). `config.equivalence*.yaml` are deliberately self-contained because the Tier C harness replays them against a pinned upstream anchor that does not load the base.
-- `workflow/config/` is untracked and holds only per-user files, seeded by `init_pypsa_usa.sh`: `config.default.yaml` (your scenario starting point), `config.api.yaml`, `config.cluster.yaml`. Do not add layered configs back into it.
+- `workflow/config/` is untracked and holds only per-user files, seeded by `init_pypsa_usa.sh`: `config.default.yaml` (your scenario starting point), `config.api.yaml`, `config.slurm.yaml`. Do not add layered configs back into it.
 - `policy_constraints/` CSVs are read straight from `repo_data/config/policy_constraints/`.
 
 ## Things to know before changing rules

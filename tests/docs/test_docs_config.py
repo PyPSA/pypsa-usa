@@ -248,7 +248,6 @@ def test_init_copies_only_user_owned_files():
     assert user_files <= {
         "config.default.yaml",
         "config.api.yaml",
-        "config.cluster.yaml",
         "config.slurm.yaml",
     }, f"unexpected per-user file in init_pypsa_usa.sh: {sorted(user_files)}"
 

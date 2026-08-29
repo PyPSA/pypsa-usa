@@ -24,7 +24,7 @@ From the command line, run the script `init_pypsa_usa.sh` to seed the per-user
 configuration files into the `workflow/config` folder.
 
 Only three files are copied — `config.default.yaml` (a starting point for your own
-scenario config), `config.api.yaml` (API keys) and `config.cluster.yaml` (HPC account
+scenario config), `config.api.yaml` (API keys) and `config.slurm.yaml` (HPC account
 settings). Every other configuration file is read by the workflow directly from the
 tracked `workflow/repo_data/config/` templates, so it can never fall out of sync with
 your checkout. The script is safe to re-run: existing files are left untouched.

@@ -58,6 +58,9 @@ SEAM_FIX_MARK = "_drop_distant_seam_plants"
 ADD_ELECTRICITY_SCRIPT = "workflow/scripts/add_electricity.py"
 FORCE_RERUN_MARKER = ".eq-force-rerun"  # rules to -R once after a newly applied patch
 
+# The ANCHOR's layered set (pinned upstream e7f8bd70), not the candidate's —
+# it still reads every layer out of config/ and still calls the SLURM file
+# config.cluster.yaml.
 LAYERED_CONFIGS = [
     "config.cluster.yaml",
     "config.plotting.yaml",
