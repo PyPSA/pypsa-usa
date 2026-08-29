@@ -228,8 +228,9 @@ def _init_script() -> tuple[Path, Path, set[str]]:
     return REPO_ROOT / templates.group(1), REPO_ROOT / destination.group(1), names
 
 
+@pytest.mark.fast
 def test_init_copies_only_user_owned_files():
-    """init must seed exactly the per-user files, and each must exist as a template.
+    """Init must seed exactly the per-user files, each backed by a template.
 
     Everything else under ``workflow/repo_data/config/`` is loaded by
     ``workflow/Snakefile`` straight from the tracked tree, so copying it into
@@ -252,6 +253,7 @@ def test_init_copies_only_user_owned_files():
     }, f"unexpected per-user file in init_pypsa_usa.sh: {sorted(user_files)}"
 
 
+@pytest.mark.fast
 def test_snakefile_reads_layered_base_from_repo_data():
     """The layered base must be read from the tracked templates, not from copies."""
     snakefile = (REPO_ROOT / "workflow" / "Snakefile").read_text(encoding="utf-8")
@@ -259,6 +261,5 @@ def test_snakefile_reads_layered_base_from_repo_data():
     assert layered, "no unconditional configfile: directives found in workflow/Snakefile"
     strays = [p for p in layered if not p.startswith("repo_data/config/")]
     assert not strays, (
-        "these layered configfiles are still read from the per-user config/ copy "
-        f"and will drift: {strays}"
+        f"these layered configfiles are still read from the per-user config/ copy and will drift: {strays}"
     )

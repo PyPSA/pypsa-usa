@@ -22,9 +22,7 @@ from dataclasses import dataclass
 RUN = "equivalence"
 INTERCONNECT = os.environ.get("EQ_INTERCONNECT", "western")
 UNTIL = os.environ.get("EQ_UNTIL", "")  # 'assembled' = stop pairs at the assembled stage
-_CONFIG_NAME = (
-    "config.equivalence.yaml" if INTERCONNECT == "western" else f"config.equivalence-{INTERCONNECT}.yaml"
-)
+_CONFIG_NAME = "config.equivalence.yaml" if INTERCONNECT == "western" else f"config.equivalence-{INTERCONNECT}.yaml"
 # Candidate side reads the tracked template directly (its Snakefile no longer
 # needs a config/ copy). The anchor is a pinned upstream checkout whose
 # Snakefile still expects everything under config/, and build.py copies the
