@@ -988,6 +988,22 @@ def broadcast_investment_horizons_index(n: pypsa.Network, df: pd.DataFrame):
     return df
 
 
+def check_ambient_derate_not_enabled(conventional: dict) -> None:
+    """Guard the phase-2 ``conventional.ambient_derate`` hook.
+
+    Ambient-temperature derates are meant to REPLACE the EIA-860 seasonal
+    derate applied by :func:`apply_seasonal_capacity_derates`, never to stack
+    on top of it (or on top of a UCAP-derated capacity credit) — stacking
+    double-counts the same thermal deficiency. Until the CPUC SERVM
+    unit-specific hourly derate profiles are retrieved and applied, enabling
+    the key is a hard error rather than a silent no-op.
+    """
+    if (conventional or {}).get("ambient_derate", {}).get("enable", False):
+        raise NotImplementedError(
+            "conventional.ambient_derate is a phase-2 hook; CPUC unit-specific hourly derate profiles are not yet retrieved or applied.",
+        )
+
+
 def apply_seasonal_capacity_derates(
     n: pypsa.Network,
     plants: pd.DataFrame,
@@ -1255,6 +1271,7 @@ def main(snakemake):
         renewable_carriers,
         unit_commitment=params.conventional["unit_commitment"],
     )
+    check_ambient_derate_not_enabled(params.conventional)
     apply_seasonal_capacity_derates(
         n,
         plants,

@@ -35,6 +35,49 @@ model_topology:
 
 Alternatively, you can use the code reeds_state: 'CA' option to achieve the same result by specifying the entire state.
 
+A complete, maintained California configuration ships with the repository as
+`workflow/repo_data/config/config.california.yaml`. It pairs the footprint below with CPUC
+SERVM demand, the RESOLVE CAISO interface limits, and enabled imports/exports:
+
+```yaml
+scenario:
+   interconnect: [western]
+   planning_horizons: [2030, 2035, 2040, 2045]  # CPUC SERVM forecast years
+   clusters: [4]                                # p8, p9, p10, p11
+   simpl: [75]
+
+model_topology:
+   transmission_network: 'reeds'
+   topological_boundaries: 'reeds_zone'
+   interface_transmission_limits: true          # RESOLVE CAISO interface caps
+   include:
+      reeds_state: ['CA']
+```
+
+`clusters` is pinned to 4 because the ReEDS zonal backbone cannot be clustered below the
+number of zones in the footprint, and California holds exactly four.
+
+To run the same footprint at **county resolution**, switch `topological_boundaries` to
+`county` and raise `clusters` to 58 — the number of California counties, and the number of
+`p06xxx` nodes in the county NARIS interface table. `simpl: ['county']` selects the
+county-FIPS fast path in `cluster_simpl`, so the resource layer is built directly on county
+boundaries (a numeric `simpl` of at least 58 also works if you want more resource zones than
+transmission nodes):
+
+```yaml
+scenario:
+   clusters: [58]        # 58 California counties
+   simpl: ['county']     # county-FIPS fast path
+
+model_topology:
+   topological_boundaries: 'county'
+```
+
+`add_extra_components` switches from the balancing-area NARIS flowgate file to the county one
+(`transmission_capacity_init_AC_county_NARIS2024.csv`) automatically when
+`topological_boundaries` is `county` — no other key needs changing. `config.california.yaml`
+carries this same block as a commented alternative.
+
 In addition to filtering by `reeds_zone` and `reeds_state`, you can filter by `reeds_ba`, `trans_reg`, and `nerc_reg` shown graphically below.
 
 

@@ -119,6 +119,112 @@ class BuiltArtifacts:
         return self.base / "busmaps" / self.interconnect / f"busmap_s{self.simpl}.csv"
 
 
+@dataclass(frozen=True)
+class ServmArtifacts:
+    """Paths to the CPUC SERVM demand artifacts produced by the Tier B build.
+
+    The ``interconnect`` and ``simpl`` defaults MUST match
+    ``workflow/repo_data/config/config.test.california.yaml``'s ``scenario``
+    section. If you change one, change both.
+    """
+
+    run_name: str
+    base: Path  # resources/{run_name}/
+    interconnect: str = "western"
+    simpl: str = "20"
+
+    @property
+    def elec_s(self) -> Path:
+        """Simplified network the weights and demand were built against."""
+        return self.base / "networks" / self.interconnect / f"elec_s{self.simpl}.nc"
+
+    @property
+    def elec_s_dem(self) -> Path:
+        """Simplified network with SERVM demand attached."""
+        return self.base / "networks" / self.interconnect / f"elec_s{self.simpl}_dem.nc"
+
+    @property
+    def weights(self) -> Path:
+        """(bus, servm_region, laf) allocation table from build_servm_load_weights."""
+        return self.base / "demand" / self.interconnect / f"servm_load_weights_s{self.simpl}.csv"
+
+    @property
+    def demand(self) -> Path:
+        """Per-bus hourly demand CSV written by build_electrical_demand."""
+        return self.base / "demand" / self.interconnect / f"power_electricity_s{self.simpl}.csv"
+
+    @property
+    def zonal_components(self) -> Path:
+        """Component-resolved zonal demand parquet (pre-disaggregation)."""
+        return self.base / "demand" / self.interconnect / f"power_zonal_components_s{self.simpl}.parquet"
+
+
+def _run_snakemake(configfile: str, until: str, run_name: str) -> None:
+    """Run one ``snakemake --until <rule>`` build against ``workflow/``."""
+    cmd = [
+        "snakemake",
+        "--until",
+        until,
+        "--configfile",
+        configfile,
+        "--config",
+        f"run={{name: '{run_name}', shared_cutouts: true}}",
+        "-j",
+        str(os.cpu_count() or 2),
+        # Force greedy scheduler to avoid the ILP scheduler's cbc dependency
+        # (cbc is shipped non-executable in some envs and causes PermissionError).
+        "--scheduler",
+        "greedy",
+        "--quiet",
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=WORKFLOW_DIR,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+    except subprocess.TimeoutExpired as e:
+        raw_stderr = e.stderr
+        if isinstance(raw_stderr, bytes):
+            raw_stderr = raw_stderr.decode("utf-8", errors="replace")
+        stderr_tail = "\n".join(raw_stderr.splitlines()[-100:]) if raw_stderr else "<no stderr captured>"
+        pytest.fail(
+            f"snakemake build timed out after {e.timeout}s\nstderr (last 100 lines):\n{stderr_tail}",
+        )
+    if result.returncode != 0:
+        pytest.fail(
+            f"snakemake build failed (exit {result.returncode}):\n"
+            f"stderr (last 100 lines):\n" + "\n".join(result.stderr.splitlines()[-100:]),
+        )
+
+
+@pytest.fixture(scope="session")
+def servm_built(tmp_path_factory) -> ServmArtifacts:
+    """Run ``snakemake --until add_demand`` on the SERVM test config once per session.
+
+    Stops at ``add_demand`` rather than ``cluster_network``: the SERVM
+    artifacts under test (weights, per-bus demand CSV, zonal components) are all
+    produced at or before that stage, and the extra clustering work is already
+    covered by the ``built`` fixture.
+
+    Skips like ``built`` when the data dirs are missing. This build also
+    downloads one ~118 MB CPUC SERVM load file the first time it runs.
+    """
+    missing = [d for d in DATA_DIRS if not d.exists()]
+    if missing:
+        pytest.skip(
+            "Integration tests require populated data dirs; missing: " + ", ".join(str(m) for m in missing),
+        )
+    run_name = f"pytest_servm_{tmp_path_factory.mktemp('servm_run').name}"
+    _run_snakemake("config/config.test.california.yaml", "add_demand", run_name)
+    return ServmArtifacts(
+        run_name=run_name,
+        base=WORKFLOW_DIR / "resources" / run_name,
+    )
+
+
 @pytest.fixture(scope="session")
 def built(tmp_path_factory) -> BuiltArtifacts:
     """Run ``snakemake --until cluster_network`` once per session and expose artifact paths.

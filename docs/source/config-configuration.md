@@ -50,8 +50,13 @@ network is aggregated to. `transmission_network` chooses between the ReEDS zonal
 TAMU synthetic nodal network; `topological_boundaries` sets the zone type used after clustering
 (county, REeDS zone, state, or balancing area). Use `include` to subset the modeled footprint to
 specific zones, states, or balancing authorities (mixed zone types are not supported), and
-`aggregate` to pre-aggregate buses into larger regions. `interface_transmission_limits` applies
-NARIS2024 inter-regional transfer capacity limits and requires the ReEDS backbone.
+`aggregate` to pre-aggregate buses into larger regions. `interface_transmission_limits` switches
+on the aggregate inter-regional transfer limits read from
+`electricity: transmission_interface_limits` and requires the ReEDS backbone; the limits are
+applied in `solve_network` as a per-snapshot cap on the total flow across each interface, and
+constrain only the import/export links, so they are inert unless `electricity: imports` or
+`electricity: exports` is enabled. See {ref}`spatial` for a worked California example
+(`workflow/repo_data/config/config.california.yaml`) at both REeDS-zone and county resolution.
 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml

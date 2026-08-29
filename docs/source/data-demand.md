@@ -21,6 +21,98 @@ the model years 2021, 2025, 2030, 2035, 2040, 2045, and 2050, and each profile i
 historical weather year, so `renewable_weather_years` must contain exactly one year from
 2007-2013 or 2016-2023.
 
+(servm-demand)=
+### CPUC SERVM (California)
+
+`profile: servm` uses the hourly load forecast the California Public Utilities Commission
+publishes for its 2026 Integrated Resource Planning cycle, produced with the SERVM
+production-cost model. It is a **California-only** dataset — use it with a footprint scoped
+to California (`model_topology: include: reeds_state: ['CA']`); the maintained entry point is
+`workflow/repo_data/config/config.california.yaml`.
+
+The workflow retrieves one CSV per forecast year from
+
+```
+https://files.cpuc.ca.gov/energy/modeling/2026_servm_updates/HourlyLoad_CA_Regions_V2025E_2224_Mon_{year}.csv
+```
+
+(~118 MB each, via `retrieve_cpuc_servm_load`). **Nine forecast years are published: 2026,
+2028, 2030, 2032, 2035, 2037, 2040, 2042, and 2045.** Unlike EFS, SERVM demand is *not*
+interpolated or AEO-scaled between published years, so `scenario: planning_horizons` must be
+drawn from that set — any other year raises in `ReadServm`.
+
+#### Regions
+
+SERVM reports six California load regions. Each maps onto the balancing areas PyPSA-USA
+carries on its buses (`workflow/repo_data/CPUC/servm_region_map.csv`):
+
+| SERVM region | PyPSA-USA balancing area(s) | Notes |
+| --- | --- | --- |
+| `PGE` | `CISO-PGAE` | PG&E CAISO footprint |
+| `SCE` | `CISO-SCE` | Includes Valley Electric Association's California load, per the CPUC data dictionary |
+| `SDGE` | `CISO-SDGE` | San Diego Gas & Electric |
+| `IID` | `IID` | Imperial Irrigation District |
+| `LADWP` | `LDWP` | Los Angeles Department of Water and Power |
+| `NCNC` | `BANC` + `TIDC` | Northern California non-CAISO: Balancing Authority of Northern California and Turlock Irrigation District |
+
+`CISO-VEA` — the Valley Electric Association balancing area — is a Nevada footprint and is
+deliberately **excluded** from California-only networks. It carries an empty region in the
+mapping file, so its (small) load share is dropped with a log message, while any *unknown*
+balancing area introduced by upstream relabeling still hard-fails.
+
+Because the SERVM regions are balancing areas rather than states, the demand is disaggregated
+with a purpose-built weights table (`build_servm_load_weights`) instead of the generic
+state/BA path: a cluster bus can straddle two SERVM regions (Los Angeles County holds both
+`LDWP` and `CISO-SCE` buses), so a bus receives the sum of its share of every region it
+overlaps. The underlying per-bus weights are still the `bus_allocation` weights described
+below.
+
+#### Components
+
+Each file publishes several load components per region (`Load`, `BTMPV`, `EV`, `DATA_CEN`, ...)
+alongside `Net Load`. **Only `Net Load` is dispatched against by the model** — it is what
+remains after behind-the-meter PV and other embedded resources. Every published component is
+nonetheless carried through on the `subsector` index level and written to the zonal artifact
+`resources/<run>/demand/{interconnect}/power_zonal_components_s{simpl}.parquet`, so the
+component split stays available for reporting. Components that exist for only some regions
+(`EV` and friends are published for PGE/SCE/SDGE only) align to `NaN` there.
+
+#### Weather years
+
+Each forecast-year file stacks 25 weather years (2000-2024) of a full hourly year.
+`electricity: demand: scenario: servm_weather_years:` selects which one to use. It takes a
+list with **exactly one** entry; multiple entries are reserved for stochastic scenarios
+(phase 3) and currently raise `NotImplementedError`, because the demand output path is not
+weather-year specific.
+
+**Set `servm_weather_years` equal to the top-level `renewable_weather_years`.** Drawing load
+and wind/solar profiles from different weather years decorrelates them and will understate
+both the peak-net-load and the flexibility need. A mismatch is permitted but logs a warning.
+
+#### Timezone and calendar caveats
+
+SERVM strips are in **fixed Pacific Standard Time (UTC−8) with no daylight-saving
+transition**. This is not stated in the source files; it was verified empirically from the
+behind-the-meter PV solar-noon centroid, which sits at hour 12.52 in December and 12.68 in
+July — a DST-observing series would move by a full hour between the two. The strips are
+rolled forward 8 hours to UTC before being attached.
+
+Two calendar misalignments are accepted, and are immaterial for an hourly
+capacity-expansion model, but matter if you compare hour-for-hour against another source:
+
+1. **Monday-start synthetic calendar.** SERVM lays each year's 8760 hours on a synthetic
+   calendar that starts on a Monday, so weekday-versus-weekend hours do not line up with the
+   real weekdays of the planning horizon.
+2. **Leap weather years.** For a leap *weather* year the SERVM strip contains February 29 and
+   omits December 31, while PyPSA-USA's snapshots do the opposite (`get_snapshots` drops
+   February 29 from leap planning horizons). Every hour after February therefore lands one
+   calendar day earlier than it sat in the source file.
+
+The strip is mapped **positionally** onto the network's own per-period snapshots rather than
+onto a synthesised `date_range` — the latter would run a day short of December 31 for the
+leap planning horizons (2028, 2032, 2040). As a consequence each planning horizon must carry
+exactly 8760 snapshots; a truncated snapshot window cannot be used with `profile: servm`.
+
 ## Demand Disaggregation
 
 All of the demand sources above arrive at a coarser resolution than the network: EIA930
@@ -68,8 +160,9 @@ horizons setting, and the electricity demand setting. If conducting historical s
 user must select a planning horizon in the past (2018-2023) and set `profile: eia`.
 
 If conducting forward-looking planning cases the user must set a future planning horizon —
-2030, 2040, or 2050 with `profile: efs`, or any of 2021, 2025, 2030, 2035, 2040, 2045, and
-2050 with `profile: eer`.
+2030, 2040, or 2050 with `profile: efs`; any of 2021, 2025, 2030, 2035, 2040, 2045, and
+2050 with `profile: eer`; or any of 2026, 2028, 2030, 2032, 2035, 2037, 2040, 2042, and 2045
+with `profile: servm` (California only).
 
 For planning horizons between the EFS data years, PyPSA-USA implements a scaling factor that
 interpolates between future years or scales historical demand using forecasts from the Annual
@@ -81,11 +174,12 @@ scenario:
 
 electricity:
   demand:
-    profile: efs # efs, eia, eer
+    profile: efs # efs, eia, eer, servm
     scenario:
       efs_case: reference # reference, medium, high
       efs_speed: moderate # slow, moderate, rapid
       eer_file: demand_EER2025_100by2050.h5 # used when profile: eer
+      servm_weather_years: [2019] # used when profile: servm; exactly one year, 2000-2024
       aeo: reference
 ```
 

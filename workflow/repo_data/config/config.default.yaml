@@ -215,6 +215,20 @@ conventional:
     pudl: true                             # PUDL receipts-based fuel cost time series (monthly resolution)
     wholesale: true                        # CAISO/wholesale natural-gas hub prices (overrides PUDL for NG)
 
+  # PHASE 2 (NOT IMPLEMENTED): ambient-temperature capacity derates for thermal
+  # units, from the CPUC SERVM unit-specific hourly derate profiles. Setting
+  # `enable: true` raises NotImplementedError in add_electricity — the profiles
+  # are not retrieved or applied yet (see the reserved
+  # `retrieve_cpuc_thermal_derate` rule in workflow/rules/retrieve.smk).
+  # When implemented it REPLACES the EIA-860 summer/winter seasonal derate
+  # rather than stacking on it; stacking an ambient derate on a seasonal derate
+  # (or on a UCAP-derated capacity credit) double-counts the same thermal
+  # deficiency and must never be done.
+  ambient_derate:
+    enable: false                          # PHASE 2 — leave false
+    source: cpuc_servm                     # CPUC SERVM unit-specific hourly derates
+    replaces_seasonal_derate: true         # never stack with the EIA-860 seasonal derate
+
 
 # ====================================================================
 # LINES — AC transmission lines

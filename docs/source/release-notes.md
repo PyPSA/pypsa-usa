@@ -49,6 +49,36 @@ The full engineering change-log, including per-change expected effects on model
 results, is maintained in the repository at
 [`docs/CHANGELOG-v1-epic.md`](https://github.com/PyPSA/pypsa-usa/blob/master/docs/CHANGELOG-v1-epic.md).
 
+### California / CPUC SERVM
+
+- **New demand source `electricity: demand: profile: servm`** — CPUC SERVM 2026 IRP hourly
+  load for the six California load regions (PGE, SCE, SDGE, IID, LADWP, NCNC), retrieved
+  per forecast year from files.cpuc.ca.gov. Nine forecast years are published (2026, 2028,
+  2030, 2032, 2035, 2037, 2040, 2042, 2045) and `planning_horizons` is restricted to them.
+  `electricity: demand: scenario: servm_weather_years` picks one weather year out of the
+  stacked 2000-2024 record. Only `Net Load` is dispatched; the full component split is
+  written to a new component-resolved zonal artifact
+  (`power_zonal_components_s{simpl}.parquet`), which is now produced for every demand
+  profile. See {ref}`servm-demand`.
+- **SERVM load-allocation weights** — a new `build_servm_load_weights` rule composes the
+  base→substation→cluster busmaps into a fractional `(SERVM region, bus)` table, so a cluster
+  that straddles two regions (Los Angeles County holds both LDWP and CISO-SCE buses) receives
+  the sum of its share of each.
+- **Interface transmission limits are live.** `model_topology: interface_transmission_limits`
+  and `electricity: transmission_interface_limits` were previously dead keys. They now apply
+  the RESOLVE interface table as a per-snapshot cap on the *aggregate* flow across each
+  interface. The constraint scopes to the import/export links, so it is inert when trade is
+  disabled; the resulting understatement for `region_2` entries inside the footprint (notably
+  `p8` in California-only runs) is documented in {doc}`data-transmission`.
+- **New maintained config `config.california.yaml`** — a runnable California-only model on
+  SERVM demand with the CAISO interface caps and imports/exports enabled, at REeDS-zone
+  resolution (`clusters: 4`) with a commented county-resolution alternative
+  (`clusters: 58`, `simpl: county`).
+- **Phase-2 hook `conventional: ambient_derate`** — reserved for CPUC SERVM unit-specific
+  ambient-temperature derates. It is not implemented; enabling it raises `NotImplementedError`
+  in `add_electricity`. When it lands it replaces the EIA-860 seasonal derate rather than
+  stacking on it.
+
 ### Documentation
 
 - New Model Description section ({doc}`model-workflow`, {doc}`model-components`,
