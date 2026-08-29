@@ -123,6 +123,14 @@ if os.path.exists("config/config.slurm.yaml"):
     configfile: "config/config.slurm.yaml"
 
 
+# EIA API key. The environment wins over the YAML so the key can stay out of
+# the checkout entirely; config/config.api.yaml remains the fallback. Resolved
+# here, once, because a dozen rules dereference config["api"]["eia"] directly
+# at parse time (below, via the include: statements).
+config.setdefault("api", {})
+config["api"]["eia"] = os.environ.get("EIA_API_KEY") or config["api"].get("eia")
+
+
 run = config.get("run", {})
 RDIR = run["name"] + "/" if run.get("name") else ""
 CDIR = RDIR if not run.get("shared_cutouts") else ""
