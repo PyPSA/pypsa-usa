@@ -315,6 +315,15 @@ def eer_demand_file():
     return filename
 
 
+SERVM_LOAD_FILE = "cpuc/servm/HourlyLoad_CA_Regions_V2025E_2224_Mon_{year}.csv"
+
+
+def servm_demand_files():
+    """One CPUC SERVM hourly-load file per planning horizon."""
+    horizons = sorted(set(config["scenario"]["planning_horizons"]))
+    return [DATA + SERVM_LOAD_FILE.format(year=year) for year in horizons]
+
+
 def demand_raw_data(wildcards):
     # get profile to use
     end_use = wildcards.end_use
@@ -346,6 +355,8 @@ def demand_raw_data(wildcards):
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
     elif profile == "eer":
         return DATA + f"eer/{eer_demand_file()}"
+    elif profile == "servm":
+        return servm_demand_files()
     elif profile == "ferc":
         return [
             DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
@@ -381,13 +392,23 @@ def demand_raw_data(wildcards):
 
 
 def demand_disaggregate_data(wildcards):
-    """CLIU county-level industrial loads are the only disaggregation input.
+    """Extra per-profile input needed to spread zonal demand over buses.
 
-    All other end uses disaggregate by population and need no extra file.
+    CLIU county-level industrial loads serve the industry end use; the SERVM
+    profile needs its precomputed (region, bus) allocation weights. Everything
+    else disaggregates by population and needs no extra file.
     """
-    if wildcards.end_use != "industry":
-        return []
-    return DATA + "industry_load/2014_update_20170910-0116.csv"
+    if wildcards.end_use == "industry":
+        return DATA + "industry_load/2014_update_20170910-0116.csv"
+    if (
+        wildcards.end_use == "power"
+        and config["electricity"]["demand"]["profile"] == "servm"
+    ):
+        return (
+            DEMAND
+            + f"{wildcards.interconnect}/servm_load_weights_s{wildcards.simpl}.csv"
+        )
+    return []
 
 
 def demand_scaling_data(wildcards):
@@ -410,6 +431,8 @@ def demand_scaling_data(wildcards):
         return []
     elif profile == "eer":
         return []
+    elif profile == "servm":
+        return []
     else:
         return ""
 
@@ -423,14 +446,20 @@ rule build_electrical_demand:
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         planning_horizons=config["scenario"]["planning_horizons"],
         renewable_weather_years=config["renewable_weather_years"],
+        servm_weather_years=config["electricity"]["demand"]["scenario"].get(
+            "servm_weather_years", []
+        ),
         snapshots=config["snapshots"],
         pudl_path=config_provider("pudl_path"),
     input:
         network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
+        dissagregate_files=demand_disaggregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
         elec_demand=DEMAND + "{interconnect}/{end_use}_electricity_s{simpl}.csv",
+        zonal_components=DEMAND
+        + "{interconnect}/{end_use}_zonal_components_s{simpl}.parquet",
     log:
         LOGS + "{interconnect}/{end_use}_build_demand_s{simpl}.log",
     benchmark:

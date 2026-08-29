@@ -33,12 +33,13 @@ gaslimit,MWh thermal,float,"Cap on annual gas-fired primary energy from gas carr
 ,,,
 demand:,,,
 -- bus_allocation,--,"One of {``population``, ``breakthrough``}","How zone-level demand is distributed to individual buses. ``population`` (default) weights buses by 2020 Decennial Census county populations (split evenly across each county's substations, then each substation's buses). ``breakthrough`` uses the legacy nominal-demand column (``Pd``) from the 2016-vintage Breakthrough Energy grid model."
--- profile,--,"One of {``efs``, ``eia``, ``eer``}","Datasource for electrical load data. ``EFS`` pulls future state level electrical demand data. ``EIA`` pulls historical balancing level electrical demand data. ``EER`` pulls future state-level profiles from the EER dataset; when selected, ``planning_horizons`` must be one of 2021, 2025, 2030, 2035, 2040, 2045, or 2050 and ``renewable_weather_years`` must contain exactly one year from 2007-2013 or 2016-2023."
+-- profile,--,"One of {``efs``, ``eia``, ``eer``, ``servm``}","Datasource for electrical load data. ``EFS`` pulls future state level electrical demand data. ``EIA`` pulls historical balancing level electrical demand data. ``EER`` pulls future state-level profiles from the EER dataset; when selected, ``planning_horizons`` must be one of 2021, 2025, 2030, 2035, 2040, 2045, or 2050 and ``renewable_weather_years`` must contain exactly one year from 2007-2013 or 2016-2023. ``SERVM`` pulls CPUC SERVM hourly load for the six California load regions (California models only); when selected, ``planning_horizons`` must be one of 2026, 2028, 2030, 2032, 2035, 2037, 2040, 2042, or 2045."
 -- scenario:,,,
 -- -- efs_case,--,"One of {``reference``, ``medium``, ``high``}",(UNDER DEVELOPMENT) Extracts EFS data according to level of adoption
 -- -- efs_speed,--,"One of {``slow``, ``moderate``, ``fast``}",(UNDER DEVELOPMENT) Extracts EFS data according to speed of electrification
 -- -- eer_file,--,"One of {``demand_EER2025_100by2050.h5``, ``demand_EER2025_Baseline_AEO2023.h5``, ``demand_EER2025_IRAlow.h5``}",Selects the EER demand dataset file to download and use when ``profile`` is ``eer``.
 -- -- aeo,--,One of the AEO scenarios `here <https://www.eia.gov/outlooks/aeo/data/browser/>`_,(UNDER DEVELOPMENT) Scales future demand according to the AEO scenario
+-- -- servm_weather_years,--,List with exactly one year from 2000-2024,"Weather year drawn from the stacked SERVM record when ``profile`` is ``servm``. Multiple entries are reserved for stochastic scenarios and currently raise ``NotImplementedError``. Keep equal to the top-level ``renewable_weather_years`` so load and renewable profiles share a weather year; a mismatch logs a warning."
 ,,,
 demand_response:,,,Settings to activate and configure demand response
 -- shift,per_unit,"float {0 <=, >= 1} or 'inf'",Allowable load to be shifted per snapshot. Set to 0 to turn off demand response. Set to 'inf' to not enforce capacity limits.

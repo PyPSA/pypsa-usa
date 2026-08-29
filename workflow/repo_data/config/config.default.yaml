@@ -163,13 +163,20 @@ electricity:
 
   # ---------------- Demand ----------------
   demand:
-    profile: efs                           # demand time series source; efs (EIA-EFS) | eia (historical actuals) | eer (EER scenarios)
+    profile: efs                           # demand time series source; efs (EIA-EFS) | eia (historical actuals) | eer (EER scenarios) | servm (CPUC SERVM, California only)
     bus_allocation: population             # per-bus demand weight; population (2020 census counties) | breakthrough (legacy BE Pd)
-    scenario:                              # EFS/EER scenario knobs (ignored if profile=eia)
+    scenario:                              # EFS/EER/SERVM scenario knobs (ignored if profile=eia)
       efs_case:  reference                 # reference | medium | high
       efs_speed: moderate                  # slow | moderate | rapid
       eer_file: demand_EER2025_100by2050.h5 # EER h5 (profile=eer): demand_EER2025_100by2050 | demand_EER2025_Baseline_AEO2023 | demand_EER2025_IRAlow
       aeo:       reference                 # AEO (EIA Annual Energy Outlook) scaling case; reference | high | low
+      # ---- profile: servm (CPUC SERVM 2026, California regions) ----
+      # Weather year drawn from the stacked 2000-2024 SERVM record. Single-entry
+      # list = deterministic; multiple entries are reserved for stochastic
+      # scenarios (phase 3) and currently raise NotImplementedError.
+      # RECOMMENDED: keep equal to top-level `renewable_weather_years` so load
+      # and renewable profiles share a weather year (mismatch logs a warning).
+      servm_weather_years: [2019]
 
   demand_response:                         # price-responsive shiftable load; 0 = disabled
     shift: 0                               # fraction of hourly load that can shift in time
