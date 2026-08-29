@@ -27,6 +27,10 @@ you change must be restated in full.
 Every top-level key is owned by exactly one file — nothing is defined twice
 across layers.
 
+The one value that does not come from a file at all is the EIA API key: `workflow/Snakefile`
+reads `$EIA_API_KEY` from the environment and it takes precedence over `api: eia:` in
+`config/config.api.yaml`, which keeps the secret out of the checkout entirely.
+
 ## Validation
 
 The merged configuration is checked against `workflow/schemas/config.schema.yaml`

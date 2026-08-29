@@ -10,7 +10,7 @@ extendable_carriers:,,,Capacity-expansion candidates. Carriers listed here get e
 -- Link,--,"e.g. {HVDC}",Adds extendable links at every connection where there are lines or HVDC links with zero initial capacity.
 ,,,
 SAFE_reservemargin,p.u.,float,"System-wide planning reserve margin as a fraction of peak load. Reserved setting — not currently enforced by an active constraint; the ``ERM`` option is the active resource-adequacy mechanism."
-SAFE_regional_reservemargins,--,path,"CSV of per-region planning reserve margins (``config/policy_constraints/SAFE_regional_prm.csv``). Reserved setting — not currently enforced by an active constraint."
+SAFE_regional_reservemargins,--,path,"CSV of per-region planning reserve margins (``repo_data/config/policy_constraints/SAFE_regional_prm.csv``). Reserved setting — not currently enforced by an active constraint."
 ,,,
 operational_reserve:,,,Settings for reserve requirements following `GenX <https://genxproject.github.io/GenX.jl/stable/Model_Reference/core/#Operational-Reserves>`_
 -- activate,bool,true or false,Whether to take operational reserve requirements into account during optimisation
@@ -21,10 +21,10 @@ operational_reserve:,,,Settings for reserve requirements following `GenX <https:
 erm:,,,Energy Reserve Margin settings (used when ERM opt is enabled). Ensures sufficient firm capacity to meet demand plus reserve margin at every timestep.
 -- <region>,--,float,"Reserve margin as a fraction (e.g., 0.15 for 15%). Use ``all`` for all regions, or specify region codes (state, interconnect, NERC region, or ReEDS zone). Defaults to ``all: 0.15`` if not specified."
 ,,,
-regional_Co2_limits,--,path,"CSV of per-region CO2 caps in tCO2/yr (``config/policy_constraints/regional_Co2_limits.csv``). Enforced when the ``REM`` keyword is present in the ``{opts}`` wildcard."
-technology_capacity_targets,--,path,"CSV of forced minimum/maximum capacity builds by technology and region (``config/policy_constraints/technology_capacity_targets.csv``). Enforced when the ``TCT`` keyword is present in the ``{opts}`` wildcard."
-portfolio_standards,--,path,"CSV of RPS/CES clean-energy fractions by region (``config/policy_constraints/portfolio_standards.csv``). Enforced when the ``RPS`` keyword is present in the ``{opts}`` wildcard (covers both RPS and CES targets)."
-transmission_interface_limits,--,path,"CSV of MW limits on flows across inter-regional transmission interfaces (``config/policy_constraints/transmission_interface_limits.csv``), paired with ``model_topology: interface_transmission_limits``. Reserved setting — not currently consumed by the workflow."
+regional_Co2_limits,--,path,"CSV of per-region CO2 caps in tCO2/yr (``repo_data/config/policy_constraints/regional_Co2_limits.csv``). Enforced when the ``REM`` keyword is present in the ``{opts}`` wildcard."
+technology_capacity_targets,--,path,"CSV of forced minimum/maximum capacity builds by technology and region (``repo_data/config/policy_constraints/technology_capacity_targets.csv``). Enforced when the ``TCT`` keyword is present in the ``{opts}`` wildcard."
+portfolio_standards,--,path,"CSV of RPS/CES clean-energy fractions by region (``repo_data/config/policy_constraints/portfolio_standards.csv``). Enforced when the ``RPS`` keyword is present in the ``{opts}`` wildcard (covers both RPS and CES targets)."
+transmission_interface_limits,--,path,"CSV of MW limits on flows across inter-regional transmission interfaces (``repo_data/config/policy_constraints/transmission_interface_limits.csv``), paired with ``model_topology: interface_transmission_limits``. Reserved setting — not currently consumed by the workflow."
 ,,,
 co2limit_enable,bool,true or false,"Switch to activate the system-wide CO2 cap below. Optional; defaults to false when unset. Can also be set via the ``Co2L`` keyword in the ``{opts}`` wildcard."
 co2limit,:math:`t_{CO_2}/a`,float,"System-wide cap on annual CO2 emissions, added as a global constraint in ``prepare_network``. Only applied when ``co2limit_enable`` is true."
