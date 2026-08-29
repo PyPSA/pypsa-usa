@@ -26,6 +26,12 @@
 # Editing this file changes the base for every run in the checkout.
 # Prefer putting scenario-specific values in your own config instead.
 #
+# ONE FILE PER TOP-LEVEL KEY. No top-level key here is also defined in
+# config.common.yaml. `lines:`, `co2:`, `renewable_weather_years` and
+# `renewable_scenarios` are owned here (the line-type catalog moved
+# over from common); `renewable:` is owned by config.common.yaml
+# (including `renewable.dataset`, which used to be duplicated here).
+#
 # Option reference: docs/source/config-configuration.md (Sphinx tables)
 # Wildcard reference: docs/source/config-wildcards.md
 # Sector reference:   docs/source/config-sectors.md
@@ -43,15 +49,10 @@ run:
   shared_cutouts: true            # true = share atlite cutouts across runs (recommended; cutouts are large and slow)
   validation: false               # true = wire in back-casting validation plots (historical-only)
 
-# ====================================================================
-# RENEWABLE DATASET — capacity-factor source for wind & solar
-# ====================================================================
-# Sets which precomputed/atlite-derived CF time series the renewable
-# attach pipeline consumes. `godeeep` requires `renewable_land_access`
-# below; `atlite` requires a populated cutout (see config.common.yaml).
-# docs : RENEWABLE_DATASET
-renewable:
-  dataset: godeeep                # atlite | godeeep — see docs/source/config-configuration.md#renewable-godeeep
+# NB: the whole `renewable:` block — including `renewable.dataset`
+# (atlite | godeeep), which used to be duplicated here — lives in
+# config.common.yaml, which owns that key outright. See
+# docs/source/config-configuration.md#renewable-godeeep.
 
 
 # ====================================================================
@@ -116,7 +117,9 @@ snapshots:
   inclusive: "left"                     # pandas.date_range inclusive arg; left | right | both | neither
 
 # GODEEEP future-scenario controls. Used only when renewable.dataset = godeeep
-# and renewable_scenarios != "historical".
+# (set in config.common.yaml) and renewable_scenarios != "historical".
+# `add_electricity.py` and `build_electricity.smk` index renewable_scenarios[0]
+# directly whenever the dataset is godeeep, so the key must stay defined.
 # docs : RENEWABLE_SCENARIOS
 renewable_scenarios: ["rcp85cooler"]   # climate scenario; historical | rcp45cooler | rcp45hotter | rcp85cooler | rcp85hotter
 # renewable_scenario_years: [2030]     # OPTIONAL: explicit list of GODEEEP scenario years; defaults to planning_horizons
@@ -226,6 +229,19 @@ lines:
   s_nom_max: .inf                          # MVA cap on expanded line capacity per corridor (.inf = unbounded)
   max_extension: 20000                     # MW cap on total network-wide line expansion
   length_factor: 1.25                      # multiplier on geographic length to account for routing/right-of-way
+
+  # pyPSA line-type catalog, mapped onto AC corridors by v_nom. Every line in
+  # the base network is assigned the LineType matching its voltage; values
+  # reference pypsa.LineType library entries. (Moved here from
+  # config.common.yaml so `lines:` is defined in exactly one file.)
+  types:                                   # Temp values; replaced when actual conductor data is loaded
+    115.: "Al/St 240/40 2-bundle 220.0"
+    138.: "Al/St 240/40 2-bundle 220.0"
+    161.: "Al/St 240/40 2-bundle 220.0"
+    230.: "Al/St 240/40 2-bundle 220.0"
+    345.: "Al/St 240/40 4-bundle 380.0"
+    500.: "Al/St 560/50 4-bundle 750.0"
+    765.: "Al/St 560/50 4-bundle 750.0"
 
 
 # ====================================================================
