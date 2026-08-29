@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PyPSA-USA is a Snakemake-orchestrated PyPSA workflow for capacity expansion, production-cost simulation, and power-flow analysis of the US bulk transmission system. Configuration is layered YAML; intermediate and final artifacts are netCDF/CSV/GeoJSON files produced by rules in `workflow/rules/*.smk` and Python scripts in `workflow/scripts/`.
 
+## Branch policy: work against `develop`, not `master`
+
+`develop` is the integration branch and is often well ahead of `master`. Any work on the model — code changes, config changes, reviews, audits, or analysis of "current state" — MUST reference `origin/develop`, not `master` or whatever the working tree happens to have checked out. Before drawing conclusions about how something works or proposing changes, run `git fetch origin develop` and check the file's state on `origin/develop` (`git show origin/develop:<path>` or check out a branch based on it). Base all feature branches and PRs on `develop`; never target `master` directly.
+
 ## Running the workflow
 
 **All `snakemake` invocations run from `workflow/`** — `cd workflow/` first. `workflow/Snakefile` auto-loads the whole layered base out of the tracked templates: `repo_data/config/config.{slurm,common,plotting,api,sector,default}.yaml`, then the optional per-user overlays `config/config.api.yaml` and `config/config.slurm.yaml`, then whatever is passed via `--configfile`. Because `config.default.yaml` is a loaded layer, a scenario config is a sparse **overlay** — it only needs the keys it changes (nested mappings merge; lists and scalars are replaced wholesale).
