@@ -28,8 +28,11 @@ class TestPostAggregateToSubstations:
     def test_bus_count_reasonable(self, built):
         """Substation count falls in the band expected for the test config."""
         n = pypsa.Network(str(built.elec_b))
-        # CA-only Western yields O(50) substations after aggregation
-        assert 10 < len(n.buses) < 200, (
+        # On the ReEDS transport path aggregate_to_substations keeps TAMU bus
+        # granularity (CA-only Western ~2,000 buses); the real reduction
+        # happens at cluster_resources. Bound catches config drift, not a
+        # target substation count.
+        assert 10 < len(n.buses) < 4000, (
             f"unexpected substation count {len(n.buses)} — config.test.yaml may have drifted"
         )
 

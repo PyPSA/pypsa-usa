@@ -510,7 +510,7 @@ if __name__ == "__main__":
     aeo = build_aeo_fuel_costs(
         parquet_path,
         tech_year,
-        aeo_params.get("scenario", "Reference"),
+        aeo_params.get("scenario", "reference"),
     )
 
     # Iterate over every (atb_scenario, model_case) so that the final CSV holds

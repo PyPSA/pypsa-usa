@@ -458,7 +458,7 @@ if __name__ == "__main__":
         # Technology configurations for filename construction
         if tech in ["onwind", "offwind", "offwind_floating"]:
             technology = "wind"
-            wind_height = snakemake.config.get("godeeep_wind_height", "_100m")
+            wind_height = snakemake.config.get("godeeep_wind_height", "_125m")
         elif tech == "solar":
             technology = "solar"
             wind_height = ""
