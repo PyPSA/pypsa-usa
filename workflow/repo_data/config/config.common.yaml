@@ -24,7 +24,7 @@
 # Points the build scripts at a specific PUDL release. Update the
 # version tag when you want fresher EIA-860/EIA-923/CEMS tables.
 # docs : PUDL
-pudl_path: s3://pudl.catalyst.coop/v2025.5.0   # versioned S3 prefix to PUDL parquet outputs (or a local file:// path)
+pudl_path: s3://pudl.catalyst.coop/v2026.8.0   # versioned S3 prefix to PUDL parquet outputs (or a local file:// path)
 
 
 # ====================================================================

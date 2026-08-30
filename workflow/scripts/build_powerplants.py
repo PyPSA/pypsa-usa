@@ -748,7 +748,7 @@ if __name__ == "__main__":
         rootpath = "."
     configure_logging(snakemake)
 
-    data_year = 2023  # Use latest available PUDL data
+    data_year = 2025  # latest complete EIA-923 year in the pinned PUDL release (v2026.8.0)
     start_date = f"{data_year}-01-01"
     end_date = f"{data_year + 1}-01-01"
 
