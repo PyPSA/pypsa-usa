@@ -468,6 +468,23 @@ def set_parameters(plants: pd.DataFrame):
     Sets generator naming schemes, updates parameter names, and imputes missing
     data.
     """
+    # EIA leaves nerc_region NULL for plants that first appear in a recent 860
+    # vintage, and downstream add_electricity maps nerc_region -> interconnect,
+    # so a plain isin() silently deletes new-build (e.g. 2.2 GW of CA renewables
+    # under PUDL v2025.5.0). Impute a representative NERC region from the
+    # plant's state before filtering; the representative choice round-trips
+    # through const.NERC_REGION_MAPPER for interconnect scoping.
+    interconnect_to_nerc = {"western": "WECC", "texas": "TRE", "eastern": "SERC"}
+    null_nerc = plants.nerc_region.isna()
+    if null_nerc.any():
+        imputed = plants.loc[null_nerc, "state"].map(const.STATES_INTERCONNECT_MAPPER).map(interconnect_to_nerc)
+        plants.loc[null_nerc, "nerc_region"] = imputed
+        logger.info(
+            "Imputed nerc_region from state for %d plants (%.0f MW) with NULL nerc_region "
+            "(recent EIA filings not yet backfilled).",
+            imputed.notna().sum(),
+            plants.loc[null_nerc & plants.nerc_region.notna(), "capacity_mw"].sum(),
+        )
     plants = plants[plants.nerc_region.isin(["WECC", "TRE", "MRO", "SERC", "RFC", "NPCC"])]
     plants = plants.rename(
         {
