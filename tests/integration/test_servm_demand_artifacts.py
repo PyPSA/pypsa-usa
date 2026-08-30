@@ -74,9 +74,14 @@ class TestServmDemand:
         assert not unknown, f"demand columns are not network buses: {sorted(unknown)[:10]}"
 
     def test_row_count_matches_snapshots(self, servm_built):
-        """One row per network snapshot."""
+        """One row per network snapshot.
+
+        Compares against the demand-attached network: ``elec_s{simpl}.nc``
+        still carries PyPSA's default ``['now']`` index — snapshots are only
+        set when ``add_demand`` attaches the load.
+        """
         demand = pd.read_csv(servm_built.demand, index_col=0)
-        n = pypsa.Network(str(servm_built.elec_s))
+        n = pypsa.Network(str(servm_built.elec_s_dem))
         assert len(demand) == len(n.snapshots), (
             f"demand has {len(demand)} rows, network has {len(n.snapshots)} snapshots"
         )

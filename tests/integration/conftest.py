@@ -175,6 +175,12 @@ def _run_snakemake(configfile: str, until: str, run_name: str) -> None:
         # (cbc is shipped non-executable in some envs and causes PermissionError).
         "--scheduler",
         "greedy",
+        # In a fresh checkout/worktree that shares data/ via symlink, snakemake's
+        # empty provenance DB marks every input-less retrieve rule as "code has
+        # changed" and re-downloads (rewriting the shared tree). mtime-only
+        # triggers treat existing retrieve outputs as up to date.
+        "--rerun-triggers",
+        "mtime",
         "--quiet",
     ]
     try:
@@ -252,6 +258,12 @@ def built(tmp_path_factory) -> BuiltArtifacts:
         # (cbc is shipped non-executable in some envs and causes PermissionError).
         "--scheduler",
         "greedy",
+        # In a fresh checkout/worktree that shares data/ via symlink, snakemake's
+        # empty provenance DB marks every input-less retrieve rule as "code has
+        # changed" and re-downloads (rewriting the shared tree). mtime-only
+        # triggers treat existing retrieve outputs as up to date.
+        "--rerun-triggers",
+        "mtime",
         "--quiet",
     ]
     try:

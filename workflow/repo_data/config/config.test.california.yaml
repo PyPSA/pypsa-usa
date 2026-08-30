@@ -102,6 +102,8 @@ links:
 
 costs:
   ng_fuel_year: 2019
+  aeo:
+    scenario: reference
 
 clustering:
   simplify_network:
@@ -133,3 +135,34 @@ custom_files:
   activate: false
   files_path: ''
   network_name: ''
+
+# validate.smk reads config["solving"] at Snakefile parse time, so even a
+# build stopped before the solver needs this section. GLPK matches the tier.
+solving:
+  options:
+    load_shedding: false
+    clip_p_max_pu: 1.e-2
+    noisy_costs: true
+    skip_iterations: true
+    rolling_horizon: false
+    seed: 123
+    track_iterations: false
+    min_iterations: 4
+    max_iterations: 6
+    transmission_losses: 0
+    linearized_unit_commitment: true
+    horizon: 8760
+    assign_all_duals: true
+  solver:
+    # gurobi rather than glpk: cluster_simpl's distribute_clusters solves a
+    # small quadratic program via pyomo, and glpk/cbc lack QP support (the
+    # code then falls back to an `ipopt` binary most envs don't ship). The
+    # Tier B fixture stops before solve_network, so no LP is ever solved
+    # with this; unit tests (workflow/scripts/test) still use GLPK directly.
+    name: gurobi
+    options: gurobi-default
+  solver_options:
+    gurobi-default: {}
+
+# REQUIRED for the godeeep renewable dataset (matches the equivalence configs).
+renewable_land_access: reference

@@ -485,3 +485,6 @@ custom_files:
   activate: false
   files_path: ''
   network_name: ''
+
+# REQUIRED for the godeeep renewable dataset (one of: reference | limited | open).
+renewable_land_access: reference
