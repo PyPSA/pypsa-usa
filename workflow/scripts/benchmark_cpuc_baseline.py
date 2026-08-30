@@ -61,8 +61,6 @@ December 31 of the horizon, and not retired by then. The model side reproduces
 actually builds, not a differently-filtered idealisation of it.
 """
 
-from __future__ import annotations
-
 import logging
 
 import matplotlib.pyplot as plt
@@ -577,18 +575,14 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake(
-            "benchmark_cpuc_baseline",
-            interconnect="western",
-            simpl="75",
-            clusters="33",
-            ll="v1.0",
-            opts="REM-3h",
-            sector="E",
-        )
+        snakemake = mock_snakemake("benchmark_cpuc_baseline")
     configure_logging(snakemake)
 
-    horizons = sorted(set(snakemake.params.planning_horizons))
+    # run.benchmark_cpuc_horizons decouples the benchmark year from the study
+    # years: the default (2026) compares today's fleet against today's CPUC
+    # baseline, which is the only pure fleet-vs-fleet comparison — later
+    # horizons measure model expansion against a mostly-static baseline.
+    horizons = sorted(set(snakemake.params.benchmark_horizons or snakemake.params.planning_horizons))
 
     tech_map = load_tech_map(snakemake.input.tech_map)
     servm_regions, ba_regions = load_benchmark_regions(snakemake.input.region_map)
@@ -606,15 +600,20 @@ if __name__ == "__main__":
 
     comparison = pd.concat(tables, ignore_index=True)
 
-    n = pypsa.Network(snakemake.input.network)
-    recon = reconcile_totals(n, fleet_frames[0], tech_map["pypsa"])
-    if not recon.empty:
-        # Informational rows: there is no CPUC reference behind them, so both
-        # delta columns stay empty rather than restating model_mw.
-        recon.insert(0, "horizon", horizons[0])
-        recon["delta_mw"] = np.nan
-        recon["delta_pct"] = np.nan
-        comparison = pd.concat([comparison, recon[comparison.columns]], ignore_index=True)
+    # Network reconciliation intentionally does not run here — the rule is
+    # network-free so the benchmark never forces a model build. Use
+    # reconcile_totals() interactively against a built network when needed.
+    network_path = getattr(snakemake.input, "network", None)
+    if network_path:
+        n = pypsa.Network(network_path)
+        recon = reconcile_totals(n, fleet_frames[0], tech_map["pypsa"])
+        if not recon.empty:
+            # Informational rows: there is no CPUC reference behind them, so
+            # both delta columns stay empty rather than restating model_mw.
+            recon.insert(0, "horizon", horizons[0])
+            recon["delta_mw"] = np.nan
+            recon["delta_pct"] = np.nan
+            comparison = pd.concat([comparison, recon[comparison.columns]], ignore_index=True)
 
     logger.info(
         "Benchmarked %d horizons across %d regions and %d comparison categories.",

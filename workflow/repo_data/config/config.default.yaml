@@ -35,6 +35,7 @@ run:
   shared_cutouts: true            # true = share atlite cutouts across runs (recommended; cutouts are large and slow)
   validation: false               # true = wire in back-casting validation plots (historical-only)
   benchmark_cpuc: false           # true = compare installed capacity against the CPUC Baseline Generator List (California runs)
+  benchmark_cpuc_horizons: [2026]  # benchmark year(s); 2026 = today's fleet vs today's baseline (network-free). Empty list = use scenario planning_horizons
 
 # ====================================================================
 # RENEWABLE DATASET — capacity-factor source for wind & solar

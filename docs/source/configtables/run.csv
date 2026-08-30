@@ -5,3 +5,4 @@ shared_resources,bool,"{true, false}",Switch to select whether resources should 
 shared_cutouts,bool,"{true, false}",Switch to select whether cutouts should be shared across runs.
 validation,bool,"{true, false}",Switch to enable back-casting validation plotting
 benchmark_cpuc,bool,"{true, false}",Switch to enable the CPUC Baseline Generator List capacity benchmark (California runs)
+benchmark_cpuc_horizons,list,"years from the CPUC list horizon range","Benchmark year(s) for the CPUC capacity comparison; default [2026] compares today's fleet against today's baseline without any network build. Empty list falls back to scenario planning_horizons."

@@ -269,15 +269,12 @@ def benchmark_figures(wildcards):
 
     Gated on its own flag rather than on the demand profile: the fleet
     benchmark is useful for any California run, whatever drives its load.
+    Network-free by design — it needs only powerplants.csv and the CPUC
+    workbook, so enabling it never triggers a model build.
     """
     if not config["run"].get("benchmark_cpuc", False):
         return []
-    return expand(
-        RESULTS
-        + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/benchmark/{figure}",
-        **config["scenario"],
-        figure=BENCHMARK_CPUC_OUTPUTS,
-    )
+    return [RESULTS + "cpuc_benchmark/" + figure for figure in BENCHMARK_CPUC_OUTPUTS]
 
 
 rule all:

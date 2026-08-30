@@ -43,6 +43,9 @@ run:
   # (comparison of model output against the CPUC SERVM/RESOLVE reference case)
   # lands in a separate PR; the key is inert until then and is safe to leave on.
   benchmark_cpuc: true
+  # 2026 is the fleet-vs-fleet comparison (all existing plants, no forecast
+  # ambiguity); the CPUC list is a baseline and stays ~static at later years.
+  benchmark_cpuc_horizons: [2026]
 
 
 # ====================================================================
