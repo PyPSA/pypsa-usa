@@ -261,6 +261,7 @@ def validation_figures(wildcards):
 BENCHMARK_CPUC_OUTPUTS = [
     "cpuc_capacity_benchmark.csv",
     "cpuc_capacity_deviation.pdf",
+    "cpuc_capacity_composition.pdf",
 ]
 
 

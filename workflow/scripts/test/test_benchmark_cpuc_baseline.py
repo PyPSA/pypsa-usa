@@ -505,10 +505,47 @@ def test_out_of_state_split_and_stale_warning(tmp_path, caplog):
         "RENAMED_UNIT,PGE,Solar,10,Arizona,,gone from workbook\n",
     )
     with caplog.at_level(logging.WARNING):
-        names = load_out_of_state_units(str(csv), cpuc)
-    assert names == {"PVERDE_5_SCEDYN", "Apex_CC1a", "RENAMED_UNIT"}
+        ledger = load_out_of_state_units(str(csv), cpuc)
+    assert set(ledger.cpuc_unit_name) == {"PVERDE_5_SCEDYN", "Apex_CC1a", "RENAMED_UNIT"}
+    assert ledger.loc[ledger.cpuc_unit_name == "PVERDE_5_SCEDYN", "eia_plant_id"].iloc[0] == "6008"
     assert "not found in the CPUC workbook" in caplog.text
 
-    in_scope, excluded = split_out_of_state(cpuc, names)
+    in_scope, excluded = split_out_of_state(cpuc, set(ledger.cpuc_unit_name))
     assert list(in_scope["Unit Name"]) == ["DIABLO_7_UNIT_1"]
     assert set(excluded["Unit Name"]) == {"PVERDE_5_SCEDYN", "Apex_CC1a"}
+
+
+def test_oos_capacity_reports_ledger_and_attachable(region_maps, tech_map):
+    from benchmark_cpuc_baseline import oos_capacity_by_region_tech
+
+    servm_regions, _ = region_maps
+    cpuc_oos = pd.DataFrame(
+        {
+            "Unit Name": ["PVERDE_5_SCEDYN", "GHOST_UNIT"],
+            "SERVM Region": ["SCE", "PGE"],
+            "SERVM Tech Category": ["Nuclear", "Battery_4h"],
+            "Capmax MW": [635.0, 100.0],
+            "Insvdt": pd.to_datetime(["1988-01-01", "2020-01-01"]),
+            "RetireDate": pd.to_datetime(["2050-12-01", "2050-12-01"]),
+        },
+    )
+    ledger = pd.DataFrame(
+        {
+            "cpuc_unit_name": ["PVERDE_5_SCEDYN", "GHOST_UNIT"],
+            "eia_plant_id": ["6008", ""],  # ghost has no EIA identity
+        },
+    )
+    plants = plants_frame(
+        [
+            # Palo Verde: 3,900 MW live at plant 6008 -> attachable capped at 635
+            ["AZ", "SRP", "nuclear", "ST", 3900.0, 1988, "existing", None, None],
+        ],
+    )
+    plants["plant_id_eia"] = [6008]
+
+    out = oos_capacity_by_region_tech(cpuc_oos, ledger, plants, tech_map["cpuc"], 2026, servm_regions)
+    keyed = out.set_index(["region", "compare_category"])
+    assert keyed.loc[("CAISO", "Nuclear"), "cpuc_mw"] == pytest.approx(635.0)
+    assert keyed.loc[("CAISO", "Nuclear"), "model_mw"] == pytest.approx(635.0)  # capped at contract
+    assert keyed.loc[("CAISO", "Battery"), "cpuc_mw"] == pytest.approx(100.0)
+    assert keyed.loc[("CAISO", "Battery"), "model_mw"] == pytest.approx(0.0)  # no EIA identity

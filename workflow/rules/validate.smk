@@ -89,6 +89,7 @@ rule benchmark_cpuc_baseline:
     output:
         comparison=RESULTS + "cpuc_benchmark/cpuc_capacity_benchmark.csv",
         heatmap=RESULTS + "cpuc_benchmark/cpuc_capacity_deviation.pdf",
+        composition=RESULTS + "cpuc_benchmark/cpuc_capacity_composition.pdf",
     log:
         LOGS + "benchmark_cpuc_baseline.log",
     threads: 1

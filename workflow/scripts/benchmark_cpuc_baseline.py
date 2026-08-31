@@ -104,7 +104,6 @@ RECONCILE_PREFIX = "RECONCILE:"
 #: ledgers; a physically-located model can never carry these, so they are
 #: reported on this row instead of being scored as model shortfall.
 CPUC_UNIT_COL = "Unit Name"
-EXCLUDED_OOS_REGION = "EXCLUDED: out-of-state contracted"
 
 
 # --------------------------------------------------------------------------- #
@@ -292,10 +291,12 @@ def map_compare_category(values: pd.Series, mapping: dict[str, str]) -> pd.Serie
 # --------------------------------------------------------------------------- #
 
 
-def load_out_of_state_units(path: str, cpuc: pd.DataFrame) -> set[str]:
+def load_out_of_state_units(path: str, cpuc: pd.DataFrame) -> pd.DataFrame:
     """
-    Workbook ``Unit Name``s of CPUC units whose physical resource is outside
-    California, from ``repo_data/CPUC/servm_out_of_state_units.csv``.
+    The out-of-state ledger from ``repo_data/CPUC/servm_out_of_state_units.csv``:
+    one row per CPUC unit whose physical resource is outside California, with
+    its ``eia_plant_id`` where one exists (the key that lets the
+    ``remote_contracted_resources`` option attach it at a CA bus).
 
     Names that no longer appear in the workbook are reported (the CPUC renames
     units between releases) but do not fail the run — an exclusion that silently
@@ -306,15 +307,117 @@ def load_out_of_state_units(path: str, cpuc: pd.DataFrame) -> set[str]:
     df = pd.read_csv(path, dtype=str, index_col=False)
     if "cpuc_unit_name" not in df.columns:
         raise ValueError(f"{path} must carry a cpuc_unit_name column; got {list(df.columns)}")
-    names = set(df.cpuc_unit_name.str.strip())
-    stale = names - set(cpuc[CPUC_UNIT_COL].astype(str))
+    df["cpuc_unit_name"] = df.cpuc_unit_name.str.strip()
+    stale = set(df.cpuc_unit_name) - set(cpuc[CPUC_UNIT_COL].astype(str))
     if stale:
         logger.warning(
             "%d out-of-state exclusion entries not found in the CPUC workbook (renamed or removed?): %s",
             len(stale),
             sorted(stale)[:10],
         )
-    return names
+    return df
+
+
+def oos_capacity_by_region_tech(
+    cpuc_oos: pd.DataFrame,
+    ledger: pd.DataFrame,
+    plants: pd.DataFrame,
+    tech_map_cpuc: dict[str, str],
+    horizon: int,
+    region_map: pd.Series,
+) -> pd.DataFrame:
+    """
+    Out-of-state contracted capacity by benchmark region and category:
+    the CPUC ledger MW alongside the MW the ``remote_contracted_resources``
+    option can attach on the model side (ledger rows with an ``eia_plant_id``
+    whose plant has live generators at ``horizon``, capped at the contracted
+    Capmax — mirroring ``add_electricity.attach_remote_contracted_resources``).
+    """
+    active = filter_active(cpuc_oos, horizon, CPUC_INSV_COL, CPUC_RETIRE_COL).copy()
+    if active.empty:
+        return pd.DataFrame(columns=["region", "compare_category", "cpuc_mw", "model_mw"])
+
+    regions = active[CPUC_REGION_COL].astype(str)
+    mapped = regions.map(region_map)
+    active["region"] = mapped.fillna(regions)
+    active["compare_category"] = map_compare_category(active[CPUC_TECH_COL], tech_map_cpuc)
+    active["cpuc_mw"] = pd.to_numeric(active[CPUC_CAPACITY_COL], errors="coerce").fillna(0.0)
+
+    # model-attachable share: live plant capacity at horizon per EIA plant id
+    prepared = prepare_model_plants(plants)
+    live = filter_active(prepared, horizon, "build_date", "generator_retirement_date")
+    live_by_plant = live.groupby(pd.to_numeric(live.plant_id_eia, errors="coerce")).p_nom.sum()
+
+    eia_ids = (
+        ledger.set_index("cpuc_unit_name")["eia_plant_id"] if "eia_plant_id" in ledger.columns else pd.Series(dtype=str)
+    )
+    unit_ids = active[CPUC_UNIT_COL].astype(str).map(eia_ids)
+
+    def _live_mw(cell) -> float:
+        # entitlement rows can reference several EIA plants joined by ';'
+        # (e.g. Hoover = "154;8902"); the attachable share draws on their sum.
+        if pd.isna(cell):
+            return 0.0
+        total = 0.0
+        for tok in str(cell).split(";"):
+            pid = pd.to_numeric(tok.strip(), errors="coerce")
+            if pd.notna(pid):
+                total += float(live_by_plant.get(pid, 0.0))
+        return total
+
+    plant_live = unit_ids.map(_live_mw)
+    active["model_mw"] = pd.concat([active.cpuc_mw, plant_live], axis=1).min(axis=1)
+
+    return active.groupby(["region", "compare_category"], as_index=False)[["cpuc_mw", "model_mw"]].sum()
+
+
+def plot_capacity_composition(comparison: pd.DataFrame, path: str) -> None:
+    """
+    Stacked in-state vs out-of-state capacity bars per benchmark region, both
+    sides, for the first horizon in ``comparison`` — the visual companion to
+    the EXCLUDED rows: it shows how much of each ledger the
+    ``remote_contracted_resources`` option puts back on the model side.
+    """
+    horizon = sorted(comparison.horizon.unique())[0]
+    df = comparison[comparison.horizon == horizon]
+    scored = df[~df.region.astype(str).str.startswith((RECONCILE_PREFIX, "EXCLUDED"))]
+    oos = df[df.region.astype(str).str.startswith("EXCLUDED: OOS ")].copy()
+    oos["region"] = oos.region.str.replace("EXCLUDED: OOS ", "", regex=False)
+
+    regions = [r for r in scored.region.unique() if not str(r).startswith(UNMAPPED_PREFIX)]
+    in_c = scored.groupby("region").cpuc_mw.sum().reindex(regions).fillna(0.0)
+    in_m = scored.groupby("region").model_mw.sum().reindex(regions).fillna(0.0)
+    oos_c = oos.groupby("region").cpuc_mw.sum().reindex(regions).fillna(0.0)
+    oos_m = oos.groupby("region").model_mw.sum().reindex(regions).fillna(0.0)
+
+    fig, ax = plt.subplots(figsize=(9, 0.9 * len(regions) + 2))
+    y = np.arange(len(regions), dtype=float)
+    h = 0.36
+    ax.barh(y + h / 2 + 0.02, in_c / 1e3, height=h, color="#2a78d6", label="CPUC in-state")
+    ax.barh(
+        y + h / 2 + 0.02,
+        oos_c / 1e3,
+        left=in_c / 1e3,
+        height=h,
+        color="#9ec5f4",
+        label="CPUC out-of-state contracted",
+    )
+    ax.barh(y - h / 2 - 0.02, in_m / 1e3, height=h, color="#eb6834", label="PyPSA-USA in-state")
+    ax.barh(
+        y - h / 2 - 0.02,
+        oos_m / 1e3,
+        left=in_m / 1e3,
+        height=h,
+        color="#f5b799",
+        label="PyPSA-USA remote-contracted (attachable)",
+    )
+    ax.set_yticks(y, regions)
+    ax.set_xlabel("Installed capacity (GW)")
+    ax.set_title(f"Capacity composition incl. out-of-state contracted resources — {horizon}")
+    ax.legend(loc="lower right", fontsize=8)
+    ax.grid(axis="x", alpha=0.3)
+    fig.savefig(path, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
 
 
 def split_out_of_state(cpuc: pd.DataFrame, names: set[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -636,8 +739,8 @@ if __name__ == "__main__":
 
     cpuc_raw = read_cpuc_baseline(snakemake.input.cpuc_baseline)
 
-    oos_names = load_out_of_state_units(snakemake.input.out_of_state, cpuc_raw)
-    cpuc_raw, cpuc_oos = split_out_of_state(cpuc_raw, oos_names)
+    oos_ledger = load_out_of_state_units(snakemake.input.out_of_state, cpuc_raw)
+    cpuc_raw, cpuc_oos = split_out_of_state(cpuc_raw, set(oos_ledger.cpuc_unit_name))
     logger.info(
         "Excluding %d out-of-state contracted CPUC units (%.0f MW listed capacity) from the scored regions.",
         len(cpuc_oos),
@@ -653,13 +756,20 @@ if __name__ == "__main__":
         fleet_frames.append(model)
         tables.append(build_comparison(cpuc, model, horizon))
 
-        # Informational: the excluded out-of-state capacity, by category, so the
-        # exclusion is visible in the output rather than silently shrinking CPUC.
+        # Informational: the excluded out-of-state capacity, per benchmark
+        # region and category, so the exclusion is visible in the output rather
+        # than silently shrinking CPUC. model_mw on these rows is the share the
+        # remote_contracted_resources option can attach back at CA buses.
         if not cpuc_oos.empty:
-            oos = cpuc_capacity_by_region_tech(cpuc_oos, tech_map["cpuc"], horizon, region_map=None)
-            oos = oos.groupby("compare_category", as_index=False).cpuc_mw.sum()
-            oos.insert(0, "region", EXCLUDED_OOS_REGION)
-            oos["model_mw"] = np.nan
+            oos = oos_capacity_by_region_tech(
+                cpuc_oos,
+                oos_ledger,
+                plants,
+                tech_map["cpuc"],
+                horizon,
+                servm_regions,
+            )
+            oos["region"] = "EXCLUDED: OOS " + oos.region.astype(str)
             oos["delta_mw"] = np.nan
             oos["delta_pct"] = np.nan
             oos.insert(0, "horizon", horizon)
@@ -690,3 +800,4 @@ if __name__ == "__main__":
     )
     comparison.to_csv(snakemake.output.comparison, index=False)
     plot_deviation_heatmap(comparison, snakemake.output.heatmap)
+    plot_capacity_composition(comparison, snakemake.output.composition)
