@@ -98,6 +98,14 @@ UNMAPPED_PREFIX = "UNMAPPED:"
 #: Pseudo-region prefix for :func:`reconcile_totals`' informational rows.
 RECONCILE_PREFIX = "RECONCILE:"
 
+#: Pseudo-region for CPUC units whose physical resource sits outside California
+#: (AZ/NV/UT solar, batteries and CCs, Hoover shares, Palo Verde, Mexicali CCs,
+#: Powerex dynamic hydro, Baja wind). CPUC's SERVM regions are contractual
+#: ledgers; a physically-located model can never carry these, so they are
+#: reported on this row instead of being scored as model shortfall.
+CPUC_UNIT_COL = "Unit Name"
+EXCLUDED_OOS_REGION = "EXCLUDED: out-of-state contracted"
+
 
 # --------------------------------------------------------------------------- #
 # inputs
@@ -282,6 +290,37 @@ def map_compare_category(values: pd.Series, mapping: dict[str, str]) -> pd.Serie
 # --------------------------------------------------------------------------- #
 # CPUC side
 # --------------------------------------------------------------------------- #
+
+
+def load_out_of_state_units(path: str, cpuc: pd.DataFrame) -> set[str]:
+    """
+    Workbook ``Unit Name``s of CPUC units whose physical resource is outside
+    California, from ``repo_data/CPUC/servm_out_of_state_units.csv``.
+
+    Names that no longer appear in the workbook are reported (the CPUC renames
+    units between releases) but do not fail the run — an exclusion that silently
+    stops excluding would be worse, so the count is logged loudly.
+    """
+    # index_col=False: a stray unquoted comma must not silently shift the
+    # first column into the index (pandas' ragged-row inference).
+    df = pd.read_csv(path, dtype=str, index_col=False)
+    if "cpuc_unit_name" not in df.columns:
+        raise ValueError(f"{path} must carry a cpuc_unit_name column; got {list(df.columns)}")
+    names = set(df.cpuc_unit_name.str.strip())
+    stale = names - set(cpuc[CPUC_UNIT_COL].astype(str))
+    if stale:
+        logger.warning(
+            "%d out-of-state exclusion entries not found in the CPUC workbook (renamed or removed?): %s",
+            len(stale),
+            sorted(stale)[:10],
+        )
+    return names
+
+
+def split_out_of_state(cpuc: pd.DataFrame, names: set[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(in_scope, excluded) split of the CPUC frame by the exclusion list."""
+    mask = cpuc[CPUC_UNIT_COL].astype(str).isin(names)
+    return cpuc[~mask], cpuc[mask]
 
 
 def cpuc_capacity_by_region_tech(
@@ -530,7 +569,9 @@ def plot_deviation_heatmap(df: pd.DataFrame, path: str) -> None:
     fleet table, not against the CPUC, so they do not belong on a CPUC-deviation
     scale.
     """
-    plot_df = df[~df.region.astype(str).str.startswith(RECONCILE_PREFIX)]
+    plot_df = df[
+        ~df.region.astype(str).str.startswith(RECONCILE_PREFIX) & ~df.region.astype(str).str.startswith("EXCLUDED:")
+    ]
     horizons = sorted(plot_df.horizon.unique())
 
     if plot_df.empty or not horizons:
@@ -594,6 +635,14 @@ if __name__ == "__main__":
     servm_regions, ba_regions = load_benchmark_regions(snakemake.input.region_map)
 
     cpuc_raw = read_cpuc_baseline(snakemake.input.cpuc_baseline)
+
+    oos_names = load_out_of_state_units(snakemake.input.out_of_state, cpuc_raw)
+    cpuc_raw, cpuc_oos = split_out_of_state(cpuc_raw, oos_names)
+    logger.info(
+        "Excluding %d out-of-state contracted CPUC units (%.0f MW listed capacity) from the scored regions.",
+        len(cpuc_oos),
+        pd.to_numeric(cpuc_oos[CPUC_CAPACITY_COL], errors="coerce").sum(),
+    )
     plants = pd.read_csv(snakemake.input.powerplants)
 
     tables = []
@@ -603,6 +652,18 @@ if __name__ == "__main__":
         model = model_capacity_by_region_tech(plants, ba_regions, tech_map["pypsa"], horizon)
         fleet_frames.append(model)
         tables.append(build_comparison(cpuc, model, horizon))
+
+        # Informational: the excluded out-of-state capacity, by category, so the
+        # exclusion is visible in the output rather than silently shrinking CPUC.
+        if not cpuc_oos.empty:
+            oos = cpuc_capacity_by_region_tech(cpuc_oos, tech_map["cpuc"], horizon, region_map=None)
+            oos = oos.groupby("compare_category", as_index=False).cpuc_mw.sum()
+            oos.insert(0, "region", EXCLUDED_OOS_REGION)
+            oos["model_mw"] = np.nan
+            oos["delta_mw"] = np.nan
+            oos["delta_pct"] = np.nan
+            oos.insert(0, "horizon", horizon)
+            tables.append(oos)
 
     comparison = pd.concat(tables, ignore_index=True)
 

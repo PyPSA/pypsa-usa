@@ -85,6 +85,7 @@ rule benchmark_cpuc_baseline:
         cpuc_baseline=DATA + "cpuc/BaselineGeneratorList_CAISO.xlsx",
         region_map="repo_data/CPUC/servm_benchmark_regions.csv",
         tech_map="repo_data/CPUC/servm_tech_map.csv",
+        out_of_state="repo_data/CPUC/servm_out_of_state_units.csv",
     output:
         comparison=RESULTS + "cpuc_benchmark/cpuc_capacity_benchmark.csv",
         heatmap=RESULTS + "cpuc_benchmark/cpuc_capacity_deviation.pdf",

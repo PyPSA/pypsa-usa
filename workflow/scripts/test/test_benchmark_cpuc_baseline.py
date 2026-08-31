@@ -479,3 +479,36 @@ def test_repo_tech_map_covers_every_pypsa_carrier(tech_map):
     carriers = set(pd.DataFrame(const.EIA_TECH_MAP).tech_type.unique())
     missing = sorted(carriers - set(tech_map["pypsa"]))
     assert not missing, f"powerplants.csv carriers with no compare_category: {missing}"
+
+
+# --------------------------------------------------------------------------- #
+# out-of-state exclusion
+# --------------------------------------------------------------------------- #
+
+
+def test_out_of_state_split_and_stale_warning(tmp_path, caplog):
+    import logging
+
+    from benchmark_cpuc_baseline import load_out_of_state_units, split_out_of_state
+
+    cpuc = pd.DataFrame(
+        {
+            "Unit Name": ["PVERDE_5_SCEDYN", "DIABLO_7_UNIT_1", "Apex_CC1a"],
+            "Capmax MW": [635.0, 1150.0, 398.0],
+        },
+    )
+    csv = tmp_path / "oos.csv"
+    csv.write_text(
+        "cpuc_unit_name,servm_region,compare_category,capmax_mw,physical_location,eia_plant_id,evidence\n"
+        'PVERDE_5_SCEDYN,SCE,Nuclear,635,Arizona,6008,"share; (AZ, BA SRP)"\n'
+        "Apex_CC1a,LADWP,Gas CC,398,Nevada,,apex\n"
+        "RENAMED_UNIT,PGE,Solar,10,Arizona,,gone from workbook\n",
+    )
+    with caplog.at_level(logging.WARNING):
+        names = load_out_of_state_units(str(csv), cpuc)
+    assert names == {"PVERDE_5_SCEDYN", "Apex_CC1a", "RENAMED_UNIT"}
+    assert "not found in the CPUC workbook" in caplog.text
+
+    in_scope, excluded = split_out_of_state(cpuc, names)
+    assert list(in_scope["Unit Name"]) == ["DIABLO_7_UNIT_1"]
+    assert set(excluded["Unit Name"]) == {"PVERDE_5_SCEDYN", "Apex_CC1a"}
