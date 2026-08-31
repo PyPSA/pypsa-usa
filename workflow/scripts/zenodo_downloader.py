@@ -266,6 +266,6 @@ class ZenodoScenarioDownloader:
             ) from exc
         delay = BACKOFF_BASE_SECONDS * 2 ** (attempt - 1)
         print(
-            f"Transient error fetching {what} (attempt {attempt}/{MAX_DOWNLOAD_ATTEMPTS}): {exc}. Retrying in {delay:.0f}s..."
+            f"Transient error fetching {what} (attempt {attempt}/{MAX_DOWNLOAD_ATTEMPTS}): {exc}. Retrying in {delay:.0f}s...",
         )
         time.sleep(delay)

@@ -50,7 +50,7 @@ def stage_member(
             raise KeyError(f"member {member!r} not found in {zip_path}") from None
         if expect_bytes is not None and info.file_size != expect_bytes:
             raise ValueError(
-                f"{zip_path}:{member} central directory reports {info.file_size} bytes, task list expects {expect_bytes}"
+                f"{zip_path}:{member} central directory reports {info.file_size} bytes, task list expects {expect_bytes}",
             )
         with zf.open(info) as src, open(dest, "wb") as out:
             shutil.copyfileobj(src, out, length=COPY_BLOCK)
@@ -58,7 +58,7 @@ def stage_member(
     staged = dest.stat().st_size
     if staged != info.file_size:
         raise OSError(
-            f"staged {staged} bytes to {dest}, central directory says {info.file_size} for {zip_path}:{member}"
+            f"staged {staged} bytes to {dest}, central directory says {info.file_size} for {zip_path}:{member}",
         )
     return staged
 
