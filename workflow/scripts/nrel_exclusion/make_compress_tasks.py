@@ -96,7 +96,7 @@ def scan_tech(zip_dir: Path, tech: str, years: range) -> dict[int, tuple[Path, s
                     prior_zip, prior_member, _ = found[year]
                     raise ValueError(
                         f"{tech} {year}: duplicate members "
-                        f"{prior_zip.name}:{prior_member} and {archive.name}:{info.filename}"
+                        f"{prior_zip.name}:{prior_member} and {archive.name}:{info.filename}",
                     )
                 found[year] = (archive, info.filename, info.file_size)
 
@@ -105,7 +105,7 @@ def scan_tech(zip_dir: Path, tech: str, years: range) -> dict[int, tuple[Path, s
         raise ValueError(
             f"{tech}: incomplete coverage — missing years {missing} "
             f"(searched {[a.name for a in archives]} in {zip_dir}); "
-            f"found {len(found)}/{len(wanted)} of {min(years)}-{max(years)}"
+            f"found {len(found)}/{len(wanted)} of {min(years)}-{max(years)}",
         )
     return found
 
@@ -130,7 +130,7 @@ def enumerate_tasks(
                     member=member,
                     member_bytes=size,
                     dest_filename=dest_filename(member),
-                )
+                ),
             )
     return tasks
 
@@ -166,7 +166,8 @@ def main() -> None:
     for tech in args.techs:
         rows = [task for task in tasks if task.tech == tech]
         print(
-            f"[tasks]   {tech}: {len(rows)} years {min(t.year for t in rows)}-{max(t.year for t in rows)}", flush=True
+            f"[tasks]   {tech}: {len(rows)} years {min(t.year for t in rows)}-{max(t.year for t in rows)}",
+            flush=True,
         )
     print(f"[tasks] submit with --array=1-{len(tasks)}", flush=True)
 
