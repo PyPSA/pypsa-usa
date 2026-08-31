@@ -5,11 +5,10 @@ rooted at ``snakemake.config`` and asserts each key path exists in the
 merged default config. Catches dead/typo'd config keys (the class of bug
 fixed in PR #10).
 
-Canonical config templates live under ``workflow/repo_data/config/`` and
-are copied into ``workflow/config/`` by ``init_pypsa_usa.sh``. The latter
-also contains the committed ``config.common.yaml`` override. For maximum
-coverage we merge the canonical templates and then overlay any tracked
-runtime overrides on top.
+The layered base lives under ``workflow/repo_data/config/`` and is loaded
+from there by ``workflow/Snakefile``; ``workflow/config/`` only holds the
+per-user overlays seeded by ``init_pypsa_usa.sh``. The merge order below
+mirrors the ``configfile:`` chain in the Snakefile.
 """
 
 from __future__ import annotations
@@ -24,14 +23,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO_ROOT / "workflow"
 SCRIPT_DIR = WORKFLOW_DIR / "scripts"
 REPO_DATA_CONFIG_DIR = WORKFLOW_DIR / "repo_data" / "config"
-RUNTIME_CONFIG_DIR = WORKFLOW_DIR / "config"
 
-# Merge order matches the configfile chain in workflow/Snakefile plus
-# config.default.yaml (the maximal scenario config). config.tutorial.yaml
-# is intentionally omitted — it's a minimal opt-in subset used for fast
-# DAG smoke tests, not a key-vocabulary source of truth.
+# Merge order matches the configfile chain in workflow/Snakefile.
+# config.tutorial.yaml is intentionally omitted — it's a sparse overlay used
+# for fast DAG smoke tests, not a key-vocabulary source of truth.
 DEFAULT_CONFIGFILES = [
-    "config.cluster.yaml",
+    "config.slurm.yaml",
     "config.common.yaml",
     "config.plotting.yaml",
     "config.api.yaml",
@@ -54,11 +51,7 @@ def _merge(a: dict, b: dict) -> dict:
 def _load_merged_config() -> dict:
     merged: dict = {}
     for name in DEFAULT_CONFIGFILES:
-        # Prefer the runtime workflow/config copy if present (it may carry
-        # tracked overrides), otherwise fall back to the canonical template.
-        runtime_path = RUNTIME_CONFIG_DIR / name
-        template_path = REPO_DATA_CONFIG_DIR / name
-        path = runtime_path if runtime_path.exists() else template_path
+        path = REPO_DATA_CONFIG_DIR / name
         if not path.exists():
             continue
         with open(path) as f:
@@ -145,6 +138,6 @@ def test_referenced_config_keys_exist(script, merged_config):
         unique_missing.append(keys)
     assert not unique_missing, (
         f"{script.name}: snakemake.config keys not defined in any "
-        f"workflow/config/*.yaml or workflow/repo_data/config/*.yaml:\n"
+        f"workflow/repo_data/config/*.yaml:\n"
         + "\n".join(f"  config[{']['.join(repr(k) for k in keys)}]" for keys in unique_missing)
     )

@@ -8,7 +8,6 @@ run `pytest -m fast` locally without setting up the data deps).
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,8 +22,6 @@ if hasattr(pypsa, "options"):
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO_ROOT / "workflow"
-RUNTIME_CONFIG_DIR = WORKFLOW_DIR / "config"
-TEMPLATE_CONFIG_DIR = WORKFLOW_DIR / "repo_data" / "config"
 DATA_DIRS = [WORKFLOW_DIR / "data", WORKFLOW_DIR / "cutouts", WORKFLOW_DIR / "repo_data"]
 
 
@@ -33,10 +30,9 @@ def pytest_collection_modifyitems(config, items):
 
     The ``built`` session fixture runs snakemake once per session against the
     shared ``workflow/`` directory. With xdist, each worker is its own
-    session — they would race on ``.snakemake/`` locks, repeat the (slow)
-    snakemake build, and contend on the seeding step that copies templates
-    from ``repo_data/config/``. Until the fixture is refactored to use a
-    truly isolated per-worker workflow dir, refuse to run.
+    session — they would race on ``.snakemake/`` locks and repeat the (slow)
+    snakemake build. Until the fixture is refactored to use a truly isolated
+    per-worker workflow dir, refuse to run.
     """
     if not any(item.get_closest_marker("integration") for item in items):
         return
@@ -47,29 +43,6 @@ def pytest_collection_modifyitems(config, items):
             "docstring). Run them without `-n` / `--numprocesses`.",
             returncode=4,
         )
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _seed_runtime_configs():
-    """Mirror ``init_pypsa_usa.sh``: copy any missing scenario configs +
-    ``policy_constraints/`` from ``workflow/repo_data/config/`` into
-    ``workflow/config/`` so snakemake has the inputs it expects.
-    Existing tracked files (e.g. ``config.common.yaml``) are left alone.
-
-    Duplicated from ``tests/static/test_dag_dryrun.py`` so Tier B works
-    without depending on Tier A collection order.
-    """
-    if not TEMPLATE_CONFIG_DIR.exists():
-        return
-    RUNTIME_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    for src in TEMPLATE_CONFIG_DIR.iterdir():
-        dst = RUNTIME_CONFIG_DIR / src.name
-        if dst.exists():
-            continue
-        if src.is_dir():
-            shutil.copytree(src, dst)
-        else:
-            shutil.copy2(src, dst)
 
 
 @dataclass(frozen=True)
@@ -224,7 +197,7 @@ def servm_built(tmp_path_factory) -> ServmArtifacts:
             "Integration tests require populated data dirs; missing: " + ", ".join(str(m) for m in missing),
         )
     run_name = f"pytest_servm_{tmp_path_factory.mktemp('servm_run').name}"
-    _run_snakemake("config/config.test.california.yaml", "add_demand", run_name)
+    _run_snakemake("repo_data/config/config.test.california.yaml", "add_demand", run_name)
     return ServmArtifacts(
         run_name=run_name,
         base=WORKFLOW_DIR / "resources" / run_name,
@@ -249,7 +222,7 @@ def built(tmp_path_factory) -> BuiltArtifacts:
         "--until",
         "cluster_network",
         "--configfile",
-        "config/config.test.yaml",
+        "repo_data/config/config.test.yaml",
         "--config",
         f"run={{name: '{run_name}', shared_cutouts: true}}",
         "-j",

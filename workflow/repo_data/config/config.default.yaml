@@ -6,17 +6,31 @@
 # capacity-expansion run at REeDS-zone resolution.
 #
 # Audience: users authoring a new scenario. Copy this file to
-# `config/config.<your-scenario>.yaml`, edit only the keys you care
-# about, and pass `--configfile config/config.<your-scenario>.yaml`.
+# `config/config.<your-scenario>.yaml`, DELETE everything you do not
+# change, and pass `--configfile config/config.<your-scenario>.yaml`.
+# A scenario config is an overlay, not a fork: anything you leave out
+# comes from this file.
 #
-# How configs are merged: Snakemake auto-loads, in order,
-#   config/config.common.yaml      (always-loaded layered base)
-#   config/config.api.yaml         (API keys; gitignored)
-#   config/config.cluster.yaml     (HPC scheduler settings)
-#   config/config.plotting.yaml    (figure styling)
-#   config/config.sector.yaml      (sector-coupling defaults)
-# beneath whatever main config you pass via --configfile. Keys here
-# override anything in those layered files.
+# How configs are merged: workflow/Snakefile auto-loads, in order,
+#   repo_data/config/config.slurm.yaml     (HPC scheduler + per-rule walltime)
+#   repo_data/config/config.common.yaml    (renewable/atlite plumbing)
+#   repo_data/config/config.plotting.yaml  (figure styling)
+#   repo_data/config/config.api.yaml       (API-key placeholders)
+#   repo_data/config/config.sector.yaml    (sector-coupling defaults)
+#   repo_data/config/config.default.yaml   (THIS FILE — the scenario base)
+# then the optional per-user overlays config/config.api.yaml and
+# config/config.slurm.yaml, and finally whatever you pass with
+# --configfile. Nested mappings merge; lists and scalars are REPLACED
+# wholesale, so a list you change must be restated in full.
+#
+# Editing this file changes the base for every run in the checkout.
+# Prefer putting scenario-specific values in your own config instead.
+#
+# ONE FILE PER TOP-LEVEL KEY. No top-level key here is also defined in
+# config.common.yaml. `lines:`, `co2:`, `renewable_weather_years` and
+# `renewable_scenarios` are owned here (the line-type catalog moved
+# over from common); `renewable:` is owned by config.common.yaml
+# (including `renewable.dataset`, which used to be duplicated here).
 #
 # Option reference: docs/source/config-configuration.md (Sphinx tables)
 # Wildcard reference: docs/source/config-wildcards.md
@@ -37,21 +51,16 @@ run:
   benchmark_cpuc: false           # true = compare installed capacity against the CPUC Baseline Generator List (California runs)
   benchmark_cpuc_horizons: [2026]  # benchmark year(s); 2026 = today's fleet vs today's baseline (network-free). Empty list = use scenario planning_horizons
 
-# ====================================================================
-# RENEWABLE DATASET — capacity-factor source for wind & solar
-# ====================================================================
-# Sets which precomputed/atlite-derived CF time series the renewable
-# attach pipeline consumes. `godeeep` requires `renewable_land_access`
-# below; `atlite` requires a populated cutout (see config.common.yaml).
+# NB: the whole `renewable:` block — including `renewable.dataset`
+# (atlite | godeeep), which used to be duplicated here — lives in
+# config.common.yaml, which owns that key outright. See
+# docs/source/config-configuration.md#renewable-godeeep.
 #
-# `godeeep` also retrieves its CF files through the `godeeep_cf_registry`
+# `godeeep` retrieves its CF files through the `godeeep_cf_registry`
 # block in config.common.yaml: every (dataset, year) the run may fetch is
 # declared there, sources are tried in order, and an undeclared
 # dataset/year fails at parse time naming the dataset key, the requested
 # year and the years each source offers. Nothing is substituted silently.
-# docs : RENEWABLE_DATASET
-renewable:
-  dataset: godeeep                # atlite | godeeep — see docs/source/config-configuration.md#renewable-godeeep
 
 
 # ====================================================================
@@ -80,13 +89,17 @@ model_topology:
   transmission_network: 'reeds'          # transmission dataset; reeds | tamu
   topological_boundaries: 'reeds_zone'   # post-cluster zone type; county | reeds_zone | state
   interface_transmission_limits: false   # apply NARIS2024 inter-region transfer caps (requires reeds backbone)
+  # KEEP THIS NULL, not {}. build_base_network treats "not None" as "the user
+  # asked for a footprint filter" and then asserts that topological_boundaries
+  # is not 'state'; an empty mapping would trip that assertion on every
+  # state-resolution run even though no filtering was requested.
   include:                               # subset the network to specific zones (mixed zone types NOT supported)
     # reeds_zone: []                     #   restrict by REeDS zone ids
     # reeds_state: ['CA']                #   restrict by state code(s)
     # reeds_ba: []                       #   restrict by balancing authority
-  aggregate:                             # pre-aggregate buses; eligible keys: reeds_zone | trans_reg
-    # trans_grp: []
-    # reeds_zone: []
+  aggregate: {}                          # pre-aggregate buses; eligible keys: reeds_zone | trans_reg
+    # trans_grp: []                      # (empty mapping = no aggregation; the only
+    # reeds_zone: []                     #  consumer is a truthiness check in cluster_network)
 
 
 # ====================================================================
@@ -117,10 +130,13 @@ snapshots:
   inclusive: "left"                     # pandas.date_range inclusive arg; left | right | both | neither
 
 # GODEEEP future-scenario controls. Used only when renewable.dataset = godeeep
-# and renewable_scenarios != "historical". Future-scenario CF years come from
-# scenario.planning_horizons above; the (scenario, hub height, year) triple must
-# be declared in `godeeep_cf_registry` (config.common.yaml). Note rcp45hotter is
-# published for solar only — its wind_125m Zenodo record is unregistered.
+# (set in config.common.yaml) and renewable_scenarios != "historical".
+# `add_electricity.py` and `build_electricity.smk` index renewable_scenarios[0]
+# directly whenever the dataset is godeeep, so the key must stay defined.
+# Future-scenario CF years come from scenario.planning_horizons above; the
+# (scenario, hub height, year) triple must be declared in `godeeep_cf_registry`
+# (config.common.yaml). Note rcp45hotter is published for solar only — its
+# wind_125m Zenodo record is unregistered.
 # docs : RENEWABLE_SCENARIOS
 renewable_scenarios: ["rcp85cooler"]   # climate scenario; historical | rcp45cooler | rcp45hotter | rcp85cooler | rcp85hotter
 
@@ -167,7 +183,7 @@ electricity:
 
   # ---------------- Reserves & resource adequacy ----------------
   SAFE_reservemargin: 0.14                 # SAFE planning reserve margin (fraction of peak load); used with SAFE opt
-  SAFE_regional_reservemargins:   'config/policy_constraints/SAFE_regional_prm.csv'
+  SAFE_regional_reservemargins:   'repo_data/config/policy_constraints/SAFE_regional_prm.csv'
 
   operational_reserve:                     # GenX-style reserve requirement; only active when activate=true
     activate: false
@@ -179,10 +195,10 @@ electricity:
     all: 0.15                              # default ERM applied to every region (fraction of annual energy)
 
   # ---------------- Policy & emissions ----------------
-  regional_Co2_limits:            'config/policy_constraints/regional_Co2_limits.csv'           # per-region CO2 caps (tCO2/yr)
-  technology_capacity_targets:    'config/policy_constraints/technology_capacity_targets.csv'   # forced min/max build by tech & region
-  portfolio_standards:            'config/policy_constraints/portfolio_standards.csv'           # RPS/CES fractions by region
-  transmission_interface_limits:  'config/policy_constraints/transmission_interface_limits.csv' # MW caps on inter-region flows
+  regional_Co2_limits:            'repo_data/config/policy_constraints/regional_Co2_limits.csv'           # per-region CO2 caps (tCO2/yr)
+  technology_capacity_targets:    'repo_data/config/policy_constraints/technology_capacity_targets.csv'   # forced min/max build by tech & region
+  portfolio_standards:            'repo_data/config/policy_constraints/portfolio_standards.csv'           # RPS/CES fractions by region
+  transmission_interface_limits:  'repo_data/config/policy_constraints/transmission_interface_limits.csv' # MW caps on inter-region flows
 
   # ---------------- Demand ----------------
   demand:
@@ -262,6 +278,19 @@ lines:
   s_nom_max: .inf                          # MVA cap on expanded line capacity per corridor (.inf = unbounded)
   max_extension: 20000                     # MW cap on total network-wide line expansion
   length_factor: 1.25                      # multiplier on geographic length to account for routing/right-of-way
+
+  # pyPSA line-type catalog, mapped onto AC corridors by v_nom. Every line in
+  # the base network is assigned the LineType matching its voltage; values
+  # reference pypsa.LineType library entries. (Moved here from
+  # config.common.yaml so `lines:` is defined in exactly one file.)
+  types:                                   # Temp values; replaced when actual conductor data is loaded
+    115.: "Al/St 240/40 2-bundle 220.0"
+    138.: "Al/St 240/40 2-bundle 220.0"
+    161.: "Al/St 240/40 2-bundle 220.0"
+    230.: "Al/St 240/40 2-bundle 220.0"
+    345.: "Al/St 240/40 4-bundle 380.0"
+    500.: "Al/St 560/50 4-bundle 750.0"
+    765.: "Al/St 560/50 4-bundle 750.0"
 
 
 # ====================================================================
@@ -353,6 +382,9 @@ costs:
 
   min_year:                                # earliest commercial-availability year per carrier; carrier excluded before this year
     hydrogen_ct: 2040
+  # null and {} are equivalent here (add_extra_components short-circuits on
+  # None and would otherwise iterate an empty mapping); null is kept as the
+  # "nothing configured" spelling used by the other optional maps.
   max_growth:                              # per-carrier annual build-rate caps; {carrier: {base: MW, rate: fraction}}
 
 
@@ -390,6 +422,10 @@ clustering:
     resolution_elec:   false               # int H or false = native hourly
     resolution_sector: false               # int H or false = native hourly
 
+# KEEP THIS NULL, not {}. cluster_network branches on `is not None`, and an
+# empty mapping would send it down the custom-weights path: it re-normalises
+# every region's factor and logs "using custom focus weights", for a result
+# that is only float-equal to the uniform path by luck.
 focus_weights:                             # OPTIONAL: per-region weights for the clustering objective; null = uniform
 
 
@@ -481,22 +517,10 @@ solving:
     cbc-default: {}                        # used in CI
     glpk-default: {}                       # used in CI
 
-  walltime: "12:00:00"                     # solver wall time cap (HH:MM:SS); enforced via solver hooks
-
-
-# ====================================================================
-# WALLTIME — per-rule HPC walltime overrides (only used by SLURM driver)
-# ====================================================================
-# docs : WALLTIME
-walltime:
-  build_renewable_profiles: '04:00:00'
-  build_fuel_prices:        '00:20:00'
-  add_demand:               '02:00:00'
-  add_electricity:          '04:00:00'
-  aggregate_to_substations: '02:00:00'
-  cluster_resources:        '05:00:00'
-  cluster_network:          '04:00:00'
-  solve_network:            '20:00:00'
+  # Solver-side wall-time cap (HH:MM:SS), enforced via solver hooks. This is
+  # NOT the scheduler's job time limit: per-rule HPC wall times live in the
+  # single `walltime:` block in config.slurm.yaml.
+  walltime: "12:00:00"
 
 
 # ====================================================================

@@ -37,6 +37,7 @@ period
 
 import logging
 import math
+import os
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
@@ -1798,9 +1799,12 @@ class _ElectricPowerOperationalData(DataExtractor):
 
 
 if __name__ == "__main__":
-    with open("./../config/config.api.yaml") as file:
-        yaml_data = yaml.safe_load(file)
-    api = yaml_data["api"]["eia"]
+    # $EIA_API_KEY wins over the yaml, matching workflow/Snakefile.
+    api = os.environ.get("EIA_API_KEY")
+    if not api:
+        with open("./../config/config.api.yaml") as file:
+            yaml_data = yaml.safe_load(file)
+        api = yaml_data["api"]["eia"]
     print(
         ElectricPowerData(
             "electric_power",

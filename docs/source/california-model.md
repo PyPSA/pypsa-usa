@@ -19,10 +19,10 @@ produced with the SERVM production-cost model.
 cd workflow
 
 # full pipeline (build + solve + figures)
-uv run snakemake -j1 --configfile config/config.california.yaml
+uv run snakemake -j1 --configfile repo_data/config/config.california.yaml
 
 # data model only, no solver
-uv run snakemake data_model -j1 --configfile config/config.california.yaml
+uv run snakemake data_model -j1 --configfile repo_data/config/config.california.yaml
 ```
 
 The first build downloads one ~118 MB SERVM load CSV per planning horizon from

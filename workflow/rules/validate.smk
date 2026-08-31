@@ -6,10 +6,10 @@ rule solve_network_validation:
         network=NETWORKS
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
         flowgates="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
-        safer_reeds="config/policy_constraints/reeds/prm_annual.csv",
-        rps_reeds="config/policy_constraints/reeds/rps_fraction.csv",
-        ces_reeds="config/policy_constraints/reeds/ces_fraction.csv",
-        interface_limits="config/policy_constraints/transmission_interface_limits.csv",
+        safer_reeds="repo_data/config/policy_constraints/reeds/prm_annual.csv",
+        rps_reeds="repo_data/config/policy_constraints/reeds/rps_fraction.csv",
+        ces_reeds="repo_data/config/policy_constraints/reeds/ces_fraction.csv",
+        interface_limits="repo_data/config/policy_constraints/transmission_interface_limits.csv",
     output:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}_operations.nc",

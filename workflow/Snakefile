@@ -1,4 +1,4 @@
-from snakemake.utils import min_version
+from snakemake.utils import min_version, validate
 
 min_version("6.0")
 
@@ -7,6 +7,7 @@ from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
 
 HTTP = HTTPRemoteProvider()
 
+import os
 from os.path import normpath
 from itertools import chain
 from pathlib import Path
@@ -81,15 +82,61 @@ wildcard_constraints:
 # -------------------------- Config and Subworkflows ------------------------- #
 
 
-# Merge subworkflow configs and main config
-configfile: "config/config.cluster.yaml"
-configfile: "config/config.common.yaml"
-configfile: "config/config.plotting.yaml"
-configfile: "config/config.api.yaml"
-configfile: "config/config.sector.yaml"
+# Layered configuration. Snakemake merges each `configfile:` into `config`
+# with a recursive dict update (nested mappings merge; lists and scalars are
+# REPLACED wholesale), and anything the user passes via `--configfile` is
+# merged last, on top of everything below.
+#
+#   config.slurm.yaml     HPC scheduler settings + per-rule wall times
+#   config.common.yaml    renewable/atlite plumbing that rarely changes
+#   config.plotting.yaml  figure styling
+#   config.api.yaml       API keys (gitignored)
+#   config.sector.yaml    sector-coupling defaults
+#   config.default.yaml   the canonical scenario base: every user-facing knob
+#
+# The whole base is read straight out of the tracked repo_data/config/
+# templates. It used to be read from the per-user config/ copies that
+# init_pypsa_usa.sh seeds once and never refreshes, so the base silently
+# drifted from the checkout. Only genuinely per-user files still live in
+# config/ (see below); everything else is workflow-owned.
+#
+# Users copy config.default.yaml to config/config.<scenario>.yaml and pass it
+# with --configfile; that file then only needs the keys it actually changes.
+configfile: "repo_data/config/config.slurm.yaml"
+configfile: "repo_data/config/config.common.yaml"
+configfile: "repo_data/config/config.plotting.yaml"
+configfile: "repo_data/config/config.api.yaml"
+configfile: "repo_data/config/config.sector.yaml"
+configfile: "repo_data/config/config.default.yaml"
 
 
-# configfile: "config/config.default.yaml"
+# User-owned overlays, seeded by init_pypsa_usa.sh. Optional so a fresh clone
+# resolves without running init first; snakemake errors on a missing
+# configfile, hence the guards.
+if os.path.exists("config/config.api.yaml"):
+
+    configfile: "config/config.api.yaml"
+
+
+if os.path.exists("config/config.slurm.yaml"):
+
+    configfile: "config/config.slurm.yaml"
+
+
+# EIA API key. The environment wins over the YAML so the key can stay out of
+# the checkout entirely; config/config.api.yaml remains the fallback. Resolved
+# here, once, because a dozen rules dereference config["api"]["eia"] directly
+# at parse time (below, via the include: statements).
+config.setdefault("api", {})
+config["api"]["eia"] = os.environ.get("EIA_API_KEY") or config["api"].get("eia")
+
+
+# Validate the fully merged config. Catches typo'd keys inside the closed
+# subtrees and out-of-range enum values at parse time, instead of letting them
+# fall through to a `config_provider(..., default=...)` fallback and surface as
+# a wrong number several rules later. set_default=False keeps the schema from
+# becoming a second, invisible source of configuration.
+validate(config, "schemas/config.schema.yaml", set_default=False)
 
 
 run = config.get("run", {})

@@ -1,10 +1,39 @@
+# Conda/mamba environment for PyPSA-USA.
+#
+# The scientific stack here is kept in sync with `pyproject.toml` / `uv.lock`
+# (see CLAUDE.md). Three pins deliberately diverge, because conda-forge cannot
+# express the uv resolution:
+#
+# 1. rasterio ==1.3.10 (uv.lock: 1.3.8). conda-forge's rasterio 1.3.8 builds
+#    pin `proj 9.2.1`/`9.3.0` exactly and `libgdal 3.7.x`, whose `pcre2 <10.44`
+#    pins are mutually exclusive with the Qt6 stack pulled in by the
+#    `matplotlib` metapackage. 1.3.10 is the nearest solvable build in the same
+#    minor series and resolves against libgdal 3.9.1 / pyogrio 0.9.0, much
+#    closer to the uv stack than the 2023-era libgdal 3.7.3 / pyogrio 0.7.2
+#    that 1.3.8 would force.
+#
+# 2. tsam ==2.3.6 exactly (pyproject: >=2.3.6). tsam 4.0.0 caps
+#    `pandas<=3.0.3`, so an unbounded pip spec silently uninstalls the
+#    conda-built pandas 3.0.5 during the pip step and leaves a broken env.
+#    2.3.6 is the version uv.lock resolves to.
+#
+# 3. ipython / jupyter / notebook / ipykernel / lxml / tqdm are left loose.
+#    pyproject does not pin them, and their previous 2023-era exact pins are
+#    unsolvable here — lxml 4.9.3 in particular violates pandas 3.0.5's
+#    `lxml >=5.3.0` run constraint.
+#
+# numpy stays at 1.26.0: conda-forge's pandas 3.0.5 declares
+# `numpy >=1.26.0,<3`, so the numpy-1 hold required by rasterio/atlite is
+# compatible with pandas 3 and no numpy 2 bump is needed.
+#
+# Verified to solve on linux-64 (CI) and osx-arm64 with micromamba 2.9.0.
 name: pypsa-usa
 channels:
 - conda-forge
 - bioconda
 
 dependencies:
-- python==3.11.9
+- python >=3.11,<3.12
 - pip
 
 - pypsa==1.3.0
@@ -16,15 +45,16 @@ dependencies:
 - pyarrow==16.1.0
 - xarray==2026.7.0
 - xlrd==2.0.1
-- dask>=2023.7.0
+- dask==2024.12.0
 - openpyxl==3.1.5
 - pycountry==22.3.5
 - seaborn==0.13.2
 - snakemake-minimal==7.32.4
+- pulp==2.7.0
 - memory_profiler==0.61.0
 - yaml==0.2.5
-- pytables==3.9.1
-- lxml==4.9.3
+- pytables==3.10.2
+- lxml>=5.3.0
 - numpy==1.26.0
 - netcdf4==1.6.4
 - networkx==3.1
@@ -38,27 +68,27 @@ dependencies:
 - cyipopt
 
 # Keep in conda environment when calling ipython
-- ipython==8.16.1
-- jupyter==1.0.0
-- notebook==7.0.6
-- ipykernel==6.25.2
+- ipython
+- jupyter
+- notebook
+- ipykernel
 
 # GIS dependencies:
 - geopy==2.4.0
 - cartopy==0.23.0
 - descartes==1.1.0
-- rasterio==1.3.8
+- rasterio==1.3.10
 - geopandas==1.1.4
 
 # TODO: check these dependencies
-- tqdm==4.66.1
+- tqdm>=4.66.1
 - country_converter==1.0.0
 
 - pip:
-  - tsam>=1.1.0
+  - tsam==2.3.6
   - gurobipy==11.0.3
-  - highspy
+  - highspy>=1.9.0
   - duckdb==0.10.0
   - flake8
-  - dill
+  - dill>=0.3.9
   - kaleido # for plotly export

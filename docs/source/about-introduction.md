@@ -111,7 +111,7 @@ created under `workflow/` on first run.
 ```console
 ├── README.md
 ├── LICENSE.md
-├── init_pypsa_usa.sh            # one-time setup: copies default configs into place
+├── init_pypsa_usa.sh            # one-time setup: seeds the per-user config files
 ├── pyproject.toml               # python dependencies (uv); pins pypsa/atlite/linopy
 ├── docs                         # this documentation (sphinx + myst)
 ├── tests                        # static + integration test suites
@@ -119,8 +119,8 @@ created under `workflow/` on first run.
     ├── Snakefile                # entry point: wildcards, paths, top-level rules
     ├── rules                    # snakemake rule definitions (*.smk)
     ├── scripts                  # python scripts executed by the rules
-    ├── config                   # your run configuration (config.default.yaml, ...)
-    ├── repo_data                # small checked-in seed data (shapes, costs, dag)
+    ├── config                   # your per-user files (api keys, HPC, scenario configs)
+    ├── repo_data                # checked-in seed data + the canonical config templates
     ├── envs                     # conda environment specification
     ├── data                     # downloaded raw data bundles
     ├── cutouts                  # atlite weather cutouts (optional, large)

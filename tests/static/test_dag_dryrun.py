@@ -4,44 +4,19 @@ Catches: missing inputs, typo'd rule names, wildcard mismatches, and
 syntactically broken ``.smk`` files. Runs ``snakemake -n`` (dry-run only,
 no rule actually executes).
 
-Snakemake reads scenario configs from ``workflow/config/``. Only
-``config.common.yaml`` is tracked in git; the rest of the configs and
-``policy_constraints/`` static inputs are seeded from
-``workflow/repo_data/config/`` by ``init_pypsa_usa.sh`` at user-init
-time. This test seeds any missing files in a session-scoped fixture so
-it runs cleanly in CI without depending on the init script being run
-ahead of pytest.
+No seeding step: ``workflow/Snakefile`` reads its whole layered base and the
+``policy_constraints/`` static inputs out of the tracked
+``workflow/repo_data/config/`` tree, and treats the per-user files under
+``workflow/config/`` as optional overlays. A fresh clone resolves without
+``init_pypsa_usa.sh`` having been run.
 """
 
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
 WORKFLOW_DIR = Path(__file__).resolve().parents[2] / "workflow"
-RUNTIME_CONFIG_DIR = WORKFLOW_DIR / "config"
-TEMPLATE_CONFIG_DIR = WORKFLOW_DIR / "repo_data" / "config"
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _seed_runtime_configs():
-    """Mirror ``init_pypsa_usa.sh``: copy any missing scenario configs +
-    ``policy_constraints/`` from ``workflow/repo_data/config/`` into
-    ``workflow/config/`` so ``snakemake -n`` has the inputs it expects.
-    Existing tracked files (e.g. ``config.common.yaml``) are left alone.
-    """
-    if not TEMPLATE_CONFIG_DIR.exists():
-        return
-    RUNTIME_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    for src in TEMPLATE_CONFIG_DIR.iterdir():
-        dst = RUNTIME_CONFIG_DIR / src.name
-        if dst.exists():
-            continue
-        if src.is_dir():
-            shutil.copytree(src, dst)
-        else:
-            shutil.copy2(src, dst)
 
 
 # County-resolution overrides for the California config. `config.california.yaml`
@@ -59,13 +34,14 @@ CALIFORNIA_COUNTY_OVERRIDE = [
 @pytest.mark.parametrize(
     "configfile,target,overrides",
     [
-        ("config/config.tutorial.yaml", "cluster_network", []),
-        ("config/config.tutorial.yaml", "solve_network", []),
-        ("config/config.default.yaml", "cluster_network", []),
-        ("config/config.california.yaml", "cluster_network", []),
-        ("config/config.california.yaml", "solve_network", []),
+        ("repo_data/config/config.tutorial.yaml", "cluster_network", []),
+        ("repo_data/config/config.tutorial.yaml", "solve_network", []),
+        ("repo_data/config/config.default.yaml", "cluster_network", []),
+        ("repo_data/config/config.test.yaml", "cluster_network", []),
+        ("repo_data/config/config.california.yaml", "cluster_network", []),
+        ("repo_data/config/config.california.yaml", "solve_network", []),
         (
-            "config/config.california.yaml",
+            "repo_data/config/config.california.yaml",
             "cluster_network",
             CALIFORNIA_COUNTY_OVERRIDE,
         ),

@@ -1,37 +1,36 @@
-# PyPSA-USA test config — used by tests/integration to build to
-# cluster_network on a minimal CA-only Western slice in <5 minutes.
-# DO NOT use as a user-facing entry point.
+# ====================================================================
+# PyPSA-USA — Test Configuration (Tier B integration harness)
+# ====================================================================
+# Builds to `cluster_network` on a minimal CA-only Western slice in
+# <5 minutes. DO NOT use as a user-facing entry point.
+#
+# This is a SPARSE OVERLAY. `workflow/Snakefile` already loads the
+# layered base (config.slurm / config.common / config.plotting /
+# config.api / config.sector / config.default) underneath it, so only
+# keys that DIFFER from that merged base belong here.
+#
+# `scenario.interconnect` is pinned deliberately even though it happens
+# to match config.default.yaml: the Tier B time budget depends on it,
+# and it must not follow a future change to the default scenario.
+#
+# NB: lists are REPLACED wholesale by the merge, never merged element-
+# wise, so any list that differs must be restated in full.
+# ====================================================================
+
 run:
   name: "test"
   disable_progressbar: true
-  shared_resources: false
-  shared_cutouts: true
-  validation: false
-
-foresight: 'perfect'
 
 scenario:
-  interconnect: [western]
+  interconnect: [western]   # pinned: Tier B budget depends on the footprint
   clusters: [4m]
   simpl: [20]
-  opts: [REM-3h]
-  ll: [v1.0]
   scope: "total"
-  sector: ""
   planning_horizons: [2030]
 
 model_topology:
-  transmission_network: 'reeds'
-  topological_boundaries: 'reeds_zone'
-  interface_transmission_limits: false
   include:
     reeds_state: ['CA']
-  aggregate: {}
-
-enable:
-  build_cutout: false
-
-renewable_weather_years: [2019]
 
 snapshots:
   start: "2019-01-01 00:00"
@@ -39,103 +38,7 @@ snapshots:
   inclusive: both
 
 electricity:
-  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste]
   renewable_carriers: [onwind, solar, hydro]
-  retirement: economic
   extendable_carriers:
     Generator: [solar, onwind, OCGT, CCGT]
     StorageUnit: [4hr_battery_storage]
-    Store: []
-    Link: []
-  demand:
-    profile: efs
-    scenario:
-      efs_case: reference
-      efs_speed: moderate
-      aeo: reference
-
-conventional:
-  unit_commitment: false
-  must_run: false
-  dynamic_fuel_price:
-    enable: false
-    pudl: true
-    wholesale: true
-
-lines:
-  s_max_pu: 0.7
-  s_nom_max: .inf
-  max_extension: 20000
-  length_factor: 1.25
-
-links:
-  p_max_pu: 1.0
-  p_nom_max: .inf
-  max_extension: 20000
-
-costs:
-  ng_fuel_year: 2019
-  aeo:
-    scenario: reference
-
-clustering:
-  simplify_network:
-    algorithm: kmeans
-  cluster_network:
-    algorithm: kmeans
-    exclude_carriers: []
-    consider_efficiency_classes: false
-  aggregation_strategies:
-    generators:
-      build_year: 'capacity_weighted_average'
-      lifetime: 'capacity_weighted_average'
-      start_up_cost: 'capacity_weighted_average'
-      min_up_time: 'capacity_weighted_average'
-      min_down_time: 'capacity_weighted_average'
-      ramp_limit_up: max
-      ramp_limit_down: max
-      committable: any
-      vom_cost: mean
-      fuel_cost: mean
-      heat_rate: mean
-  temporal:
-    resolution_elec: false
-    resolution_sector: false
-
-focus_weights:
-
-custom_files:
-  activate: false
-  files_path: ''
-  network_name: ''
-
-# validate.smk reads config["solving"] at Snakefile parse time, so even a
-# build stopped before the solver needs this section. GLPK matches the tier.
-solving:
-  options:
-    load_shedding: false
-    clip_p_max_pu: 1.e-2
-    noisy_costs: true
-    skip_iterations: true
-    rolling_horizon: false
-    seed: 123
-    track_iterations: false
-    min_iterations: 4
-    max_iterations: 6
-    transmission_losses: 0
-    linearized_unit_commitment: true
-    horizon: 8760
-    assign_all_duals: true
-  solver:
-    # gurobi rather than glpk: cluster_simpl's distribute_clusters solves a
-    # small quadratic program via pyomo, and glpk/cbc lack QP support (the
-    # code then falls back to an `ipopt` binary most envs don't ship). The
-    # Tier B fixture stops before solve_network, so no LP is ever solved
-    # with this; unit tests (workflow/scripts/test) still use GLPK directly.
-    name: gurobi
-    options: gurobi-default
-  solver_options:
-    gurobi-default: {}
-
-# REQUIRED for the godeeep renewable dataset (matches the equivalence configs).
-renewable_land_access: reference

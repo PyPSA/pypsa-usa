@@ -6,9 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PyPSA-USA is a Snakemake-orchestrated PyPSA workflow for capacity expansion, production-cost simulation, and power-flow analysis of the US bulk transmission system. Configuration is layered YAML; intermediate and final artifacts are netCDF/CSV/GeoJSON files produced by rules in `workflow/rules/*.smk` and Python scripts in `workflow/scripts/`.
 
+## Branch policy: work against `develop`, not `master`
+
+`develop` is the integration branch and is often well ahead of `master`. Any work on the model — code changes, config changes, reviews, audits, or analysis of "current state" — MUST reference `origin/develop`, not `master` or whatever the working tree happens to have checked out. Before drawing conclusions about how something works or proposing changes, run `git fetch origin develop` and check the file's state on `origin/develop` (`git show origin/develop:<path>` or check out a branch based on it). Base all feature branches and PRs on `develop`; never target `master` directly.
+
 ## Running the workflow
 
-**All `snakemake` invocations run from `workflow/`** — `cd workflow/` first. Snakemake auto-loads `config/config.cluster.yaml`, `config.common.yaml`, `config.plotting.yaml`, `config.api.yaml`, `config.sector.yaml` from `workflow/Snakefile`; the main configfile is passed via `--configfile`.
+**All `snakemake` invocations run from `workflow/`** — `cd workflow/` first. `workflow/Snakefile` auto-loads the whole layered base out of the tracked templates: `repo_data/config/config.{slurm,common,plotting,api,sector,default}.yaml`, then the optional per-user overlays `config/config.api.yaml` and `config/config.slurm.yaml`, then whatever is passed via `--configfile`. Because `config.default.yaml` is a loaded layer, a scenario config is a sparse **overlay** — it only needs the keys it changes (nested mappings merge; lists and scalars are replaced wholesale).
 
 ```bash
 cd workflow
@@ -20,9 +24,9 @@ Useful targets:
 - `rule data_model` — build everything up to the assembled-but-unsolved network (no solver).
 - `rule all` — full pipeline including solve and figures.
 - `--until <rule>` to stop early, `-R <rule>` to force re-execution.
-- Tutorial config (`config/config.tutorial.yaml`, CA only, simpl=75, clusters=4m, 2050) is the smallest meaningful end-to-end run.
+- Tutorial config (`repo_data/config/config.tutorial.yaml`, CA only, simpl=75, clusters=4m, 2050) is the smallest meaningful end-to-end run.
 
-HPC: edit `config/config.cluster.yaml` (account/partition/email) and `workflow/run_slurm.sh`, then `bash workflow/run_slurm.sh`.
+HPC: edit `config/config.slurm.yaml` (account/partition/email; it also holds the single per-rule `walltime:` block) and `workflow/run_slurm.sh`, then `bash workflow/run_slurm.sh`.
 
 ## Tests and lint
 
@@ -89,10 +93,12 @@ Defined in `workflow/Snakefile`:
 
 ## Configs
 
-- `config/config.default.yaml` — primary user-facing config (Western, default knobs).
-- `config/config.tutorial.yaml` — minimal CA-only smoke run.
-- `workflow/repo_data/config/` mirrors `config/` and is the source for `docs/source/configtables/` documentation.
-- Layered configs in `config/config.{cluster,common,api,plotting,sector}.yaml` are merged automatically by `Snakefile`; the main configfile only overrides what it needs to.
+- `workflow/repo_data/config/` is canonical and is what the Snakefile loads. It is also the source for `docs/source/configtables/` documentation.
+- `repo_data/config/config.default.yaml` — the scenario base layer: every user-facing knob, with defaults. Auto-loaded, and also the file users copy as a starting scenario.
+- `repo_data/config/config.tutorial.yaml`, `config.test.yaml` — sparse overlays (only keys that differ from the base). `config.equivalence*.yaml` are deliberately self-contained because the Tier C harness replays them against a pinned upstream anchor that does not load the base.
+- `workflow/config/` is untracked and holds only per-user files, seeded by `init_pypsa_usa.sh`: `config.default.yaml` (your scenario starting point), `config.api.yaml`, `config.slurm.yaml`. Do not add layered configs back into it.
+- `policy_constraints/` CSVs are read straight from `repo_data/config/policy_constraints/`.
+- The merged config is validated against `workflow/schemas/config.schema.yaml` at parse time (`snakemake.utils.validate`, `set_default=False`). The top level is open (snakemake/scenarios inject keys) but `electricity:`, `model_topology:`, `clustering:`, `solving:` etc. are closed, so a typo'd key fails loudly. Adding a config key means adding it to the schema.
 
 ## Things to know before changing rules
 
