@@ -1325,6 +1325,18 @@ def apply_ucap(n: pypsa.Network, ucap_config: dict) -> None:
         # Apply to static p_max_pu
         n.generators.loc[mask, "p_max_pu"] *= ucap_factor
 
+        # Committable units carry a minimum stable level (p_min_pu) that must stay
+        # below the derated p_max_pu, otherwise the unit's dispatch box is empty and
+        # the MILP is infeasible. UCAP shrinks the whole usable range of the unit, so
+        # scale p_min_pu by the same factor rather than leaving it at the ICAP level.
+        if "committable" in n.generators:
+            com_mask = mask & n.generators.committable.fillna(False).astype(bool)
+            if com_mask.any():
+                n.generators.loc[com_mask, "p_min_pu"] *= ucap_factor
+                com_varying = [g for g in n.generators.index[com_mask] if g in n.generators_t.p_min_pu.columns]
+                if com_varying:
+                    n.generators_t.p_min_pu[com_varying] *= ucap_factor
+
         # Apply to time-varying p_max_pu if present
         gens_with_time_varying = [g for g in gen_names if g in n.generators_t.p_max_pu.columns]
         if gens_with_time_varying:

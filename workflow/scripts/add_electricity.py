@@ -597,6 +597,15 @@ def attach_conventional_generators(
     if unit_commitment:
         for attr in committable_fields:
             plants[attr] = plants[attr].astype(float).fillna(defaults[attr])
+        # p_min_pu is the unit's minimum stable level. For a conventional unit
+        # p_max_pu is the seasonal derate (apply_seasonal_capacity_derates below),
+        # so p_min_pu must not exceed the *tighter* of the two seasons: above it
+        # the only feasible commitment is status = 0 and the unit's capacity
+        # silently disappears for that whole season.
+        # build_powerplants.sanitize_uc_parameters already enforces
+        # this at the source; the clip here is the second line of defence for
+        # hand-edited or externally supplied powerplants.csv files, and the 0.95
+        # factor leaves 5 % headroom against the rounding applied to p_max_pu.
         plants["p_min_pu"] = (
             (plants.minimum_load_mw / plants.p_nom)
             .clip(
@@ -607,6 +616,19 @@ def attach_conventional_generators(
             .fillna(0)
             .mul(0.95)
         )
+        # PyPSA defaults `up_time_before` to 1, i.e. every unit is assumed to have
+        # been online in the snapshot before the horizon. Any unit with
+        # min_up_time > 1 is then forced to stay online at the start of the
+        # horizon, and its whole minimum stable level has to be absorbed by the
+        # very first snapshots — a January night, the annual load minimum. With
+        # `solving.options.load_shedding: false` that is an outright infeasibility,
+        # not a cost. This is a greenfield planning model with no warm-start
+        # state, so start every committable unit with no prior commitment
+        # obligation in either direction (`down_time_before` already defaults to 0).
+        plants["up_time_before"] = 0
+        # Only committable units may carry a non-zero p_min_pu: on a
+        # non-committable generator p_min_pu is an unconditional must-run.
+        committable_fields = [*committable_fields, "p_min_pu", "up_time_before"]
     else:
         for attr in committable_fields:
             plants[attr] = defaults[attr]

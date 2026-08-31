@@ -80,7 +80,7 @@ electricity:
     balancing_period: year
 
 conventional:
-  unit_commitment: false
+  unit_commitment: true
   must_run: false
   dynamic_fuel_price:
     enable: false
@@ -122,6 +122,7 @@ clustering:
       ramp_limit_up: max
       ramp_limit_down: max
       committable: any
+      p_min_pu:        'capacity_weighted_average'   # minimum stable level: same rule as p_max_pu so p_min_pu <= p_max_pu survives clustering
       vom_cost: mean
       fuel_cost: mean
       heat_rate: mean

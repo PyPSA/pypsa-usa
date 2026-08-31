@@ -234,7 +234,7 @@ electricity:
 # CONVENTIONAL — unit-commitment and fuel-price overrides
 # ====================================================================
 conventional:
-  unit_commitment: false
+  unit_commitment: true
   must_run: false
   dynamic_fuel_price:
     enable: false
@@ -367,12 +367,13 @@ clustering:
     generators:
       build_year:      'capacity_weighted_average'
       lifetime:        'capacity_weighted_average'
-      start_up_cost:   'capacity_weighted_average'
+      start_up_cost:   sum                          # aggregate acts as one unit: starting it starts the members; cap-weighted average understates cycling cost ~N-fold
       min_up_time:     'capacity_weighted_average'
       min_down_time:   'capacity_weighted_average'
-      ramp_limit_up:   max
-      ramp_limit_down: max
+      ramp_limit_up:   capacity_weighted_average    # max would make the cluster as flexible as its single nimblest member
+      ramp_limit_down: capacity_weighted_average
       committable:     any
+      p_min_pu:        'capacity_weighted_average'   # minimum stable level: same rule as p_max_pu so p_min_pu <= p_max_pu survives clustering
       vom_cost:        mean
       fuel_cost:       mean
       heat_rate:       mean
