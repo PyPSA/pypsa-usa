@@ -129,7 +129,14 @@ def test_default_config_ships_the_gate_closed():
 
 def test_new_config_key_is_documented():
     docs = os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "docs", "source", "configtables", "nrel_exclusion.csv"
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "..",
+        "docs",
+        "source",
+        "configtables",
+        "nrel_exclusion.csv",
     )
     with open(docs) as fh:
         assert "godeeep_allow_unscreened_fallback" in fh.read()
@@ -200,7 +207,7 @@ def test_mixing_check_runs_for_every_historical_run():
     consistency_at = body.index("check_godeeep_weather_year_consistency(")
     fallback_at = body.index('if source == "aggregated":')
     assert consistency_at < fallback_at, (
-        "check_godeeep_weather_year_consistency must run before (and outside) " "the `source == 'aggregated'` branch."
+        "check_godeeep_weather_year_consistency must run before (and outside) the `source == 'aggregated'` branch."
     )
     assert 'if scenario == "historical":' in body[:consistency_at]
 
