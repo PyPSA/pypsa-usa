@@ -994,8 +994,11 @@ def add_elec_imports_exports(
             zone_inside = row.r if row.r in zones_in_model else row.rr
             zone_outside = row.r if row.r not in zones_in_model else row.rr
 
-            # extremely crude cashing for generating cost timeseries :|
-            if zone_outside not in costs:
+            # extremely crude caching for generating cost timeseries :|
+            # keyed by the INSIDE zone — checking the outside zone here skipped
+            # the write whenever an earlier row's inside zone happened to match,
+            # leaving costs[zone_inside] unset (KeyError on county networks).
+            if zone_inside not in costs:
                 if isinstance(fuel_costs, float | int):
                     costs[zone_inside] = fuel_costs
                 elif isinstance(fuel_costs, pd.DataFrame):
@@ -1642,7 +1645,7 @@ def main(snakemake) -> None:
                 f"'exports.costs' must be 'wholesale', name of a carrier, or a float/int. Received: {export_costs}",
             )
 
-        add_elec_imports_exports(n, "exports", export_flowgates, fuel_costs, co2_emissions)
+        add_elec_imports_exports(n, "exports", export_flowgates, fuel_costs, co2_emissions, zone_col)
 
     if snakemake.config["scenario"]["sector"] == "E":
         co2_storage = snakemake.config.get("co2", {}).get("storage", False)
