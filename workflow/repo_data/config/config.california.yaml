@@ -165,6 +165,7 @@ electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste]
   renewable_carriers:   [onwind, offwind_floating, solar, hydro]
   retirement: economic
+  honor_planned_retirements: true   # e.g. drops the retired OTC steamers (Ormond Beach, Alamitos, Huntington Beach)
 
   extendable_carriers:
     Generator:    [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, nuclear, hydrogen_ct]

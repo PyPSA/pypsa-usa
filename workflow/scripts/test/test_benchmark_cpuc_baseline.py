@@ -238,27 +238,34 @@ def test_model_side_maps_ba_codes_and_splits_phs(tech_map, region_maps):
 
 
 def test_model_side_mirrors_load_powerplants_retirement(tech_map, region_maps):
-    """Existing units are pinned to a 2100 retirement, as add_electricity does."""
+    """Existing units honor their announced retirement date, as add_electricity does."""
     _, ba_regions = region_maps
     plants = plants_frame(
         [
-            # announced 2035 retirement, but operational_status == existing
-            ["CA", "CISO", "CCGT", "CA", 500.0, 2010, "existing", "2035-01-01", None],
+            # announced (planned) 2035 retirement, operational_status == existing
+            ["CA", "CISO", "CCGT", "CA", 500.0, 2010, "existing", None, None],
             # already retired, with the date kept
             ["CA", "CISO", "coal", "ST", 300.0, 1980, "retired", "2025-01-01", None],
             # proposed: build year comes from the planned operating date
             ["CA", "CISO", "solar", "PV", 100.0, None, "proposed", None, "2032-01-01"],
+            # existing with no announcement: survives indefinitely
+            ["CA", "CISO", "OCGT", "GT", 50.0, 2001, "existing", None, None],
         ],
     )
+    plants["planned_generator_retirement_date"] = ["2035-01-01", None, None, None]
+
     at_2040 = model_capacity_by_region_tech(plants, ba_regions, tech_map["pypsa"], 2040)
     keyed = at_2040.set_index("compare_category").model_mw
 
-    assert keyed["Gas CC"] == pytest.approx(500.0)  # survives its announced retirement
+    assert "Gas CC" not in keyed.index  # honors its announced 2035 retirement
     assert "Coal" not in keyed.index  # retired 2025
     assert keyed["Solar"] == pytest.approx(100.0)  # proposed unit online 2032
+    assert keyed["Gas CT/ICE/Steam"] == pytest.approx(50.0)  # no announcement -> survives
 
     at_2030 = model_capacity_by_region_tech(plants, ba_regions, tech_map["pypsa"], 2030)
-    assert "Solar" not in at_2030.set_index("compare_category").index
+    keyed_2030 = at_2030.set_index("compare_category").model_mw
+    assert keyed_2030["Gas CC"] == pytest.approx(500.0)  # still online before the announced date
+    assert "Solar" not in keyed_2030.index
 
 
 def test_model_side_reports_out_of_scope_balancing_areas(tech_map, region_maps):

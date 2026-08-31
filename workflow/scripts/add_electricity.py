@@ -221,6 +221,7 @@ def load_powerplants(
     plants_fn,
     investment_periods: list[int],
     interconnect: str | None = None,
+    honor_planned_retirements: bool = True,
 ) -> pd.DataFrame:
     plants = pd.read_csv(
         plants_fn,
@@ -242,9 +243,30 @@ def load_powerplants(
         "current_planned_generator_operating_date",
     ].dt.year
 
-    # If operational_status is existing or proposed, replace generator_retirement_date with 1/1/2100
-    retirement_date = pd.to_datetime("2100-01-01")
-    plants.loc[plants.operational_status.isin(["existing", "proposed"]), "generator_retirement_date"] = retirement_date
+    # Existing/proposed units have no *actual* retirement date yet. Honor the
+    # EIA announced date where one exists (e.g. the CAISO OTC steamers Ormond
+    # Beach / Alamitos / Huntington Beach, ~2.9 GW that would otherwise stay
+    # in the fleet forever); units without an announcement fall back to the
+    # far-future sentinel. Announced retirements only bite at the first
+    # investment period: after clustering, build_year/lifetime are aggregated
+    # capacity-weighted, so per-period exogenous retirement inside a cluster
+    # is not representable.
+    far_future = pd.to_datetime("2100-01-01")
+    live_mask = plants.operational_status.isin(["existing", "proposed"])
+    if honor_planned_retirements:
+        planned = pd.to_datetime(plants["planned_generator_retirement_date"])
+        plants.loc[live_mask, "generator_retirement_date"] = planned[live_mask].fillna(far_future)
+        announced_out = live_mask & planned.notna() & (planned.dt.year <= investment_periods[0])
+        if announced_out.any():
+            logger.info(
+                "Honoring announced retirements: dropping %d units (%.0f MW) with a planned "
+                "retirement date on or before %d.",
+                announced_out.sum(),
+                plants.loc[announced_out, "p_nom"].sum(),
+                investment_periods[0],
+            )
+    else:
+        plants.loc[live_mask, "generator_retirement_date"] = far_future
 
     # Handle NaT values
     plants.loc[plants.generator_retirement_date.isna(), "generator_retirement_date"] = pd.to_datetime("1900-01-01")
@@ -1238,6 +1260,7 @@ def main(snakemake):
         snakemake.input["powerplants"],
         n.investment_periods,
         interconnect=interconnection,
+        honor_planned_retirements=snakemake.config["electricity"].get("honor_planned_retirements", True),
     )
     # A run scoped with model_topology.include tiles regions over the footprint only;
     # the seam-plant fallback in filter_plants_by_region must then be distance-bounded.

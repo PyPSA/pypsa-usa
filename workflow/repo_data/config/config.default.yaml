@@ -134,6 +134,7 @@ electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste]   # plant types attached as existing capacity from EIA-860
   renewable_carriers:   [onwind, offwind_floating, solar, hydro]                        # variable renewables attached as existing capacity
   retirement: economic                   # economic = allow early retirement at fixed cost; technical = lock p_nom_min to p_nom
+  honor_planned_retirements: true        # drop existing/proposed units at their EIA planned_generator_retirement_date (false = keep every existing unit indefinitely)
 
   # Capacity-expansion candidates. Carriers listed here get extendable
   # p_nom and pay annualized capex; carriers listed only above are

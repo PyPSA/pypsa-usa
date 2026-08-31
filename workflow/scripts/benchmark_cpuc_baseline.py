@@ -330,19 +330,22 @@ def prepare_model_plants(plants: pd.DataFrame) -> pd.DataFrame:
     Mirrors ``workflow/scripts/add_electricity.py::load_powerplants`` (the
     ``operational_status`` handling around its build-year and retirement-date
     blocks): proposed units take their build year from
-    ``current_planned_generator_operating_date``; existing and proposed units are
-    pinned to a 2100 retirement (i.e. the model does not retire them on the EIA
-    planned date); and units with no retirement date on record are pinned to
-    1900 so the ``> horizon`` test drops them.
+    ``current_planned_generator_operating_date``; existing and proposed units
+    retire on their EIA ``planned_generator_retirement_date`` where one is
+    announced (the ``honor_planned_retirements`` behavior, default on) and on a
+    far-future sentinel otherwise; units with no retirement date on record are
+    pinned to 1900 so the ``> horizon`` test drops them.
 
     Deviating from that here would benchmark a fleet the model never builds, so
-    the mirroring is deliberate even where the upstream rule is coarse — the
-    2100 pin in particular means announced retirements do not shrink the model
-    fleet, which is one of the things this benchmark is meant to make visible.
+    the mirroring is deliberate.
     """
     df = plants.copy()
 
-    for col in ("current_planned_generator_operating_date", "generator_retirement_date"):
+    for col in (
+        "current_planned_generator_operating_date",
+        "generator_retirement_date",
+        "planned_generator_retirement_date",
+    ):
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce")
         else:
@@ -356,7 +359,10 @@ def prepare_model_plants(plants: pd.DataFrame) -> pd.DataFrame:
     if proposed.any():
         df.loc[proposed, "build_year"] = df.loc[proposed, "current_planned_generator_operating_date"].dt.year
 
-    df.loc[status.isin(["existing", "proposed"]), "generator_retirement_date"] = pd.Timestamp("2100-01-01")
+    live = status.isin(["existing", "proposed"])
+    df.loc[live, "generator_retirement_date"] = df.loc[live, "planned_generator_retirement_date"].fillna(
+        pd.Timestamp("2100-01-01"),
+    )
     df.loc[df.generator_retirement_date.isna(), "generator_retirement_date"] = pd.Timestamp("1900-01-01")
 
     # filter_active() reads an in-service *date*; build_year is a year integer.

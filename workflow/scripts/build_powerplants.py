@@ -63,7 +63,11 @@ def load_eia_operable_data(parquet_path: str):
             array_agg(yg.technology_description ORDER BY yg.report_date DESC) FILTER (WHERE yg.technology_description IS NOT NULL)[1] AS technology_description,
             array_agg(yg.operational_status ORDER BY yg.report_date DESC) FILTER (WHERE yg.operational_status IS NOT NULL)[1] AS operational_status,
             array_agg(yg.prime_mover_code ORDER BY yg.report_date DESC) FILTER (WHERE yg.prime_mover_code IS NOT NULL)[1] AS prime_mover_code,
-            array_agg(yg.planned_generator_retirement_date ORDER BY yg.report_date DESC) FILTER (WHERE yg.planned_generator_retirement_date IS NOT NULL)[1] AS planned_generator_retirement_date,
+            -- Deliberately NOT most-recent-non-null: a newer filing reporting NULL
+            -- means the retirement announcement was withdrawn (e.g. Diablo Canyon
+            -- post-SB846), and resurrecting an older filing's date would retire a
+            -- unit its owner no longer plans to retire.
+            array_agg(yg.planned_generator_retirement_date ORDER BY yg.report_date DESC)[1] AS planned_generator_retirement_date,
             array_agg(yg.energy_storage_capacity_mwh ORDER BY yg.report_date DESC) FILTER (WHERE yg.energy_storage_capacity_mwh IS NOT NULL)[1] AS energy_storage_capacity_mwh,
             array_agg(yg.generator_operating_date ORDER BY yg.report_date DESC) FILTER (WHERE yg.generator_operating_date IS NOT NULL)[1] AS generator_operating_date,
             array_agg(yg.state ORDER BY yg.report_date DESC) FILTER (WHERE yg.state IS NOT NULL)[1] AS state,
