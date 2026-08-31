@@ -14,6 +14,7 @@ Specifically, it will do the following
 
 import logging
 import math
+import os
 from abc import ABC, abstractmethod
 from math import pi
 from typing import Any
@@ -1319,9 +1320,12 @@ if __name__ == "__main__":
         "../resources/Washington/networks/western/elec_s10_c4m_ec_lv1.0_3h.nc",
     )
     year = 2018
-    with open("./../config/config.api.yaml") as file:
-        yaml_data = yaml.safe_load(file)
-    api = yaml_data["api"]["eia"]
+    # $EIA_API_KEY wins over the yaml, matching workflow/Snakefile.
+    api = os.environ.get("EIA_API_KEY")
+    if not api:
+        with open("./../config/config.api.yaml") as file:
+            yaml_data = yaml.safe_load(file)
+        api = yaml_data["api"]["eia"]
 
     pipelines = InterconnectGasPipelineCapacity(
         year,

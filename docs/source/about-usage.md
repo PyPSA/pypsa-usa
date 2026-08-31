@@ -7,7 +7,16 @@
 
 ## Set Configuration
 
-To start, you'll want to set the proper network configuration for your studies purpose. The default configuration in `config/config.default.yaml` using the `western` interconnect and 33 nodes is a good place to start!
+To start, you'll want to set the proper network configuration for your studies purpose. The
+default configuration in `config/config.default.yaml` (seeded from the tracked template by
+`init_pypsa_usa.sh`) using the `western` interconnect and 33 nodes is a good place to start!
+
+Your config file only needs to carry the keys you actually change: the workflow always
+loads `repo_data/config/config.default.yaml` and the other layered files underneath it, and
+your `--configfile` is merged on top. So there are two equally valid ways to set up a run —
+copy the seeded `config/config.default.yaml` to `config/config.<scenario>.yaml` and edit it,
+or write a short file holding only your overrides. Nested mappings merge key by key, but
+lists and scalars are **replaced wholesale**, so any list you change must be restated in full.
 
 You can find more information on each configuration setting on the [configurations page](https://pypsa-usa.readthedocs.io/en/latest/config-configuration.html).
 
@@ -45,9 +54,9 @@ snakemake data_model -j1 --configfile config/config.default.yaml
 
 ## Running on HPC Cluster
 
-If you are running the workflow on an High-Performance Compute (HPC) cluster, you will first need to update the configuration settings in `config.cluster.yaml`. Update the account, partition, email, and chdir fields to match the information of your institutions cluster.
+If you are running the workflow on an High-Performance Compute (HPC) cluster, you will first need to update the configuration settings in `workflow/config/config.slurm.yaml` (seeded by `init_pypsa_usa.sh`). Update the account, partition, email, and chdir fields to match the information of your institutions cluster.
 
-Next, identify the name of the configuration file you would like to run by editing the `run_slurm.sh` script. The default value is the `--configfile config/config.default.yaml`.
+Next, identify the name of the configuration file you would like to run by editing the `--configfile` argument in the `run_slurm.sh` script; the path shipped in the script is only an example. The script also passes `--cluster-config config/config.slurm.yaml`, which is what resolves the `{cluster.*}` placeholders in its `sbatch` command line.
 
 To run, open a terminal within a login node of your cluster and run the script included in the `workflow` directory:
 
@@ -101,6 +110,7 @@ uv run snakemake -j4 -R build_shapes --until build_base_network --configfile con
 where `build_shapes` is forced to run, and `build_base_network` is the last rule you would like to run.
 
 ```{note}
-Every `snakemake` invocation must include `--configfile` (the Snakefile does not set a
-default configuration file). Omitting it fails with `KeyError: 'scenario'`.
+`--configfile` is optional: the Snakefile loads `repo_data/config/config.default.yaml` as
+the base layer, so omitting it simply runs the shipped defaults under `run: name: "Default"`.
+Pass `--configfile` to select your own scenario and give it its own `run: name:`.
 ```

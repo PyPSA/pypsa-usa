@@ -24,7 +24,7 @@ With [uv](https://docs.astral.sh/uv/) installed:
 ```bash
 git clone https://github.com/PyPSA/pypsa-usa.git
 cd pypsa-usa
-bash init_pypsa_usa.sh   # copy configuration templates into workflow/config
+bash init_pypsa_usa.sh   # seed the per-user config files into workflow/config
 cd workflow
 uv run snakemake -j1 --configfile config/config.default.yaml
 ```

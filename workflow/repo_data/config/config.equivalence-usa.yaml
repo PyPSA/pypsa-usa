@@ -10,6 +10,11 @@
 # Keys the ANCHOR requires from the main config (its layered common lacks
 # them): co2.storage, clustering.cluster_network.feature,
 # clustering.simplify_network.feature (prong 2). v1-epic ignores the extras.
+#
+# DELIBERATELY NOT A SPARSE OVERLAY. Unlike config.tutorial.yaml and
+# config.test.yaml, this file must stay self-contained: the anchor checkout
+# does NOT auto-load config.default.yaml, so any key dropped here would be
+# supplied to the candidate and missing on the anchor.
 run:
   name: "equivalence"
   disable_progressbar: true
@@ -86,10 +91,10 @@ electricity:
   # opts string; technology_capacity_targets (TCT opt) and
   # portfolio_standards (RPS opt) are the sibling keys read the same way.
   # Paths mirror config.default.yaml; the CSVs ship in
-  # config/policy_constraints/ in both checkouts.
-  regional_Co2_limits: 'config/policy_constraints/regional_Co2_limits.csv'
-  technology_capacity_targets: 'config/policy_constraints/technology_capacity_targets.csv'
-  portfolio_standards: 'config/policy_constraints/portfolio_standards.csv'
+  # repo_data/config/policy_constraints/ in both checkouts.
+  regional_Co2_limits: 'repo_data/config/policy_constraints/regional_Co2_limits.csv'
+  technology_capacity_targets: 'repo_data/config/policy_constraints/technology_capacity_targets.csv'
+  portfolio_standards: 'repo_data/config/policy_constraints/portfolio_standards.csv'
 
 conventional:
   unit_commitment: false
@@ -207,6 +212,11 @@ solving:
       Seed: 123
       AggFill: 0
       PreDual: 0
+      # Mirrors config.default.yaml. Required explicitly here: the candidate
+      # branch now auto-loads config.default.yaml as a base layer, so omitting
+      # this would hand the candidate a solver option the anchor never sees and
+      # break the like-for-like comparison.
+      GURO_PAR_BARDENSETHRESH: 200
 
 focus_weights:
 

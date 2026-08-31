@@ -481,7 +481,7 @@ def _availability_report(sources: Sequence[CfSource], key: str) -> str:
 
 def _format_years(years: Sequence[int]) -> str:
     """Render a year tuple compactly, collapsing contiguous runs to a range."""
-    ordered = sorted(set(int(y) for y in years))
+    ordered = sorted({int(y) for y in years})
     if not ordered:
         return "(none)"
     if len(ordered) > 2 and ordered == list(range(ordered[0], ordered[-1] + 1)):

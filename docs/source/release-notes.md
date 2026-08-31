@@ -30,8 +30,31 @@ changes you will notice:
   `geospatial/`, `costs/`, `prices/`, `demand/`, `powerplants/`, ... — instead of
   per-interconnect flat folders. File names are unchanged.
 - Unused config keys and never-read rule parameters were removed. The canonical config
-  templates live in `workflow/repo_data/config/`; `workflow/config/` is no longer tracked in
-  git and is generated from those templates by `init_pypsa_usa.sh`.
+  templates live in `workflow/repo_data/config/` and the workflow loads its whole layered
+  base from there; `workflow/config/` is untracked and holds only the per-user files
+  (`config.api.yaml`, `config.slurm.yaml`, your own scenario configs) seeded by
+  `init_pypsa_usa.sh`.
+- **`config.cluster.yaml` was renamed `config.slurm.yaml`.** The old name collided with the
+  `{clusters}` wildcard and the `clustering:` section while only ever describing the job
+  scheduler. Its dead per-rule `{rule}: {walltime: ...}` blocks are gone; the single
+  top-level `walltime:` block is the one the rules actually read. Rename your copy under
+  `workflow/config/` to keep your account and partition settings.
+- **Scenario configs are overlays, not forks.** `config.default.yaml` is itself a loaded
+  layer, so a `--configfile` only needs the keys it changes, and every top-level key is now
+  owned by exactly one layered file. A full copy still works — it simply overrides every key
+  it repeats. See {doc}`config-configuration`.
+- **The merged configuration is validated** against `workflow/schemas/config.schema.yaml` at
+  parse time. A misspelled key inside a closed section (`electricity:`, `model_topology:`,
+  `clustering:`, `solving:`, ...) now fails immediately instead of silently falling back to a
+  default several rules later.
+- **The EIA API key can be supplied as `$EIA_API_KEY`**, which takes precedence over
+  `config/config.api.yaml` and keeps the key out of your files entirely.
+- **`renewable_land_access` now defaults to `reference`.** The shipped templates previously
+  paired `renewable.dataset: godeeep` with a null land-access setting, a combination
+  `build_renewable_profiles` rejects — no shipped config could build renewable profiles from a
+  clean checkout. The default is NREL's central land-access assumption; expect
+  `retrieve_nrel_exclusion_artifact` jobs in every godeeep DAG. Null remains valid only with
+  `dataset: atlite`.
 
 ### Correctness fixes validated by an equivalence harness
 

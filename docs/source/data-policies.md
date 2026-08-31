@@ -15,9 +15,9 @@ PyPSA-USA integrates with the ReEDS capacity expansion model developed by NREL t
 ### Policy Data
 
 Default policy inputs are tracked in `workflow/repo_data/config/policy_constraints/` and are
-copied into `workflow/config/policy_constraints/` — the untracked working config directory the
-workflow reads — by `init_pypsa_usa.sh`. Each file can be used as shipped or replaced with
-custom entries to explore new policy pathways.
+read from there directly by the rules — there is no copy step. Each file can be used as
+shipped, edited in place, or replaced by pointing the corresponding `electricity:` config
+key at your own CSV to explore new policy pathways.
 
 - **Renewable Portfolio Standards (RPS)**: State RPS compliance trajectories derived from the
   NREL ReEDS model inputs (`reeds/rps_fraction.csv`), covering roughly 30 states with annual
