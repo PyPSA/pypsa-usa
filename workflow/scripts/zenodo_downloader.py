@@ -29,6 +29,13 @@ class ZenodoScenarioDownloader:
             "wind_125m_rcp45cooler_compressed": 20127572,
             "wind_125m_rcp85hotter_compressed": 20127604,
             "wind_125m_rcp85cooler_compressed": 20127645,
+            # Pre-#745 bus-aggregated GODEEEP historical profiles, keyed by
+            # substation ID. The compressed per-cell records above only hold
+            # weather year 2012 for the historical scenario; these hold the
+            # full multi-decade span (solar 1980-2022, wind 2001-2022) and back
+            # the multi-weather-year fallback in build_renewable_profiles.py.
+            "solar_historical_aggregated": 18293999,
+            "wind_100m_historical_aggregated": 18331699,
         }
 
         # Cache for record metadata to avoid repeated API calls

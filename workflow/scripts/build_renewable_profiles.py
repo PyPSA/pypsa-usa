@@ -23,6 +23,289 @@ from zenodo_downloader import ZenodoScenarioDownloader
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# GODEEEP historical weather-year routing
+# ---------------------------------------------------------------------------
+# The NREL land-access path (#745) consumes per-cell COMPRESSED GODEEEP
+# capacity-factor records. For the *historical* climate scenario those records
+# hold a single weather year (2012) — Zenodo records 20127513 (solar) and
+# 20127520 (wind 125 m) each contain exactly one file. The older bus-aggregated
+# records that the pre-#745 pipeline used are still published and cover the full
+# multi-decade historical span, so every other historical weather year falls
+# back to them (at the cost of the per-cell NREL exclusion weighting).
+GODEEEP_COMPRESSED_HISTORICAL_YEARS = frozenset({2012})
+
+# Weather years available in the bus-aggregated historical records, confirmed
+# against the Zenodo file manifests (43 and 22 files respectively, no gaps).
+GODEEEP_AGGREGATED_HISTORICAL_YEARS = {
+    "solar": range(1980, 2023),  # zenodo record 18293999
+    "wind": range(2001, 2023),  # zenodo record 18331699
+}
+
+# The aggregated wind archive was only ever published at a 100 m hub height,
+# regardless of the `godeeep_wind_height` used for the compressed records.
+GODEEEP_AGGREGATED_WIND_HEIGHT = "_100m"
+
+GODEEEP_AGGREGATED_RECORD_KEYS = {
+    "solar": "solar_historical_aggregated",
+    "wind": "wind_100m_historical_aggregated",
+}
+
+
+def godeeep_profile_source(scenario: str, technology: str, year: int) -> str:
+    """Return which GODEEEP archive backs ``(scenario, technology, year)``.
+
+    ``"compressed"`` selects the per-cell NREL land-access path (unchanged);
+    ``"aggregated"`` selects the pre-#745 bus-aggregated fallback.
+
+    Non-historical (climate) scenarios always use the compressed records —
+    one record per (tech, scenario) holds every published horizon year — and
+    have no aggregated counterpart on Zenodo.
+    """
+    if technology not in GODEEEP_AGGREGATED_HISTORICAL_YEARS:
+        raise ValueError(
+            f"Unknown GODEEEP technology {technology!r}; expected 'solar' or 'wind'.",
+        )
+    if scenario != "historical":
+        return "compressed"
+    if year in GODEEEP_COMPRESSED_HISTORICAL_YEARS:
+        return "compressed"
+    years = GODEEEP_AGGREGATED_HISTORICAL_YEARS[technology]
+    if year in years:
+        return "aggregated"
+    raise ValueError(
+        f"GODEEEP historical weather year {year} is not available for "
+        f"{technology}: the compressed per-cell records cover "
+        f"{sorted(GODEEEP_COMPRESSED_HISTORICAL_YEARS)} and the bus-aggregated "
+        f"records cover {years.start}-{years.stop - 1}. Pick a year in range "
+        "or switch renewable.dataset to 'atlite'.",
+    )
+
+
+# Carriers whose siting must never be driven by an unscreened profile.
+GODEEEP_RENEWABLE_CARRIERS = ("solar", "onwind", "offwind", "offwind_floating")
+
+
+def check_godeeep_weather_year_consistency(
+    scenario: str,
+    technology: str,
+    years,
+) -> str:
+    """Refuse a run that would mix screened and unscreened weather years.
+
+    A single run must not blend NREL-screened 2012 profiles with unscreened
+    aggregated profiles from other years — the two have different effective
+    land-access universes, so the resulting capacity factors are not
+    comparable across years. Returns the single shared source name.
+    """
+    years = [int(y) for y in years]
+    if not years:
+        raise ValueError("renewable_weather_years is empty.")
+    sources = {y: godeeep_profile_source(scenario, technology, y) for y in years}
+    distinct = set(sources.values())
+    if len(distinct) > 1:
+        screened = sorted(y for y, s in sources.items() if s == "compressed")
+        unscreened = sorted(y for y, s in sources.items() if s == "aggregated")
+        raise ValueError(
+            f"renewable_weather_years {years} mixes NREL-screened and unscreened "
+            f"GODEEEP sources for {technology}: {screened} come from the screened "
+            f"per-cell records while {unscreened} fall back to the unscreened "
+            "bus-aggregated archives. Capacity factors from the two are not "
+            "comparable. Use 2012 alone for a screened run, or only non-2012 "
+            "years for an unscreened one.",
+        )
+    return distinct.pop()
+
+
+def check_godeeep_fallback_allowed(
+    year: int,
+    technology: str,
+    allow_fallback: bool,
+    extendable_generators=(),
+) -> None:
+    """Gate the unscreened fallback: opt-in only, and never for expansion.
+
+    ``godeeep_allow_unscreened_fallback`` must be set explicitly, and no
+    renewable carrier may be extendable — the aggregated profile universe
+    (every substation in the archive) disagrees with the NREL ``p_nom_max``
+    universe (supply-curve sites only), so letting the optimiser site new
+    renewable capacity against it would be unsound.
+    """
+    if not allow_fallback:
+        raise ValueError(
+            f"GODEEEP historical weather year {year} has no NREL-screened "
+            f"({technology}) record — only 2012 does. Falling back to the "
+            "unscreened bus-aggregated archive is opt-in: set "
+            "`godeeep_allow_unscreened_fallback: true` to accept profiles with "
+            "no NREL land-access screening (and, for wind, a 100m rather than "
+            "125m hub height), or use weather year 2012.",
+        )
+    extendable = sorted(set(extendable_generators) & set(GODEEEP_RENEWABLE_CARRIERS))
+    if extendable:
+        raise ValueError(
+            f"godeeep_allow_unscreened_fallback is true for weather year {year}, "
+            f"but {extendable} are in electricity.extendable_carriers.Generator. "
+            "Unscreened profiles must not drive capacity-expansion siting: the "
+            "aggregated archive covers every substation while the NREL p_nom_max "
+            "it would be paired with covers only supply-curve sites, so the "
+            "optimiser would site new capacity against a land-access universe "
+            "that does not exist. Remove the renewable carriers from "
+            "extendable_carriers (operational run), or use weather year 2012.",
+        )
+
+
+def godeeep_aggregated_filename(technology: str, year: int) -> str:
+    """Filename of the bus-aggregated historical record for ``(tech, year)``."""
+    if technology == "solar":
+        return f"solar_gen_cf_{year}_aggregated.nc"
+    if technology == "wind":
+        return f"wind_gen_cf_{year}{GODEEEP_AGGREGATED_WIND_HEIGHT}_aggregated.nc"
+    raise ValueError(
+        f"Unknown GODEEEP technology {technology!r}; expected 'solar' or 'wind'.",
+    )
+
+
+def godeeep_aggregated_record_key(technology: str) -> str:
+    """zenodo_downloader.scenario_records key for the aggregated record."""
+    try:
+        return GODEEEP_AGGREGATED_RECORD_KEYS[technology]
+    except KeyError:
+        raise ValueError(
+            f"Unknown GODEEEP technology {technology!r}; expected 'solar' or 'wind'.",
+        ) from None
+
+
+def map_bus_keys(keys, busmap: pd.Series) -> pd.Series:
+    """Map raw substation keys onto simpl-cluster bus IDs.
+
+    Tolerates the two key spellings in the pipeline: NREL/GODEEEP artifacts
+    write ``"35827.0"`` while ``busmap_s{simpl}.csv`` is indexed by the bare
+    integer ``"35827"``. Returns a Series indexed by the *original* keys,
+    with NaN where no cluster matched.
+    """
+    keys = pd.Index(keys).astype(str)
+    out = pd.Series(keys, index=keys).map(busmap)
+    missing = out.isna()
+    if missing.any():
+        try:
+            norm = out.index[missing].to_series().astype(float).astype(int).astype(str)
+            out[missing] = norm.map(busmap).to_numpy()
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def remap_aggregated_profile(
+    profile: xr.DataArray,
+    busmap: pd.Series,
+    weights: pd.Series | None = None,
+    tech: str = "",
+    chunk_t: int = 1000,
+) -> xr.DataArray:
+    """Aggregate a substation-keyed GODEEEP profile onto simpl-cluster buses.
+
+    The pre-#745 archives are keyed by the *substation* IDs of the unclustered
+    network (dims ``(time, bus)``, bus a ``<U7`` string like ``"35827.0"``).
+    After the simplify-early refactor, profiles must be keyed by the
+    ``busmap_s{simpl}.csv`` cluster IDs that the regions and the network use.
+
+    Capacity factor is an intensive quantity, so substations folded into one
+    cluster are combined with a *capacity-weighted mean* using ``weights``
+    (the NREL caps ``p_nom_max``, keyed by substation). This keeps the cluster
+    profile consistent with the cluster ``p_nom_max`` it is paired with. A
+    cluster whose weights sum to zero — no developable land under the chosen
+    land-access scenario — falls back to an unweighted mean over its
+    substations; such clusters carry ``p_nom_max == 0`` and are dropped by the
+    ``min_p_nom_max`` filter downstream anyway.
+
+    Substations with no busmap entry (outside the run footprint) are dropped.
+    """
+    if "bus" not in profile.dims or "time" not in profile.dims:
+        raise ValueError(
+            f"Aggregated GODEEEP profile must have (time, bus) dims; got {profile.dims}.",
+        )
+
+    cluster = map_bus_keys(profile.bus.values, busmap)
+    keep = cluster.notna().to_numpy()
+    n_total = len(cluster)
+    if not keep.any():
+        raise RuntimeError(
+            f"Aggregated GODEEEP remap ({tech}): none of the {n_total} archive "
+            "substations matched busmap_s{simpl}.csv. Check bus-ID formatting.",
+        )
+    logger.info(
+        f"Aggregated GODEEEP remap ({tech}): {int(keep.sum())}/{n_total} archive "
+        "substations fall inside the run footprint.",
+    )
+
+    # Subset before materializing — the national archive is ~1.4 GB decoded,
+    # while a single interconnect keeps only a couple thousand substations.
+    # Read contiguous time slabs and drop the out-of-footprint columns in
+    # numpy: a fancy index straight through the netCDF backend would decode
+    # the whole variable one element at a time.
+    profile = profile.transpose("time", "bus")  # lazy; fixes slab orientation
+    keep_pos = np.flatnonzero(keep)
+    n_time = profile.sizes["time"]
+    block = np.empty((n_time, len(keep_pos)), dtype="float32")
+    for t0 in range(0, n_time, chunk_t):
+        t1 = min(t0 + chunk_t, n_time)
+        slab = np.asarray(profile.isel(time=slice(t0, t1)).values)
+        block[t0:t1] = slab[:, keep_pos]
+        del slab
+
+    mat = pd.DataFrame(  # index=bus, columns=time
+        block.T,
+        index=pd.Index(np.asarray(profile.bus.values)[keep_pos], name="bus"),
+        columns=pd.Index(profile.time.values, name="time"),
+    )
+    groups = cluster[keep].astype(str)
+    groups.index = mat.index
+
+    if weights is None:
+        w = pd.Series(1.0, index=mat.index)
+    else:
+        lookup = _weight_lookup(weights)
+        w = pd.Series(mat.index.astype(str), index=mat.index).map(lookup)
+        w = pd.to_numeric(w, errors="coerce").fillna(0.0).clip(lower=0.0)
+
+    den = w.groupby(groups).sum()
+    num = mat.mul(w, axis=0).groupby(groups).sum()
+    out = num.div(den, axis=0)
+
+    zero = den <= 0
+    if zero.any():
+        unweighted = mat.groupby(groups).mean()
+        out.loc[zero[zero].index] = unweighted.loc[zero[zero].index]
+        logger.info(
+            f"Aggregated GODEEEP remap ({tech}): {int(zero.sum())} cluster buses "
+            "have zero NREL caps weight; using an unweighted substation mean.",
+        )
+
+    return xr.DataArray(
+        out.to_numpy().T.astype("float32"),
+        coords={
+            "time": mat.columns.to_numpy(),
+            # np.asarray of a str list yields a fixed-width <U dtype, matching
+            # the bus coord the compressed path produces.
+            "bus": np.asarray(out.index.to_list()),
+        },
+        dims=("time", "bus"),
+        name="profile",
+    )
+
+
+def _weight_lookup(weights: pd.Series) -> dict:
+    """Weight lookup accepting both ``"35827.0"`` and ``"35827"`` spellings."""
+    lookup: dict[str, float] = {}
+    for key, value in zip(pd.Index(weights.index).astype(str), np.asarray(weights, dtype=float)):
+        lookup[key] = value
+        try:
+            lookup.setdefault(str(int(float(key))), value)
+        except (TypeError, ValueError):
+            pass
+    return lookup
+
+
 def _reassign_unmapped_caps(
     df: pd.DataFrame,
     max_km: float,
@@ -465,29 +748,13 @@ if __name__ == "__main__":
         else:
             raise ValueError("Invalid technology type. Choose 'onwind', 'offwind', 'offwind_floating' or 'solar'.")
 
-        # ===== NREL access-scenario path =====
-        # Download per-cell compressed CF and apply availability-weighted
-        # aggregation onto bus polygons at runtime. Capacity variables come
-        # from the NREL supply-curve rollup (caps file).
-        from nrel_exclusion.aggregate_godeeep_weighted import (
-            fix_godeeep_time,
-            get_cell_to_bus_mapping,
-            weighted_bus_aggregation,
-        )
-
         logger.info(f"NREL access scenario: {access}")
-        cf_filename = f"{technology}_gen_cf_{year}{wind_height}_compressed.nc"
-        # Compressed-CF records on Zenodo are split by (tech, scenario), not by
-        # year-window — one record holds 2030/2040/2050 for the same scenario.
-        cf_record_key = f"{technology}{wind_height}_{scenario}_compressed"
-        cf_filepath = downloader.download_scenario_file(cf_record_key, scenario, cf_filename)
 
-        ds_cf = xr.open_dataset(cf_filepath)
-        ds_cf = fix_godeeep_time(ds_cf, year)
-        ds_cf = ds_cf.rename({"XLONG": "x", "XLAT": "y"})
-
-        avail = xr.open_dataarray(snakemake.input.nrel_avail)
-        caps_ds = xr.open_dataset(snakemake.input.nrel_caps)
+        # Capacity variables always come from the NREL supply-curve rollup
+        # (caps file). They are keyed by (tech, land-access scenario) and are
+        # independent of the weather year, so both profile paths below share
+        # them unchanged.
+        caps_ds_raw = xr.open_dataset(snakemake.input.nrel_caps)
 
         # NREL caps are keyed by substation ID; remap to simpl-cluster bus IDs
         # so they intersect with the profile/region bus space.
@@ -496,19 +763,142 @@ if __name__ == "__main__":
         # Opt-in recovery of out-of-footprint caps entries (default off);
         # reaches the script the same way renewable_land_access does.
         reassign_cfg = snakemake.config.get("nrel_caps_reassign") or {}
-        caps_ds = remap_caps_to_cluster(caps_ds, busmap_s, tech=tech, reassign=reassign_cfg)
+        caps_ds = remap_caps_to_cluster(caps_ds_raw, busmap_s, tech=tech, reassign=reassign_cfg)
         logger.info(f"Remapped NREL caps to {caps_ds.sizes['bus']} cluster buses.")
 
-        mapping = get_cell_to_bus_mapping(
-            ds_cf["x"].values,
-            ds_cf["y"].values,
-            [snakemake.input.regions],
-            cache_dir=snakemake.params.mapping_cache_dir,
-        )
-        logger.info(f"Cell→bus mapping: {mapping['name'].nunique()} buses, {len(mapping)} cell rows")
+        source = godeeep_profile_source(scenario, technology, year)
+        # Provenance stamped onto the output .nc so postprocessing can see
+        # which land-access treatment produced the profile it reads.
+        profile_provenance = {
+            "godeeep_scenario": scenario,
+            "godeeep_weather_year": str(year),
+            "godeeep_source": source,
+        }
 
-        agg = weighted_bus_aggregation(ds_cf["capacity_factor"], avail, mapping)
-        profile = agg["profile"].sel(time=renewable_sns)
+        # A run must not blend screened (2012) and unscreened weather years.
+        # Checked for every historical run, not just when THIS year falls back:
+        # `year` is renewable_weather_years[0], so a [2012, 2019] run would
+        # otherwise route to the screened path here and hide the mismatch.
+        if scenario == "historical":
+            check_godeeep_weather_year_consistency(
+                scenario,
+                technology,
+                snakemake.config["renewable_weather_years"],
+            )
+
+        if source == "aggregated":
+            check_godeeep_fallback_allowed(
+                year,
+                technology,
+                allow_fallback=bool(snakemake.config.get("godeeep_allow_unscreened_fallback", False)),
+                extendable_generators=snakemake.config["electricity"]["extendable_carriers"]["Generator"],
+            )
+
+        if source == "compressed":
+            # ===== NREL access-scenario path =====
+            # Download per-cell compressed CF and apply availability-weighted
+            # aggregation onto bus polygons at runtime.
+            from nrel_exclusion.aggregate_godeeep_weighted import (
+                fix_godeeep_time,
+                get_cell_to_bus_mapping,
+                weighted_bus_aggregation,
+            )
+
+            cf_filename = f"{technology}_gen_cf_{year}{wind_height}_compressed.nc"
+            # Compressed-CF records on Zenodo are split by (tech, scenario), not
+            # by year-window — one record holds 2030/2040/2050 for the same
+            # scenario.
+            cf_record_key = f"{technology}{wind_height}_{scenario}_compressed"
+            cf_filepath = downloader.download_scenario_file(cf_record_key, scenario, cf_filename)
+
+            ds_cf = xr.open_dataset(cf_filepath)
+            ds_cf = fix_godeeep_time(ds_cf, year)
+            ds_cf = ds_cf.rename({"XLONG": "x", "XLAT": "y"})
+
+            avail = xr.open_dataarray(snakemake.input.nrel_avail)
+
+            mapping = get_cell_to_bus_mapping(
+                ds_cf["x"].values,
+                ds_cf["y"].values,
+                [snakemake.input.regions],
+                cache_dir=snakemake.params.mapping_cache_dir,
+            )
+            logger.info(f"Cell→bus mapping: {mapping['name'].nunique()} buses, {len(mapping)} cell rows")
+
+            agg = weighted_bus_aggregation(ds_cf["capacity_factor"], avail, mapping)
+            profile = agg["profile"].sel(time=renewable_sns)
+            profile_provenance["land_access"] = access
+            profile_provenance["hub_height"] = wind_height.lstrip("_") or "n/a"
+        else:
+            # ===== Multi-weather-year fallback (pre-#745 aggregated records) =====
+            # The compressed per-cell records only carry weather year 2012 for
+            # the historical scenario. Every other historical year comes from
+            # the bus-aggregated archives, which are already rolled up onto the
+            # unclustered network's substations — so the NREL per-cell land-use
+            # exclusions cannot be applied to this year's profile.
+            height_note = ""
+            if technology == "wind" and wind_height != GODEEEP_AGGREGATED_WIND_HEIGHT:
+                height_note = (
+                    f" Hub-height inconsistency: godeeep_wind_height is "
+                    f"'{wind_height}' but the aggregated archive was only "
+                    f"published at '{GODEEEP_AGGREGATED_WIND_HEIGHT}', so this "
+                    "year's wind profile is a 100 m profile."
+                )
+            logger.warning(
+                f"weather year {year}: using pre-aggregated GODEEEP profiles; "
+                "NREL land-access exclusions do not apply to this year's "
+                "profile aggregation. These archives were rolled up once, on "
+                "the county-based substation tessellation they were published "
+                "with — the run's own regions cannot re-cut them, only "
+                "re-aggregate them." + height_note,
+            )
+
+            cf_filename = godeeep_aggregated_filename(technology, year)
+            cf_record_key = godeeep_aggregated_record_key(technology)
+            cf_filepath = downloader.download_scenario_file(cf_record_key, scenario, cf_filename)
+            if cf_filepath is None:
+                raise RuntimeError(
+                    f"Could not obtain aggregated GODEEEP file {cf_filename!r} from "
+                    f"Zenodo record key {cf_record_key!r}.",
+                )
+
+            agg_profile = xr.open_dataarray(cf_filepath)
+
+            profile_provenance["land_access"] = "none (unscreened county-aggregated fallback)"
+            profile_provenance["hub_height"] = (
+                GODEEEP_AGGREGATED_WIND_HEIGHT.lstrip("_") if technology == "wind" else "n/a"
+            )
+
+            # Capacity-weight the substation→cluster mean by the same NREL
+            # p_nom_max that the cluster caps are built from. NOTE: the caps
+            # are still the SCREENED supply-curve capacities while this profile
+            # is unscreened, so p_nom_max and profile describe different land
+            # universes. That inconsistency is tolerable only because
+            # check_godeeep_fallback_allowed() refuses this path whenever a
+            # renewable carrier is extendable — nothing sites capacity against
+            # these numbers, they only scale existing plants' availability.
+            #
+            # Remap BEFORE selecting time: the archive is a national
+            # (8760 x ~41k) netCDF variable, and a fancy time index over it
+            # decodes the whole ~1.4 GB. Subsetting buses first leaves a
+            # cluster-level array small enough to slice in memory.
+            profile = remap_aggregated_profile(
+                agg_profile,
+                busmap_s,
+                weights=caps_ds_raw["p_nom_max"].to_pandas(),
+                tech=tech,
+            )
+            logger.info(f"Aggregated GODEEEP profile remapped to {profile.sizes['bus']} cluster buses.")
+
+            try:
+                profile = profile.sel(time=renewable_sns)
+            except KeyError as exc:
+                raise RuntimeError(
+                    f"Requested snapshots are not all present in {cf_filename}, which "
+                    f"spans {str(profile.time.values[0])[:16]} to "
+                    f"{str(profile.time.values[-1])[:16]}. Check "
+                    "renewable_snapshots against the weather year.",
+                ) from exc
 
         capacities = caps_ds["weight"]
         p_nom_max = caps_ds["p_nom_max"]
@@ -538,6 +928,8 @@ if __name__ == "__main__":
         average_distance = average_distance.sel(bus=common_buses)
 
         logger.info(f"Profile: {profile.shape}  Capacities: {capacities.shape}")
+    else:
+        profile_provenance = {}
 
     # ds of renewable data to be outputted
     ds = xr.merge(
@@ -587,6 +979,10 @@ if __name__ == "__main__":
     if correction_factor != 1.0:
         logger.info(f"Applying correction factor {correction_factor} to profile...")
         ds["profile"] = ds["profile"] * correction_factor
+
+    # Provenance: which archive and land-access treatment produced this profile.
+    # Postprocessing reads these rather than re-deriving them from config.
+    ds.attrs.update({"renewable_dataset": dataset, **profile_provenance})
 
     ds.to_netcdf(snakemake.output.profile)
     if client is not None:
