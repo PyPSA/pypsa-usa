@@ -167,6 +167,22 @@ properties:
       enable: {type: boolean}
       max_km: {type: number}
 
+  # GODEEEP CF retrieval registry (#803/#806). Kept permissive at the leaf
+  # level - godeeep_cf_registry.py does its own strict validation with
+  # error messages that name the dataset key and available years.
+  godeeep_cf_registry:
+    type: object
+    additionalProperties: true
+    properties:
+      copy_local: {type: boolean}
+      sources:
+        type: array
+        items:
+          type: object
+          required: [kind, datasets]
+          properties:
+            kind: {enum: [local, zenodo]}
+
   pudl_path: {type: string}
 
   atlite:

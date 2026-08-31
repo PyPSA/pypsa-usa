@@ -170,10 +170,85 @@ renewable:
 renewable_land_access: reference        # reference | limited | open (null allowed only with dataset: atlite)
 apply_cec_basescreen: false             # overlay CEC Wind/Solar BaseScreen on onwind+solar (CA-only)
 apply_boem_osw: false                   # overlay BOEM offshore-wind planning areas on offwind + offwind_floating
-godeeep_wind_height: "_100m"            # raw GODEEEP wind-CF hub height; "_100m" | "_125m"
+godeeep_wind_height: "_125m"            # raw GODEEEP wind-CF hub height; "_100m" | "_125m" — NO DEFAULT is applied if unset, the run fails loudly.
+                                        # "_125m" is the only height published on Zenodo; "_100m" REQUIRES the local (Oak) source below.
+                                        # "_80m" is not a GODEEEP product — there is no data at that height.
 nrel_caps_reassign:                     # out-of-footprint caps recovery for footprint-scoped runs (caps are rolled up nationally)
   enable: false                         # when true, fold unmapped caps entries onto the nearest in-footprint bus (needs x/y in the caps file)
   max_km: 100                           # only reassign entries within this distance (km); farther entries stay dropped (prevents cross-seam teleporting)
+
+
+# ====================================================================
+# GODEEEP CF REGISTRY — where compressed capacity-factor files come from
+# ====================================================================
+# Declares every (dataset key, year) the workflow is allowed to retrieve.
+# `godeeep_cf_registry.py` walks `sources` IN ORDER and the FIRST source
+# declaring the requested (dataset key, year) wins. There are NO fallback
+# paths: a missing dataset/year raises an error naming the dataset key, the
+# requested year and the available years per source — it never substitutes a
+# different year, hub height or screening variant (issue #803).
+#
+# Dataset keys are "{tech}{wind_height}_{scenario}_compressed", e.g.
+# `solar_historical_compressed`, `wind_125m_rcp85cooler_compressed`.
+# `years:` takes an inclusive range string ("1980-2022") or an explicit list.
+# docs : GODEEEP_CF_REGISTRY
+godeeep_cf_registry:
+  copy_local: false                     # false = the retrieve rule symlinks local hits (no duplication); true = copy into the run's data/
+  sources:
+    # ---- 1. Local Oak mirror: full 1980-2022 historical archive, both hub heights.
+    - kind: local
+      root: /oak/stanford/groups/iazevedo/GoDEEEP_Capacity_Factors_compressed
+      layout: "{scenario}/{tech_dir}/{filename}"   # placeholders: scenario, tech_dir (solar|wind_100m|wind_125m), technology, wind_height, year, filename, dataset_key
+      datasets:
+        solar_historical_compressed:
+          years: "1980-2022"
+        wind_100m_historical_compressed:
+          years: "1980-2022"
+        wind_125m_historical_compressed:
+          years: "1980-2022"
+    # ---- 2. Zenodo: the published subset. Historical is a single year (2012);
+    #         future scenarios hold 2030/2040/2050 per (tech, scenario) record.
+    #         Every year list below was read off the live Zenodo API file listing
+    #         (GET https://zenodo.org/api/records/<id>), not assumed.
+    - kind: zenodo
+      datasets:
+        solar_historical_compressed:
+          record: 20127513
+          years: [2012]
+        wind_125m_historical_compressed:
+          record: 20127520
+          years: [2012]
+        solar_rcp45hotter_compressed:
+          record: 20127523
+          years: [2030, 2040, 2050]
+        solar_rcp45cooler_compressed:
+          record: 20127562
+          years: [2030, 2040, 2050]
+        solar_rcp85hotter_compressed:
+          record: 20127589
+          years: [2030, 2040, 2050]
+        solar_rcp85cooler_compressed:
+          record: 20127633
+          years: [2030, 2040, 2050]
+        wind_125m_rcp45cooler_compressed:
+          record: 20127572
+          years: [2030, 2040, 2050]
+        wind_125m_rcp85hotter_compressed:
+          record: 20127604
+          years: [2030, 2040, 2050]
+        wind_125m_rcp85cooler_compressed:
+          record: 20127645
+          years: [2030, 2040, 2050]
+        # wind_125m_rcp45hotter is NOT published. Record 20127545 (hardcoded in the
+        # old zenodo_downloader.py) returns HTTP 404 "The persistent identifier is
+        # not registered", and no such record appears in a Zenodo search of the
+        # series — the other 9 records of the series do. Declaring it with an empty
+        # year list keeps the failure honest: requesting it raises "available years:
+        # (none)" instead of the legacy silent `None` download path. Use the local
+        # source or re-publish the record to make this scenario runnable.
+        wind_125m_rcp45hotter_compressed:
+          record: 20127545
+          years: []
 
 
 # ====================================================================

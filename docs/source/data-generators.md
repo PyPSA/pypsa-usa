@@ -38,13 +38,13 @@ exclusion assumptions.
 
 #### GODEEEP (default)
 
-The default capacity-factor source (`renewable.dataset: godeeep`) is the [GODEEEP](https://www.pnnl.gov/projects/godeeep) dataset — regional-climate-model capacity factors developed at Pacific Northwest National Laboratory under the Grid Operations, Decarbonization, Environmental and Energy Equity Platform. Designed for multi-year climate-change scenario studies, GODEEEP provides hourly solar PV and 125 m hub-height wind capacity factors on a 12 km Lambert Conformal grid for:
+The default capacity-factor source (`renewable.dataset: godeeep`) is the [GODEEEP](https://www.pnnl.gov/projects/godeeep) dataset — regional-climate-model capacity factors developed at Pacific Northwest National Laboratory under the Grid Operations, Decarbonization, Environmental and Energy Equity Platform. Designed for multi-year climate-change scenario studies, GODEEEP provides hourly solar PV and 100 m / 125 m hub-height wind capacity factors on a 12 km Lambert Conformal grid for:
 
-- **One historical year** (2012) calibrated against observed weather.
+- **A historical period** (1980–2022) calibrated against observed weather.
 - **Four future climate scenarios** — `rcp45hotter`, `rcp45cooler`, `rcp85hotter`, `rcp85cooler` — under the RCP4.5 and RCP8.5 emissions pathways, downscaled with two GCM ensemble members per pathway.
 - **Three planning horizons** (2030, 2040, 2050) per future scenario, drawn from contiguous 20-year (wind) or 40-year (solar) windows.
 
-The raw GODEEEP files are large (~4.4 GB per `(tech, scenario, year)` triple). PyPSA-USA consumes a uint8-quantized + zlib-compressed variant (~350 MB for solar, ~800 MB for wind) published as 10 Zenodo records keyed by `(tech, scenario)`. The compressed files are pulled automatically at runtime by `scripts/zenodo_downloader.py`.
+The raw GODEEEP files are large (~4.4 GB per `(tech, scenario, year)` triple). PyPSA-USA consumes a uint8-quantized + zlib-compressed variant (~350 MB for solar, ~800 MB for wind). Each compressed file is placed by `rule retrieve_godeeep_cf` from the sources declared in the `godeeep_cf_registry` config block — a local mirror (on Sherlock, the full 1980–2022 historical archive at both hub heights) and Zenodo records keyed by `(tech, scenario)`. Only part of the matrix is on Zenodo; see [`renewable: godeeep`](godeeep_cf) for exactly which `(dataset, year)` pairs each source holds.
 
 GODEEEP capacity factors are re-aggregated to PyPSA-USA bus polygons using a runtime weighting step:
 

@@ -332,12 +332,67 @@ PyPSA-USA supports two sources for renewable capacity-factor time series, select
 - `atlite` — runtime computation of capacity factors from ERA5 cutouts, weighted by Copernicus / CORINE land-use exclusions (the legacy default; see [Renewable Capacity Factors](renewable_cfs) under Model Data).
 - `godeeep` — pre-computed regional climate-model capacity factors from the [GODEEEP](https://www.pnnl.gov/projects/godeeep) (Grid Operations, Decarbonization, Environmental and Energy Equity Platform) dataset, weighted at runtime by NREL reV land-access exclusions.
 
-The `godeeep` path consumes two file families published on Zenodo, downloaded automatically by `scripts/zenodo_downloader.py` on first run:
+The `godeeep` path consumes two file families:
 
-- **Compressed GODEEEP capacity factors** — per-cell hourly capacity factors on the GODEEEP Lambert Conformal grid, uint8-quantized and zlib-compressed (~12× smaller than the raw aggregated files). One Zenodo record per `(tech, scenario)`:
-   - solar: [historical](https://doi.org/10.5281/zenodo.20127513), [rcp45hotter](https://doi.org/10.5281/zenodo.20127523), [rcp45cooler](https://doi.org/10.5281/zenodo.20127562), [rcp85hotter](https://doi.org/10.5281/zenodo.20127589), [rcp85cooler](https://doi.org/10.5281/zenodo.20127633)
-   - wind (125 m): [historical](https://doi.org/10.5281/zenodo.20127520), [rcp45hotter](https://doi.org/10.5281/zenodo.20127545), [rcp45cooler](https://doi.org/10.5281/zenodo.20127572), [rcp85hotter](https://doi.org/10.5281/zenodo.20127604), [rcp85cooler](https://doi.org/10.5281/zenodo.20127645)
+- **Compressed GODEEEP capacity factors** — per-cell hourly capacity factors on the GODEEEP Lambert Conformal grid, uint8-quantized and zlib-compressed (~12× smaller than the raw aggregated files; ~350 MB per solar year, ~800 MB per wind year). One file per `(tech, hub height, scenario, year)`, retrieved by `rule retrieve_godeeep_cf` from the sources declared in `godeeep_cf_registry` (see below).
 - **NREL land-access artifacts** ([10.5281/zenodo.20127899](https://doi.org/10.5281/zenodo.20127899)) — `avail_{tech}_{access}[_cec|_boem].nc` per-cell availability rasters and `caps_{tech}_{access}[_cec|_boem].nc` per-bus rollups (`weight`, `p_nom_max`, `potential`, `average_distance`, and `underwater_fraction` for offshore).
+
+#### How capacity-factor files are retrieved
+
+Capacity-factor files are no longer downloaded from inside `build_renewable_profiles`. A dedicated
+rule, `retrieve_godeeep_cf`, places each file, driven by the `godeeep_cf_registry` block of
+`config.common.yaml`. The registry is an *ordered* list of sources — a local mirror and Zenodo —
+and each source declares exactly which `(dataset key, year)` pairs it holds. The first source
+declaring the requested pair wins.
+
+There are **no fallback paths**: no default hub height, no nearest-year substitution, no swap to an
+unscreened variant. A request for a dataset or year that no source declares fails at snakemake
+parse time with an error naming the dataset key, the requested year and the years available from
+each source. Local hits are symlinked into the run's `data/` directory (set `copy_local: true` to
+copy instead) and verified against the mirror's `SHA256SUMS` manifest before use.
+
+#### Which data is available
+
+Dataset keys are `{tech}{wind_height}_{scenario}_compressed`. On Sherlock all of the following is
+reachable out of the box, because the shipped config declares the group's Oak mirror
+(`/oak/stanford/groups/iazevedo/GoDEEEP_Capacity_Factors_compressed`, group `oak_iazevedo`) as the
+first source. Off Sherlock, edit `godeeep_cf_registry` to remove or repoint the `local` source —
+only the Zenodo subset is then reachable.
+
+| Dataset key | `godeeep_wind_height` | Oak mirror | Zenodo |
+|---|---|---|---|
+| `solar_historical_compressed` | — | 1980–2022 | 2012 only ([20127513](https://doi.org/10.5281/zenodo.20127513)) |
+| `wind_100m_historical_compressed` | `"_100m"` | 1980–2022 | not published |
+| `wind_125m_historical_compressed` | `"_125m"` | 1980–2022 | 2012 only ([20127520](https://doi.org/10.5281/zenodo.20127520)) |
+| `solar_rcp45hotter_compressed` | — | — | 2030 / 2040 / 2050 ([20127523](https://doi.org/10.5281/zenodo.20127523)) |
+| `solar_rcp45cooler_compressed` | — | — | 2030 / 2040 / 2050 ([20127562](https://doi.org/10.5281/zenodo.20127562)) |
+| `solar_rcp85hotter_compressed` | — | — | 2030 / 2040 / 2050 ([20127589](https://doi.org/10.5281/zenodo.20127589)) |
+| `solar_rcp85cooler_compressed` | — | — | 2030 / 2040 / 2050 ([20127633](https://doi.org/10.5281/zenodo.20127633)) |
+| `wind_125m_rcp45hotter_compressed` | `"_125m"` | — | **not published** (record 20127545 returns HTTP 404) |
+| `wind_125m_rcp45cooler_compressed` | `"_125m"` | — | 2030 / 2040 / 2050 ([20127572](https://doi.org/10.5281/zenodo.20127572)) |
+| `wind_125m_rcp85hotter_compressed` | `"_125m"` | — | 2030 / 2040 / 2050 ([20127604](https://doi.org/10.5281/zenodo.20127604)) |
+| `wind_125m_rcp85cooler_compressed` | `"_125m"` | — | 2030 / 2040 / 2050 ([20127645](https://doi.org/10.5281/zenodo.20127645)) |
+
+Notable gaps:
+
+- **Full historical coverage (1980–2022) requires the Oak mirror.** From Zenodo the historical
+  scenario is a single year, 2012.
+- **100 m hub-height wind exists only on the Oak mirror.** Zenodo publishes 125 m only.
+- **`rcp45hotter` is solar-only.** The corresponding 125 m wind record was never registered, so the
+  registry declares it with an empty year list; requesting it fails with `available years: (none)`
+  rather than silently downloading nothing.
+
+The Oak mirror also holds an 80 m wind archive (1980–2022, sha256-verified alongside the rest), but
+it is not yet wired into `godeeep_cf_registry` and the workflow accepts only `"_100m"` and
+`"_125m"` for `godeeep_wind_height`. (`"_80m"` was the silent default behind
+[#803](https://github.com/PyPSA/pypsa-usa/issues/803) and is now rejected.)
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.common.yaml
+   :language: yaml
+   :start-after: # docs : GODEEEP_CF_REGISTRY
+   :end-before: # docs :
+```
 
 #### Configuring a godeeep run
 
@@ -350,7 +405,10 @@ A complete godeeep configuration requires four config blocks beyond the standard
      dataset: godeeep    # set to atlite for the ERA5 + CORINE workflow
    ```
 
-2. **Scenario and year selection**. The GODEEEP dataset has one historical record (2012) and four future climate scenarios (`rcp45hotter`, `rcp45cooler`, `rcp85hotter`, `rcp85cooler`) at planning horizons 2030 / 2040 / 2050.
+2. **Scenario and year selection**. The GODEEEP dataset has a historical scenario and four future
+   climate scenarios (`rcp45hotter`, `rcp45cooler`, `rcp85hotter`, `rcp85cooler`) at planning
+   horizons 2030 / 2040 / 2050. Historical years run 1980–2022 via the Oak mirror; from Zenodo only
+   2012 is available. Any `(scenario, year)` outside the table above fails at parse time.
 
    ```yaml
    renewable_scenarios: ["rcp45cooler"]   # one of: historical | rcp45hotter | rcp45cooler | rcp85hotter | rcp85cooler
@@ -358,6 +416,13 @@ A complete godeeep configuration requires four config blocks beyond the standard
    ```
 
    Future-scenario years come from the `planning_horizons` wildcard (under `scenario:`); the historical year comes from `renewable_weather_years`.
+
+   Wind runs must also set the hub height, which has **no default** — leaving it unset fails the
+   run:
+
+   ```yaml
+   godeeep_wind_height: "_125m"   # "_100m" (Oak mirror only) | "_125m" (Oak mirror + Zenodo)
+   ```
 
 3. **Snapshots** — the temporal slice within the chosen year. For godeeep this controls how much of the 8760-hour GODEEEP CF is sampled:
 
