@@ -41,6 +41,7 @@ model-workflow
 model-components
 model-constraints
 model-network-schema
+california-model
 ```
 
 ```{toctree}

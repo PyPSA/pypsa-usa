@@ -28,7 +28,9 @@ historical weather year, so `renewable_weather_years` must contain exactly one y
 publishes for its 2026 Integrated Resource Planning cycle, produced with the SERVM
 production-cost model. It is a **California-only** dataset — use it with a footprint scoped
 to California (`model_topology: include: reeds_state: ['CA']`); the maintained entry point is
-`workflow/repo_data/config/config.california.yaml`.
+`workflow/repo_data/config/config.california.yaml`. The [California model](california-model.md)
+page is the full reference for that configuration — every dataset that goes into it, the
+weather-year options, and the caveats.
 
 The workflow retrieves one CSV per forecast year from
 
@@ -55,10 +57,12 @@ carries on its buses (`workflow/repo_data/CPUC/servm_region_map.csv`):
 | `LADWP` | `LDWP` | Los Angeles Department of Water and Power |
 | `NCNC` | `BANC` + `TIDC` | Northern California non-CAISO: Balancing Authority of Northern California and Turlock Irrigation District |
 
-`CISO-VEA` — the Valley Electric Association balancing area — is a Nevada footprint and is
-deliberately **excluded** from California-only networks. It carries an empty region in the
-mapping file, so its (small) load share is dropped with a log message, while any *unknown*
-balancing area introduced by upstream relabeling still hard-fails.
+Four balancing areas carry a deliberately **empty** region in the mapping file, so their
+(small) load shares are dropped with a log message, while any *unknown* balancing area
+introduced by upstream relabeling still hard-fails: `CISO-VEA` (Valley Electric Association, a
+Nevada footprint) and the California slivers served by `PACW` (Siskiyou/Del Norte/Modoc, whose
+load lives in CPUC's non-CA PACW region file), `WALC` (WAPA Desert Southwest, Colorado River)
+and `NEVP` (NV Energy, Tahoe/CalNeva) — none of which the CPUC California-region files cover.
 
 Because the SERVM regions are balancing areas rather than states, the demand is disaggregated
 with a purpose-built weights table (`build_servm_load_weights`) instead of the generic
@@ -94,6 +98,11 @@ weather-year specific.
 **Set `servm_weather_years` equal to the top-level `renewable_weather_years`.** Drawing load
 and wind/solar profiles from different weather years decorrelates them and will understate
 both the peak-net-load and the flexibility need. A mismatch is permitted but logs a warning.
+
+Not every SERVM weather year has a matching renewable profile: which years the GODEEEP dataset
+can supply, and at what cost in land screening, is tabulated under
+[Historical weather-year availability](godeeep_weather_years) and summarised for California on
+the [California model](california-model.md) page.
 
 #### Timezone and calendar caveats
 

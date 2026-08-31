@@ -314,7 +314,7 @@ A complete godeeep configuration requires four config blocks beyond the standard
      dataset: godeeep    # set to atlite for the ERA5 + CORINE workflow
    ```
 
-2. **Scenario and year selection**. The GODEEEP dataset has one historical record (2012) and four future climate scenarios (`rcp45hotter`, `rcp45cooler`, `rcp85hotter`, `rcp85cooler`) at planning horizons 2030 / 2040 / 2050.
+2. **Scenario and year selection**. The GODEEEP dataset has a historical record and four future climate scenarios (`rcp45hotter`, `rcp45cooler`, `rcp85hotter`, `rcp85cooler`). Each climate record publishes exactly three planning horizons — 2030, 2040 and 2050.
 
    ```yaml
    renewable_scenarios: ["rcp45cooler"]   # one of: historical | rcp45hotter | rcp45cooler | rcp85hotter | rcp85cooler
@@ -322,6 +322,13 @@ A complete godeeep configuration requires four config blocks beyond the standard
    ```
 
    Future-scenario years come from the `planning_horizons` wildcard (under `scenario:`); the historical year comes from `renewable_weather_years`.
+
+   For the historical scenario, the weather years actually reachable depend on which archive
+   backs them: the per-cell compressed records that the NREL land-access path consumes carry
+   **2012 only**, while solar 1980-2022 and wind 2001-2022 are available exclusively through the
+   opt-in, unscreened `godeeep_allow_unscreened_fallback` path. See
+   [Historical weather-year availability](godeeep_weather_years) under Model Data for the
+   screening, hub-height and extendability constraints that come with it.
 
 3. **Snapshots** — the temporal slice within the chosen year. For godeeep this controls how much of the 8760-hour GODEEEP CF is sampled:
 
