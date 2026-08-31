@@ -341,6 +341,39 @@ rule retrieve_nrel_exclusion_artifact:
         "../scripts/retrieve_nrel_exclusion.py"
 
 
+# GODEEEP climate scenarios; the scenario is a directory/record component, never
+# part of the CF file name (see godeeep_cf_registry.cf_filename).
+GODEEEP_SCENARIOS = (
+    "historical",
+    "rcp45cooler",
+    "rcp45hotter",
+    "rcp85cooler",
+    "rcp85hotter",
+)
+
+
+rule retrieve_godeeep_cf:
+    """
+    Place one compressed GODEEEP capacity-factor file where
+    build_renewable_profiles expects it. The source (local mirror or Zenodo
+    record) is declared per (dataset key, year) in the `godeeep_cf_registry`
+    config block; an undeclared dataset/year raises instead of falling back to
+    another year, hub height or screening variant.
+    """
+    wildcard_constraints:
+        scenario="|".join(GODEEEP_SCENARIOS),
+        cf_file=r"(solar|wind)_gen_cf_\d{4}(_\d+m)?_compressed",
+    output:
+        DATA + "godeeep/{scenario}/{cf_file}.nc",
+    log:
+        LOGS + "retrieve/godeeep_cf_{scenario}_{cf_file}.log",
+    resources:
+        walltime="01:00:00",
+        mem_mb=2000,
+    script:
+        "../scripts/retrieve_godeeep_cf.py"
+
+
 if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:
 
     rule retrieve_egs:

@@ -148,12 +148,13 @@ snapshots:
   end: "2020-01-01"
   inclusive: "left"                      # a full 8760-hour year
 
-# NOTE: the GODEEEP climate-scenario records publish CFs for 2030/2040/2050 only;
-# horizons 2035/2045 have no matching climate CF file (no year-snapping exists).
-# Either restrict planning_horizons to published years for climate runs, or use
-# renewable_scenarios: ['historical'] + godeeep_allow_unscreened_fallback for
-# weather-year-consistent profiles. See docs/source/california-model.md.
-renewable_scenarios: ["rcp85cooler"]     # GODEEEP climate scenario
+# Historical profiles matching the SERVM demand weather year. The registry's
+# Oak mirror serves screened years 1980-2022 (Zenodo alone carries 2012 only).
+# Climate scenarios (rcp*) publish horizons 2030/2040/2050 only, so they cannot
+# back this config's 2035/2045 planning horizons - the registry fails at parse
+# time if you switch to one without restricting planning_horizons.
+# See docs/source/california-model.md.
+renewable_scenarios: ['historical']     # GODEEEP climate scenario
 
 renewable_snapshots:
   start_month: 1

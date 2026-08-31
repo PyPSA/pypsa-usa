@@ -2,6 +2,17 @@
 
 from itertools import chain
 
+# rules/common.smk materializes godeeep_cf_registry.py into the source-cache
+# dir it puts on sys.path, so the CF registry is importable at parse time —
+# where its validation belongs.
+from godeeep_cf_registry import (
+    cf_filename,
+    godeeep_tech_spec,
+    resolve_scenario,
+    resolve_weather_year,
+    validate_godeeep_cf_config,
+)
+
 
 rule build_shapes:
     params:
@@ -160,11 +171,42 @@ if config["enable"].get("build_cutout", False):
             "../scripts/build_cutout.py"
 
 
-# Only use planning_horizon for GoDEEEP future scenarios
+# Resolve every configured (scenario, year, technology) CF request now, so a
+# registry that cannot serve the run dies here — with one aggregated message
+# naming each dataset key, the requested year and the available years — instead
+# of hundreds of DAG nodes later. A non-godeeep config is a no-op.
+validate_godeeep_cf_config(config)
+
+# Only use planning_horizon for GoDEEEP future scenarios. `and` short-circuits,
+# so an atlite run never needs renewable_scenarios, and a godeeep run missing it
+# gets the registry's error rather than a bare KeyError.
 godeeep_planning_horizon = (
     config.get("renewable", {}).get("dataset") == "godeeep"
-    and config["renewable_scenarios"][0] != "historical"
+    and resolve_scenario(config) != "historical"
 )
+
+
+def godeeep_cf_artifact(wildcards):
+    """Input function for the GODEEEP capacity-factor file of a technology.
+
+    The file is retrieved by ``rule retrieve_godeeep_cf`` rather than downloaded
+    inside ``build_renewable_profiles``. Returns no input unless the CF dataset
+    is ``godeeep``. Future scenarios take the CF year from the
+    ``{planning_horizon}`` wildcard, historical ones from
+    ``renewable_weather_years[0]``; both the year and the file name come from
+    ``godeeep_cf_registry`` so the rule, the retrieval and the parse-time
+    validation cannot drift apart.
+    """
+    if config.get("renewable", {}).get("dataset") != "godeeep":
+        return []
+    spec = godeeep_tech_spec(wildcards.technology, config)
+    scenario = resolve_scenario(config)
+    year = resolve_weather_year(
+        config,
+        int(wildcards.planning_horizon) if godeeep_planning_horizon else None,
+    )
+    filename = cf_filename(spec.technology, spec.wind_height, scenario, year)
+    return DATA + f"godeeep/{scenario}/{filename}"
 
 
 def nrel_exclusion_artifact(kind):
@@ -234,6 +276,7 @@ rule build_renewable_profiles:
         ),
         nrel_avail=nrel_exclusion_artifact("avail"),
         nrel_caps=nrel_exclusion_artifact("caps"),
+        godeeep_cf=godeeep_cf_artifact,
         cutout=lambda wildcards: (
             expand(
                 "cutouts/"
@@ -270,10 +313,14 @@ rule build_renewable_profiles:
         )
     threads: ATLITE_NPROCESSES
     resources:
+        # godeeep does no atlite excluder work: it streams the compressed CF in
+        # 500-hour chunks and aggregates onto bus polygons, whose peak footprint
+        # is set by the chunk and the cell->bus mapping, not by input.size.
         mem_mb=lambda wildcards, input, attempt: (
-            ATLITE_NPROCESSES * input.size // 2000000
-        )
-        * 2.5,
+            32000 * attempt
+            if config["renewable"]["dataset"] == "godeeep"
+            else (ATLITE_NPROCESSES * input.size // 2000000) * 2.5
+        ),
         walltime=config_provider(
             "walltime", "build_renewable_profiles", default="02:30:00"
         ),

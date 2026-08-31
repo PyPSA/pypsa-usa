@@ -48,7 +48,6 @@ EXPECTED_TOPLEVEL_OVERRIDES = {
         "apply_cec_basescreen",
         "apply_boem_osw",
         "godeeep_wind_height",
-        "godeeep_allow_unscreened_fallback",
         "nrel_caps_reassign",
     },
 }

@@ -1,8 +1,45 @@
-"""Download scenarios from Zenodo."""
+"""Download scenarios from Zenodo.
 
+Every failure path in this module raises :class:`ZenodoDownloadError`. Nothing
+returns ``None`` and nothing silently substitutes a different record, file or
+partially-downloaded artifact: a caller that gets a path back is guaranteed a
+complete file whose checksum matches the one Zenodo publishes for it.
+
+Record IDs for the GODEEEP ``*_compressed.nc`` capacity factors are no longer
+hardcoded here — they are declared in the ``godeeep_cf_registry`` config block
+and reach this module through ``download_to_path``.
+"""
+
+import time
 from pathlib import Path
 
 import requests
+from _helpers import validate_checksum
+
+# Transient-failure retry policy for both metadata and file requests.
+MAX_DOWNLOAD_ATTEMPTS = 3
+BACKOFF_BASE_SECONDS = 2.0
+METADATA_TIMEOUT_SECONDS = 30
+# (connect, read) — the read budget has to cover a slow chunk, not the file.
+DOWNLOAD_TIMEOUT_SECONDS = (10, 120)
+RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
+
+class ZenodoDownloadError(Exception):
+    """Raised when a Zenodo record, file or download cannot be resolved."""
+
+
+def _is_transient(exc: Exception) -> bool:
+    """True for errors worth retrying (connection resets, timeouts, 5xx/429)."""
+    if isinstance(
+        exc,
+        requests.exceptions.Timeout | requests.exceptions.ConnectionError | requests.exceptions.ChunkedEncodingError,
+    ):
+        return True
+    if isinstance(exc, requests.exceptions.HTTPError):
+        status = getattr(exc.response, "status_code", None)
+        return status is not None and (status >= 500 or status in RETRYABLE_STATUS_CODES)
+    return False
 
 
 class ZenodoScenarioDownloader:
@@ -10,54 +47,47 @@ class ZenodoScenarioDownloader:
 
     def __init__(self, download_dir="./data"):
         self.download_dir = Path(download_dir)
-        self.download_dir.mkdir(exist_ok=True)
+        self.download_dir.mkdir(parents=True, exist_ok=True)
 
         # NREL land-access availability + bus-capacity artifacts; one record
         # holds all 48 avail_*.nc / caps_*.nc files.
-        # GODEEEP _compressed.nc records used by the NREL land-access path.
-        # Keyed by (tech + wind_height + scenario) — no year_range — because
-        # one record holds all years per (tech, scenario).
         self.scenario_records = {
             "nrel_exclusion_v1": 20316475,
-            "solar_historical_compressed": 20127513,
-            "solar_rcp45hotter_compressed": 20127523,
-            "solar_rcp45cooler_compressed": 20127562,
-            "solar_rcp85hotter_compressed": 20127589,
-            "solar_rcp85cooler_compressed": 20127633,
-            "wind_125m_historical_compressed": 20127520,
-            "wind_125m_rcp45hotter_compressed": 20127545,
-            "wind_125m_rcp45cooler_compressed": 20127572,
-            "wind_125m_rcp85hotter_compressed": 20127604,
-            "wind_125m_rcp85cooler_compressed": 20127645,
-            # Pre-#745 bus-aggregated GODEEEP historical profiles, keyed by
-            # substation ID. The compressed per-cell records above only hold
-            # weather year 2012 for the historical scenario; these hold the
-            # full multi-decade span (solar 1980-2022, wind 2001-2022) and back
-            # the multi-weather-year fallback in build_renewable_profiles.py.
-            "solar_historical_aggregated": 18293999,
-            "wind_100m_historical_aggregated": 18331699,
         }
 
         # Cache for record metadata to avoid repeated API calls
         self._metadata_cache = {}
 
     def get_record_metadata(self, record_id):
-        """Get metadata for a record (with caching)."""
+        """
+        Get metadata for a record (with caching).
+
+        Raises
+        ------
+        ZenodoDownloadError
+            If the record cannot be fetched or does not parse as JSON.
+        """
         if record_id in self._metadata_cache:
             return self._metadata_cache[record_id]
 
         url = f"https://zenodo.org/api/records/{record_id}"
+        what = f"metadata for Zenodo record {record_id} ({url})"
+
+        for attempt in range(1, MAX_DOWNLOAD_ATTEMPTS + 1):
+            try:
+                response = requests.get(url, timeout=METADATA_TIMEOUT_SECONDS)
+                response.raise_for_status()
+                break
+            except requests.exceptions.RequestException as e:
+                self._retry_or_raise(e, attempt, what)
 
         try:
-            response = requests.get(url)
-            response.raise_for_status()
             metadata = response.json()
-            self._metadata_cache[record_id] = metadata
-            return metadata
+        except ValueError as e:
+            raise ZenodoDownloadError(f"Zenodo returned a non-JSON response for {what}: {e}") from e
 
-        except requests.exceptions.RequestException as e:
-            print(f"Failed to get metadata for record {record_id}: {e}")
-            return None
+        self._metadata_cache[record_id] = metadata
+        return metadata
 
     def download_scenario_file(self, scenario_final, scenario, filename, force_redownload=False):
         """
@@ -66,37 +96,47 @@ class ZenodoScenarioDownloader:
         Parameters
         ----------
         scenario_final : str
-            Lookup key into scenario_records (e.g. "solar_rcp45hotter_compressed").
+            Lookup key into scenario_records (e.g. "nrel_exclusion_v1").
         scenario : str
             Climate-scenario name used to choose the on-disk subdir
             (e.g. "historical", "rcp45hotter").
         filename : str
-            Name of the file to download, e.g., "solar_gen_cf_2030_compressed.nc".
+            Name of the file to download, e.g., "caps_solar_reference.nc".
         force_redownload : bool, optional
             If True, re-download the file even if it exists locally. Default is False.
+
+        Returns
+        -------
+        str
+            Path to the complete, checksum-verified local file.
+
+        Raises
+        ------
+        ZenodoDownloadError
+            If `scenario_final` is not a known key, if `filename` is not in the
+            record, or if the download fails or fails checksum validation.
         """
-        (self.download_dir / "zenodo" / scenario).mkdir(exist_ok=True)
-        local_filepath = f"{self.download_dir}/zenodo/{scenario}/{filename}"
+        # Validated up front, even when the file is already on disk: an unknown
+        # key is a config bug and must never resolve to a cached artifact.
+        try:
+            record_id = self.scenario_records[scenario_final]
+        except KeyError as e:
+            available = ", ".join(sorted(self.scenario_records)) or "<none>"
+            raise ZenodoDownloadError(
+                f"Unknown Zenodo dataset key '{scenario_final}'. Available keys: {available}.",
+            ) from e
+
+        local_filepath = self.download_dir / "zenodo" / scenario / filename
+        local_filepath.parent.mkdir(parents=True, exist_ok=True)
 
         # Check if file already exists locally and skip Zenodo
-        if Path(local_filepath).exists() and not force_redownload:
+        if local_filepath.exists() and not force_redownload:
             print(
                 f"File already exists locally: {local_filepath}. Skipping download. Use force_redownload=True to re-download.",
             )
             return str(local_filepath)
-        # Only check record_id if we need to download
-        else:
-            record_id = self.scenario_records.get(scenario_final)
 
-            if not record_id:
-                print(f"No record ID found for scenario: {scenario_final}")
-                print("Available scenarios with record IDs:")
-                for scenario, rec_id in self.scenario_records.items():
-                    if rec_id is not None:
-                        print(f"  - {scenario} (ID: {rec_id})")
-                return None
-
-            return self._download_file(record_id, filename, Path(local_filepath), force_redownload)
+        return self._download_file(record_id, filename, local_filepath, force_redownload)
 
     def download_to_path(self, record_id, filename, out_path, force_redownload=False):
         """
@@ -115,6 +155,17 @@ class ZenodoScenarioDownloader:
             record's manifest).
         out_path : str or Path
             Destination path. Parent directories are created if missing.
+
+        Returns
+        -------
+        str
+            Path to the complete, checksum-verified local file.
+
+        Raises
+        ------
+        ZenodoDownloadError
+            If `filename` is not in the record, or if the download fails or
+            fails checksum validation.
         """
         out_path = Path(out_path)
         if out_path.exists() and not force_redownload:
@@ -128,62 +179,93 @@ class ZenodoScenarioDownloader:
 
         This is only called after confirming the file doesn't exist locally.
         """
-        # Ensure directory exists
+        local_filepath = Path(local_filepath)
         local_filepath.parent.mkdir(parents=True, exist_ok=True)
 
-        # Get record metadata
         metadata = self.get_record_metadata(record_id)
-        if not metadata:
-            return None
+        record_files = metadata.get("files", [])
 
         # Find the specific file
-        target_file = None
-        for file_info in metadata.get("files", []):
-            if file_info["key"] == filename:
-                target_file = file_info
-                break
+        target_file = next((f for f in record_files if f["key"] == filename), None)
+        if target_file is None:
+            available = ", ".join(sorted(f["key"] for f in record_files)) or "<none>"
+            raise ZenodoDownloadError(
+                f"File '{filename}' not found in Zenodo record {record_id}. Available files: {available}.",
+            )
 
-        if not target_file:
-            print(f"File '{filename}' not found in record {record_id}")
-            print("Available files:")
-            for file_info in metadata.get("files", []):
-                print(f"  - {file_info['key']}")
-            return None
+        # Checked before spending bandwidth: an unverifiable download is a
+        # failure, not something to wave through.
+        checksum = target_file.get("checksum")
+        if not checksum:
+            raise ZenodoDownloadError(
+                f"Zenodo record {record_id} publishes no checksum for '{filename}'; "
+                "refusing to download a file whose integrity cannot be verified.",
+            )
 
-        # Download the file
         download_url = target_file["links"]["self"]
-        file_size_mb = target_file["size"] / (1024 * 1024)
-
         print(f"Downloading {filename} from record {record_id}...")
-        print(f"Size: {file_size_mb:.1f} MB")
+        if target_file.get("size"):
+            print(f"Size: {target_file['size'] / (1024 * 1024):.1f} MB")
         print(f"Saving to: {local_filepath}")
 
+        what = f"'{filename}' from Zenodo record {record_id} ({download_url})"
+        for attempt in range(1, MAX_DOWNLOAD_ATTEMPTS + 1):
+            try:
+                response = requests.get(download_url, stream=True, timeout=DOWNLOAD_TIMEOUT_SECONDS)
+                response.raise_for_status()
+                self._write_stream(response, local_filepath)
+                break
+            except requests.exceptions.RequestException as e:
+                local_filepath.unlink(missing_ok=True)  # never keep a torn file
+                self._retry_or_raise(e, attempt, what)
+
         try:
-            response = requests.get(download_url, stream=True)
-            response.raise_for_status()
+            validate_checksum(local_filepath, checksum=checksum)
+        except (AssertionError, ValueError) as e:
+            local_filepath.unlink(missing_ok=True)
+            raise ZenodoDownloadError(
+                f"Checksum mismatch for {what}: expected {checksum}. "
+                f"The partial or corrupt file {local_filepath} has been removed; re-run the rule.",
+            ) from e
 
-            total_size = int(response.headers.get("content-length", 0))
-            downloaded_size = 0
+        print(f"Successfully downloaded {filename}")
+        return str(local_filepath)
 
-            with open(local_filepath, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded_size += len(chunk)
+    @staticmethod
+    def _write_stream(response, local_filepath):
+        """Stream a response body to disk, reporting progress on large files."""
+        total_size = int(response.headers.get("content-length", 0))
+        downloaded_size = 0
 
-                        # Show progress for large files
-                        if total_size > 10 * 1024 * 1024:  # Show progress for files > 10MB
-                            progress = (downloaded_size / total_size) * 100
-                            print(f"\rProgress: {progress:.1f}%", end="", flush=True)
+        with open(local_filepath, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    downloaded_size += len(chunk)
 
-            if total_size > 10 * 1024 * 1024:
-                print()  # New line after progress
+                    # Show progress for large files
+                    if total_size > 10 * 1024 * 1024:  # Show progress for files > 10MB
+                        progress = (downloaded_size / total_size) * 100
+                        print(f"\rProgress: {progress:.1f}%", end="", flush=True)
 
-            print(f"Successfully downloaded {filename}")
-            return str(local_filepath)
+        if total_size > 10 * 1024 * 1024:
+            print()  # New line after progress
 
-        except requests.exceptions.RequestException as e:
-            print(f"Download failed: {e}")
-            if Path(local_filepath).exists():
-                Path(local_filepath).unlink()  # Remove partial file
-            return None
+    @staticmethod
+    def _retry_or_raise(exc, attempt, what):
+        """Sleep before the next attempt, or raise once retries are exhausted.
+
+        Non-transient failures (404, 403, ...) are raised immediately — retrying
+        them would only delay the error.
+        """
+        if not _is_transient(exc):
+            raise ZenodoDownloadError(f"Failed to fetch {what}: {exc}") from exc
+        if attempt >= MAX_DOWNLOAD_ATTEMPTS:
+            raise ZenodoDownloadError(
+                f"Failed to fetch {what} after {MAX_DOWNLOAD_ATTEMPTS} attempts: {exc}",
+            ) from exc
+        delay = BACKOFF_BASE_SECONDS * 2 ** (attempt - 1)
+        print(
+            f"Transient error fetching {what} (attempt {attempt}/{MAX_DOWNLOAD_ATTEMPTS}): {exc}. Retrying in {delay:.0f}s..."
+        )
+        time.sleep(delay)

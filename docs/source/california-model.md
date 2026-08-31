@@ -96,36 +96,22 @@ Which renewable years are available depends on `renewable_scenarios`:
   by the **planning horizon**, not by a weather year. One Zenodo record per `(tech, scenario)`
   publishes exactly three horizons: **2030, 2040 and 2050**. `renewable_weather_years` is not
   consulted for the profile.
-- **`historical`** is indexed by `renewable_weather_years[0]`, and availability differs by
-  path:
+- **`historical`** is indexed by `renewable_weather_years[0]`. Every historical year flows
+  through the same screened NREL land-access path (`renewable_land_access`, plus optional
+  `_cec` / `_boem` overlays); availability depends on which registry source holds the
+  compressed per-cell file:
 
-| Path | Solar | Wind | Land screening | Hub height |
-| --- | --- | --- | --- | --- |
-| Screened — per-cell compressed records weighted by the NREL reV availability raster | **2012** | **2012** | `renewable_land_access` (`reference` / `limited` / `open`), plus optional `_cec` / `_boem` overlays | 125 m |
-| Unscreened fallback — pre-#745 bus-aggregated archives, opt-in via `godeeep_allow_unscreened_fallback` | **1980-2022** | **2001-2022** | none | 100 m |
+| Source (first match wins) | Solar | Wind 100 m | Wind 125 m |
+| --- | --- | --- | --- |
+| Local (Oak) mirror, SHA256-verified | **1980-2022** | **1980-2022** | **1980-2022** |
+| Zenodo records | 2012 | — | 2012 |
 
-```{warning}
-The unscreened fallback ([issue #803](https://github.com/PyPSA/pypsa-usa/issues/803)) exists
-because only weather year 2012 was republished as per-cell compressed records. Its profiles
-carry **no NREL land-access screening**, are locked to the county-based substation
-tessellation they were published on (the run's own regions can re-aggregate them but cannot
-re-cut them), and are 100 m hub height for wind regardless of `godeeep_wind_height`. Three
-guards apply:
-
-* `godeeep_allow_unscreened_fallback` defaults to `false`; without it the workflow raises
-  rather than silently substituting an unscreened profile.
-* The fallback is **refused outright** when any of `solar`, `onwind`, `offwind`, or
-  `offwind_floating` appears in `electricity: extendable_carriers: Generator`. The aggregated
-  archive covers every substation while the `p_nom_max` it would be paired with covers only
-  NREL supply-curve sites, so the optimizer would site new capacity against a land-access
-  universe that does not exist. The fallback is for operational (nothing-extendable) runs.
-* Mixing screened and unscreened years in one `renewable_weather_years` list raises, because
-  capacity factors from the two paths are not comparable.
-
-Every profile `.nc` is stamped with `godeeep_scenario`, `godeeep_weather_year`,
-`godeeep_source`, `land_access` and `hub_height` attributes, so postprocessing can see which
-treatment produced the profile it is reading.
-```
+A `(dataset, year)` combination no configured source declares fails at snakemake parse time
+with the available years listed — no fallback, no default hub height, no nearest-year
+substitution ([issue #803](https://github.com/PyPSA/pypsa-usa/issues/803) is resolved by the
+mirror; the interim unscreened bus-aggregated fallback is retired). This makes every SERVM
+demand weather year 2000–2022 pairable with a screened renewable profile of the same year;
+SERVM years 2023–2024 currently have no matching GODEEEP profile.
 
 ```{note}
 `config.california.yaml` ships with `renewable_scenarios: ["rcp85cooler"]` and
