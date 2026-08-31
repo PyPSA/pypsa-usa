@@ -145,6 +145,17 @@ electricity:
     Store: []                              # candidate Store carriers (e.g. H2_tank); requires sector coupling
     Link:  []                              # candidate Link carriers (e.g. HVDC)
 
+  # ---------------- Out-of-state contracted resources (California) ----------------
+  # Adds the physically out-of-state resources the CPUC ledger attributes to
+  # California load regions (Palo Verde's SCE share, LADWP's Intermountain and
+  # Apex, the Hoover entitlements, ~2 GW of AZ/NV solar and battery contracts)
+  # back into a California-scoped model as generators at California buses, at
+  # their CONTRACTED capacity. Requires `demand: profile: servm` (the SERVM load
+  # weights decide which bus each region's contracts attach to).
+  remote_contracted_resources:
+    enable: false                          # attach CA-contracted out-of-state units at CA buses
+    file: repo_data/CPUC/servm_out_of_state_units.csv
+
   # ---------------- Reserves & resource adequacy ----------------
   SAFE_reservemargin: 0.14                 # SAFE planning reserve margin (fraction of peak load); used with SAFE opt
   SAFE_regional_reservemargins:   'config/policy_constraints/SAFE_regional_prm.csv'

@@ -173,6 +173,14 @@ electricity:
     Store: []
     Link:  []
 
+  # ---------------- Out-of-state contracted resources ----------------
+  # ~10.9 GW of physically out-of-state capacity that the CPUC ledger attributes
+  # to California regions. Without this the CA footprint drops it entirely
+  # (see docs/source/data-generators.md).
+  remote_contracted_resources:
+    enable: true
+    file: repo_data/CPUC/servm_out_of_state_units.csv
+
   # ---------------- Reserves & resource adequacy ----------------
   SAFE_reservemargin: 0.14
   SAFE_regional_reservemargins:   'config/policy_constraints/SAFE_regional_prm.csv'

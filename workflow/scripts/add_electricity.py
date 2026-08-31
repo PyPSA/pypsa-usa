@@ -35,6 +35,17 @@ logger = logging.getLogger(__name__)
 # see filter_plants_by_region / _drop_distant_seam_plants.
 SEAM_PLANT_MAX_KM = 100.0
 
+# Index prefix for California's out-of-state CONTRACTED resources, mirroring the
+# "C" prefix attach_conventional_generators puts on the physical fleet.
+REMOTE_PREFIX = "R "
+# Carriers whose availability comes from a per-bus capacity-factor profile
+# (attach_wind_and_solar). `hydro` is deliberately absent: its profiles come from
+# the breakthrough dataset and remote hydro is handled as a firm unit instead.
+VRE_PROFILE_CARRIERS = ("solar", "onwind", "offwind", "offwind_floating")
+# Duration (hours) assumed for a remote battery contract whose plant reports no
+# energy_storage_capacity_mwh.
+DEFAULT_REMOTE_DURATION_H = 4.0
+
 
 def sanitize_carriers(n, config):
     """
@@ -1007,6 +1018,530 @@ def attach_phs_storage(
     )
 
 
+def _parse_eia_plant_ids(value) -> list[int]:
+    """Parse the ``eia_plant_id`` cell of the CPUC out-of-state ledger.
+
+    The column is usually a single EIA plant id, but a contract can span
+    several physical plants (Hoover is EIA 154 *and* 8902, the NV and AZ
+    halves of the same dam) in which case the ids are ``;``-joined. Empty
+    cells (Mexico/BC units, pure entitlement rows) yield an empty list.
+    """
+    if value is None or (isinstance(value, float) and np.isnan(value)) or pd.isna(value):
+        return []
+    ids = []
+    for token in str(value).replace(",", ";").split(";"):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            ids.append(int(float(token)))
+        except ValueError:
+            logger.warning(f"Unparseable eia_plant_id token '{token}' in the remote contracted-resource file.")
+    return ids
+
+
+def _servm_region_buses(weights: pd.DataFrame, n: pypsa.Network) -> pd.Series:
+    """Map each SERVM region onto the single network bus carrying most of its load.
+
+    ``build_servm_load_weights`` writes a long (bus, servm_region, laf) table; the
+    max-LAF bus is the region's load centroid and is where a contracted
+    out-of-state resource is attributed. Buses absent from the network (a
+    coarser ``{simpl}`` than the weights file was built for) are dropped first.
+    """
+    w = weights.copy()
+    w["bus"] = w["bus"].astype(str)
+    w["laf"] = pd.to_numeric(w["laf"], errors="coerce")
+    w = w.dropna(subset=["laf"])
+
+    known = w[w["bus"].isin(n.buses.index)]
+    if len(known) < len(w):
+        logger.warning(
+            f"SERVM load weights reference {len(w) - len(known)} bus(es) absent from the network; ignoring them "
+            "when picking remote-resource attachment buses.",
+        )
+    if known.empty:
+        raise ValueError(
+            "None of the buses in the SERVM load-weights file are present in the network; cannot attribute "
+            "remote contracted resources to California buses.",
+        )
+    # Deterministic tie-break: highest laf, then lexicographically largest bus.
+    ranked = known.sort_values(["servm_region", "laf", "bus"])
+    return ranked.groupby("servm_region").tail(1).set_index("servm_region")["bus"]
+
+
+def _carrier_category_maps(tech_map: pd.DataFrame | None) -> tuple[dict, dict]:
+    """Build (model carrier -> compare_category, compare_category -> carrier) maps.
+
+    Both come from ``repo_data/CPUC/servm_tech_map.csv`` (``side == "pypsa"``);
+    the reverse map keeps the first carrier listed for a category, which the file
+    orders so that the canonical model carrier comes first (Gas CC -> CCGT,
+    Battery -> battery, ...).
+    """
+    if tech_map is None or tech_map.empty:
+        return {}, {}
+    pypsa_side = tech_map[tech_map["side"] == "pypsa"]
+    carrier_to_category = dict(zip(pypsa_side["source_category"], pypsa_side["compare_category"], strict=False))
+    category_to_carrier: dict[str, str] = {}
+    for carrier, category in carrier_to_category.items():
+        category_to_carrier.setdefault(category, carrier)
+    return carrier_to_category, category_to_carrier
+
+
+def _cost(costs: pd.DataFrame, carrier: str, field: str, default: float = np.nan) -> float:
+    """Look up a cost-table field, tolerating carriers the table does not cover."""
+    try:
+        return float(costs.at[carrier, field])
+    except (KeyError, TypeError, ValueError):
+        return default
+
+
+def _select_remote_constituents(
+    row: pd.Series,
+    plants_prefilter: pd.DataFrame,
+    carrier_to_category: dict,
+    category_to_carrier: dict,
+) -> tuple[pd.DataFrame, str, str]:
+    """Pick the powerplants.csv rows that back one CPUC contract row.
+
+    Returns ``(constituent rows, carrier, note)``. The plant's live generator
+    rows are first restricted to those whose model carrier maps to the contract's
+    ``compare_category``; within that subset the dominant (max summed ``p_nom``)
+    carrier wins. When the plant carries no unit of the contracted category at all
+    -- e.g. the 6 MW solar entitlement ``MCFLND_5_MFAUXL1`` pointed at EIA 67498,
+    which powerplants.csv knows only as a battery -- the category's canonical
+    carrier is used with the whole plant as the techno-economic donor, rather than
+    silently converting a solar contract into a battery.
+    """
+    ids = _parse_eia_plant_ids(row.get("eia_plant_id"))
+    live = plants_prefilter[plants_prefilter["plant_id_eia"].isin(ids)]
+    if live.empty:
+        return live, "", "no_live_units"
+
+    live = live.copy()
+    live["compare_category"] = live["carrier"].map(carrier_to_category)
+    matched = live[live["compare_category"] == row["compare_category"]]
+    if not matched.empty:
+        carrier = matched.groupby("carrier")["p_nom"].sum().idxmax()
+        return matched[matched["carrier"] == carrier], carrier, "ok"
+
+    carrier = category_to_carrier.get(row["compare_category"])
+    if carrier is None:
+        carrier = live.groupby("carrier")["p_nom"].sum().idxmax()
+    logger.warning(
+        f"Remote contracted unit '{row['cpuc_unit_name']}' is categorised '{row['compare_category']}' but EIA plant(s) "
+        f"{ids} carry no unit of that category (carriers present: {sorted(set(live['carrier']))}). Attaching it as "
+        f"'{carrier}' with the whole plant as the techno-economic donor.",
+    )
+    return live, carrier, "category_fallback"
+
+
+def _remote_unit_attributes(
+    constituents: pd.DataFrame,
+    p_nom: float,
+    carrier: str,
+    costs: pd.DataFrame,
+) -> dict:
+    """Capacity-weighted techno-economics for one remote contracted unit."""
+    fields = [
+        "efficiency",
+        "marginal_cost",
+        "heat_rate",
+        "summer_derate",
+        "winter_derate",
+        "ramp_limit_up",
+        "ramp_limit_down",
+        "min_up_time",
+        "min_down_time",
+        "start_up_cost",
+        "fuel_cost",
+    ]
+    attrs = {field: weighted_avg(constituents, field, "p_nom") for field in fields}
+
+    plant_p_nom = float(constituents["p_nom"].sum())
+    scale = (p_nom / plant_p_nom) if plant_p_nom > 0 else 0.0
+    # start-up cost is an absolute $/start, so it scales with the contracted share
+    attrs["start_up_cost"] = float(np.nan_to_num(attrs["start_up_cost"])) * scale
+
+    min_load = float(constituents["minimum_load_mw"].fillna(0).sum())
+    attrs["min_load_pu"] = (min_load / plant_p_nom) if plant_p_nom > 0 else 0.0
+
+    for field, fallback in (
+        ("efficiency", _cost(costs, carrier, "efficiency", 1.0)),
+        ("marginal_cost", _cost(costs, carrier, "marginal_cost", 0.0)),
+        ("heat_rate", _cost(costs, carrier, "heat_rate_mmbtu_per_mwh", 0.0)),
+        ("summer_derate", 1.0),
+        ("winter_derate", 1.0),
+        ("fuel_cost", 0.0),
+    ):
+        if pd.isna(attrs[field]):
+            attrs[field] = fallback
+
+    build_year = weighted_avg(constituents, "build_year", "p_nom")
+    attrs["build_year"] = int(build_year) if not pd.isna(build_year) else 0
+
+    storage_mwh = constituents["energy_storage_capacity_mwh"].astype(float).sum()
+    attrs["duration"] = (
+        (storage_mwh / plant_p_nom) if (plant_p_nom > 0 and storage_mwh > 0) else DEFAULT_REMOTE_DURATION_H
+    )
+    return attrs
+
+
+def _remote_vre_profile(n: pypsa.Network, bus: str, carrier: str) -> pd.Series | None:
+    """Per-unit availability for a remote VRE unit attached at ``bus``.
+
+    Preference order: the attachment bus's own profile for that carrier, then the
+    mean profile of that carrier across every bus that has one. Returns ``None``
+    when the network carries no profile for the carrier at all -- attaching a
+    resource with an implicit flat 100 % capacity factor would be worse than
+    dropping it.
+    """
+    profiles = n.generators_t.p_max_pu
+    same_carrier = n.generators.index[n.generators.carrier == carrier]
+    available = [gen for gen in same_carrier if gen in profiles.columns]
+    if not available:
+        return None
+    own = f"{bus} {carrier}"
+    if own in available:
+        return profiles[own]
+    logger.info(
+        f"No {carrier} profile at bus '{bus}'; using the network mean {carrier} profile "
+        f"({len(available)} buses) for the remote contracted unit(s) attached there.",
+    )
+    return profiles[available].mean(axis=1)
+
+
+def _apply_remote_seasonal_derates(n: pypsa.Network, derates: pd.DataFrame):
+    """Seasonal (EIA-860) p_max_pu for firm remote units, mirroring apply_seasonal_capacity_derates.
+
+    ``apply_seasonal_capacity_derates`` runs earlier in ``main`` and keys off the
+    ``plants`` frame, so it cannot see these generators; the same summer/winter
+    split is reproduced here for exactly the columns added by this module.
+    """
+    if derates.empty:
+        return
+    sns_dt = n.snapshots.get_level_values(1)
+    summer_sns = sns_dt[sns_dt.month.isin([6, 7, 8])]
+    winter_sns = sns_dt[~sns_dt.month.isin([6, 7, 8])]
+
+    p_max_pu = pd.DataFrame(1.0, index=sns_dt, columns=derates.index)
+    p_max_pu.loc[summer_sns, derates.index] *= derates["summer_derate"].astype(float)
+    p_max_pu.loc[winter_sns, derates.index] *= derates["winter_derate"].astype(float)
+    p_max_pu = broadcast_investment_horizons_index(n, p_max_pu).round(3)
+    # Round only the new columns: the VRE profiles already in the frame are
+    # attached at full precision and must not be re-rounded here.
+    n.generators_t.p_max_pu = pd.concat([n.generators_t.p_max_pu, p_max_pu], axis=1)
+
+
+def attach_remote_contracted_resources(
+    n: pypsa.Network,
+    plants_prefilter: pd.DataFrame,
+    remote_df: pd.DataFrame,
+    weights: pd.DataFrame,
+    costs: pd.DataFrame,
+    conventional_carriers: list,
+    extendable_carriers: dict,
+    tech_map: pd.DataFrame | None = None,
+    unit_commitment: bool = False,
+) -> pd.DataFrame:
+    """Attach California's out-of-state CONTRACTED resources at California buses.
+
+    The CPUC ledger attributes ~10.9 GW of physically out-of-state capacity to
+    California load regions (Palo Verde's SCE share, LADWP's Intermountain and
+    Apex, the Hoover entitlements, ~2 GW of AZ/NV solar and battery contracts,
+    ...). A California-scoped run drops those plants in
+    :func:`filter_plants_by_region` because they sit outside the model footprint,
+    which understates the fleet that actually serves California load. This
+    function adds them back as generators / storage units at California buses, at
+    their CONTRACTED capacity, with techno-economics taken from the same PUDL
+    fleet build (``plants_prefilter``, captured before the regional filter).
+
+    Parameters
+    ----------
+    n
+        Network at the ``elec_s{simpl}_dem`` stage; VRE profiles must already be
+        attached (this function copies them for remote VRE contracts).
+    plants_prefilter
+        ``load_powerplants`` output BEFORE ``filter_plants_by_region``, so the
+        out-of-state plants are still present. Retirement and vintage filtering
+        has already been applied, and is respected: a contract whose plant has no
+        live rows is skipped.
+    remote_df
+        ``repo_data/CPUC/servm_out_of_state_units.csv``.
+    weights
+        ``build_servm_load_weights`` output — the (bus, servm_region, laf) table
+        that decides which California bus a region's contracts attach to.
+    tech_map
+        ``repo_data/CPUC/servm_tech_map.csv``, used to reconcile the ledger's
+        ``compare_category`` with model carriers.
+
+    Notes
+    -----
+    Simplifications, all deliberate:
+
+    * ``p_nom`` is ``min(capmax_mw, live plant capacity)`` — a contract can never
+      exceed what the physical plant has, and the ledger's contracted share is
+      otherwise taken at face value.
+    * Remote VRE units borrow the CAPACITY FACTOR PROFILE OF THEIR CALIFORNIA
+      ATTACHMENT BUS, not of their physical location. Desert-southwest solar is
+      better-correlated with CAISO's own solar than this implies.
+    * Remote HYDRO (the Hoover entitlements) is attached as a firm,
+      energy-unlimited generator carrying only the EIA-860 seasonal derate. CRSP
+      hydrology, Lake Mead elevation and the monthly energy schedules that
+      actually bound those entitlements are NOT modelled.
+    * Ledger rows with no ``eia_plant_id`` (Mexicali TDM/LR2, Powerex/BC,
+      ESJ Baja wind, a few pure entitlement rows) are skipped: they have no PUDL
+      techno-economics to inherit and remain in import-machinery territory.
+    * Contracts are attached NON-EXTENDABLE. They represent existing contracted
+      capacity, not expansion candidates; ``extendable_carriers`` deliberately
+      does not make them expandable.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per ledger row with its disposition (``status``, ``carrier``,
+        ``bus``, ``p_nom``), for logging and testing.
+    """
+    region_bus = _servm_region_buses(weights, n)
+    carrier_to_category, category_to_carrier = _carrier_category_maps(tech_map)
+
+    missing_regions = sorted(set(remote_df["servm_region"]) - set(region_bus.index))
+    if missing_regions:
+        raise ValueError(
+            f"SERVM regions {missing_regions} appear in the remote contracted-resource file but have no bus in the "
+            "SERVM load-weights table; cannot attribute their contracts to a California bus.",
+        )
+
+    records: list[dict] = []
+    units: list[dict] = []
+    for _, row in remote_df.iterrows():
+        name = str(row["cpuc_unit_name"])
+        record = {
+            "cpuc_unit_name": name,
+            "servm_region": row["servm_region"],
+            "compare_category": row["compare_category"],
+            "capmax_mw": float(row["capmax_mw"]),
+            "status": "",
+            "carrier": "",
+            "bus": "",
+            "p_nom": 0.0,
+        }
+        if not _parse_eia_plant_ids(row.get("eia_plant_id")):
+            record["status"] = "skipped_no_eia_id"
+            records.append(record)
+            continue
+
+        constituents, carrier, note = _select_remote_constituents(
+            row,
+            plants_prefilter,
+            carrier_to_category,
+            category_to_carrier,
+        )
+        if note == "no_live_units":
+            logger.info(
+                f"Remote contracted unit '{name}' ({record['capmax_mw']:.1f} MW) skipped: EIA plant(s) "
+                f"{_parse_eia_plant_ids(row.get('eia_plant_id'))} have no live generator rows in powerplants.csv "
+                "(retired, not yet built, or absent from the fleet).",
+            )
+            record["status"] = "skipped_no_live_units"
+            records.append(record)
+            continue
+
+        bus = region_bus[row["servm_region"]]
+        p_nom = float(min(record["capmax_mw"], constituents["p_nom"].sum()))
+        attrs = _remote_unit_attributes(constituents, p_nom, carrier, costs)
+
+        record.update(
+            {
+                "status": "attached" if note == "ok" else "attached_category_fallback",
+                "carrier": carrier,
+                "bus": bus,
+                "p_nom": p_nom,
+            },
+        )
+        records.append(record)
+        units.append({"name": REMOTE_PREFIX + name, "carrier": carrier, "bus": bus, "p_nom": p_nom, **attrs})
+
+        logger.info(
+            f"Remote contracted unit '{name}' -> bus '{bus}' ({row['servm_region']} max-LAF bus), carrier "
+            f"'{carrier}', {p_nom:.1f} MW of a contracted {record['capmax_mw']:.1f} MW.",
+        )
+
+    summary = pd.DataFrame(records)
+    if not units:
+        logger.warning("Remote contracted resources enabled but no ledger row could be attached.")
+        return summary
+
+    unit_df = pd.DataFrame(units).set_index("name")
+    if unit_df.index.has_duplicates:
+        raise ValueError(
+            f"Duplicate cpuc_unit_name(s) in the remote contracted-resource file: "
+            f"{sorted(unit_df.index[unit_df.index.duplicated()])}",
+        )
+    add_missing_carriers(n, sorted(set(unit_df["carrier"])))
+
+    batteries = unit_df[unit_df["carrier"] == "battery"]
+    vre = unit_df[unit_df["carrier"].isin(VRE_PROFILE_CARRIERS)]
+    firm = unit_df.drop(index=batteries.index.union(vre.index))
+
+    _attach_remote_firm(n, firm, costs, conventional_carriers, unit_commitment)
+    dropped_vre = _attach_remote_vre(n, vre, costs)
+    _attach_remote_batteries(n, batteries, costs)
+
+    if dropped_vre:
+        summary.loc[summary["cpuc_unit_name"].isin(dropped_vre), "status"] = "skipped_no_profile"
+        summary.loc[summary["cpuc_unit_name"].isin(dropped_vre), "p_nom"] = 0.0
+
+    attached = summary[summary["status"].str.startswith("attached")]
+    skipped = summary[~summary["status"].str.startswith("attached")]
+    logger.info(
+        f"Remote contracted resources: attached {len(attached)} of {len(summary)} CPUC ledger rows, "
+        f"{attached['p_nom'].sum():.1f} MW of a contracted {summary['capmax_mw'].sum():.1f} MW.\n"
+        f"By carrier [MW]:\n{attached.groupby('carrier')['p_nom'].sum().round(1).to_string()}",
+    )
+    if not skipped.empty:
+        detail = ", ".join(f"{r.cpuc_unit_name} ({r.capmax_mw:.1f} MW, {r.status})" for r in skipped.itertuples())
+        logger.warning(
+            f"Remote contracted resources: {len(skipped)} ledger row(s) totalling "
+            f"{skipped['capmax_mw'].sum():.1f} MW were NOT added to the model: {detail}.",
+        )
+    return summary
+
+
+def _attach_remote_firm(
+    n: pypsa.Network,
+    firm: pd.DataFrame,
+    costs: pd.DataFrame,
+    conventional_carriers: list,
+    unit_commitment: bool,
+):
+    """Attach firm (thermal, nuclear, geothermal, hydro) remote contracts as generators."""
+    if firm.empty:
+        return
+
+    committable = bool(unit_commitment) and bool(firm["carrier"].isin(conventional_carriers).any())
+    kwargs = {}
+    if committable:
+        commit_flags = firm["carrier"].isin(conventional_carriers)
+        # p_min_pu is a hard must-run on a non-committable generator, so it is
+        # only carried for units that are actually committable. The 0.95 factor
+        # and the seasonal-derate clip mirror attach_conventional_generators.
+        p_min_pu = (
+            firm["min_load_pu"]
+            .clip(upper=np.minimum(firm["summer_derate"], firm["winter_derate"]), lower=0)
+            .astype(float)
+            .fillna(0)
+            .mul(0.95)
+            .where(commit_flags, 0.0)
+        )
+        defaults = n.components["Generator"].defaults["default"]
+        kwargs = {
+            "committable": commit_flags,
+            "p_min_pu": p_min_pu,
+            "start_up_cost": firm["start_up_cost"].astype(float).fillna(defaults["start_up_cost"]),
+            "min_up_time": firm["min_up_time"].astype(float).fillna(defaults["min_up_time"]),
+            "min_down_time": firm["min_down_time"].astype(float).fillna(defaults["min_down_time"]),
+            # greenfield planning model: no warm-start commitment obligation
+            "up_time_before": 0,
+        }
+
+    n.add(
+        "Generator",
+        firm.index,
+        carrier=firm["carrier"],
+        bus=firm["bus"],
+        p_nom=firm["p_nom"],
+        p_nom_min=firm["p_nom"],
+        p_nom_extendable=False,
+        ramp_limit_up=firm["ramp_limit_up"],
+        ramp_limit_down=firm["ramp_limit_down"],
+        efficiency=firm["efficiency"].round(3),
+        marginal_cost=firm["marginal_cost"],
+        capital_cost=firm["carrier"].map(lambda c: _cost(costs, c, "annualized_capex_fom", 0.0)),
+        build_year=firm["build_year"].astype(int),
+        lifetime=firm["carrier"].map(lambda c: _cost(costs, c, "lifetime", np.inf)),
+        **kwargs,
+    )
+    n.generators.loc[firm.index, "vom_cost"] = firm["carrier"].map(
+        lambda c: _cost(costs, c, "opex_variable_per_mwh", 0.0),
+    )
+    n.generators.loc[firm.index, "fuel_cost"] = firm["fuel_cost"]
+    n.generators.loc[firm.index, "heat_rate"] = firm["heat_rate"]
+
+    _apply_remote_seasonal_derates(n, firm[["summer_derate", "winter_derate"]])
+
+
+def _attach_remote_vre(n: pypsa.Network, vre: pd.DataFrame, costs: pd.DataFrame) -> list[str]:
+    """Attach remote wind/solar contracts, borrowing the attachment bus's CF profile.
+
+    Returns the ledger names that had to be dropped for want of any profile.
+    """
+    dropped: list[str] = []
+    if vre.empty:
+        return dropped
+
+    profiles = {}
+    for name, unit in vre.iterrows():
+        profile = _remote_vre_profile(n, unit["bus"], unit["carrier"])
+        if profile is None:
+            logger.error(
+                f"Remote contracted unit '{name}' (carrier '{unit['carrier']}', {unit['p_nom']:.1f} MW) dropped: the "
+                "network carries no capacity-factor profile for that carrier, so no availability can be assigned.",
+            )
+            dropped.append(name[len(REMOTE_PREFIX) :])
+            continue
+        profiles[name] = profile
+
+    vre = vre.loc[list(profiles)]
+    if vre.empty:
+        return dropped
+
+    p_max_pu = pd.DataFrame(profiles).reindex(columns=vre.index)
+    n.add(
+        "Generator",
+        vre.index,
+        carrier=vre["carrier"],
+        bus=vre["bus"],
+        p_nom=vre["p_nom"],
+        p_nom_min=vre["p_nom"],
+        p_nom_extendable=False,
+        efficiency=1.0,
+        marginal_cost=vre["carrier"].map(lambda c: _cost(costs, c, "marginal_cost", 0.0)),
+        capital_cost=vre["carrier"].map(lambda c: _cost(costs, c, "annualized_capex_fom", 0.0)),
+        build_year=vre["build_year"].astype(int),
+        lifetime=vre["carrier"].map(lambda c: _cost(costs, c, "lifetime", np.inf)),
+        p_max_pu=p_max_pu,
+    )
+    return dropped
+
+
+def _attach_remote_batteries(n: pypsa.Network, batteries: pd.DataFrame, costs: pd.DataFrame):
+    """Attach remote battery contracts as non-extendable storage units."""
+    if batteries.empty:
+        return
+    efficiency = 0.85**0.5
+    n.add(
+        "StorageUnit",
+        batteries.index,
+        carrier="battery",
+        bus=batteries["bus"],
+        p_nom=batteries["p_nom"],
+        p_nom_max=batteries["p_nom"],
+        p_nom_min=0,
+        p_nom_extendable=False,
+        capital_cost=_cost(costs, "4hr_battery_storage", "opex_fixed_per_kw", 0.0) * 1e3,
+        # attach_battery_storage divides the reported duration by the dispatch
+        # efficiency so the DELIVERABLE energy matches the reported MWh; mirror it
+        # so remote and in-state batteries are sized on the same convention.
+        max_hours=batteries["duration"] / efficiency,
+        build_year=batteries["build_year"].astype(int),
+        lifetime=_cost(costs, "4hr_battery_storage", "lifetime", np.inf),
+        efficiency_store=efficiency,
+        efficiency_dispatch=efficiency,
+        cyclic_state_of_charge=True,
+        cyclic_state_of_charge_per_period=True,  # pypsa v1 flipped this default to False
+    )
+
+
 def broadcast_investment_horizons_index(n: pypsa.Network, df: pd.DataFrame):
     """
     Broadcast the index of a dataframe to match the potentially multi-indexed
@@ -1284,6 +1819,19 @@ def main(snakemake):
         interconnect=interconnection,
         honor_planned_retirements=snakemake.config["electricity"].get("honor_planned_retirements", True),
     )
+
+    # California's out-of-state CONTRACTED resources are physically outside a
+    # CA-scoped footprint, so filter_plants_by_region below drops them. Stash the
+    # (small) slice of the fleet the CPUC ledger points at BEFORE that filter runs;
+    # attach_remote_contracted_resources adds them back at CA buses later.
+    remote_contracted = dict(getattr(params, "remote_contracted", None) or {})
+    remote_df = None
+    plants_prefilter = None
+    if remote_contracted.get("enable", False):
+        remote_df = pd.read_csv(snakemake.input["remote_resources"])
+        remote_ids = {pid for value in remote_df["eia_plant_id"] for pid in _parse_eia_plant_ids(value)}
+        plants_prefilter = plants[plants["plant_id_eia"].isin(remote_ids)].copy()
+
     # A run scoped with model_topology.include tiles regions over the footprint only;
     # the seam-plant fallback in filter_plants_by_region must then be distance-bounded.
     include_filter = snakemake.config.get("model_topology", {}).get("include") or {}
@@ -1372,6 +1920,22 @@ def main(snakemake):
         {"hydro": snakemake.input["hydro_breakthrough"]},
         ["hydro"],
     )
+
+    # Runs last among the attach_* steps: remote VRE contracts copy the
+    # capacity-factor profile of their California attachment bus, which only
+    # exists once attach_wind_and_solar has run.
+    if remote_df is not None:
+        attach_remote_contracted_resources(
+            n,
+            plants_prefilter,
+            remote_df,
+            pd.read_csv(snakemake.input["servm_load_weights"]),
+            costs,
+            conventional_carriers,
+            extendable_carriers,
+            tech_map=pd.read_csv(snakemake.input["servm_tech_map"]),
+            unit_commitment=params.conventional["unit_commitment"],
+        )
 
     update_p_nom_max(n)
 

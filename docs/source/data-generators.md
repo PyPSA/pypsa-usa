@@ -25,6 +25,53 @@ In production cost-minimizing optimization models, a generator’s marginal cost
 - **Future Fuel Costs**:
     - Forecasted annual fuel prices are imported from the EIA's Annual Energy Outlook (AEO).
 
+(remote_contracted_resources)=
+## Out-of-State Contracted Resources (California)
+
+A California-scoped run (`model_topology: include: reeds_state: ['CA']`) attaches only the
+plants that fall inside the model footprint, so every resource that is *physically* outside
+California is dropped by `filter_plants_by_region` — including roughly 10.9 GW that the CPUC
+ledger attributes to California load regions and that genuinely serves California load: SCE's
+635 MW share of Palo Verde, LADWP's 1,185 MW of Intermountain and 566 MW of Apex, the Hoover
+entitlements, and about 2 GW of Arizona and Nevada solar and battery contracts.
+
+Setting `electricity: remote_contracted_resources: enable: true` adds them back. For each row
+of `workflow/repo_data/CPUC/servm_out_of_state_units.csv`, `add_electricity` looks the unit's
+`eia_plant_id` up in the same PUDL fleet build that supplies the rest of the model (captured
+*before* the regional filter runs, so the plant is still present), and attaches a single
+generator — or a StorageUnit for battery contracts — at a California bus:
+
+- **Capacity** is the *contracted* MW (`capmax_mw`), capped at the live capacity the physical
+  plant actually has. Retirement and vintage filtering is respected: a contract whose plant has
+  no live units at the first investment period is skipped.
+- **Bus** is the max-LAF bus of the row's SERVM region, taken from the same
+  `build_servm_load_weights` table the demand path uses. This is why the option requires
+  `demand: profile: servm`.
+- **Techno-economics** (heat rate, efficiency, marginal cost, ramp rates, seasonal derates,
+  unit-commitment parameters) are capacity-weighted over the plant's constituent units, so a
+  contract inherits the same data the physical fleet carries. Generators are named
+  `R <cpuc_unit_name>`, mirroring the `C` prefix on the conventional fleet, and are attached
+  **non-extendable**: they are existing contracts, not expansion candidates.
+
+Four simplifications are deliberate and worth knowing before reading results:
+
+1. **Remote wind and solar borrow the capacity-factor profile of their California attachment
+   bus**, not of their physical location. Desert-southwest solar is in reality better
+   correlated with CAISO's own solar than this implies. If the attachment bus has no profile
+   for that carrier, the network mean profile for the carrier is used; if the network has no
+   such profile at all the contract is dropped rather than given an implicit 100 % capacity
+   factor.
+2. **Remote hydro (the Hoover entitlements) is attached as a firm, energy-unlimited
+   generator** carrying only the EIA-860 seasonal derate. CRSP hydrology, Lake Mead elevation
+   and the monthly energy schedules that actually bound those entitlements are not modelled.
+3. **Rows with no `eia_plant_id` are skipped** — Mexicali TDM/LR2, Powerex/BC, the ESJ Baja
+   wind contracts and a few pure entitlement rows (about 1.9 GW). They have no PUDL
+   techno-economics to inherit and remain in import-machinery territory; the run logs a single
+   summary warning naming them and their MW.
+4. **The CPUC baseline benchmark keeps scoring these units on its `EXCLUDED` row**, because it
+   reads `powerplants.csv` rather than the network. When this option is on, the MW on that row
+   is what has been added back into the model.
+
 ## Renewable Resources
 
 (renewable_cfs)=

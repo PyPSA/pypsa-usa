@@ -714,6 +714,27 @@ rule build_powerplants:
         "../scripts/build_powerplants.py"
 
 
+def remote_contracted_resource_files(wildcards):
+    """CPUC out-of-state contracted units, plus what is needed to place them.
+
+    Only requested when ``electricity.remote_contracted_resources.enable`` is on,
+    so the option is fully inert (and pulls no extra inputs) by default. The
+    SERVM load weights supply the (region -> California bus) attribution and the
+    tech map reconciles the ledger's `compare_category` with model carriers.
+    """
+    cfg = config["electricity"].get("remote_contracted_resources", {}) or {}
+    if not cfg.get("enable", False):
+        return {}
+    return {
+        "remote_resources": cfg.get(
+            "file", "repo_data/CPUC/servm_out_of_state_units.csv"
+        ),
+        "servm_tech_map": "repo_data/CPUC/servm_tech_map.csv",
+        "servm_load_weights": DEMAND
+        + f"{wildcards.interconnect}/servm_load_weights_s{wildcards.simpl}.csv",
+    }
+
+
 rule add_electricity:
     params:
         length_factor=config["lines"]["length_factor"],
@@ -725,8 +746,10 @@ rule add_electricity:
         costs=config["costs"],
         planning_horizons=config["scenario"]["planning_horizons"],
         eia_api=config["api"]["eia"],
+        remote_contracted=config["electricity"].get("remote_contracted_resources", {}),
     input:
         unpack(dynamic_fuel_price_files),
+        unpack(remote_contracted_resource_files),
         **(
             {
                 # For GODEEEP future scenarios: pass all horizon-specific profiles

@@ -67,6 +67,12 @@ state/BA path: a cluster bus can straddle two SERVM regions (Los Angeles County 
 overlaps. The underlying per-bus weights are still the `bus_allocation` weights described
 below.
 
+The same weights table also places California's *out-of-state contracted supply*: with
+`electricity: remote_contracted_resources: enable: true`, each resource the CPUC ledger
+attributes to a SERVM region is attached at that region's max-LAF bus. See
+[Out-of-State Contracted Resources](remote_contracted_resources) under Generators & Storage
+Units.
+
 #### Components
 
 Each file publishes several load components per region (`Load`, `BTMPV`, `EV`, `DATA_CEN`, ...)

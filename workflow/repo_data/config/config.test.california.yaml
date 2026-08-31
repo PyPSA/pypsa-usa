@@ -59,6 +59,9 @@ electricity:
     Store: []
     Link: []
   transmission_interface_limits: 'config/policy_constraints/transmission_interface_limits.csv'
+  remote_contracted_resources:
+    enable: true   # exercises the CPUC out-of-state contract attach in Tier B
+    file: repo_data/CPUC/servm_out_of_state_units.csv
   demand:
     profile: servm
     bus_allocation: population
