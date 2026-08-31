@@ -16,9 +16,9 @@ import pandas as pd
 import xarray as xr
 from _helpers import configure_logging, get_snapshots
 from dask.distributed import Client
+from godeeep_cf_registry import resolve_scenario, resolve_weather_year
 from pypsa.geo import haversine
 from shapely.geometry import LineString
-from zenodo_downloader import ZenodoScenarioDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -434,7 +434,7 @@ if __name__ == "__main__":
 
     if dataset == "godeeep":
         logger.info("Loading godeeep renewable data...")
-        scenario = snakemake.config["renewable_scenarios"][0]
+        scenario = resolve_scenario(snakemake.config)
         tech = snakemake.wildcards.technology
         access = snakemake.config.get("renewable_land_access")
         if not access:
@@ -443,32 +443,20 @@ if __name__ == "__main__":
                 "'open') when renewable.dataset == 'godeeep'.",
             )
 
-        # Determine year based on scenario type
-        if scenario == "historical":
-            year = snakemake.config["renewable_weather_years"][0]
-            logger.info(f"Using historical year: {year} (from renewable_weather_years)")
-        else:
-            year = snakemake.params.planning_horizon
-            logger.info(f"Using future scenario year: {year} (from planning_horizon wildcard)")
+        # Historical scenarios take the CF year from renewable_weather_years,
+        # future ones from the {planning_horizon} wildcard.
+        year = resolve_weather_year(snakemake.config, snakemake.params.planning_horizon)
+        logger.info(f"Using GODEEEP CF year {year} for scenario '{scenario}'")
 
         # Get snapshots with appropriate year
         renewable_sns = get_renewable_snapshots(snakemake.config, year)
-        downloader = ZenodoScenarioDownloader()
-
-        # Technology configurations for filename construction
-        if tech in ["onwind", "offwind", "offwind_floating"]:
-            technology = "wind"
-            wind_height = snakemake.config.get("godeeep_wind_height", "_100m")
-        elif tech == "solar":
-            technology = "solar"
-            wind_height = ""
-        else:
-            raise ValueError("Invalid technology type. Choose 'onwind', 'offwind', 'offwind_floating' or 'solar'.")
 
         # ===== NREL access-scenario path =====
-        # Download per-cell compressed CF and apply availability-weighted
-        # aggregation onto bus polygons at runtime. Capacity variables come
-        # from the NREL supply-curve rollup (caps file).
+        # Aggregate the per-cell compressed CF onto bus polygons weighted by
+        # availability. The CF file is retrieved by rule retrieve_godeeep_cf —
+        # which dataset/year/hub height it holds is declared in
+        # config["godeeep_cf_registry"], so this script never picks a file.
+        # Capacity variables come from the NREL supply-curve rollup (caps file).
         from nrel_exclusion.aggregate_godeeep_weighted import (
             fix_godeeep_time,
             get_cell_to_bus_mapping,
@@ -476,11 +464,7 @@ if __name__ == "__main__":
         )
 
         logger.info(f"NREL access scenario: {access}")
-        cf_filename = f"{technology}_gen_cf_{year}{wind_height}_compressed.nc"
-        # Compressed-CF records on Zenodo are split by (tech, scenario), not by
-        # year-window — one record holds 2030/2040/2050 for the same scenario.
-        cf_record_key = f"{technology}{wind_height}_{scenario}_compressed"
-        cf_filepath = downloader.download_scenario_file(cf_record_key, scenario, cf_filename)
+        cf_filepath = snakemake.input.godeeep_cf
 
         ds_cf = xr.open_dataset(cf_filepath)
         ds_cf = fix_godeeep_time(ds_cf, year)
