@@ -45,6 +45,10 @@ export GRB_LICENSE_FILE=/share/software/user/restricted/gurobi/11.0.2/licenses/g
 ml load gcc/12.4.0
 export CFLAGS="-Wno-error=incompatible-pointer-types"
 
+# System git (1.8, CentOS 7) predates `git worktree`, which anchor
+# provisioning needs.
+ml load system git/2.45.1
+
 # --- 1. Stage data + cutouts Oak -> scratch (idempotent resume via rsync) ---
 mkdir -p "$CACHE"
 rsync -a "$CH2_WF/data/" "$CACHE/data/"
