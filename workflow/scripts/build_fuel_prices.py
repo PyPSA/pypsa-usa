@@ -61,36 +61,43 @@ def make_hourly(df: pd.DataFrame) -> pd.DataFrame:
 ###
 
 
-def get_state_ng_power_prices(sns: pd.date_range, eia_api: str) -> pd.DataFrame:
-    df = (
-        eia.FuelCosts("gas", sns.year[0], eia_api, industry="power").get_data(
-            pivot=True,
+def _clamped_fuel_costs(
+    fuel: str,
+    sns: pd.date_range,
+    eia_api: str,
+    floor: int,
+) -> pd.DataFrame:
+    """
+    Fetch EIA fuel costs, clamping the query year to the earliest with data.
+
+    EIA electric-power gas prices begin 2002-01 and coal shipment receipts
+    begin 2008; earlier years return empty payloads that crash format_data.
+    For earlier snapshot years fetch the floor year and shift the month-start
+    index back onto the snapshot year (a shift, not a replace, because the
+    inclusive API end bound leaves a spillover January of the next year).
+    """
+    year = sns.year[0]
+    data_year = max(year, floor)
+    df = eia.FuelCosts(fuel, data_year, eia_api, industry="power").get_data(
+        pivot=True,
+    )
+    if data_year != year:
+        logger.warning(
+            f"No EIA {fuel} power prices before {floor}; using {data_year} prices for snapshot year {year}",
         )
-        * 1000
-        / const.NG_MWH_2_MMCF
-    )  # $/MCF -> $/MWh
+        df.index = df.index.map(
+            lambda ts: ts.replace(year=ts.year - (data_year - year)),
+        )
+    return df
+
+
+def get_state_ng_power_prices(sns: pd.date_range, eia_api: str) -> pd.DataFrame:
+    df = _clamped_fuel_costs("gas", sns, eia_api, floor=2002) * 1000 / const.NG_MWH_2_MMCF  # $/MCF -> $/MWh
     return make_hourly(df)
 
 
 def get_state_coal_power_prices(sns: pd.date_range, eia_api: str) -> pd.DataFrame:
-    year = sns.year[0]
-    # EIA coal shipment receipts (coal/shipments/receipts) have no data before
-    # 2008; earlier years return an empty payload. Use 2008 prices for earlier
-    # snapshot years, relabelled onto the snapshot year (index is month starts,
-    # so no Feb-29 hazard).
-    data_year = max(year, 2008)
-    if data_year != year:
-        logger.warning(
-            f"No EIA coal prices before 2008; using {data_year} prices for snapshot year {year}",
-        )
-    eia_coal = (
-        eia.FuelCosts("coal", data_year, eia_api, industry="power").get_data(
-            pivot=True,
-        )
-        * const.COAL_dol_ton_2_MWHthermal
-    )
-    if data_year != year:
-        eia_coal.index = eia_coal.index.map(lambda ts: ts.replace(year=year))
+    eia_coal = _clamped_fuel_costs("coal", sns, eia_api, floor=2008) * const.COAL_dol_ton_2_MWHthermal
     return make_hourly(eia_coal)
 
 
