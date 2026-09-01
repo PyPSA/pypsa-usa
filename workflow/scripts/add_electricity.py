@@ -1301,6 +1301,40 @@ def attach_remote_contracted_resources(
         One row per ledger row with its disposition (``status``, ``carrier``,
         ``bus``, ``p_nom``), for logging and testing.
     """
+    unit_df, summary = build_remote_contracted_units(n, plants_prefilter, remote_df, weights, costs, tech_map)
+    if unit_df.empty:
+        return summary
+
+    dropped_vre = attach_remote_units(n, unit_df, costs, conventional_carriers, unit_commitment)
+    return _finalize_remote_summary(summary, dropped_vre)
+
+
+def build_remote_contracted_units(
+    n: pypsa.Network,
+    plants_prefilter: pd.DataFrame,
+    remote_df: pd.DataFrame,
+    weights: pd.DataFrame,
+    costs: pd.DataFrame,
+    tech_map: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Derive the CPUC contracted-unit table without touching the network.
+
+    This is the half of :func:`attach_remote_contracted_resources` that only
+    needs data: it resolves each ledger row onto its live ``powerplants.csv``
+    rows, derives capacity-weighted techno-economics, and picks the California
+    attachment bus (the region's max-LAF bus). In ``imports.representation:
+    generator`` the units are attached at an EXTERNAL bus instead, but the
+    California bus is still resolved here because remote VRE units borrow that
+    bus's capacity-factor profile.
+
+    Returns
+    -------
+    (unit_df, summary)
+        ``unit_df`` is indexed by ``REMOTE_PREFIX + cpuc_unit_name`` and carries
+        every attribute the ``n.add`` calls need, plus the physical ``state`` of
+        the constituent plants (used to place the unit behind the right external
+        zone). ``summary`` is the per-ledger-row disposition table.
+    """
     region_bus = _servm_region_buses(weights, n)
     carrier_to_category, category_to_carrier = _carrier_category_maps(tech_map)
 
@@ -1349,6 +1383,7 @@ def attach_remote_contracted_resources(
         bus = region_bus[row["servm_region"]]
         p_nom = float(min(record["capmax_mw"], constituents["p_nom"].sum()))
         attrs = _remote_unit_attributes(constituents, p_nom, carrier, costs)
+        state = _remote_unit_state(constituents)
 
         record.update(
             {
@@ -1359,7 +1394,9 @@ def attach_remote_contracted_resources(
             },
         )
         records.append(record)
-        units.append({"name": REMOTE_PREFIX + name, "carrier": carrier, "bus": bus, "p_nom": p_nom, **attrs})
+        units.append(
+            {"name": REMOTE_PREFIX + name, "carrier": carrier, "bus": bus, "p_nom": p_nom, "state": state, **attrs},
+        )
 
         logger.info(
             f"Remote contracted unit '{name}' -> bus '{bus}' ({row['servm_region']} max-LAF bus), carrier "
@@ -1369,7 +1406,7 @@ def attach_remote_contracted_resources(
     summary = pd.DataFrame(records)
     if not units:
         logger.warning("Remote contracted resources enabled but no ledger row could be attached.")
-        return summary
+        return pd.DataFrame(), summary
 
     unit_df = pd.DataFrame(units).set_index("name")
     if unit_df.index.has_duplicates:
@@ -1377,6 +1414,40 @@ def attach_remote_contracted_resources(
             f"Duplicate cpuc_unit_name(s) in the remote contracted-resource file: "
             f"{sorted(unit_df.index[unit_df.index.duplicated()])}",
         )
+    return unit_df, summary
+
+
+def _remote_unit_state(constituents: pd.DataFrame) -> str:
+    """Physical state of a contract's constituent plants (dominant by capacity).
+
+    Hoover is the reason this is capacity-weighted rather than a single lookup:
+    the contract spans EIA 154 (NV) and 8902 (AZ), two halves of the same dam.
+    """
+    if "state" not in constituents.columns:
+        return ""
+    states = constituents.dropna(subset=["state"])
+    if states.empty:
+        return ""
+    return str(states.groupby("state")["p_nom"].sum().idxmax())
+
+
+def attach_remote_units(
+    n: pypsa.Network,
+    unit_df: pd.DataFrame,
+    costs: pd.DataFrame,
+    conventional_carriers: list,
+    unit_commitment: bool,
+    profiles: pd.DataFrame | None = None,
+) -> list[str]:
+    """Add a derived contracted-unit table to the network at ``unit_df['bus']``.
+
+    Shared by both import representations: in ``store`` mode the buses are
+    California buses and the profiles are derived here; in ``generator`` mode
+    ``external_regions`` rewrites ``bus`` to an external bus and supplies the
+    profiles that were borrowed at the pre-clustering stage.
+
+    Returns the ledger names dropped for want of a VRE profile.
+    """
     add_missing_carriers(n, sorted(set(unit_df["carrier"])))
 
     batteries = unit_df[unit_df["carrier"] == "battery"]
@@ -1384,9 +1455,48 @@ def attach_remote_contracted_resources(
     firm = unit_df.drop(index=batteries.index.union(vre.index))
 
     _attach_remote_firm(n, firm, costs, conventional_carriers, unit_commitment)
-    dropped_vre = _attach_remote_vre(n, vre, costs)
+    dropped_vre = _attach_remote_vre(n, vre, costs, profiles=profiles)
     _attach_remote_batteries(n, batteries, costs)
+    return dropped_vre
 
+
+def build_remote_unit_bundle(
+    n: pypsa.Network,
+    unit_df: pd.DataFrame,
+    summary: pd.DataFrame,
+    costs: pd.DataFrame,
+    conventional_carriers: list,
+    unit_commitment: bool,
+) -> dict:
+    """Serialize the contracted units instead of attaching them.
+
+    Used by ``imports.representation: generator``, where the units belong at an
+    external bus that only exists later, in ``add_extra_components``. Everything
+    that stage cannot recompute is carried across: the derived unit table, the
+    CF profiles borrowed from the (pre-clustering) California buses, and the
+    cost table the ``n.add`` calls resolve ``capital_cost``/``lifetime`` from.
+    """
+    vre = unit_df[unit_df["carrier"].isin(VRE_PROFILE_CARRIERS)]
+    profiles, dropped_vre = collect_remote_vre_profiles(n, vre)
+    unit_df = unit_df.drop(index=[REMOTE_PREFIX + name for name in dropped_vre], errors="ignore")
+
+    bundle = {
+        "units": unit_df,
+        "vre_profiles": pd.DataFrame(profiles) if profiles else pd.DataFrame(index=n.snapshots),
+        "costs": costs,
+        "conventional_carriers": list(conventional_carriers),
+        "unit_commitment": bool(unit_commitment),
+        "summary": _finalize_remote_summary(summary, dropped_vre),
+    }
+    logger.info(
+        f"Serialized {len(unit_df)} remote contracted unit(s) ({unit_df['p_nom'].sum():.1f} MW) for attachment "
+        "behind the model boundary (imports.representation: generator).",
+    )
+    return bundle
+
+
+def _finalize_remote_summary(summary: pd.DataFrame, dropped_vre: list[str]) -> pd.DataFrame:
+    """Fold the dropped-VRE outcome into the summary and log the totals."""
     if dropped_vre:
         summary.loc[summary["cpuc_unit_name"].isin(dropped_vre), "status"] = "skipped_no_profile"
         summary.loc[summary["cpuc_unit_name"].isin(dropped_vre), "p_nom"] = 0.0
@@ -1470,16 +1580,14 @@ def _attach_remote_firm(
     _apply_remote_seasonal_derates(n, firm[["summer_derate", "winter_derate"]])
 
 
-def _attach_remote_vre(n: pypsa.Network, vre: pd.DataFrame, costs: pd.DataFrame) -> list[str]:
-    """Attach remote wind/solar contracts, borrowing the attachment bus's CF profile.
+def collect_remote_vre_profiles(n: pypsa.Network, vre: pd.DataFrame) -> tuple[dict[str, pd.Series], list[str]]:
+    """Borrow a CF profile per remote VRE unit from its attachment bus.
 
-    Returns the ledger names that had to be dropped for want of any profile.
+    Returns ``(profiles, dropped)``; ``dropped`` holds the ledger names for which
+    the network carries no profile of that carrier at all.
     """
+    profiles: dict[str, pd.Series] = {}
     dropped: list[str] = []
-    if vre.empty:
-        return dropped
-
-    profiles = {}
     for name, unit in vre.iterrows():
         profile = _remote_vre_profile(n, unit["bus"], unit["carrier"])
         if profile is None:
@@ -1490,12 +1598,39 @@ def _attach_remote_vre(n: pypsa.Network, vre: pd.DataFrame, costs: pd.DataFrame)
             dropped.append(name[len(REMOTE_PREFIX) :])
             continue
         profiles[name] = profile
+    return profiles, dropped
+
+
+def _attach_remote_vre(
+    n: pypsa.Network,
+    vre: pd.DataFrame,
+    costs: pd.DataFrame,
+    profiles: pd.DataFrame | None = None,
+) -> list[str]:
+    """Attach remote wind/solar contracts, borrowing the attachment bus's CF profile.
+
+    ``profiles`` short-circuits the borrowing: in ``imports.representation:
+    generator`` the units land on an external bus that has no profile of its
+    own, so the profiles borrowed before clustering are carried in on the
+    serialized bundle instead.
+
+    Returns the ledger names that had to be dropped for want of any profile.
+    """
+    dropped: list[str] = []
+    if vre.empty:
+        return dropped
+
+    if profiles is None:
+        profiles, dropped = collect_remote_vre_profiles(n, vre)
+    else:
+        profiles = {name: profiles[name] for name in vre.index if name in profiles.columns}
 
     vre = vre.loc[list(profiles)]
     if vre.empty:
         return dropped
 
     p_max_pu = pd.DataFrame(profiles).reindex(columns=vre.index)
+    p_max_pu = p_max_pu.set_axis(n.snapshots)
     n.add(
         "Generator",
         vre.index,
@@ -1825,6 +1960,7 @@ def main(snakemake):
     # (small) slice of the fleet the CPUC ledger points at BEFORE that filter runs;
     # attach_remote_contracted_resources adds them back at CA buses later.
     remote_contracted = dict(getattr(params, "remote_contracted", None) or {})
+    imports_representation = getattr(params, "imports_representation", "store") or "store"
     remote_df = None
     plants_prefilter = None
     if remote_contracted.get("enable", False):
@@ -1924,18 +2060,42 @@ def main(snakemake):
     # Runs last among the attach_* steps: remote VRE contracts copy the
     # capacity-factor profile of their California attachment bus, which only
     # exists once attach_wind_and_solar has run.
+    #
+    # `imports.representation: generator` moves these units BEHIND the model
+    # boundary, so they must not be added here — add_extra_components attaches
+    # them at the external import buses instead. The bundle output is declared
+    # unconditionally by the rule, so a sentinel is written when there is
+    # nothing to hand over.
+    remote_bundle = None
     if remote_df is not None:
-        attach_remote_contracted_resources(
+        unit_df, summary = build_remote_contracted_units(
             n,
             plants_prefilter,
             remote_df,
             pd.read_csv(snakemake.input["servm_load_weights"]),
             costs,
-            conventional_carriers,
-            extendable_carriers,
             tech_map=pd.read_csv(snakemake.input["servm_tech_map"]),
-            unit_commitment=params.conventional["unit_commitment"],
         )
+        if unit_df.empty:
+            pass
+        elif imports_representation == "generator":
+            remote_bundle = build_remote_unit_bundle(
+                n,
+                unit_df,
+                summary,
+                costs,
+                conventional_carriers,
+                params.conventional["unit_commitment"],
+            )
+        else:
+            dropped_vre = attach_remote_units(
+                n,
+                unit_df,
+                costs,
+                conventional_carriers,
+                params.conventional["unit_commitment"],
+            )
+            _finalize_remote_summary(summary, dropped_vre)
 
     update_p_nom_max(n)
 
@@ -2010,7 +2170,7 @@ def main(snakemake):
         axis=1,
     )
 
-    output_folder = os.path.dirname(snakemake.output[0]) + "/base_network"
+    output_folder = os.path.dirname(snakemake.output.network) + "/base_network"
     export_network_for_gis_mapping(n, output_folder)
 
     clean_bus_data(n)
@@ -2018,8 +2178,12 @@ def main(snakemake):
     n.meta = snakemake.config
 
     log_network_schema(n, stage="exit", baseline=schema_entry)
-    # n.export_to_netcdf(snakemake.output[0])
-    pickle.dump(n, open(snakemake.output[0], "wb"))
+    # n.export_to_netcdf(snakemake.output.network)
+    pickle.dump(n, open(snakemake.output.network, "wb"))
+
+    # Always written, even when it holds nothing: snakemake requires every
+    # declared output to exist.
+    pickle.dump(remote_bundle, open(snakemake.output.remote_units, "wb"))
 
 
 if __name__ == "__main__":

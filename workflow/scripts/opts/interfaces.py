@@ -10,7 +10,7 @@ with the columns ``interface, region_1, region_2, flow_12, flow_21``, where
     CAISO_Imports,"p9, p10, p11","p2, p5, p6, ...",9728,10208,RESOLVE
 
 The caps are applied to the import/export ``Link`` components created by
-``add_extra_components.add_elec_imports_exports`` and are therefore a no-op
+``external_regions.add_external_regions`` and are therefore a no-op
 when ``electricity.imports``/``electricity.exports`` are disabled.
 """
 
