@@ -285,7 +285,11 @@ properties:
         properties:
           enable: {type: boolean}
           representation: {enum: [store, generator]}
-          costs: {enum: [wholesale, carrier, float]}
+          costs:
+            description: >
+              'wholesale' (EIA price series), a carrier name (that fleet's
+              average marginal cost), or a flat number in $/MWh.
+            type: [string, number]
           co2_emissions: {type: number}
           capacity_limit: {type: boolean}
           volume_limit: {}
@@ -296,7 +300,11 @@ properties:
         additionalProperties: false
         properties:
           enable: {type: boolean}
-          costs: {enum: [wholesale, carrier, float]}
+          costs:
+            description: >
+              'wholesale' (EIA price series), a carrier name (that fleet's
+              average marginal cost), or a flat number in $/MWh.
+            type: [string, number]
           capacity_limit: {type: boolean}
           volume_limit: {}
           balancing_period: {enum: [day, week, month, year]}

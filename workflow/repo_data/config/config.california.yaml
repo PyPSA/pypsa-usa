@@ -56,6 +56,7 @@ electricity:
   imports:
     enable: true
     representation: generator   # CPUC out-of-state contracts sit BEHIND the WECC boundary, so their deliveries are metered against the import cap
+    costs: 60                   # flat $/MWh for unspecified imports; the 'wholesale' EIA series is retail-priced (see issue #807)
     volume_limit: 25            # % of annual CA load
     balancing_period: year
   exports:
