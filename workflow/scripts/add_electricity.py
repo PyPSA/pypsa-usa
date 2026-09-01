@@ -1712,6 +1712,9 @@ def attach_breakthrough_renewable_plants(
             p_nom = pd.concat([p_nom_be.max(axis=0), tech_plants["Pmax"]], axis=1).max(
                 axis=1,
             )
+            # concat's outer join sorts the union index; realign to the plant
+            # order n.add receives as names (pypsa >=1.0 rejects mismatches)
+            p_nom = p_nom.reindex(tech_plants.index)
             p_max_pu = (p_nom_be[p_nom.index] / p_nom).astype(float).fillna(0)  # some values remain 0
         else:
             p_nom = tech_plants.Pmax
