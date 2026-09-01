@@ -86,7 +86,7 @@ for f in sorted(root.rglob("*")):
             "max_pss": float(r.get("max_pss", 0) or 0),
             "cpu_time": float(r.get("cpu_time", 0) or 0),
             "mean_load": float(r.get("mean_load", 0) or 0),
-        }
+        },
     )
 
 if not rows:
@@ -128,12 +128,14 @@ agg["rec_mem_mb"] = agg.peak_rss.map(rec_mem)
 agg["rec_walltime"] = agg.peak_s.map(rec_time)
 agg["peak_time"] = agg.peak_s.map(fmt_hms)
 
-print(f"{'RULE':<44} {'N':>2} {'PEAK_RSS_MB':>11} {'PEAK_TIME':>10} {'LOAD%':>6}   {'REC_MEM_MB':>10} {'REC_WALLTIME':>12}")
+print(
+    f"{'RULE':<44} {'N':>2} {'PEAK_RSS_MB':>11} {'PEAK_TIME':>10} {'LOAD%':>6}   {'REC_MEM_MB':>10} {'REC_WALLTIME':>12}"
+)
 print("-" * 108)
 for name, r in agg.iterrows():
     print(
         f"{name:<44} {int(r.n):>2} {r.peak_rss:>11.0f} {r.peak_time:>10} "
-        f"{r.mean_load:>6.0f}   {int(r.rec_mem_mb):>10} {r.rec_walltime:>12}"
+        f"{r.mean_load:>6.0f}   {int(r.rec_mem_mb):>10} {r.rec_walltime:>12}",
     )
 
 print()
