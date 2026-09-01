@@ -40,6 +40,17 @@ MANIFEST="$OVERLAY_DIR/manifest.tsv"
 
 mkdir -p logs/slurm logs/drivers
 
+# The uv-managed CPython ships no CA bundle -- ssl.get_default_verify_paths()
+# returns cafile=None -- so every retrieve_* rule that downloads over HTTPS dies
+# with CERTIFICATE_VERIFY_FAILED. (curl works, because it reads the system
+# store, which is why a curl reachability test does not catch this.) Point
+# Python at certifi. sbatch --export=ALL propagates these to the rule jobs.
+if [ -z "${SSL_CERT_FILE:-}" ]; then
+  _certifi=$("$(dirname "$SNAKEMAKE")/python" -c 'import certifi; print(certifi.where())' 2>/dev/null || true)
+  [ -n "$_certifi" ] && export SSL_CERT_FILE="$_certifi" REQUESTS_CA_BUNDLE="$_certifi"
+fi
+[ -n "${SSL_CERT_FILE:-}" ] || echo "WARNING: SSL_CERT_FILE unset; HTTPS retrieve rules will likely fail" >&2
+
 export PARTITION EMAIL
 # slurm_submit.sh rounds the float mem_mb some rules produce; see that file.
 SBATCH_CMD="bash slurm_submit.sh {rule} {threads} {resources.mem_mb} {resources.walltime}"
