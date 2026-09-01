@@ -57,6 +57,9 @@ rule add_sectors:
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
     log:
         "logs/add_sectors/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.log",
+    benchmark:
+        BENCHMARKS
+        +"{interconnect}/add_sectors_elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}"
     group:
         "prepare"
     threads: 1

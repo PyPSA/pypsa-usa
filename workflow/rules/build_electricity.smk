@@ -35,6 +35,8 @@ rule build_shapes:
         county_shapes=GEOSPATIAL + "{interconnect}/county_shapes.geojson",
     log:
         "logs/build_shapes/{interconnect}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_shapes"
     threads: 1
     resources:
         walltime=config_provider("walltime", "build_shapes", default="00:30:00"),
@@ -83,6 +85,8 @@ rule build_base_network:
         network=NETWORKS + "{interconnect}/elec_base_network.nc",
     log:
         "logs/create_network/{interconnect}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_base_network"
     threads: 1
     resources:
         mem_mb=5000,
@@ -114,6 +118,8 @@ rule build_bus_regions:
         regions_offshore=GEOSPATIAL + "{interconnect}/regions_offshore.geojson",
     log:
         "logs/build_bus_regions/{interconnect}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_bus_regions"
     threads: 1
     resources:
         mem_mb=3000,
@@ -137,6 +143,8 @@ rule build_cost_data:
         sector_costs=COSTS + "sector_costs_{year}.csv",
     log:
         LOGS + "costs_{year}.log",
+    benchmark:
+        BENCHMARKS + "build_cost_data_{year}"
     threads: 1
     resources:
         mem_mb=5000,
@@ -754,6 +762,8 @@ rule build_powerplants:
         powerplants="resources/powerplants/powerplants.csv",
     log:
         "logs/build_powerplants.log",
+    benchmark:
+        BENCHMARKS + "build_powerplants"
     resources:
         mem_mb=30000,
         walltime=config_provider("walltime", "build_powerplants", default="00:30:00"),
@@ -889,6 +899,8 @@ rule aggregate_to_substations:
         busmap=BUSMAPS + "{interconnect}/busmap_b.csv",
     log:
         "logs/aggregate_to_substations/{interconnect}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/aggregate_to_substations"
     threads: 1
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 150000) * attempt * 1.5,
@@ -938,6 +950,8 @@ rule cluster_resources:
         busmap=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
     log:
         "logs/cluster_resources/{interconnect}/elec_s{simpl}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/cluster_resources_elec_s{simpl}"
     threads: 1
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 150000) * attempt * 1.5,
@@ -956,6 +970,8 @@ rule build_servm_load_weights:
         weights=DEMAND + "{interconnect}/servm_load_weights_s{simpl}.csv",
     log:
         LOGS + "{interconnect}/build_servm_load_weights_s{simpl}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_servm_load_weights_s{simpl}"
     threads: 1
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 200000) * attempt * 2,
@@ -1071,6 +1087,8 @@ rule add_extra_components:
         NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:
         "logs/add_extra_components/{interconnect}/elec_s{simpl}_c{clusters}_ec.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/add_extra_components_elec_s{simpl}_c{clusters}_ec"
     threads: 1
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
@@ -1109,6 +1127,9 @@ rule prepare_network:
         NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
     log:
         "logs/prepare_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.log",
+    benchmark:
+        BENCHMARKS
+        +"{interconnect}/prepare_network_elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}"
     threads: 1
     resources:
         walltime=config_provider("walltime", "prepare_network", default="00:30:00"),
