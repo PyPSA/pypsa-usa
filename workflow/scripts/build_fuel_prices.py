@@ -73,12 +73,24 @@ def get_state_ng_power_prices(sns: pd.date_range, eia_api: str) -> pd.DataFrame:
 
 
 def get_state_coal_power_prices(sns: pd.date_range, eia_api: str) -> pd.DataFrame:
+    year = sns.year[0]
+    # EIA coal shipment receipts (coal/shipments/receipts) have no data before
+    # 2008; earlier years return an empty payload. Use 2008 prices for earlier
+    # snapshot years, relabelled onto the snapshot year (index is month starts,
+    # so no Feb-29 hazard).
+    data_year = max(year, 2008)
+    if data_year != year:
+        logger.warning(
+            f"No EIA coal prices before 2008; using {data_year} prices for snapshot year {year}",
+        )
     eia_coal = (
-        eia.FuelCosts("coal", sns.year[0], eia_api, industry="power").get_data(
+        eia.FuelCosts("coal", data_year, eia_api, industry="power").get_data(
             pivot=True,
         )
         * const.COAL_dol_ton_2_MWHthermal
     )
+    if data_year != year:
+        eia_coal.index = eia_coal.index.map(lambda ts: ts.replace(year=year))
     return make_hourly(eia_coal)
 
 
