@@ -61,6 +61,13 @@ done
 
 # --- 2. Harness, both opts variants -----------------------------------------
 cd "$REPO"
+
+# Clear stale snakemake locks left by a killed predecessor job (best-effort).
+for wf in "$REPO/workflow" "$REPO/.worktrees/anchor-e7f8bd70/workflow"; do
+    if [ -d "$wf/.snakemake/locks" ] && [ -n "$(ls -A "$wf/.snakemake/locks" 2>/dev/null)" ]; then
+        (cd "$wf" && uv run snakemake --unlock) || true
+    fi
+done
 export EQ_INTERCONNECT=usa
 export EQ_SIMPL=300
 export EQ_CLUSTERS=134a
