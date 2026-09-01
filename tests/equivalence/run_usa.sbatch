@@ -73,10 +73,14 @@ archive() { # archive <label>: keep this run's manifests + report
     cp -p "$REPO"/workflow/results/equivalence/*.html "$dst"/ 2>/dev/null || true
 }
 
-EQ_OPTS=REM-3h uv run python -m tests.equivalence.run \
-    --prong 2 --side both --jobs 8 --timeout 61200
-archive rem1mt
-
+# Unconstrained run FIRST: the REM 1 Mt cap looks infeasible at USA scale
+# (barrier verdict + stalled disambiguation simplex, 2026-09-01), and a failed
+# solve aborts the harness — ordering this way secures the anchor build,
+# comparison, and benchmark data before the REM question is settled.
 EQ_OPTS=3h uv run python -m tests.equivalence.run \
-    --prong 2 --side both --jobs 8 --timeout 25200
+    --prong 2 --side both --jobs 8 --timeout 43200
 archive noco2
+
+EQ_OPTS=REM-3h uv run python -m tests.equivalence.run \
+    --prong 2 --side both --jobs 8 --timeout 21600
+archive rem1mt
