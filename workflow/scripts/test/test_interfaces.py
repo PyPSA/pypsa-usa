@@ -507,6 +507,21 @@ def test_map_remote_units_to_zones_falls_back_and_warns(caplog):
     assert "UT" in caplog.text
 
 
+def test_map_remote_units_to_zones_resolves_county_fips_states():
+    # County zones are "p" + county FIPS and are absent from the BA membership
+    # table; the state must come from the FIPS prefix (32=NV, 04=AZ).
+    inbound = pd.Series({"p32003": 3000.0, "p04012": 1000.0, "p04027": 2000.0})
+    zones = map_remote_units_to_zones(
+        pd.Series({"R Hoover": "NV", "R Palo Verde": "AZ"}),
+        ["p32003", "p04012", "p04027"],
+        inbound,
+        "county",
+        MEMBERSHIP,
+    )
+    assert zones["R Hoover"] == "p32003"
+    assert zones["R Palo Verde"] == "p04027"  # AZ, and p04027 > p04012
+
+
 def test_map_remote_units_to_zones_state_boundaries_need_no_membership():
     inbound = pd.Series({"NV": 2000.0, "AZ": 1000.0})
     zones = map_remote_units_to_zones(
