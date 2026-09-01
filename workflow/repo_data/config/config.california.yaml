@@ -69,6 +69,17 @@ clustering:
   aggregation_strategies:
     generators:
       p_min_pu: 'capacity_weighted_average'   # keep the UC feasibility invariant through clustering
+      # CPUC out-of-state units (REMOTE_PREFIX "R ") are attached to CA buses with
+      # p_nom_extendable=False, while in-state units of the same carrier are extendable
+      # because their carrier is in extendable_carriers.Generator. Clustering groups
+      # one-ports by (bus, carrier), so those two land in one group and PyPSA's default
+      # `consense` raises. Same situation `committable: any` already handles in the base.
+      p_nom_extendable: any
+      # Hydro units disagree on up_time_before ({0, 1}). `max` keeps the integer
+      # dtype (capacity_weighted_average would yield a float) and is the
+      # UC-feasibility-safe direction: the cluster inherits the longest online
+      # history, so it is never spuriously forced to stay committed.
+      up_time_before: max
 
 solving:
   mem: 30000
