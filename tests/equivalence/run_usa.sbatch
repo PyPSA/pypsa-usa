@@ -39,6 +39,12 @@ mkdir -p "$UV_CACHE_DIR" "$PIP_CACHE_DIR" "$XDG_CACHE_HOME"
 
 export GRB_LICENSE_FILE=/share/software/user/restricted/gurobi/11.0.2/licenses/gurobi.lic
 
+# GCC 14 (cluster default) hard-errors on incompatible-pointer-types, which
+# breaks the datrie 0.8.2 source build (snakemake dep). Use gcc 12 and keep
+# the warning non-fatal as a fallback.
+ml load gcc/12.4.0
+export CFLAGS="-Wno-error=incompatible-pointer-types"
+
 # --- 1. Stage data + cutouts Oak -> scratch (idempotent resume via rsync) ---
 mkdir -p "$CACHE"
 rsync -a "$CH2_WF/data/" "$CACHE/data/"
