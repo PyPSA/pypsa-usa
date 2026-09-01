@@ -48,6 +48,8 @@ run:
   shared_resources: false         # true = reuse resources/ across all runs (DAG-keyed); false = isolate per run.name
   shared_cutouts: true            # true = share atlite cutouts across runs (recommended; cutouts are large and slow)
   validation: false               # true = wire in back-casting validation plots (historical-only)
+  benchmark_cpuc: false           # true = compare installed capacity against the CPUC Baseline Generator List (California runs)
+  benchmark_cpuc_horizons: [2026]  # benchmark year(s); 2026 = today's fleet vs today's baseline (network-free). Empty list = use scenario planning_horizons
 
 # NB: the whole `renewable:` block — including `renewable.dataset`
 # (atlite | godeeep), which used to be duplicated here — lives in
@@ -157,6 +159,7 @@ electricity:
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste]   # plant types attached as existing capacity from EIA-860
   renewable_carriers:   [onwind, offwind_floating, solar, hydro]                        # variable renewables attached as existing capacity
   retirement: economic                   # economic = allow early retirement at fixed cost; technical = lock p_nom_min to p_nom
+  honor_planned_retirements: true        # drop existing/proposed units at their EIA planned_generator_retirement_date (false = keep every existing unit indefinitely)
 
   # Capacity-expansion candidates. Carriers listed here get extendable
   # p_nom and pay annualized capex; carriers listed only above are
@@ -166,6 +169,17 @@ electricity:
     StorageUnit:  [4hr_battery_storage, 8hr_battery_storage]                            # Xhr_battery_storage (X = 2..10)
     Store: []                              # candidate Store carriers (e.g. H2_tank); requires sector coupling
     Link:  []                              # candidate Link carriers (e.g. HVDC)
+
+  # ---------------- Out-of-state contracted resources (California) ----------------
+  # Adds the physically out-of-state resources the CPUC ledger attributes to
+  # California load regions (Palo Verde's SCE share, LADWP's Intermountain and
+  # Apex, the Hoover entitlements, ~2 GW of AZ/NV solar and battery contracts)
+  # back into a California-scoped model as generators at California buses, at
+  # their CONTRACTED capacity. Requires `demand: profile: servm` (the SERVM load
+  # weights decide which bus each region's contracts attach to).
+  remote_contracted_resources:
+    enable: false                          # attach CA-contracted out-of-state units at CA buses
+    file: repo_data/CPUC/servm_out_of_state_units.csv
 
   # ---------------- Reserves & resource adequacy ----------------
   SAFE_reservemargin: 0.14                 # SAFE planning reserve margin (fraction of peak load); used with SAFE opt
@@ -188,13 +202,20 @@ electricity:
 
   # ---------------- Demand ----------------
   demand:
-    profile: efs                           # demand time series source; efs (EIA-EFS) | eia (historical actuals) | eer (EER scenarios)
+    profile: efs                           # demand time series source; efs (EIA-EFS) | eia (historical actuals) | eer (EER scenarios) | servm (CPUC SERVM, California only)
     bus_allocation: population             # per-bus demand weight; population (2020 census counties) | breakthrough (legacy BE Pd)
-    scenario:                              # EFS/EER scenario knobs (ignored if profile=eia)
+    scenario:                              # EFS/EER/SERVM scenario knobs (ignored if profile=eia)
       efs_case:  reference                 # reference | medium | high
       efs_speed: moderate                  # slow | moderate | rapid
       eer_file: demand_EER2025_100by2050.h5 # EER h5 (profile=eer): demand_EER2025_100by2050 | demand_EER2025_Baseline_AEO2023 | demand_EER2025_IRAlow
       aeo:       reference                 # AEO (EIA Annual Energy Outlook) scaling case; reference | high | low
+      # ---- profile: servm (CPUC SERVM 2026, California regions) ----
+      # Weather year drawn from the stacked 2000-2024 SERVM record. Single-entry
+      # list = deterministic; multiple entries are reserved for stochastic
+      # scenarios (phase 3) and currently raise NotImplementedError.
+      # RECOMMENDED: keep equal to top-level `renewable_weather_years` so load
+      # and renewable profiles share a weather year (mismatch logs a warning).
+      servm_weather_years: [2019]
 
   demand_response:                         # price-responsive shiftable load; 0 = disabled
     shift: 0                               # fraction of hourly load that can shift in time
@@ -232,6 +253,20 @@ conventional:
     enable: false                          # true = use time-varying fuel prices instead of constant
     pudl: true                             # PUDL receipts-based fuel cost time series (monthly resolution)
     wholesale: true                        # CAISO/wholesale natural-gas hub prices (overrides PUDL for NG)
+
+  # PHASE 2 (NOT IMPLEMENTED): ambient-temperature capacity derates for thermal
+  # units, from the CPUC SERVM unit-specific hourly derate profiles. Setting
+  # `enable: true` raises NotImplementedError in add_electricity — the profiles
+  # are not retrieved or applied yet (see the reserved
+  # `retrieve_cpuc_thermal_derate` rule in workflow/rules/retrieve.smk).
+  # When implemented it REPLACES the EIA-860 summer/winter seasonal derate
+  # rather than stacking on it; stacking an ambient derate on a seasonal derate
+  # (or on a UCAP-derated capacity credit) double-counts the same thermal
+  # deficiency and must never be done.
+  ambient_derate:
+    enable: false                          # PHASE 2 — leave false
+    source: cpuc_servm                     # CPUC SERVM unit-specific hourly derates
+    replaces_seasonal_derate: true         # never stack with the EIA-860 seasonal derate
 
 
 # ====================================================================
@@ -373,11 +408,11 @@ clustering:
     generators:
       build_year:      'capacity_weighted_average'
       lifetime:        'capacity_weighted_average'
-      start_up_cost:   'capacity_weighted_average'
+      start_up_cost:   sum                          # aggregate acts as one unit: starting it starts the members; cap-weighted average understates cycling cost ~N-fold
       min_up_time:     'capacity_weighted_average'
       min_down_time:   'capacity_weighted_average'
-      ramp_limit_up:   max
-      ramp_limit_down: max
+      ramp_limit_up:   capacity_weighted_average    # max would make the cluster as flexible as its single nimblest member
+      ramp_limit_down: capacity_weighted_average
       committable:     any
       vom_cost:        mean
       fuel_cost:       mean

@@ -38,6 +38,37 @@ While representative of the US electricity system, the TAMU network is synthetic
 See the [Spatial Configuration](./config-spatial.md) page for information on how to choose between networks.
 ```
 
+## Interface Transmission Limits
+
+The path-by-path ratings above are complemented by **interface** limits: aggregate MW caps on
+the total simultaneous flow across a bundle of paths. PyPSA-USA ships the CPUC RESOLVE
+interface table at `config/policy_constraints/transmission_interface_limits.csv`, which rates
+the CAISO import/export capability against the rest of WECC:
+
+| Interface | `region_1` (inside) | `region_2` (outside) | `flow_12` (MW) | `flow_21` (MW) |
+| --- | --- | --- | --- | --- |
+| `CA_NW` | p9, p10, p11 | p2, p5, p6, p7, p8 | 3,592 | 9,269 |
+| `CA_SW` | p9, p10, p11 | p12, p13, p25, p27, p28, p30 | 10,901 | 10,463 |
+| `CAISO_Imports` | p9, p10, p11 | all of the above | 9,728 | 10,208 |
+
+**Flow orientation:** `flow_12` is the cap on flow *out of* `region_1` (exports), `flow_21` the
+cap on flow *into* `region_1` (imports). Enable the table with
+`model_topology: interface_transmission_limits: true`; the constraint formulation is described
+in [Model Constraints](./model-constraints.md#interface-transmission-limits).
+
+```{warning}
+The interface caps are applied to the virtual `imports` / `exports` links created by
+`add_extra_components`, so they bind only when `electricity: imports` / `electricity: exports`
+are enabled, and they only see flow that crosses the boundary of the modeled footprint.
+
+`p8` (northeastern California) appears in the `region_2` list of every RESOLVE row but is
+itself a California zone. In a California-only model it is therefore *inside* the network, and
+the internal `p8`-`p9` AC corridor — about 300 MW in the ReEDS/NARIS balancing-area table —
+carries no trade links and escapes the `CAISO_Imports` cap. Simultaneous CAISO imports are
+understated by roughly that amount. This gap is documented rather than corrected: closing it
+would require constraining internal AC lines alongside the trade links.
+```
+
 (transmission-data)=
 ### Data
 ```{eval-rst}

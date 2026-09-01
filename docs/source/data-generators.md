@@ -25,6 +25,53 @@ In production cost-minimizing optimization models, a generator’s marginal cost
 - **Future Fuel Costs**:
     - Forecasted annual fuel prices are imported from the EIA's Annual Energy Outlook (AEO).
 
+(remote_contracted_resources)=
+## Out-of-State Contracted Resources (California)
+
+A California-scoped run (`model_topology: include: reeds_state: ['CA']`) attaches only the
+plants that fall inside the model footprint, so every resource that is *physically* outside
+California is dropped by `filter_plants_by_region` — including roughly 10.9 GW that the CPUC
+ledger attributes to California load regions and that genuinely serves California load: SCE's
+635 MW share of Palo Verde, LADWP's 1,185 MW of Intermountain and 566 MW of Apex, the Hoover
+entitlements, and about 2 GW of Arizona and Nevada solar and battery contracts.
+
+Setting `electricity: remote_contracted_resources: enable: true` adds them back. For each row
+of `workflow/repo_data/CPUC/servm_out_of_state_units.csv`, `add_electricity` looks the unit's
+`eia_plant_id` up in the same PUDL fleet build that supplies the rest of the model (captured
+*before* the regional filter runs, so the plant is still present), and attaches a single
+generator — or a StorageUnit for battery contracts — at a California bus:
+
+- **Capacity** is the *contracted* MW (`capmax_mw`), capped at the live capacity the physical
+  plant actually has. Retirement and vintage filtering is respected: a contract whose plant has
+  no live units at the first investment period is skipped.
+- **Bus** is the max-LAF bus of the row's SERVM region, taken from the same
+  `build_servm_load_weights` table the demand path uses. This is why the option requires
+  `demand: profile: servm`.
+- **Techno-economics** (heat rate, efficiency, marginal cost, ramp rates, seasonal derates,
+  unit-commitment parameters) are capacity-weighted over the plant's constituent units, so a
+  contract inherits the same data the physical fleet carries. Generators are named
+  `R <cpuc_unit_name>`, mirroring the `C` prefix on the conventional fleet, and are attached
+  **non-extendable**: they are existing contracts, not expansion candidates.
+
+Four simplifications are deliberate and worth knowing before reading results:
+
+1. **Remote wind and solar borrow the capacity-factor profile of their California attachment
+   bus**, not of their physical location. Desert-southwest solar is in reality better
+   correlated with CAISO's own solar than this implies. If the attachment bus has no profile
+   for that carrier, the network mean profile for the carrier is used; if the network has no
+   such profile at all the contract is dropped rather than given an implicit 100 % capacity
+   factor.
+2. **Remote hydro (the Hoover entitlements) is attached as a firm, energy-unlimited
+   generator** carrying only the EIA-860 seasonal derate. CRSP hydrology, Lake Mead elevation
+   and the monthly energy schedules that actually bound those entitlements are not modelled.
+3. **Rows with no `eia_plant_id` are skipped** — Mexicali TDM/LR2, Powerex/BC, the ESJ Baja
+   wind contracts and a few pure entitlement rows (about 1.9 GW). They have no PUDL
+   techno-economics to inherit and remain in import-machinery territory; the run logs a single
+   summary warning naming them and their MW.
+4. **The CPUC baseline benchmark keeps scoring these units on its `EXCLUDED` row**, because it
+   reads `powerplants.csv` rather than the network. When this option is on, the MW on that row
+   is what has been added back into the model.
+
 ## Renewable Resources
 
 (renewable_cfs)=
@@ -42,19 +89,38 @@ The default capacity-factor source (`renewable.dataset: godeeep`) is the [GODEEE
 
 - **A historical period** (1980–2022) calibrated against observed weather.
 - **Four future climate scenarios** — `rcp45hotter`, `rcp45cooler`, `rcp85hotter`, `rcp85cooler` — under the RCP4.5 and RCP8.5 emissions pathways, downscaled with two GCM ensemble members per pathway.
-- **Three planning horizons** (2030, 2040, 2050) per future scenario, drawn from contiguous 20-year (wind) or 40-year (solar) windows.
+- **Three planning horizons** (2030, 2040, 2050) per future scenario, drawn from contiguous 20-year (wind) or 40-year (solar) windows. Under a climate scenario the profile year is the `planning_horizons` wildcard, not `renewable_weather_years`.
 
 The raw GODEEEP files are large (~4.4 GB per `(tech, scenario, year)` triple). PyPSA-USA consumes a uint8-quantized + zlib-compressed variant (~350 MB for solar, ~800 MB for wind). Each compressed file is placed by `rule retrieve_godeeep_cf` from the sources declared in the `godeeep_cf_registry` config block — a local mirror (on Sherlock, the full 1980–2022 historical archive at both hub heights) and Zenodo records keyed by `(tech, scenario)`. Only part of the matrix is on Zenodo; see [`renewable: godeeep`](godeeep_cf) for exactly which `(dataset, year)` pairs each source holds.
 
 GODEEEP capacity factors are re-aggregated to PyPSA-USA bus polygons using a runtime weighting step:
 
-1. **Per-cell availability raster** — a fraction in [0, 1] for each 12 km GODEEEP cell, derived from NREL reV supply-curve availability scenarios. Three access scenarios are supported: `reference` (least restrictive, ~5× more permissive than Atlite+CORINE), `limited` (closest to the Atlite+CORINE baseline), and `open` (most permissive, for sensitivity studies). Optional overlays apply the California Energy Commission Wind/Solar BaseScreen (`_cec`, CA-only) and BOEM offshore wind planning areas (`_boem`, offshore).
+1. **Per-cell availability raster** — a fraction in [0, 1] for each 12 km GODEEEP cell, derived from NREL reV supply-curve availability scenarios. Three access scenarios are supported, ordered from most to least restrictive: `limited` (the tightest siting regime, and the closest of the three to the Atlite+CORINE baseline), `reference` (NREL's intermediate regime, and the workflow's usual choice — it admits roughly two to three times the onshore land that `limited` does), and `open` (the most permissive, for sensitivity studies). Optional overlays apply the California Energy Commission Wind/Solar BaseScreen (`_cec`, CA-only) and BOEM offshore wind planning areas (`_boem`, offshore).
 2. **Cell→bus mapping** computed once per bus layout from a county-level shapefile (cached on disk; ~14 min per interconnect at county resolution).
 3. **Per-bus rollup** of `weight`, `p_nom_max`, `potential`, `average_distance`, and (for offshore) `underwater_fraction` from NREL supply-curve site locations within each bus polygon.
 
 The availability rasters and per-bus capacity rollups are published as a separate Zenodo record ([10.5281/zenodo.20127899](https://doi.org/10.5281/zenodo.20127899)) and downloaded on first run.
 
-See [`renewable: godeeep`](godeeep_cf) under Model Configuration for the full set of config knobs.
+(godeeep_weather_years)=
+##### Historical weather-year availability
+
+With `renewable_scenarios: ["historical"]` the profile year is `renewable_weather_years[0]`.
+Every historical year flows through the same screened NREL land-access path; what differs is
+which registry **source** holds the compressed per-cell file:
+
+| Source (first match wins) | Solar | Wind 100 m | Wind 125 m |
+| --- | --- | --- | --- |
+| Local (Oak) mirror, SHA256-verified | **1980-2022** | **1980-2022** | **1980-2022** |
+| Zenodo records | 2012 | — | 2012 |
+
+A `(dataset, year)` combination no configured source declares fails at snakemake parse time with
+the available years listed — there is no fallback, no default hub height, and no nearest-year
+substitution. (The unscreened bus-aggregated archives that briefly served other years are
+retired; [issue #803](https://github.com/PyPSA/pypsa-usa/issues/803) is resolved by the mirror.)
+
+See [`renewable: godeeep`](godeeep_cf) under Model Configuration for the full set of config
+knobs, and the [California model](california-model.md) page for how the two paths interact with a
+CPUC SERVM demand year.
 
 #### Atlite (legacy alternative)
 

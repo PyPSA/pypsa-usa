@@ -428,10 +428,18 @@ def assign_missing_regions(n: pypsa.Network):
     # Match missing buses to their nearest neighbors
     missing = match_missing_buses(reference_buses, missing)
 
-    # Assign region attributes from matched buses to missing buses
+    # Assign region attributes from matched buses — but ONLY the attributes
+    # that are actually missing. Overwriting the full attribute set clobbered
+    # correctly-resolved values whenever a single shape lookup failed: the
+    # Trans Bay Cable's Potrero terminal sits in a reeds_shapes gap, and the
+    # whole-row copy moved its (correct) county from San Francisco to San
+    # Mateo, stranding SF's only HVDC infeed one county south (11 of 4,248
+    # western buses were misassigned this way).
     for attr in region_attrs:
         if attr in n.buses.columns:  # Only assign if column exists
-            n.buses.loc[missing.index, attr] = reference_buses.loc[missing.bus_assignment, attr].values
+            tgt = missing.index[n.buses.loc[missing.index, attr].isna()]
+            if len(tgt):
+                n.buses.loc[tgt, attr] = reference_buses.loc[missing.loc[tgt, "bus_assignment"], attr].values
 
 
 def assign_reeds_memberships(n: pypsa.Network, fn_reeds_memberships: str):

@@ -1,0 +1,61 @@
+# ====================================================================
+# PyPSA-USA — SERVM Test Configuration (Tier B integration harness)
+# ====================================================================
+# CA-only Western slice with CPUC SERVM demand, built to `add_demand`
+# by the tests/integration `servm_built` fixture. DO NOT use as a
+# user-facing entry point.
+#
+# SPARSE OVERLAY over the auto-loaded layered base — only keys that
+# differ belong here; lists are replaced wholesale.
+#
+# Snapshots stay the base's full 8760-hour year: `ReadServm` maps each
+# SERVM hourly strip positionally onto the network's own snapshots and
+# raises unless the planning horizon carries exactly 8760 of them, so a
+# short-window harness is impossible. Runtime is held down by the small
+# `simpl` / `clusters` values instead.
+# ====================================================================
+
+run:
+  name: "test-california"
+  disable_progressbar: true
+
+scenario:
+  clusters: [4m]
+  simpl: [20]
+  scope: "total"
+  planning_horizons: [2030]   # must be a CPUC SERVM forecast year
+
+model_topology:
+  interface_transmission_limits: true
+  include:
+    reeds_state: ['CA']
+
+electricity:
+  renewable_carriers: [onwind, solar, hydro]
+  extendable_carriers:
+    Generator: [solar, onwind, OCGT, CCGT]
+    StorageUnit: [4hr_battery_storage]
+  remote_contracted_resources:
+    enable: true              # Tier B coverage of the remote-attach path
+  demand:
+    profile: servm
+  imports:
+    enable: true
+    volume_limit: 25
+    balancing_period: year
+  exports:
+    enable: true
+    volume_limit: 25
+    balancing_period: year
+
+conventional:
+  unit_commitment: true
+
+clustering:
+  aggregation_strategies:
+    generators:
+      p_min_pu: 'capacity_weighted_average'   # keep the UC feasibility invariant through clustering
+
+solving:
+  options:
+    transmission_losses: 0

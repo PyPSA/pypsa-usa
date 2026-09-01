@@ -52,6 +52,7 @@ Regions used by the policy constraints may be specified as state codes, ReEDS zo
 | [Bidirectional link coupling](#bidirectional-link-coupling) | Equal capacity expansion of paired forward/reverse links | always active | [bidirectional_link.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/bidirectional_link.py) |
 | [Demand-response capacity](#demand-response-capacity) | Shifted load bounded by a fixed share of nominal load per bus and snapshot | `electricity: demand_response: shift` | [sector.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/sector.py) |
 | [Import/export volume limits](#import-and-export-volume-limits) | Traded energy bounded by a share of demand per balancing period | `electricity: imports/exports: volume_limit` | [interchange.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/interchange.py) |
+| [Interface transmission limits](#interface-transmission-limits) | Aggregate MW cap on the total flow across a bundle of transmission paths | `model_topology: interface_transmission_limits`; `electricity: transmission_interface_limits` | [interfaces.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/interfaces.py) |
 | [National emission cap](#national-emission-cap-co2l) | System-wide CO2 cap via PyPSA `GlobalConstraint` | `Co2L` opts token; `electricity: co2limit` | [prepare_network.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/prepare_network.py) |
 | [Natural gas limit](#natural-gas-limit-ch4l) | Cap on annual gas-fired primary energy | `CH4L` opts token; `electricity: gaslimit` | [prepare_network.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/prepare_network.py) |
 | [Emission pricing](#emission-pricing-ep) | CO2 price added to marginal costs (objective, not a constraint) | `Ep` opts token; `costs: emission_prices` | [prepare_network.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/prepare_network.py) |
@@ -306,6 +307,41 @@ where {math}`M` is the set of import (or export) links, {math}`v` the volume lim
 percent, and {math}`d_t` total AC load in period {math}`\tau`. In sector studies demand is
 measured as the flow into the end-use sectors and the bound becomes a linear constraint in
 both trade and demand variables.
+
+(interface-transmission-limits)=
+## Interface transmission limits
+
+A transmission *interface* is a bundle of paths between two groups of regions that is rated in
+aggregate rather than path-by-path — CAISO's simultaneous import capability being the canonical
+example. Setting `model_topology: interface_transmission_limits: true` reads the interface table
+at `electricity: transmission_interface_limits` (columns
+`interface, region_1, region_2, flow_12, flow_21`) and adds one per-snapshot constraint per
+interface and direction:
+
+**Trigger:** `model_topology: interface_transmission_limits: true`.
+
+\begin{align*}
+    &\ \hspace{1cm} \sum_{\ell \in I^{\rightarrow}} p_{\ell,t} \;\leq\; F_{12}
+    \hspace{0.5cm} \forall_t
+    \hspace{1cm}
+    \sum_{\ell \in I^{\leftarrow}} p_{\ell,t} \;\leq\; F_{21}
+    \hspace{0.5cm} \forall_t
+\end{align*}
+
+where {math}`F_{12}` (`flow_12`) caps flow **out of** `region_1` into `region_2` and
+{math}`F_{21}` (`flow_21`) caps flow in the opposite direction. {math}`I^{\rightarrow}` and
+{math}`I^{\leftarrow}` are selected by bus membership and carrier, never by link name.
+
+```{important}
+Only the `imports` / `exports` links added by `add_extra_components` are constrained, so the
+limits are a **no-op when `electricity: imports` and `electricity: exports` are both disabled**.
+A `region_2` entry that is itself inside the modeled footprint contributes no trade links, so
+internal AC lines between it and `region_1` escape the cap. In the shipped
+`CAISO_Imports` row this applies to `p8`, which is a California zone: in a California-only run
+the internal `p8`-`p9` corridor (~300 MW in the ReEDS/NARIS balancing-area table) is not
+counted against the CAISO import cap, understating simultaneous imports by roughly that
+corridor's rating. This is documented, not corrected.
+```
 
 (national-emission-cap-co2l)=
 ## National emission cap (Co2L)

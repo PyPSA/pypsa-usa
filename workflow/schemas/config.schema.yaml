@@ -55,6 +55,8 @@ properties:
       shared_resources: {type: boolean}
       shared_cutouts: {type: boolean}
       validation: {type: boolean}
+      benchmark_cpuc: {type: boolean}
+      benchmark_cpuc_horizons: {type: array, items: {type: integer}}
       scenarios:
         description: Optional multi-scenario driver; see rules/common.smk config_provider.
         type: object
@@ -216,6 +218,15 @@ properties:
       conventional_carriers: {type: array, items: {type: string}}
       renewable_carriers: {type: array, items: {type: string}}
       retirement: {enum: [economic, technical]}
+      honor_planned_retirements: {type: boolean}
+
+      remote_contracted_resources:
+        description: Attach CA-contracted out-of-state units at CA buses (see data-generators.md).
+        type: object
+        additionalProperties: false
+        properties:
+          enable: {type: boolean}
+          file: {type: string}
 
       extendable_carriers:
         type: object
@@ -249,7 +260,7 @@ properties:
         type: object
         additionalProperties: false
         properties:
-          profile: {enum: [efs, eia, eer]}
+          profile: {enum: [efs, eia, eer, servm]}
           bus_allocation: {enum: [population, breakthrough]}
           scenario:
             type: object
@@ -259,6 +270,7 @@ properties:
               efs_speed: {enum: [slow, moderate, rapid]}
               eer_file: {type: string}
               aeo: {enum: [reference, high, low]}
+              servm_weather_years: {type: array, items: {type: integer, minimum: 2000, maximum: 2024}}
 
       demand_response:
         type: object
@@ -295,6 +307,15 @@ properties:
     properties:
       unit_commitment: {type: boolean}
       must_run: {type: boolean}
+      ambient_derate:
+        description: PHASE-2 stub — enabling raises NotImplementedError.
+        type: object
+        additionalProperties: false
+        properties:
+          enable: {type: boolean}
+          source: {type: string}
+          scope: {type: array, items: {type: string}}
+          replaces_seasonal_derate: {type: boolean}
       dynamic_fuel_price:
         type: object
         additionalProperties: false

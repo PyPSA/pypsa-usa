@@ -1,0 +1,74 @@
+# ====================================================================
+# PyPSA-USA — California (CPUC SERVM 2026)
+# ====================================================================
+# CA-only network carved out of the Western Interconnect, with WECC
+# imports/exports at the boundary and demand from the CPUC 2026 SERVM
+# update (hourly, per CA load region, weather years 2000-2024 via
+# `electricity: demand: scenario: servm_weather_years`).
+#
+#   cd workflow
+#   uv run snakemake -j1 --configfile repo_data/config/config.california.yaml
+#
+# This is a SPARSE OVERLAY over the auto-loaded layered base — only keys
+# that differ from the base belong here. Lists are replaced wholesale.
+# See docs/source/california-model.md for the full data inventory.
+# ====================================================================
+
+run:
+  name: "california"
+  benchmark_cpuc: true          # CPUC Baseline Generator List capacity benchmark (network-free; horizon from run.benchmark_cpuc_horizons)
+
+scenario:
+  # must be CPUC SERVM forecast years: {2026, 2028, 2030, 2032, 2035, 2037, 2040, 2042, 2045}
+  planning_horizons: [2030, 2035, 2040, 2045]
+  clusters: [4]                 # one bus per CA ReEDS zone (p8/p9/p10/p11)
+  scope: "total"
+
+  # ---- county resolution (uncomment to switch) --------------------
+  # California has 58 counties; `simpl: county` selects the county-FIPS
+  # fast path in cluster_simpl, and the imports machinery automatically
+  # picks the county-level NARIS flowgate file.
+  # clusters: [58]
+  # simpl: ['county']
+
+model_topology:
+  interface_transmission_limits: true   # aggregate RESOLVE CAISO import/export caps
+  include:
+    reeds_state: ['CA']
+  # topological_boundaries: 'county'    # pair with the county block above
+
+# Historical profiles matching the SERVM demand weather year. The registry's
+# Oak mirror serves screened years 1980-2022 (Zenodo alone carries 2012 only).
+# Climate scenarios (rcp*) publish horizons 2030/2040/2050 only, so they cannot
+# back this config's 2035/2045 planning horizons — the registry fails at parse
+# time if you switch to one without restricting planning_horizons.
+# Keep `renewable_weather_years` == `electricity.demand.scenario.servm_weather_years`
+# (both default to 2019 in the base) so load and renewables share a weather year.
+renewable_scenarios: ['historical']
+
+electricity:
+  extendable_carriers:
+    Generator: [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, nuclear, hydrogen_ct]
+  remote_contracted_resources:
+    enable: true                # attach CA-contracted out-of-state units (Palo Verde, Intermountain, Hoover, ...) at CA buses
+  demand:
+    profile: servm
+  imports:
+    enable: true
+    volume_limit: 25            # % of annual CA load
+    balancing_period: year
+  exports:
+    enable: true
+    volume_limit: 25
+    balancing_period: year
+
+conventional:
+  unit_commitment: true         # linearized UC (solving.options.linearized_unit_commitment in the base)
+
+clustering:
+  aggregation_strategies:
+    generators:
+      p_min_pu: 'capacity_weighted_average'   # keep the UC feasibility invariant through clustering
+
+solving:
+  mem: 30000

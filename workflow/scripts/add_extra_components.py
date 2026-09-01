@@ -994,8 +994,11 @@ def add_elec_imports_exports(
             zone_inside = row.r if row.r in zones_in_model else row.rr
             zone_outside = row.r if row.r not in zones_in_model else row.rr
 
-            # extremely crude cashing for generating cost timeseries :|
-            if zone_outside not in costs:
+            # extremely crude caching for generating cost timeseries :|
+            # keyed by the INSIDE zone — checking the outside zone here skipped
+            # the write whenever an earlier row's inside zone happened to match,
+            # leaving costs[zone_inside] unset (KeyError on county networks).
+            if zone_inside not in costs:
                 if isinstance(fuel_costs, float | int):
                     costs[zone_inside] = fuel_costs
                 elif isinstance(fuel_costs, pd.DataFrame):
@@ -1325,6 +1328,18 @@ def apply_ucap(n: pypsa.Network, ucap_config: dict) -> None:
         # Apply to static p_max_pu
         n.generators.loc[mask, "p_max_pu"] *= ucap_factor
 
+        # Committable units carry a minimum stable level (p_min_pu) that must stay
+        # below the derated p_max_pu, otherwise the unit's dispatch box is empty and
+        # the MILP is infeasible. UCAP shrinks the whole usable range of the unit, so
+        # scale p_min_pu by the same factor rather than leaving it at the ICAP level.
+        if "committable" in n.generators:
+            com_mask = mask & n.generators.committable.fillna(False).astype(bool)
+            if com_mask.any():
+                n.generators.loc[com_mask, "p_min_pu"] *= ucap_factor
+                com_varying = [g for g in n.generators.index[com_mask] if g in n.generators_t.p_min_pu.columns]
+                if com_varying:
+                    n.generators_t.p_min_pu[com_varying] *= ucap_factor
+
         # Apply to time-varying p_max_pu if present
         gens_with_time_varying = [g for g in gen_names if g in n.generators_t.p_max_pu.columns]
         if gens_with_time_varying:
@@ -1630,7 +1645,7 @@ def main(snakemake) -> None:
                 f"'exports.costs' must be 'wholesale', name of a carrier, or a float/int. Received: {export_costs}",
             )
 
-        add_elec_imports_exports(n, "exports", export_flowgates, fuel_costs, co2_emissions)
+        add_elec_imports_exports(n, "exports", export_flowgates, fuel_costs, co2_emissions, zone_col)
 
     if snakemake.config["scenario"]["sector"] == "E":
         co2_storage = snakemake.config.get("co2", {}).get("storage", False)

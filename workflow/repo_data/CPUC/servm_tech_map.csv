@@ -1,0 +1,52 @@
+side,source_category,compare_category,note
+cpuc,CC,Gas CC,
+cpuc,CT,Gas CT/ICE/Steam,
+cpuc,ICE,Gas CT/ICE/Steam,
+cpuc,Steam,Gas CT/ICE/Steam,CA gas steam boilers; EIA maps 'Natural Gas Steam Turbine' to OCGT so it cannot be split out on the model side
+cpuc,Cogen,Gas Cogen/CHP,CPUC-only bucket; EIA/PyPSA carriers have no CHP concept so these units land in CCGT/OCGT on the model side
+cpuc,Coal,Coal,
+cpuc,Nuclear,Nuclear,
+cpuc,Geothermal,Geothermal,
+cpuc,Biomass/Wood,Biomass,
+cpuc,Biogas,Biomass,
+cpuc,Hydro,Hydro,
+cpuc,PSH,PSH,
+cpuc,Wind,Wind,
+cpuc,OOS_Wind,Wind,out-of-state wind contracted to a CA region; absent from the CA subset of the 2026 baseline
+cpuc,Solar_1Axis,Solar,
+cpuc,Solar_Fixed,Solar,
+cpuc,Solar_2Axis,Solar,
+cpuc,Solar_Thermal,Solar,
+cpuc,Paired_Solar_1Axis,Solar,
+cpuc,Paired_Solar_Fixed,Solar,
+cpuc,Hybrid_Solar_1Axis,Solar,
+cpuc,Hybrid_Solar_Fixed,Solar,
+cpuc,Battery_4h,Battery,
+cpuc,Paired_BattStorage,Battery,
+cpuc,Hybrid_BattStorage,Battery,
+cpuc,DR,Demand Response,CPUC-only; PyPSA-USA has no demand-response resource
+cpuc,Pumping_Load,Pumping Load,CPUC-only; modelled as load rather than as a resource in PyPSA-USA
+pypsa,CCGT,Gas CC,
+pypsa,CCGT-95CCS,Gas CC,
+pypsa,OCGT,Gas CT/ICE/Steam,EIA 'Natural Gas Steam Turbine' / 'Combustion Turbine' / 'Internal Combustion Engine' all map here
+pypsa,hydrogen_ct,Gas CT/ICE/Steam,
+pypsa,coal,Coal,
+pypsa,nuclear,Nuclear,
+pypsa,geothermal,Geothermal,
+pypsa,EGS,Geothermal,
+pypsa,biomass,Biomass,
+pypsa,waste,Biomass,municipal solid waste; CPUC folds it into Biogas
+pypsa,hydro,Hydro,pumped storage is split off before mapping via prime_mover_code == PS
+pypsa,PHS,PSH,
+pypsa,onwind,Wind,
+pypsa,offwind,Wind,
+pypsa,offwind_floating,Wind,
+pypsa,solar,Solar,
+pypsa,battery,Battery,
+pypsa,2hr_battery_storage,Battery,
+pypsa,4hr_battery_storage,Battery,
+pypsa,6hr_battery_storage,Battery,
+pypsa,8hr_battery_storage,Battery,
+pypsa,10hr_battery_storage,Battery,
+pypsa,oil,Oil,model-only; CPUC has no oil bucket for CA
+pypsa,other,Other,"model-only catch-all (flywheels, other gases, compressed air)"

@@ -362,6 +362,15 @@ def eer_demand_file():
     return filename
 
 
+SERVM_LOAD_FILE = "cpuc/servm/HourlyLoad_CA_Regions_V2025E_2224_Mon_{year}.csv"
+
+
+def servm_demand_files():
+    """One CPUC SERVM hourly-load file per planning horizon."""
+    horizons = sorted(set(config["scenario"]["planning_horizons"]))
+    return [DATA + SERVM_LOAD_FILE.format(year=year) for year in horizons]
+
+
 def demand_raw_data(wildcards):
     # get profile to use
     end_use = wildcards.end_use
@@ -393,6 +402,8 @@ def demand_raw_data(wildcards):
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
     elif profile == "eer":
         return DATA + f"eer/{eer_demand_file()}"
+    elif profile == "servm":
+        return servm_demand_files()
     elif profile == "ferc":
         return [
             DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
@@ -428,13 +439,23 @@ def demand_raw_data(wildcards):
 
 
 def demand_disaggregate_data(wildcards):
-    """CLIU county-level industrial loads are the only disaggregation input.
+    """Extra per-profile input needed to spread zonal demand over buses.
 
-    All other end uses disaggregate by population and need no extra file.
+    CLIU county-level industrial loads serve the industry end use; the SERVM
+    profile needs its precomputed (region, bus) allocation weights. Everything
+    else disaggregates by population and needs no extra file.
     """
-    if wildcards.end_use != "industry":
-        return []
-    return DATA + "industry_load/2014_update_20170910-0116.csv"
+    if wildcards.end_use == "industry":
+        return DATA + "industry_load/2014_update_20170910-0116.csv"
+    if (
+        wildcards.end_use == "power"
+        and config["electricity"]["demand"]["profile"] == "servm"
+    ):
+        return (
+            DEMAND
+            + f"{wildcards.interconnect}/servm_load_weights_s{wildcards.simpl}.csv"
+        )
+    return []
 
 
 def demand_scaling_data(wildcards):
@@ -457,6 +478,8 @@ def demand_scaling_data(wildcards):
         return []
     elif profile == "eer":
         return []
+    elif profile == "servm":
+        return []
     else:
         return ""
 
@@ -470,14 +493,20 @@ rule build_electrical_demand:
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         planning_horizons=config["scenario"]["planning_horizons"],
         renewable_weather_years=config["renewable_weather_years"],
+        servm_weather_years=config["electricity"]["demand"]["scenario"].get(
+            "servm_weather_years", []
+        ),
         snapshots=config["snapshots"],
         pudl_path=config_provider("pudl_path"),
     input:
         network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
+        dissagregate_files=demand_disaggregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
         elec_demand=DEMAND + "{interconnect}/{end_use}_electricity_s{simpl}.csv",
+        zonal_components=DEMAND
+        + "{interconnect}/{end_use}_zonal_components_s{simpl}.parquet",
     log:
         LOGS + "{interconnect}/{end_use}_build_demand_s{simpl}.log",
     benchmark:
@@ -732,6 +761,27 @@ rule build_powerplants:
         "../scripts/build_powerplants.py"
 
 
+def remote_contracted_resource_files(wildcards):
+    """CPUC out-of-state contracted units, plus what is needed to place them.
+
+    Only requested when ``electricity.remote_contracted_resources.enable`` is on,
+    so the option is fully inert (and pulls no extra inputs) by default. The
+    SERVM load weights supply the (region -> California bus) attribution and the
+    tech map reconciles the ledger's `compare_category` with model carriers.
+    """
+    cfg = config["electricity"].get("remote_contracted_resources", {}) or {}
+    if not cfg.get("enable", False):
+        return {}
+    return {
+        "remote_resources": cfg.get(
+            "file", "repo_data/CPUC/servm_out_of_state_units.csv"
+        ),
+        "servm_tech_map": "repo_data/CPUC/servm_tech_map.csv",
+        "servm_load_weights": DEMAND
+        + f"{wildcards.interconnect}/servm_load_weights_s{wildcards.simpl}.csv",
+    }
+
+
 rule add_electricity:
     params:
         length_factor=config["lines"]["length_factor"],
@@ -743,8 +793,10 @@ rule add_electricity:
         costs=config["costs"],
         planning_horizons=config["scenario"]["planning_horizons"],
         eia_api=config["api"]["eia"],
+        remote_contracted=config["electricity"].get("remote_contracted_resources", {}),
     input:
         unpack(dynamic_fuel_price_files),
+        unpack(remote_contracted_resource_files),
         **(
             {
                 # For GODEEEP future scenarios: pass all horizon-specific profiles
@@ -892,6 +944,26 @@ rule cluster_resources:
         walltime=config_provider("walltime", "cluster_resources", default="01:00:00"),
     script:
         "../scripts/cluster_simpl.py"
+
+
+rule build_servm_load_weights:
+    input:
+        network=NETWORKS + "{interconnect}/elec_base_network.nc",
+        busmap_b=BUSMAPS + "{interconnect}/busmap_b.csv",
+        busmap_s=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
+        region_map="repo_data/CPUC/servm_region_map.csv",
+    output:
+        weights=DEMAND + "{interconnect}/servm_load_weights_s{simpl}.csv",
+    log:
+        LOGS + "{interconnect}/build_servm_load_weights_s{simpl}.log",
+    threads: 1
+    resources:
+        mem_mb=lambda wildcards, input, attempt: (input.size // 200000) * attempt * 2,
+        walltime=config_provider(
+            "walltime", "build_servm_load_weights", default="00:20:00"
+        ),
+    script:
+        "../scripts/build_servm_load_weights.py"
 
 
 rule cluster_network:

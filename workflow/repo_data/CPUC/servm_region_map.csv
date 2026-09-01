@@ -1,0 +1,12 @@
+balancing_area,servm_region,note
+CISO-PGAE,PGE,
+CISO-SCE,SCE,
+CISO-SDGE,SDGE,
+IID,IID,
+LDWP,LADWP,
+BANC,NCNC,
+TIDC,NCNC,
+CISO-VEA,,Nevada footprint; excluded from CA-only networks
+PACW,,California sliver served by PacifiCorp West (Siskiyou/Del Norte/Modoc); load lives in CPUC's non-CA PACW region file
+WALC,,California sliver served by WAPA Desert Southwest (Colorado River); not covered by the CPUC CA-region files
+NEVP,,California sliver served by NV Energy (Tahoe/CalNeva); not covered by the CPUC CA-region files

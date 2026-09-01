@@ -12,6 +12,276 @@ from _helpers import configure_logging, weighted_avg
 logger = logging.getLogger(__name__)
 
 
+# ======================================================================
+# Unit-commitment parameter bounds
+# ======================================================================
+# The UC columns written to powerplants.csv come from the WECC ADS merge and,
+# where ADS has no match, from `impute_missing_plant_data` group means. Both
+# paths produce values that are physically impossible for the unit they land
+# on:
+#   * absolute ($, not $/MW) start-up costs imputed onto sub-MW units, giving
+#     start costs up to 1e6 $/MW,
+#   * baseload min-up/min-down times imputed onto aircraft-derivative peakers,
+#   * EIA-860 `minimum_load_mw` reported at plant level but joined to a single
+#     sub-unit, giving minimum_load_mw > p_nom (p_min_pu > 1),
+#   * NaNs, which `add_electricity` otherwise fills with the PyPSA defaults
+#     (min_up_time=0, min_down_time=0, start_up_cost=0) — i.e. a unit that is
+#     infinitely flexible and free to cycle.
+# With `conventional.unit_commitment: true` every one of those either distorts
+# the dispatch or makes the MILP infeasible, so they are clamped here, at the
+# source, rather than in each consumer.
+#
+# Bounds are per carrier and deliberately wide: the intent is to remove the
+# impossible, not to overwrite plausible unit-specific data.
+#
+# Keys, all applied only to the committable (conventional thermal) carriers:
+#   up_h / down_h : (min, max, default) minimum up / down time, in HOURS.
+#                   `add_electricity` hands these to PyPSA's `min_up_time` /
+#                   `min_down_time`, whose unit is SNAPSHOTS — the hours->
+#                   snapshots rescale happens in prepare_network when the
+#                   `{opts}` string reduces the temporal resolution.
+#   ramp          : (min, max, default) ramp limit, per-unit of p_nom per HOUR.
+#   start_usd_mw  : (min, max, default) start-up cost in $ per MW of p_nom.
+#   p_min_pu      : (max, default) minimum stable level as a fraction of p_nom.
+UC_CARRIERS = ("nuclear", "coal", "CCGT", "OCGT", "oil", "biomass", "geothermal", "waste")
+
+UC_BOUNDS = {
+    # Nuclear cycles on refueling timescales; NRC/EPRI load-follow studies put
+    # min up/down at ~1 day, ramp at ~5-25 %/h, start cost ~100 $/MW, and a
+    # minimum stable level of 40-60 % (French load-follow practice).
+    "nuclear": {
+        "up_h": (8.0, 168.0, 24.0),
+        "down_h": (8.0, 168.0, 24.0),
+        "ramp": (0.05, 1.0, 0.25),
+        "start_usd_mw": (20.0, 500.0, 100.0),
+        "p_min_pu": (0.90, 0.50),
+    },
+    # Coal steam: NREL/Intertek cycling study — warm start 4-12 h, min load
+    # 25-50 % of rating, ramp 20-60 %/h, warm-start cost 100-300 $/MW.
+    "coal": {
+        "up_h": (2.0, 48.0, 8.0),
+        "down_h": (2.0, 48.0, 8.0),
+        "ramp": (0.10, 1.0, 0.40),
+        "start_usd_mw": (30.0, 600.0, 200.0),
+        "p_min_pu": (0.80, 0.40),
+    },
+    # Combined cycle: CAISO/WECC ADS typical min up 2-6 h, min down 4-8 h,
+    # min load 30-50 % (1x1 mode), ramp 40-100 %/h, warm start 50-100 $/MW.
+    "CCGT": {
+        "up_h": (1.0, 24.0, 4.0),
+        "down_h": (1.0, 24.0, 6.0),
+        "ramp": (0.20, 1.0, 0.60),
+        "start_usd_mw": (20.0, 300.0, 75.0),
+        "p_min_pu": (0.80, 0.40),
+    },
+    # Simple-cycle CT: designed to start in <1 h; min up/down 1 h, full-range
+    # ramp, min load 20-50 %, start cost 80-120 $/MW (NREL cycling study).
+    "OCGT": {
+        "up_h": (1.0, 8.0, 1.0),
+        "down_h": (1.0, 8.0, 1.0),
+        "ramp": (0.20, 1.0, 1.0),
+        "start_usd_mw": (20.0, 300.0, 100.0),
+        "p_min_pu": (0.70, 0.30),
+    },
+    # Oil-fired units in the fleet are overwhelmingly small recip/CT peakers;
+    # treat them like OCGT but allow a slightly wider start-cost band because
+    # distillate start fuel is expensive.
+    "oil": {
+        "up_h": (1.0, 8.0, 1.0),
+        "down_h": (1.0, 8.0, 1.0),
+        "ramp": (0.20, 1.0, 1.0),
+        "start_usd_mw": (20.0, 400.0, 100.0),
+        "p_min_pu": (0.70, 0.30),
+    },
+    # Biomass steam: small stoker/BFB boilers, cycled rarely; min up/down of a
+    # few hours, slow ramp, min load ~40 %.
+    "biomass": {
+        "up_h": (1.0, 24.0, 4.0),
+        "down_h": (1.0, 24.0, 4.0),
+        "ramp": (0.05, 1.0, 0.30),
+        "start_usd_mw": (10.0, 300.0, 60.0),
+        "p_min_pu": (0.80, 0.40),
+    },
+    # Geothermal binary/flash plants run baseload; ADS reports zero start cost
+    # for every unit, which under UC makes cycling free. Floor it so the model
+    # does not use geothermal as a zero-cost switching resource.
+    "geothermal": {
+        "up_h": (1.0, 24.0, 8.0),
+        "down_h": (1.0, 24.0, 6.0),
+        "ramp": (0.05, 1.0, 0.20),
+        "start_usd_mw": (5.0, 200.0, 30.0),
+        "p_min_pu": (0.90, 0.50),
+    },
+    # MSW/landfill-gas steam: baseload-ish, must keep burning feedstock; same
+    # envelope as biomass.
+    "waste": {
+        "up_h": (1.0, 24.0, 6.0),
+        "down_h": (1.0, 24.0, 4.0),
+        "ramp": (0.05, 1.0, 0.30),
+        "start_usd_mw": (5.0, 200.0, 30.0),
+        "p_min_pu": (0.80, 0.40),
+    },
+}
+
+
+def _clamp_series(
+    values: pd.Series,
+    lower: float,
+    upper: float,
+    default: float,
+) -> tuple[pd.Series, int, int]:
+    """
+    Clamp `values` into [lower, upper] and fill NaN with `default`.
+
+    Returns the cleaned series plus the number of values clamped and the number
+    filled, so the caller can report both.
+    """
+    s = pd.to_numeric(values, errors="coerce")
+    n_filled = int(s.isna().sum())
+    clamped = s.clip(lower=lower, upper=upper)
+    n_clamped = int((clamped != s).sum())  # NaN != NaN is False, so fills are not counted here
+    return clamped.fillna(default), n_clamped, n_filled
+
+
+def sanitize_uc_parameters(plants: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clamp and fill the unit-commitment columns of the committable carriers.
+
+    Operates per carrier using `UC_BOUNDS`. Rows of non-committable carriers
+    (wind, solar, hydro, battery, ...) are left untouched — PyPSA never marks
+    them committable, so their UC columns are inert.
+
+    Guarantees, for every committable row:
+      * `min_up_time` / `min_down_time` finite, positive, within the carrier band;
+      * `ramp_limit_up` / `ramp_limit_down` finite, in (0, 1];
+      * `start_up_cost` finite, non-negative, within the carrier's $/MW band, and
+        still equal to `startup_cost_fixed + start_fuel_cost` (both components are
+        rescaled by the same factor, as is `start_fuel_mmbtu`);
+      * `minimum_load_mw / p_nom <= min(summer_derate, winter_derate)` — the
+        feasibility invariant. `p_max_pu` for a conventional unit is the seasonal
+        derate (see `add_electricity.apply_seasonal_capacity_derates`), so a
+        larger `p_min_pu` leaves the unit no feasible output above zero. PyPSA
+        can then only satisfy both bounds by pinning `status = 0`, silently
+        deleting that capacity for the whole tighter season — and on a
+        non-committable generator (an ADS must-run under
+        `conventional.must_run`) it makes the LP outright infeasible.
+
+    Counts of clamped and filled values are logged per carrier and parameter.
+    """
+    required = {
+        "carrier",
+        "p_nom",
+        "min_up_time",
+        "min_down_time",
+        "ramp_limit_up",
+        "ramp_limit_down",
+        "start_up_cost",
+        "startup_cost_fixed",
+        "start_fuel_cost",
+        "start_fuel_mmbtu",
+        "minimum_load_mw",
+        "summer_derate",
+        "winter_derate",
+    }
+    missing = required - set(plants.columns)
+    if missing:
+        raise KeyError(f"sanitize_uc_parameters is missing required columns: {sorted(missing)}")
+
+    report: list[dict] = []
+
+    for carrier, bounds in UC_BOUNDS.items():
+        mask = plants.carrier == carrier
+        if not mask.any():
+            continue
+        sub = plants.loc[mask]
+        p_nom = pd.to_numeric(sub.p_nom, errors="coerce").clip(lower=1e-3)
+
+        # ---- min up / down time (hours) -----------------------------------
+        for col, key in (("min_up_time", "up_h"), ("min_down_time", "down_h")):
+            lo, hi, default = bounds[key]
+            cleaned, n_clamped, n_filled = _clamp_series(sub[col], lo, hi, default)
+            plants.loc[mask, col] = cleaned
+            report.append(dict(carrier=carrier, param=col, clamped=n_clamped, filled=n_filled, n=int(mask.sum())))
+
+        # ---- ramp limits (per-unit of p_nom per hour) ----------------------
+        lo, hi, default = bounds["ramp"]
+        for col in ("ramp_limit_up", "ramp_limit_down"):
+            cleaned, n_clamped, n_filled = _clamp_series(sub[col], lo, hi, default)
+            plants.loc[mask, col] = cleaned
+            report.append(dict(carrier=carrier, param=col, clamped=n_clamped, filled=n_filled, n=int(mask.sum())))
+
+        # ---- start-up cost ($, bounded in $/MW) ----------------------------
+        lo, hi, default = bounds["start_usd_mw"]
+        specific = pd.to_numeric(sub.start_up_cost, errors="coerce") / p_nom
+        cleaned_specific, n_clamped, n_filled = _clamp_series(specific, lo, hi, default)
+        new_total = cleaned_specific * p_nom
+        old_total = pd.to_numeric(sub.start_up_cost, errors="coerce")
+        old_fixed = pd.to_numeric(sub.startup_cost_fixed, errors="coerce")
+        old_fuel = pd.to_numeric(sub.start_fuel_cost, errors="coerce")
+        # Keep startup_cost_fixed + start_fuel_cost == start_up_cost. Where the
+        # old total is missing or zero, or the two components do not reproduce it
+        # (one of them is NaN), the split is undefined: the whole (clamped or
+        # defaulted) cost becomes a fixed cost and the start fuel goes to zero.
+        # The columns as written are only consistent to the 4 decimals they were
+        # rounded to, so rebuild the fixed part as the residual rather than
+        # scaling both parts and inheriting an amplified rounding error.
+        splittable = (old_total > 0) & np.isclose(old_fixed + old_fuel, old_total, rtol=1e-4, atol=1e-3)
+        ratio = (new_total / old_total.where(splittable)).astype(float)
+        new_fuel = pd.Series(np.where(splittable, old_fuel.fillna(0) * ratio.fillna(0), 0.0), index=sub.index)
+        plants.loc[mask, "start_up_cost"] = new_total
+        plants.loc[mask, "start_fuel_cost"] = new_fuel
+        plants.loc[mask, "startup_cost_fixed"] = new_total - new_fuel
+        plants.loc[mask, "start_fuel_mmbtu"] = np.where(
+            splittable,
+            pd.to_numeric(sub.start_fuel_mmbtu, errors="coerce").fillna(0) * ratio.fillna(0),
+            0.0,
+        )
+        report.append(
+            dict(carrier=carrier, param="start_up_cost", clamped=n_clamped, filled=n_filled, n=int(mask.sum())),
+        )
+
+        # ---- minimum load / the p_min_pu <= p_max_pu feasibility invariant --
+        p_min_max, p_min_default = bounds["p_min_pu"]
+        derate = np.minimum(
+            pd.to_numeric(sub.summer_derate, errors="coerce").fillna(1.0),
+            pd.to_numeric(sub.winter_derate, errors="coerce").fillna(1.0),
+        ).clip(lower=0.0, upper=1.0)
+        # The unit may not be asked to run above what its worst season allows.
+        # Compare against the derate truncated to the 4 decimals `set_parameters`
+        # writes, so the invariant holds against the columns as they land in
+        # powerplants.csv and not only against their full-precision values.
+        ceiling = np.floor(np.minimum(derate, p_min_max) * 1e4) / 1e4
+        raw_pu = pd.to_numeric(sub.minimum_load_mw, errors="coerce") / p_nom
+        n_filled = int(raw_pu.isna().sum())
+        clipped_pu = raw_pu.clip(lower=0.0, upper=ceiling)
+        n_clamped = int((clipped_pu != raw_pu).sum())
+        filled_pu = clipped_pu.fillna(np.minimum(ceiling, p_min_default))
+        # `set_parameters` rounds every numeric column to 4 decimals on the way
+        # out. On a sub-MW unit that rounding is a large relative step, and
+        # rounding *up* would put p_min_pu back above the derate. Truncate to the
+        # same 4 decimals here so the later round() cannot move the value at all.
+        plants.loc[mask, "minimum_load_mw"] = np.floor((filled_pu * p_nom).astype(float) * 1e4) / 1e4
+        report.append(
+            dict(carrier=carrier, param="minimum_load_mw", clamped=n_clamped, filled=n_filled, n=int(mask.sum())),
+        )
+
+    if report:
+        summary = pd.DataFrame(report)
+        touched = summary[(summary.clamped > 0) | (summary.filled > 0)]
+        logger.warning(
+            "Unit-commitment bounds enforcement clamped %d and filled %d values across %d committable rows.",
+            int(summary.clamped.sum()),
+            int(summary.filled.sum()),
+            int(plants.carrier.isin(UC_CARRIERS).sum()),
+        )
+        if not touched.empty:
+            logger.warning(
+                "Per-carrier UC clamp/fill counts:\n%s",
+                touched.to_string(index=False),
+            )
+    return plants
+
+
 def initialize_duckdb():
     duckdb.connect(database=":memory:", read_only=False)
     duckdb.query("INSTALL httpfs;")
@@ -63,7 +333,11 @@ def load_eia_operable_data(parquet_path: str):
             array_agg(yg.technology_description ORDER BY yg.report_date DESC) FILTER (WHERE yg.technology_description IS NOT NULL)[1] AS technology_description,
             array_agg(yg.operational_status ORDER BY yg.report_date DESC) FILTER (WHERE yg.operational_status IS NOT NULL)[1] AS operational_status,
             array_agg(yg.prime_mover_code ORDER BY yg.report_date DESC) FILTER (WHERE yg.prime_mover_code IS NOT NULL)[1] AS prime_mover_code,
-            array_agg(yg.planned_generator_retirement_date ORDER BY yg.report_date DESC) FILTER (WHERE yg.planned_generator_retirement_date IS NOT NULL)[1] AS planned_generator_retirement_date,
+            -- Deliberately NOT most-recent-non-null: a newer filing reporting NULL
+            -- means the retirement announcement was withdrawn (e.g. Diablo Canyon
+            -- post-SB846), and resurrecting an older filing's date would retire a
+            -- unit its owner no longer plans to retire.
+            array_agg(yg.planned_generator_retirement_date ORDER BY yg.report_date DESC)[1] AS planned_generator_retirement_date,
             array_agg(yg.energy_storage_capacity_mwh ORDER BY yg.report_date DESC) FILTER (WHERE yg.energy_storage_capacity_mwh IS NOT NULL)[1] AS energy_storage_capacity_mwh,
             array_agg(yg.generator_operating_date ORDER BY yg.report_date DESC) FILTER (WHERE yg.generator_operating_date IS NOT NULL)[1] AS generator_operating_date,
             array_agg(yg.state ORDER BY yg.report_date DESC) FILTER (WHERE yg.state IS NOT NULL)[1] AS state,
@@ -468,6 +742,23 @@ def set_parameters(plants: pd.DataFrame):
     Sets generator naming schemes, updates parameter names, and imputes missing
     data.
     """
+    # EIA leaves nerc_region NULL for plants that first appear in a recent 860
+    # vintage, and downstream add_electricity maps nerc_region -> interconnect,
+    # so a plain isin() silently deletes new-build (e.g. 2.2 GW of CA renewables
+    # under PUDL v2025.5.0). Impute a representative NERC region from the
+    # plant's state before filtering; the representative choice round-trips
+    # through const.NERC_REGION_MAPPER for interconnect scoping.
+    interconnect_to_nerc = {"western": "WECC", "texas": "TRE", "eastern": "SERC"}
+    null_nerc = plants.nerc_region.isna()
+    if null_nerc.any():
+        imputed = plants.loc[null_nerc, "state"].map(const.STATES_INTERCONNECT_MAPPER).map(interconnect_to_nerc)
+        plants.loc[null_nerc, "nerc_region"] = imputed
+        logger.info(
+            "Imputed nerc_region from state for %d plants (%.0f MW) with NULL nerc_region "
+            "(recent EIA filings not yet backfilled).",
+            imputed.notna().sum(),
+            plants.loc[null_nerc & plants.nerc_region.notna(), "capacity_mw"].sum(),
+        )
     plants = plants[plants.nerc_region.isin(["WECC", "TRE", "MRO", "SERC", "RFC", "NPCC"])]
     plants = plants.rename(
         {
@@ -587,6 +878,10 @@ def set_parameters(plants: pd.DataFrame):
     plants["efficiency"] = 1 / (plants["heat_rate"] / 3.412)  # MMBTu/MWh to MWh_electric/MWh_thermal
 
     set_derates(plants)
+
+    # Must run after set_derates: the p_min_pu <= p_max_pu feasibility invariant
+    # is expressed against the seasonal derates.
+    plants = sanitize_uc_parameters(plants)
 
     plants["heat_rate_source"] = plants["heat_rate_source"].fillna("NA")
     plants["fuel_cost_source"] = plants["fuel_cost_source"].fillna("NA")
@@ -748,7 +1043,7 @@ if __name__ == "__main__":
         rootpath = "."
     configure_logging(snakemake)
 
-    data_year = 2023  # Use latest available PUDL data
+    data_year = 2025  # latest complete EIA-923 year in the pinned PUDL release (v2026.8.0)
     start_date = f"{data_year}-01-01"
     end_date = f"{data_year + 1}-01-01"
 

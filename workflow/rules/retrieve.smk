@@ -103,6 +103,46 @@ rule retrieve_eer_demand_data:
         "../scripts/retrieve_eer_data.py"
 
 
+CPUC_SERVM_URL = "https://files.cpuc.ca.gov/energy/modeling/2026_servm_updates/"
+
+
+rule retrieve_cpuc_servm_load:
+    wildcard_constraints:
+        servm_year="2026|2028|2030|2032|2035|2037|2040|2042|2045",
+    params:
+        url=lambda wildcards: CPUC_SERVM_URL
+        + f"HourlyLoad_CA_Regions_V2025E_2224_Mon_{wildcards.servm_year}.csv",
+    output:
+        DATA + "cpuc/servm/HourlyLoad_CA_Regions_V2025E_2224_Mon_{servm_year}.csv",
+    resources:
+        mem_mb=5000,
+    log:
+        "logs/retrieve/retrieve_cpuc_servm_load_{servm_year}.log",
+    retries: 2
+    script:
+        "../scripts/retrieve_cpuc_data.py"
+
+
+rule retrieve_cpuc_baseline_generators:
+    params:
+        url=CPUC_SERVM_URL + "BaselineGeneratorList_CAISO.xlsx",
+    output:
+        DATA + "cpuc/BaselineGeneratorList_CAISO.xlsx",
+    resources:
+        mem_mb=5000,
+    log:
+        "logs/retrieve/retrieve_cpuc_baseline_generators.log",
+    retries: 2
+    script:
+        "../scripts/retrieve_cpuc_data.py"
+
+
+# RESERVED (phase 2): `retrieve_cpuc_thermal_derate` will pull the CPUC SERVM
+# unit-specific ambient-temperature derate profiles that back the
+# `conventional.ambient_derate` config hook. Until it lands, enabling that key
+# raises NotImplementedError in add_electricity.
+
+
 sector_datafiles = [
     # heating sector
     "population/DECENNIALDHC2020.P1-Data.csv",

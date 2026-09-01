@@ -88,7 +88,8 @@ if __name__ == "__main__":
     n = pypsa.Network(snakemake.input.network)
     schema_entry = log_network_schema(n, stage="entry")
 
-    if snakemake.wildcards.simpl:
+    simpl_mode = resolve_simpl_mode(snakemake.wildcards.simpl)
+    if simpl_mode in ("kmeans", "county"):
         configured_strategy = params.simplify_network.get(
             "weighting_strategy",
             "population",
@@ -101,9 +102,14 @@ if __name__ == "__main__":
                 configured_strategy,
             )
 
+        # county fast-path: the busmap is the county FIPS partition, so no
+        # k-means (and no cluster-count QP) runs at all.
+        county_busmap = build_county_busmap(n) if simpl_mode == "county" else False
+
         clustering = clustering_for_n_clusters(
             n,
-            int(snakemake.wildcards.simpl),
+            0 if simpl_mode == "county" else int(snakemake.wildcards.simpl),
+            custom_busmap=county_busmap,
             focus_weights=params.focus_weights,
             solver_name=solver_name,
             algorithm=params.simplify_network["algorithm"],
