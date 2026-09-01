@@ -76,6 +76,7 @@ run_one() {
     --jobs "$JOBS" \
     --latency-wait 60 \
     --rerun-incomplete \
+    --rerun-triggers $RERUN_TRIGGERS \
     --restart-times "$RESTART_TIMES" \
     --default-resources "mem_mb=8000" "walltime='02:00:00'" \
     --printshellcmds \
@@ -89,10 +90,53 @@ run_one() {
   return $rc
 }
 
-fails=0
+# Scheduling.
+#
+# Snakemake locks a run's input/output FILE SETS, not the working directory, so
+# two runs collide only when both want to CREATE the same file. Almost all
+# outputs live under resources/<run.name>/, but two tiers do not:
+#
+#   global   resources/powerplants/powerplants.csv, data/cpuc/..., data/caiso/...,
+#            data/nrel/...        -- shared by every overlay
+#   per-year data/godeeep/historical/*_{year}_*.nc, cutouts/*_{year}.nc
+#            -- shared by the z4 and county overlays of the SAME weather year
+#
+# Hence: bootstrap one overlay alone so the global tier exists, then serialise
+# within a weather year and parallelise across years.
+BOOTSTRAP="${BOOTSTRAP:-1}"
+
+# Only rebuild on mtime. Without this a code or config edit mid-campaign pulls
+# the shared retrieve rules back into every DAG at once and they all collide.
+RERUN_TRIGGERS="${RERUN_TRIGGERS:-mtime}"
+
+year_of() { printf '%s' "$1" | sed -n 's/.*_wy\([0-9]\{4\}\)_.*/\1/p'; }
+
+declare -A GROUP
+YEARS=()
 for overlay in "$@"; do
+  y=$(year_of "$overlay")
+  [ -n "$y" ] || y="ungrouped_$overlay"
+  [ -n "${GROUP[$y]:-}" ] || YEARS+=("$y")
+  GROUP[$y]="${GROUP[$y]:-} $overlay"
+done
+
+fails=0
+
+if [ "$BOOTSTRAP" = "1" ] && [ $# -gt 1 ]; then
+  echo "=== bootstrap: building globally-shared artifacts via $1 ==="
+  run_one "$1" || fails=$((fails + 1))
+fi
+
+run_group() {
+  local rc=0 o
+  for o in "$@"; do run_one "$o" || rc=1; done
+  return $rc
+}
+
+for y in "${YEARS[@]}"; do
   while [ "$(jobs -rp | wc -l)" -ge "$CONCURRENCY" ]; do wait -n; done
-  run_one "$overlay" &
+  # shellcheck disable=SC2086
+  run_group ${GROUP[$y]} &
 done
 wait
 
