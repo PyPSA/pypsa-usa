@@ -35,6 +35,12 @@ def main() -> int:
         help="which builds to run before comparing",
     )
     ap.add_argument("--jobs", type=int, default=4)
+    ap.add_argument(
+        "--timeout",
+        type=int,
+        default=10800,
+        help="per-side snakemake wall-clock cap in seconds (USA-scale builds need far more than the 3h default)",
+    )
     args = ap.parse_args()
 
     solve = not args.skip_solve
@@ -46,9 +52,9 @@ def main() -> int:
     else:
         cand_target, anch_target = final_target(args.prong, solve), anchor_final_target(args.prong, solve)
     if args.side in ("candidate", "both"):
-        build_side("candidate", cand_target, args.jobs)
+        build_side("candidate", cand_target, args.jobs, timeout=args.timeout)
     if args.side in ("anchor", "both"):
-        build_side("anchor", anch_target, args.jobs)
+        build_side("anchor", anch_target, args.jobs, timeout=args.timeout)
 
     result = run_comparison(
         args.prong,

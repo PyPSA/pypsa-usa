@@ -1,6 +1,7 @@
-# PyPSA-USA equivalence-harness config — WHOLE-US variant (data stages only;
-# stop before solve_network). Identical to config.equivalence.yaml except the
-# footprint: interconnect usa, no reeds_state include filter. (see
+# PyPSA-USA equivalence-harness config — WHOLE-US variant (full chain through
+# solve_network, prong 2 at simpl=300). Derived from config.equivalence.yaml;
+# differs in footprint (interconnect usa, no reeds_state include filter),
+# granularity, and the national 1 Mt CO2 cap. (see
 # docs/superpowers/specs/2026-08-07-pipeline-equivalence-and-perf-design.md).
 # One shared file drives BOTH the v1-epic candidate and the anchor
 # (upstream/develop e7f8bd70) baseline builds. The harness driver passes
@@ -26,9 +27,9 @@ foresight: 'perfect'
 
 scenario:
   interconnect: [usa]
-  clusters: [4]            # reeds transport model: must equal CA's ReEDS zone count (p8-p11); plain 4 = all carriers aggregate to zones (user choice 2026-08-07)
-  simpl: ['']            # prong 1 (pass-through); prong 2 targets use s20
-  opts: [REM-3h]
+  clusters: [134a]          # reeds transport model: must equal the US ReEDS zone count (134 country==USA rows in ReEDS_Constraints/membership.csv)
+  simpl: ['300']           # prong 2 production-style granularity (user choice 2026-08-31); prong 1 would use '' pass-through
+  opts: [REM-3h, 3h]       # REM-3h = national 1 Mt CO2 cap (see regional_Co2_limits below); 3h = unconstrained twin
   ll: [v1.0]
   scope: "total"
   sector: ""
@@ -92,7 +93,10 @@ electricity:
   # portfolio_standards (RPS opt) are the sibling keys read the same way.
   # Paths mirror config.default.yaml; the CSVs ship in
   # repo_data/config/policy_constraints/ in both checkouts.
-  regional_Co2_limits: 'repo_data/config/policy_constraints/regional_Co2_limits.csv'
+  # USA harness: single national 1,000,000 t cap (regions='all') instead of the
+  # state-policy CSV — the REM-3h run binds it, the 3h run never reads it.
+  # build.py syncs this harness-only CSV into the anchor worktree.
+  regional_Co2_limits: 'repo_data/config/policy_constraints/regional_Co2_limits_equivalence_usa.csv'
   technology_capacity_targets: 'repo_data/config/policy_constraints/technology_capacity_targets.csv'
   portfolio_standards: 'repo_data/config/policy_constraints/portfolio_standards.csv'
 

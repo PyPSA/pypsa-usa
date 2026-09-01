@@ -29,9 +29,10 @@ _CONFIG_NAME = "config.equivalence.yaml" if INTERCONNECT == "western" else f"con
 # shared harness config in there.
 CONFIGFILE = f"repo_data/config/{_CONFIG_NAME}"
 ANCHOR_CONFIGFILE = f"config/{_CONFIG_NAME}"
-CLUSTERS = "4"
+CLUSTERS = os.environ.get("EQ_CLUSTERS", "4")  # reeds transport: must equal the footprint's ReEDS zone count (western/CA slice 4; usa 134)
 LL = "v1.0"
-OPTS = "REM-3h"
+OPTS = os.environ.get("EQ_OPTS", "REM-3h")
+SIMPL2 = os.environ.get("EQ_SIMPL", "20")  # prong-2 simpl granularity (prong 1 is always pass-through '')
 SECTOR = "E"
 HORIZON = "2030"  # godeeep planning-horizon subdir for profiles
 
@@ -51,8 +52,8 @@ class ArtifactPair:
 
 
 def prong_pairs(prong: int) -> list[ArtifactPair]:
-    """Comparable artifacts for prong 1 (simpl='') or prong 2 (simpl=20)."""
-    s = "" if prong == 1 else "20"
+    """Comparable artifacts for prong 1 (simpl='') or prong 2 (simpl=SIMPL2)."""
+    s = "" if prong == 1 else SIMPL2
     ic = INTERCONNECT
     pairs = [
         # NOTE: these two CSVs are keyed at different granularities (anchor is
@@ -133,7 +134,7 @@ def prong_pairs(prong: int) -> list[ArtifactPair]:
 
 def final_target(prong: int, solve: bool = True) -> str:
     """The snakemake target that forces the whole prong's chain."""
-    s = "" if prong == 1 else "20"
+    s = "" if prong == 1 else SIMPL2
     prepared = f"elec_s{s}_c{CLUSTERS}_ec_l{LL}_{OPTS}_{SECTOR}"
     if solve:
         return f"{RES}/{INTERCONNECT}/networks/{prepared}.nc"
@@ -141,7 +142,7 @@ def final_target(prong: int, solve: bool = True) -> str:
 
 
 def anchor_final_target(prong: int, solve: bool = True) -> str:
-    s = "" if prong == 1 else "20"
+    s = "" if prong == 1 else SIMPL2
     prepared = f"elec_s{s}_c{CLUSTERS}_ec_l{LL}_{OPTS}_{SECTOR}"
     if solve:
         return f"{RES}/{INTERCONNECT}/networks/{prepared}.nc"

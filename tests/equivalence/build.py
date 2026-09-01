@@ -126,6 +126,15 @@ def provision_anchor_worktree() -> Path:
     for cfg in (REPO / "workflow" / "repo_data" / "config").glob("config.equivalence*.yaml"):
         shutil.copy2(cfg, wf / "config" / cfg.name)
 
+    # Harness-specific policy CSVs (e.g. the USA national CO2 cap) are
+    # referenced by repo_data-relative paths in the shared configs; the pinned
+    # anchor checkout does not ship them, so sync them from the candidate.
+    pc_src = REPO / "workflow" / "repo_data" / "config" / "policy_constraints"
+    pc_dst = wf / "repo_data" / "config" / "policy_constraints"
+    for csv in pc_src.glob("*equivalence*.csv"):
+        shutil.copy2(csv, pc_dst / csv.name)
+        shutil.copy2(csv, wf / "config" / "policy_constraints" / csv.name)
+
     apply_infra_patches(wt)
     apply_adopted_fix_patches(wt)
 
