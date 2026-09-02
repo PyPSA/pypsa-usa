@@ -148,7 +148,16 @@ def calc_import_export_costs(n: pypsa.Network, carrier: str) -> float:
 
 def load_import_export_costs(eia_api: str, year: int) -> pd.DataFrame:
     """Loads fuel costs from EIA."""
-    return FuelCosts(fuel="electricity", year=year, api=eia_api).get_data()
+    # EIA retail-sales electricity prices begin 2001; earlier years return an
+    # empty payload that crashes format_data. No date shifting is needed: the
+    # downstream _build_cost_timeseries relabels the index onto the network's
+    # investment periods anyway.
+    data_year = max(year, 2001)
+    if data_year != year:
+        logger.warning(
+            f"No EIA electricity prices before 2001; using {data_year} prices for year {year}",
+        )
+    return FuelCosts(fuel="electricity", year=data_year, api=eia_api).get_data()
 
 
 def format_import_export_costs(n: pypsa.Network, fuel_costs: pd.DataFrame) -> pd.DataFrame:
