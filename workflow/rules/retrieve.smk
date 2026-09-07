@@ -38,17 +38,17 @@ def define_sector_databundles():
 
 
 rule retrieve_zenodo_databundles:
-    params:
-        define_zenodo_databundles(),
     output:
         expand(
             DATA + "breakthrough_network/base_grid/{file}", file=breakthrough_datafiles
         ),
         expand(DATA + "{file}", file=pypsa_usa_datafiles),
-    resources:
-        mem_mb=5000,
     log:
         "logs/retrieve/retrieve_databundles.log",
+    resources:
+        mem_mb=5000,
+    params:
+        define_zenodo_databundles(),
     script:
         "../scripts/retrieve_databundles.py"
 
@@ -57,11 +57,11 @@ rule retrieve_zenodo_databundles:
 rule retrieve_seismic_risk_mask:
     output:
         DATA + "seismic_risk_exclusion/seismic_risk_mask.geojson",
+    log:
+        "logs/retrieve/retrieve_seismic_risk_mask.log",
     resources:
         mem_mb=5000,
         walltime="00:10:00",
-    log:
-        "logs/retrieve/retrieve_seismic_risk_mask.log",
     script:
         "../scripts/retrieve_seismic_risk_mask.py"
 
@@ -73,32 +73,32 @@ def efs_databundle(wildcards):
 
 
 rule retrieve_nrel_efs_data:
+    output:
+        DATA + "nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv",
+    log:
+        "logs/retrieve/retrieve_efs_{efs_case}_{efs_speed}.log",
     wildcard_constraints:
         efs_case="Reference|Medium|High",
         efs_speed="Slow|Moderate|Rapid",
-    params:
-        efs_databundle,
-    output:
-        DATA + "nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv",
     resources:
         mem_mb=5000,
-    log:
-        "logs/retrieve/retrieve_efs_{efs_case}_{efs_speed}.log",
+    params:
+        efs_databundle,
     script:
         "../scripts/retrieve_databundles.py"
 
 
 rule retrieve_eer_demand_data:
-    wildcard_constraints:
-        eer_file="demand_EER2025_100by2050|demand_EER2025_Baseline_AEO2023|demand_EER2025_IRAlow",
-    params:
-        url=lambda wildcards: f"https://zenodo.org/records/18435264/files/{wildcards.eer_file}.h5?download=1",
     output:
         DATA + "eer/{eer_file}.h5",
-    resources:
-        mem_mb=5000,
     log:
         "logs/retrieve/retrieve_eer_{eer_file}.log",
+    wildcard_constraints:
+        eer_file="demand_EER2025_100by2050|demand_EER2025_Baseline_AEO2023|demand_EER2025_IRAlow",
+    resources:
+        mem_mb=5000,
+    params:
+        url=lambda wildcards: f"https://zenodo.org/records/18435264/files/{wildcards.eer_file}.h5?download=1",
     script:
         "../scripts/retrieve_eer_data.py"
 
@@ -121,13 +121,13 @@ sector_datafiles = [
 
 
 rule retrieve_sector_databundle:
-    params:
-        define_sector_databundles(),
     output:
         expand(DATA + "{file}", file=sector_datafiles),
     log:
         LOGS + "retrieve_sector_databundle.log",
     retries: 2
+    params:
+        define_sector_databundles(),
     script:
         "../scripts/retrieve_databundles.py"
 
@@ -181,6 +181,9 @@ COMSTOCK_FILES = [
 
 
 rule retrieve_res_eulp:
+    output:
+        expand(DATA + "eulp/res/{{state}}/{profile}.csv", profile=RESSTOCK_FILES),
+        DATA + "eulp/res/{state}.csv",
     log:
         "logs/retrieve/retrieve_res_eulp/{state}.log",
     retries: 3
@@ -188,14 +191,14 @@ rule retrieve_res_eulp:
         stock="res",
         profiles=RESSTOCK_FILES,
         save_dir=DATA + "eulp/res",
-    output:
-        expand(DATA + "eulp/res/{{state}}/{profile}.csv", profile=RESSTOCK_FILES),
-        DATA + "eulp/res/{state}.csv",
     script:
         "../scripts/retrieve_eulp.py"
 
 
 rule retrieve_com_eulp:
+    output:
+        expand(DATA + "eulp/com/{{state}}/{profile}.csv", profile=COMSTOCK_FILES),
+        DATA + "eulp/com/{state}.csv",
     log:
         "logs/retrieve/retrieve_com_eulp/{state}.log",
     retries: 3
@@ -203,9 +206,6 @@ rule retrieve_com_eulp:
         stock="com",
         profiles=COMSTOCK_FILES,
         save_dir=DATA + "eulp/com",
-    output:
-        expand(DATA + "eulp/com/{{state}}/{profile}.csv", profile=COMSTOCK_FILES),
-        DATA + "eulp/com/{state}.csv",
     script:
         "../scripts/retrieve_eulp.py"
 
@@ -221,9 +221,9 @@ rule retrieve_ship_raster:
         DATA + "shipdensity_global.zip",
     log:
         LOGS + "retrieve_ship_raster.log",
+    retries: 2
     resources:
         mem_mb=5000,
-    retries: 2
     run:
         move(input[0], output[0])
 
@@ -243,17 +243,15 @@ if (
             "cutouts/" + CDIR + "usa_{cutout}.nc",
         log:
             "logs/" + CDIR + "retrieve_cutout_usa_{cutout}.log",
+        retries: 2
         resources:
             walltime="00:50:00",
             mem_mb=5000,
-        retries: 2
         run:
             move(input[0], output[0])
 
 
 rule retrieve_caiso_data:
-    params:
-        fuel_year=config["costs"]["ng_fuel_year"],
     input:
         fuel_regions="repo_data/plants/wecc_fuelregions.xlsx",
     output:
@@ -265,6 +263,8 @@ rule retrieve_caiso_data:
     resources:
         walltime="00:10:00",
         mem_mb=2000,
+    params:
+        fuel_year=config["costs"]["ng_fuel_year"],
     script:
         "../scripts/retrieve_caiso_data.py"
 
@@ -283,6 +283,10 @@ rule retrieve_pudl:
 
 
 rule retrieve_nrel_exclusion_artifact:
+    output:
+        DATA + "nrel_exclusion/derived/{nrel_artifact}.nc",
+    log:
+        LOGS + "retrieve/nrel_exclusion_{nrel_artifact}.log",
     """
     Download a single NREL land-access availability/caps artifact from the
     Zenodo bundle (record nrel_exclusion_v1). Triggered on-demand by
@@ -290,10 +294,6 @@ rule retrieve_nrel_exclusion_artifact:
     """
     wildcard_constraints:
         nrel_artifact=r"(avail|caps)_(solar|onwind|offwind|offwind_floating)_(reference|limited|open)(_cec|_boem)?",
-    output:
-        DATA + "nrel_exclusion/derived/{nrel_artifact}.nc",
-    log:
-        LOGS + "retrieve/nrel_exclusion_{nrel_artifact}.log",
     resources:
         walltime="00:10:00",
         mem_mb=2000,
@@ -304,16 +304,16 @@ rule retrieve_nrel_exclusion_artifact:
 if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:
 
     rule retrieve_egs:
-        params:
-            dispatch=config["renewable"]["EGS"]["dispatch"],
-            subdir=DATA + "EGS/{interconnect}",
         output:
             DATA + "EGS/{interconnect}/specs_EGS.nc",
             DATA + "EGS/{interconnect}/profile_EGS.nc",
+        log:
+            LOGS + "retrieve_EGS_{interconnect}.log",
         resources:
             walltime="00:30:00",
             mem_mb=5000,
-        log:
-            LOGS + "retrieve_EGS_{interconnect}.log",
+        params:
+            dispatch=config["renewable"]["EGS"]["dispatch"],
+            subdir=DATA + "EGS/{interconnect}",
         script:
             "../scripts/retrieve_egs.py"
