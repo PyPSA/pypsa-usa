@@ -72,7 +72,7 @@ run:
 scenario:
   interconnect: [western]                # geographic scope; one of: usa | texas | western | eastern
   planning_horizons: [2030, 2040, 2050]  # investment-period years (2018-2023 | 2030 | 2040 | 2050)
-  clusters: [33]                         # final cluster count; integer, optionally suffixed m / a / c, or "all"
+  clusters: [33]                         # final cluster count; plain integer keeps renewable resource zones (== m); suffix s / a / c or "all"
   simpl: [75]                            # pre-clustering kmeans granularity; alphanumeric or "all"
   ll: [v1.0]                             # line-limit scenario; v|c + number/opt/all (e.g. v1.0, copt)
   opts: [REM-3h]                         # dash/plus-separated options string (REM = renewable-energy mix, 3h = 3-hour temporal resolution)

@@ -74,7 +74,7 @@ for wf in "$REPO/workflow" "$REPO/.worktrees/anchor-e7f8bd70/workflow"; do
 done
 export EQ_INTERCONNECT=usa
 export EQ_SIMPL=300
-export EQ_CLUSTERS=134a
+export EQ_CLUSTERS=134
 
 archive() { # archive <label>: keep this run's manifests, findings + plots
     dst="$REPO/workflow/results/equivalence/usa-$1"

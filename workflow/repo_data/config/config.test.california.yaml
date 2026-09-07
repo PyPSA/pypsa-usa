@@ -20,7 +20,7 @@ run:
   disable_progressbar: true
 
 scenario:
-  clusters: [4m]
+  clusters: [4]
   simpl: [20]
   scope: "total"
   planning_horizons: [2030]   # must be a CPUC SERVM forecast year

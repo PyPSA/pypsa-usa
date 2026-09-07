@@ -27,7 +27,7 @@ foresight: 'perfect'
 
 scenario:
   interconnect: [usa]
-  clusters: [134a]          # reeds transport model: must equal the US ReEDS zone count (134 country==USA rows in ReEDS_Constraints/membership.csv)
+  clusters: [134]           # plain = conventional-only aggregation (renewable zones kept), user choice 2026-09-06; reeds transport model: must equal the US ReEDS zone count (134 country==USA rows in ReEDS_Constraints/membership.csv)
   simpl: ['300']           # prong 2 production-style granularity (user choice 2026-08-31); prong 1 would use '' pass-through
   opts: [REM-3h, 3h]       # REM-3h = national 1 Mt CO2 cap (see regional_Co2_limits below); 3h = unconstrained twin
   ll: [v1.0]

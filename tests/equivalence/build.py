@@ -40,7 +40,7 @@ import time
 from collections.abc import Iterable
 from pathlib import Path
 
-from .paths import ANCHOR_CONFIGFILE, CONFIGFILE
+from .paths import ANCHOR_CONFIGFILE, CONFIGFILE, anchor_clusters
 
 REPO = Path(__file__).resolve().parents[2]
 ANCHOR_SHA = "e7f8bd70"
@@ -127,8 +127,17 @@ def provision_anchor_worktree() -> Path:
             shutil.copy2(entry, dst)
 
     # Shared harness configs (kept in sync from the candidate repo_data copies).
+    # The anchor keeps the pre-2026-09-06 {clusters} suffix semantics, so
+    # scenario.clusters is translated on the way in (paths.anchor_clusters).
     for cfg in (REPO / "workflow" / "repo_data" / "config").glob("config.equivalence*.yaml"):
-        shutil.copy2(cfg, wf / "config" / cfg.name)
+        text = re.sub(
+            r"^(\s*clusters:\s*\[)([^\]]*)(\])",
+            lambda m: m.group(1) + ", ".join(anchor_clusters(v.strip()) for v in m.group(2).split(",")) + m.group(3),
+            cfg.read_text(),
+            count=1,
+            flags=re.MULTILINE,
+        )
+        (wf / "config" / cfg.name).write_text(text)
 
     # Harness-specific policy CSVs (e.g. the USA national CO2 cap) are
     # referenced by repo_data-relative paths in the shared configs; the pinned

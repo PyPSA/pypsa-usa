@@ -100,7 +100,7 @@ for wf in "$REPO/workflow" "$REPO/.worktrees/anchor-e7f8bd70/workflow"; do
 done
 export EQ_INTERCONNECT=usa
 export EQ_SIMPL=300
-export EQ_CLUSTERS=134a
+export EQ_CLUSTERS=134
 export EQ_UNTIL=assembled
 export EQ_OPTS=3h   # unused before prepare_network; kept for target naming
 

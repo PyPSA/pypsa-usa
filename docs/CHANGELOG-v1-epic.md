@@ -376,6 +376,24 @@ Conventions:
   *Results effect:* None (documentation, captions, and a local-config
   resync only).
 
+- **`{clusters}` wildcard: plain integer now keeps renewable resource zones
+  (formerly `m`); new `s` suffix for the old all-carrier aggregation** (user
+  decision 2026-09-06; `workflow/scripts/cluster_network.py::parse_clusters_wildcard`,
+  `workflow/Snakefile` wildcard regex `[0-9]+[msac]?|all`, memory formula in
+  `rules/common.smk`, docs `config-wildcards.md`, unit tests in
+  `scripts/test/test_cluster_wildcard.py`). `N` and `Nm` aggregate only
+  conventional carriers so wind/solar keep their `{simpl}`-level profiles and
+  potentials on the coarser grid; `Ns` ("small") aggregates every carrier;
+  `Na` / `Nc` / `all` unchanged. Tutorial/test configs drop the `m`. The
+  equivalence harness translates the candidate value into the pinned
+  anchor's old dialect (`paths.anchor_clusters`: `134` -> `134m`, `4s` -> `4`)
+  for its config copy and target paths; USA prong 2 moves from `134a` to
+  `134`, the CA config becomes `4s` to preserve its countersigned baseline.
+  *Results effect:* **Yes for configs that used a bare integer** — they now
+  keep per-zone renewable generators instead of one averaged generator per
+  carrier and bus (larger generator set, different RE build). Write `Ns` to
+  recover the old behaviour.
+
 - **Rename rule `cluster_simpl` -> `cluster_resources`** (user request
   2026-08-07; rule name, log path, walltime config key, living docs; the
   script file stays `workflow/scripts/cluster_simpl.py`). *Results effect:*

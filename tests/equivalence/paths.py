@@ -31,6 +31,26 @@ CONFIGFILE = f"repo_data/config/{_CONFIG_NAME}"
 ANCHOR_CONFIGFILE = f"config/{_CONFIG_NAME}"
 CLUSTERS = os.environ.get("EQ_CLUSTERS", "4")  # reeds transport: must equal the footprint's ReEDS zone count (western/CA slice 4; usa 134)
 LL = "v1.0"
+
+
+def anchor_clusters(wc: str = CLUSTERS) -> str:
+    """Translate a candidate ``{clusters}`` value into the anchor's dialect.
+
+    Since 2026-09-06 the candidate's plain integer means "aggregate only
+    conventional carriers" (the anchor's ``m``) and ``s`` means "aggregate
+    every carrier" (the anchor's plain integer). The pinned anchor keeps the
+    old semantics, so its targets and config use the translated value.
+    """
+    if wc == "all":
+        return wc
+    if wc.endswith("s"):
+        return wc[:-1]
+    if wc[-1].isdigit():
+        return wc + "m"
+    return wc
+
+
+ANCHOR_CLUSTERS = anchor_clusters()
 OPTS = os.environ.get("EQ_OPTS", "REM-3h")
 SIMPL2 = os.environ.get("EQ_SIMPL", "20")  # prong-2 simpl granularity (prong 1 is always pass-through '')
 SECTOR = "E"
@@ -117,35 +137,37 @@ def prong_pairs(prong: int) -> list[ArtifactPair]:
         return pairs
     core = f"elec_s{s}_c{CLUSTERS}"
     prepared = f"{core}_ec_l{LL}_{OPTS}"
+    acore = f"elec_s{s}_c{ANCHOR_CLUSTERS}"
+    aprepared = f"{acore}_ec_l{LL}_{OPTS}"
     pairs += [
         ArtifactPair(
             stage="clustered_network",
             candidate=f"{EQ}/networks/{ic}/{core}.nc",
-            anchor=f"{EQ}/{ic}/{core}.nc",
+            anchor=f"{EQ}/{ic}/{acore}.nc",
             kind="network",
         ),
         ArtifactPair(
             stage="extra_components",
             candidate=f"{EQ}/networks/{ic}/{core}_ec.nc",
-            anchor=f"{EQ}/{ic}/{core}_ec.nc",
+            anchor=f"{EQ}/{ic}/{acore}_ec.nc",
             kind="network",
         ),
         ArtifactPair(
             stage="prepared_network",
             candidate=f"{EQ}/networks/{ic}/{prepared}.nc",
-            anchor=f"{EQ}/{ic}/{prepared}.nc",
+            anchor=f"{EQ}/{ic}/{aprepared}.nc",
             kind="network",
         ),
         ArtifactPair(
             stage="sectored_network",
             candidate=f"{EQ}/networks/{ic}/{prepared}_{SECTOR}.nc",
-            anchor=f"{EQ}/{ic}/{prepared}_{SECTOR}.nc",
+            anchor=f"{EQ}/{ic}/{aprepared}_{SECTOR}.nc",
             kind="network",
         ),
         ArtifactPair(
             stage="solved_network",
             candidate=f"{RES}/{ic}/networks/{prepared}_{SECTOR}.nc",
-            anchor=f"{RES}/{ic}/networks/{prepared}_{SECTOR}.nc",
+            anchor=f"{RES}/{ic}/networks/{aprepared}_{SECTOR}.nc",
             kind="network",
             solve_stage=True,
         ),
@@ -164,7 +186,7 @@ def final_target(prong: int, solve: bool = True) -> str:
 
 def anchor_final_target(prong: int, solve: bool = True) -> str:
     s = "" if prong == 1 else SIMPL2
-    prepared = f"elec_s{s}_c{CLUSTERS}_ec_l{LL}_{OPTS}_{SECTOR}"
+    prepared = f"elec_s{s}_c{ANCHOR_CLUSTERS}_ec_l{LL}_{OPTS}_{SECTOR}"
     if solve:
         return f"{RES}/{INTERCONNECT}/networks/{prepared}.nc"
     return f"{EQ}/{INTERCONNECT}/{prepared}.nc"

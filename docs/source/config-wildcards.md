@@ -51,16 +51,20 @@ ReEDS networks, the zone counts listed on the
 {ref}`spatial configuration page <spatial>` — `cluster_network` reports the correct
 minimum if the value is infeasible).
 
-A plain integer (e.g. `33`) aggregates buses *and* generators: generators at the merged
-buses are combined per carrier. A letter suffix controls which carriers are aggregated,
-letting resource zones keep their `{simpl}`-level detail on a coarser transmission grid:
+A plain integer (e.g. `33`) aggregates buses and *conventional* generators only: renewable
+generators are moved to the clustered buses but keep their distinct `{simpl}`-level resource
+zones, so a clustered bus may host several wind or solar generators with different profiles
+and potentials. This preserves resource quality on a coarser transmission grid instead of
+averaging the best and worst sites of a zone into one profile. A letter suffix changes which
+carriers are aggregated:
 
 | Value  | Behaviour |
 |--------|-----------|
-| `33`   | Aggregate all carriers to the clustered buses (one generator per carrier and bus). |
-| `33m`  | Aggregate only conventional carriers; renewable generators are moved to the clustered buses but keep their distinct `{simpl}`-level resource zones (a clustered bus may host several wind generators). |
-| `33c`  | Aggregate all *except* conventional carriers; conventional plants keep `{simpl}`-level detail. |
+| `33`   | **Default.** Aggregate only conventional carriers; renewables keep `{simpl}`-level resource zones. |
+| `33m`  | Same as `33` (kept as an alias for older configs). |
+| `33s`  | "Small": aggregate *all* carriers to the clustered buses (one generator per carrier and bus). Cheapest to solve; averages renewable resource classes within a zone. |
 | `33a`  | Aggregate no carriers — all generators keep their `{simpl}`-level resolution. |
+| `33c`  | Aggregate all *except* conventional carriers; conventional plants keep `{simpl}`-level detail. |
 | `all`  | Skip spatial reduction entirely (one cluster per bus). |
 
 Carriers listed in `clustering: cluster_network: exclude_carriers` are never aggregated.

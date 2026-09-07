@@ -35,7 +35,7 @@ run:
 scenario:
   interconnect: [western]                # pinned: the tutorial is a CA slice of the Western Interconnect
   planning_horizons: [2050]              # single horizon keeps the solve small
-  clusters: [4m]                         # 4 clusters, m = memory-scaled resource hint
+  clusters: [4]                          # 4 clusters; renewables keep simpl-level resource zones (default, formerly 4m)
   scope: "total"                         # demand scope; urban | rural | total
 
 
