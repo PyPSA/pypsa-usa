@@ -394,6 +394,11 @@ Conventions:
   assembled and solved stages, and a rule-grouped benchmark table.
   "candidate" renders as "V1-epic" in all user-facing text (internal keys
   unchanged). *Results effect:* None (reporting only).
+  **Retired 2026-09-06:** `report.py` and `report_sections/` deleted; the
+  harness now writes standalone PNGs via `tests/equivalence/plots.py` into
+  `results/equivalence/plots_{interconnect}/` (per-zone choropleths of RE
+  potential and potential-weighted mean CF, national available-power time
+  series). Findings JSON and manifests remain the machine-readable record.
 
 - **Fix 6.28% silent demand loss through transformer removal**
   (`workflow/scripts/aggregate_to_substations.py`). `remove_transformers`

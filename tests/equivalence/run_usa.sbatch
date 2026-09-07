@@ -14,7 +14,7 @@
 #                             (regional_Co2_limits_equivalence_usa.csv)
 #        run B  opts 3h     : emissions-unconstrained twin
 #      Run B reuses every artifact up to prepare_network; only the prepared
-#      and solved networks rebuild. Manifests + HTML report are archived per
+#      and solved networks rebuild. Manifests, findings + PNG plots are archived per
 #      run under workflow/results/equivalence/usa-{rem1mt,noco2}/.
 #
 #SBATCH -J eq-usa-p2
@@ -76,12 +76,12 @@ export EQ_INTERCONNECT=usa
 export EQ_SIMPL=300
 export EQ_CLUSTERS=134a
 
-archive() { # archive <label>: keep this run's manifests + report
+archive() { # archive <label>: keep this run's manifests, findings + plots
     dst="$REPO/workflow/results/equivalence/usa-$1"
     mkdir -p "$dst"
     cp -p "$REPO"/workflow/results/equivalence/manifest_*_usa.json "$dst"/ 2>/dev/null || true
     cp -p "$REPO"/workflow/results/equivalence/findings_*.json "$dst"/ 2>/dev/null || true
-    cp -p "$REPO"/workflow/results/equivalence/*.html "$dst"/ 2>/dev/null || true
+    cp -rp "$REPO"/workflow/results/equivalence/plots_usa "$dst"/ 2>/dev/null || true
 }
 
 # Unconstrained run FIRST: the REM 1 Mt cap looks infeasible at USA scale

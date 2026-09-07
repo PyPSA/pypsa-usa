@@ -111,4 +111,4 @@ dst="$REPO/workflow/results/equivalence/usa-cf-assembled"
 mkdir -p "$dst"
 cp -p "$REPO"/workflow/results/equivalence/manifest_*_usa.json "$dst"/ 2>/dev/null || true
 cp -p "$REPO"/workflow/results/equivalence/findings_*.json "$dst"/ 2>/dev/null || true
-cp -p "$REPO"/workflow/results/equivalence/*.html "$dst"/ 2>/dev/null || true
+cp -rp "$REPO"/workflow/results/equivalence/plots_usa "$dst"/ 2>/dev/null || true
