@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 
 from .compare import load_network, load_waivers
-from .paths import CLUSTERS, INTERCONNECT, UNTIL, prong_pairs
+from .paths import CLUSTERS, CONFIGFILE, INTERCONNECT, UNTIL, prong_pairs
 
 REPO = Path(__file__).resolve().parents[2]
 ANCHOR_ROOT = REPO / ".worktrees" / "anchor-e7f8bd70" / "workflow"
@@ -128,7 +128,7 @@ def build_ctx() -> dict:
     for side in ("candidate", "anchor"):
         p = RESULTS / f"manifest_{side}{_SUF}.json"
         manifests[side] = json.loads(p.read_text()) if p.exists() else {}
-    cfg = CAND_ROOT / "config" / "config.equivalence.yaml"
+    cfg = CAND_ROOT / CONFIGFILE
     fingerprint = {
         "V1-epic sha": _git_sha(REPO),
         "anchor sha": _git_sha(ANCHOR_ROOT),

@@ -56,6 +56,10 @@ POWERPLANTS_SCRIPT = "workflow/scripts/build_powerplants.py"
 # add_electricity.py only after the seam fix, and never in the pristine anchor.
 SEAM_FIX_MARK = "_drop_distant_seam_plants"
 ADD_ELECTRICITY_SCRIPT = "workflow/scripts/add_electricity.py"
+# DL-17 sentinel: the leap-day-drop helper's name. Present in the candidate's
+# build_renewable_profiles.py only after the fix, never in the pristine anchor.
+LEAP_FIX_MARK = "_drop_leap_day"
+BUILD_PROFILES_SCRIPT = "workflow/scripts/build_renewable_profiles.py"
 FORCE_RERUN_MARKER = ".eq-force-rerun"  # rules to -R once after a newly applied patch
 
 # The ANCHOR's layered set (pinned upstream e7f8bd70), not the candidate's —
@@ -134,6 +138,14 @@ def provision_anchor_worktree() -> Path:
     for csv in pc_src.glob("*equivalence*.csv"):
         shutil.copy2(csv, pc_dst / csv.name)
         shutil.copy2(csv, wf / "config" / "policy_constraints" / csv.name)
+
+    # Per-user API keys live in the candidate's untracked config/ overlay
+    # (never in the tracked repo_data templates). Mirror them onto the anchor
+    # so both sides run with the same credentials. Infra-only: identical key,
+    # cannot move numbers.
+    api_overlay = REPO / "workflow" / "config" / "config.api.yaml"
+    if api_overlay.exists():
+        shutil.copy2(api_overlay, wf / "config" / "config.api.yaml")
 
     apply_infra_patches(wt)
     apply_adopted_fix_patches(wt)
@@ -230,6 +242,11 @@ def apply_adopted_fix_patches(wt: Path) -> None:
     a CA-scoped run attaches 23 out-of-footprint plants / 1,887.4 MW (nearest
     890 km away) to California buses. Gated on ``model_topology.include``, so
     it is a no-op for unfiltered interconnect/usa runs on both sides.
+
+    DL-17 (2026-09-01): drop Feb 29 from ``get_renewable_snapshots``'s
+    CF-selection window in ``build_renewable_profiles.py``. Required for leap
+    weather years (historical 2012, the only Zenodo-published historical
+    year); no-op otherwise. See ``apply_leap_day_adoption``.
     """
     applied_rules: list[str] = []
     smk = wt / "workflow" / "rules" / "build_electricity.smk"
@@ -289,6 +306,7 @@ def apply_adopted_fix_patches(wt: Path) -> None:
 
     apply_powerplants_adoption(wt, applied_rules)
     apply_seam_adoption(wt, applied_rules)
+    apply_leap_day_adoption(wt, applied_rules)
 
     if applied_rules:
         mark_force_rerun(wt, applied_rules)
@@ -534,6 +552,69 @@ def apply_seam_adoption(wt: Path, applied_rules: list[str]) -> None:
     dst.write_text(text)
     log("applied adopted-fix patch DL-13: add_electricity.py seam-plant bound")
     applied_rules.append("add_electricity")
+
+
+def apply_leap_day_adoption(wt: Path, applied_rules: list[str]) -> None:
+    """DL-17: mirror the leap-day drop onto the anchor's build_renewable_profiles.py.
+
+    ``get_renewable_snapshots`` builds the CF-selection window with
+    ``pd.date_range``, which includes Feb 29 for leap weather years (e.g. the
+    Zenodo-published historical 2012). ``fix_godeeep_time`` shifts the raw
+    GODEEEP time axis past the leap day, so ``.sel(time=...)`` on the window
+    KeyErrors. The candidate wraps both returns in ``_drop_leap_day``; the
+    anchor gets the same code by slice adoption.
+
+    Mechanism (DL-13 family, but simpler): the region between the
+    ``# Get renewable snapshots`` banner comment and ``def plot_data(`` is
+    byte-identical between e7f8bd70 and the pre-fix candidate (verified
+    2026-09-01), so the candidate's slice — which now also carries the
+    ``_drop_leap_day`` helper — replaces the anchor's slice wholesale. Sliced
+    from the LIVE candidate file so both sides run the same text and candidate
+    drift re-triggers the forced rerun. Content-idempotent like DL-12/13.
+    No-op for non-leap weather years, so it cannot move numbers on the
+    recorded 2019/2030 baselines.
+    """
+    dst = wt / BUILD_PROFILES_SCRIPT
+    cand_src = REPO / BUILD_PROFILES_SCRIPT
+    if not cand_src.exists():
+        raise RuntimeError(f"candidate {BUILD_PROFILES_SCRIPT} missing; refusing to patch")
+    cand_text = cand_src.read_text()
+    if LEAP_FIX_MARK not in cand_text:
+        raise RuntimeError(
+            f"candidate {BUILD_PROFILES_SCRIPT} lacks the DL-17 sentinel "
+            f"{LEAP_FIX_MARK!r}; refusing to mirror an unexpected file",
+        )
+
+    start_mark = "# Get renewable snapshots for a given year using month/day from config"
+    end_mark = "def plot_data("
+
+    def _slice(text: str, name: str) -> tuple[int, int]:
+        try:
+            start = text.index(start_mark)
+            end = text.index(end_mark)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"cannot locate the DL-17 slice in {name}; its shape changed: {exc}",
+            ) from None
+        if not start < end:
+            raise RuntimeError(f"DL-17 slice out of order in {name}; refusing to patch")
+        return start, end
+
+    c0, c1 = _slice(cand_text, f"candidate {BUILD_PROFILES_SCRIPT}")
+    cand_block = cand_text[c0:c1]
+    if LEAP_FIX_MARK not in cand_block:
+        raise RuntimeError(
+            f"candidate {BUILD_PROFILES_SCRIPT} DL-17 slice lost the sentinel; refusing to patch",
+        )
+
+    anchor_text = dst.read_text()
+    a0, a1 = _slice(anchor_text, f"anchor {BUILD_PROFILES_SCRIPT}")
+    new_text = anchor_text[:a0] + cand_block + anchor_text[a1:]
+    if anchor_text == new_text:
+        return
+    dst.write_text(new_text)
+    log("applied adopted-fix patch DL-17: build_renewable_profiles.py leap-day drop")
+    applied_rules.append("build_renewable_profiles")
 
 
 def side_configfile(side: str) -> str:

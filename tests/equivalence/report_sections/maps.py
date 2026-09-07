@@ -38,12 +38,123 @@ SIMPLIFY_TOL_DEG = 0.02  # sub-pixel at MAP_DPI for a national-extent panel
 PROFILE_TECHS = ("onwind", "solar", "offwind_floating")
 
 
+def _render_prong2_profiles(ctx) -> str:
+    """ReEDS-zone maps + national time series for the prong-2 CF artifacts.
+
+    The prong-1 map sections below need pass-through (simpl='') artifacts and
+    render nothing in an UNTIL=assembled prong-2 campaign. This section maps
+    what that campaign DOES produce: the candidate's simpl-cluster profiles vs
+    the anchor's nodal profiles, both aggregated to the shared ReEDS-zone
+    frame (the only granularity at which a per-region difference panel is
+    meaningful, since the two sides' bus spaces are disjoint by design).
+    Anchor buses reach zones through the same busmap_s{simpl} join the
+    candidate's caps remap uses; candidate cluster IDs are '{zone} {i}'.
+    """
+    import geopandas as gpd
+    import xarray as xr
+
+    from ..paths import EQ, SIMPL2
+
+    plt, np, pd = ctx["plt"], ctx["np"], ctx["pd"]
+    img = ctx["img"]
+    cand_root, anch_root = ctx["cand_root"], ctx["anch_root"]
+    labels = ctx["labels"]
+
+    pairs = [p for p in ctx["prong_pairs"](2) if p.kind == "profile"]
+    pairs = [p for p in pairs if (cand_root / p.candidate).exists() and (anch_root / p.anchor).exists()]
+    if not pairs:
+        return ""
+
+    zones = gpd.read_file(cand_root / f"{EQ}/geospatial/{IC}/reeds_shapes.geojson").set_index("name")
+    busmap = pd.read_csv(cand_root / f"{EQ}/busmaps/{IC}/busmap_s{SIMPL2}.csv", index_col=0, dtype=str).iloc[:, 0]
+    busmap.index = busmap.index.astype(str)
+
+    def zone_of_cluster(b: str) -> str:
+        return b.rsplit(" ", 1)[0]
+
+    def zone_of_anchor_bus(b: str) -> str | float:
+        c = busmap.get(b)
+        if c is None:
+            try:
+                c = busmap.get(str(int(float(b))))
+            except (TypeError, ValueError):
+                c = None
+        return zone_of_cluster(c) if isinstance(c, str) else np.nan
+
+    parts = [
+        "<h3>Prong 2 capacity-factor construction (ReEDS-zone frame)</h3>",
+        "<p>Candidate and anchor profiles aggregated to the 134 shared ReEDS "
+        "zones: installable potential (sum of p_nom_max) and potential-weighted "
+        "mean capacity factor, plus the national available-power time series "
+        "the aggregates in the findings table summarize. The difference panels "
+        "share a diverging scale centered at zero — equivalence reads as "
+        "near-white.</p>",
+    ]
+
+    for pair in pairs:
+        tech = pair.stage.replace("profile_", "")
+        with xr.open_dataset(cand_root / pair.candidate) as dsc, xr.open_dataset(anch_root / pair.anchor) as dsa:
+            frames = {}
+            for side, ds, zfun in (
+                ("cand", dsc, zone_of_cluster),
+                ("anch", dsa, zone_of_anchor_bus),
+            ):
+                pnm_ = ds["p_nom_max"].to_pandas()
+                cf = ds["profile"].mean("time").to_pandas()
+                z = pd.Series([zfun(str(b)) for b in pnm_.index], index=pnm_.index)
+                pot = pnm_.groupby(z).sum()
+                wcf = (cf * pnm_).groupby(z).sum() / pot.replace(0.0, np.nan)
+                frames[side] = pd.DataFrame({"pot": pot / 1e3, "cf": wcf})
+            avail_c = (dsc["profile"] * dsc["p_nom_max"]).sum("bus").to_pandas() / 1e3
+            avail_a = (dsa["profile"] * dsa["p_nom_max"]).sum("bus").to_pandas() / 1e3
+
+        for qty, label, fmt in (("pot", "installable potential [GW]", "{:.0f}"), ("cf", "potential-weighted mean CF", "{:.2f}")):
+            gc = zones.join(frames["cand"][qty].rename("v"))
+            ga = zones.join(frames["anch"][qty].rename("v"))
+            diff = gc["v"] - ga["v"]
+            vmax = float(np.nanmax([gc["v"].max(), ga["v"].max()]))
+            dmax = float(np.nanmax(np.abs(diff))) or 1e-9
+            fig, axes = plt.subplots(1, 3, figsize=(15, 4.2))
+            for ax, g, title in (
+                (axes[0], gc, labels["candidate"]),
+                (axes[1], ga, labels["anchor"]),
+            ):
+                g.plot(column="v", ax=ax, cmap="viridis", vmin=0, vmax=vmax, legend=True, missing_kwds={"color": "#dddddd"})
+                ax.set_title(f"{title}: {tech} {label}", fontsize=9)
+            gd = zones.join(diff.rename("v"))
+            gd.plot(column="v", ax=axes[2], cmap="RdBu_r", vmin=-dmax, vmax=dmax, legend=True, missing_kwds={"color": "#dddddd"})
+            axes[2].set_title(f"{labels['candidate']} − {labels['anchor']}", fontsize=9)
+            for ax in axes:
+                ax.set_axis_off()
+            parts.append(img(fig, f"{tech}: per-zone {label} on both sides, and their difference"))
+
+        day_c, day_a = avail_c.resample("D").mean(), avail_a.resample("D").mean()
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 5), sharex=True, height_ratios=[3, 1])
+        ax1.plot(day_c.index, day_c.values, label=labels["candidate"], lw=1.0)
+        ax1.plot(day_a.index, day_a.values, label=labels["anchor"], lw=1.0, alpha=0.75)
+        ax1.set_ylabel("national available power [GW]\n(daily mean)")
+        ax1.legend(fontsize=8)
+        ax1.set_title(f"{tech}: Σ profile·p_nom_max over all buses", fontsize=10)
+        rel = 100.0 * (day_c - day_a) / day_a.replace(0.0, np.nan)
+        ax2.axhline(0, color="#999999", lw=0.5)
+        ax2.plot(rel.index, rel.values, color="#a03030", lw=0.8)
+        ax2.set_ylabel("rel diff [%]")
+        parts.append(img(fig, f"{tech}: national available power, both sides and relative difference"))
+
+    return "".join(parts)
+
+
 def render(ctx) -> str:
     import sys
 
     sys.path.insert(0, str(ctx["repo"] / "workflow" / "scripts"))
 
     parts: list[str] = ["<h2 id='maps'>Where the differences are: maps</h2>"]
+
+    try:
+        parts.append(_render_prong2_profiles(ctx))
+    except Exception as e:
+        parts.append(f"<p>prong-2 profile maps failed: {e}</p>")
 
     try:
         import cartopy.crs as ccrs

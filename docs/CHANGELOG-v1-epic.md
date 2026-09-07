@@ -99,6 +99,27 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **Leap-day drop in the GODEEEP CF-selection window (DL-17)**
+  (`workflow/scripts/build_renewable_profiles.py::_drop_leap_day`; harness
+  adoption in `tests/equivalence/build.py::apply_leap_day_adoption`).
+  `get_renewable_snapshots` builds the CF-selection window with
+  `pd.date_range`, which includes Feb 29 for leap weather years, but
+  `fix_godeeep_time` shifts the raw GODEEEP time axis past the leap day,
+  so `.sel(time=...)` KeyErrors. Needed for the USA equivalence campaign's
+  switch (2026-09-01) to historical 2012 CFs — the only historical year
+  published on Zenodo, chosen so both sides retrieve byte-identical inputs
+  (the local Oak mirror's 2012 files fail an md5 check against the Zenodo
+  publication). Dropping Feb 29 yields the standard 8760-hour year, which
+  maps 1:1 onto the full-year snapshots now set in
+  `config.equivalence-usa.yaml`. *Results effect:* no-op for non-leap
+  weather years (2019 baselines, future-scenario 2030/2040/2050 horizons),
+  so recorded baselines are unaffected; for leap years it turns a crash
+  into the standard 8760 convention. Fourth ADOPTED-FIX anchor patch,
+  done by slice adoption: the region between the `# Get renewable
+  snapshots` banner and `def plot_data(` is byte-identical between
+  e7f8bd70 and the pre-fix candidate (verified 2026-09-01), so the
+  candidate's patched slice replaces the anchor's wholesale.
+
 - **Seam-plant fallback bounded to the model footprint in scoped runs
   (DL-13)** (`workflow/scripts/add_electricity.py`, commits d98cb93f and
   103f2194; harness adoption in

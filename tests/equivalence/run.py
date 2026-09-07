@@ -21,7 +21,7 @@ from tests.equivalence.paths import (  # noqa: E402
     assembled_target,
     final_target,
 )
-from tests.equivalence.report import build_report  # noqa: E402
+from tests.equivalence.plots import export_all  # noqa: E402
 
 
 def main() -> int:
@@ -48,7 +48,7 @@ def main() -> int:
     # stage (paths.prong_pairs); build the matching targets too, or the run
     # would still drive the whole chain through the solve it is not comparing.
     if UNTIL == "assembled":
-        cand_target, anch_target = assembled_target(), anchor_assembled_target()
+        cand_target, anch_target = assembled_target(args.prong), anchor_assembled_target(args.prong)
     else:
         cand_target, anch_target = final_target(args.prong, solve), anchor_final_target(args.prong, solve)
     if args.side in ("candidate", "both"):
@@ -61,13 +61,15 @@ def main() -> int:
         REPO / "workflow",
         ANCHOR_WORKTREE / "workflow",
     )
-    report = build_report()
+    # PNG plots instead of the HTML report (user decision 2026-09-01: the
+    # HTML wrapper added nothing over the figures themselves).
+    plots_dir = export_all()
     print(
         f"[equivalence] prong {args.prong}: "
         f"{'PASS' if result['pass'] else 'FAIL'} "
         f"({result['n_live']} live / {result['n_findings']} total findings)",
     )
-    print(f"[equivalence] report: {report}")
+    print(f"[equivalence] plots: {plots_dir}")
     return 0 if result["pass"] else 1
 
 

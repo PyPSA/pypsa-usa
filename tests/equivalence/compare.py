@@ -29,7 +29,7 @@ import pandas as pd
 import xarray as xr
 import yaml
 
-from .paths import INTERCONNECT, ArtifactPair, prong_pairs
+from .paths import INTERCONNECT, UNTIL, ArtifactPair, prong_pairs
 
 REPO = Path(__file__).resolve().parents[2]
 RTOL = 1e-3
@@ -419,6 +419,69 @@ def _compare_solved(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
 
 def compare_profiles(pair: ArtifactPair, pc: Path, pa: Path, findings: list[dict]) -> None:
     with xr.open_dataset(pc) as dc, xr.open_dataset(pa) as da:
+        # Clustering-invariant system aggregates. At prong 2 the two sides'
+        # bus spaces are disjoint (candidate: simpl-cluster IDs, anchor: nodal
+        # IDs), so the per-bus comparison below degenerates to a row_set
+        # finding; these aggregates are the substantive CF-construction
+        # comparison there. Potential is the extensive caps rollup; the
+        # available-power series folds CF weighting differences into one
+        # comparable national time series.
+        if "p_nom_max" in dc and "p_nom_max" in da:
+            tc = float(dc["p_nom_max"].sum())
+            ta = float(da["p_nom_max"].sum())
+            if not np.isclose(tc, ta, rtol=RTOL):
+                findings.append(
+                    {
+                        "stage": pair.stage,
+                        "component": "system_potential_mw",
+                        "column": "sum(p_nom_max)",
+                        "kind": "value",
+                        "detail": {
+                            "candidate": tc,
+                            "anchor": ta,
+                            "rel": abs(tc - ta) / max(abs(ta), 1e-9),
+                            "rel_pct": round(abs(tc - ta) / max(abs(ta), 1e-9) * 100.0, 4),
+                        },
+                    },
+                )
+            if "profile" in dc and "profile" in da:
+                sc = (dc["profile"] * dc["p_nom_max"]).sum("bus").to_pandas()
+                sa = (da["profile"] * da["p_nom_max"]).sum("bus").to_pandas()
+                # Compare on positional hours: the two sides may label the
+                # same weather differently (e.g. horizon-relabeled years).
+                n = min(len(sc), len(sa))
+                vc, va = sc.to_numpy()[:n], sa.to_numpy()[:n]
+                bad = ~np.isclose(vc, va, rtol=RTOL, atol=1e-6)
+                if len(sc) != len(sa) or bad.any():
+                    denom = np.maximum(np.abs(va), 1e-9)
+                    rel = np.abs(vc - va) / denom
+                    findings.append(
+                        {
+                            "stage": pair.stage,
+                            "component": "system_available_mw",
+                            "column": "sum_bus(profile*p_nom_max)",
+                            "kind": "value",
+                            "detail": {
+                                "hours_compared": int(n),
+                                "hours_mismatched": int(bad.sum()),
+                                "len_candidate": int(len(sc)),
+                                "len_anchor": int(len(sa)),
+                                "worst_rel_pct": round(float(rel.max()) * 100.0, 4),
+                                "mean_rel_pct": round(float(rel.mean()) * 100.0, 4),
+                                "candidate_total_mwh": float(vc.sum()),
+                                "anchor_total_mwh": float(va.sum()),
+                            },
+                        },
+                    )
+        # Per-bus variable comparison is only meaningful when the two sides
+        # share a bus space (prong 1). At prong 2 the candidate is keyed by
+        # simpl-cluster IDs and the anchor by nodal IDs — zero overlap — so
+        # skip the per-var loop and let the system aggregates above carry the
+        # comparison instead of emitting hundreds of vacuous row_set findings.
+        cb = {str(b) for b in dc.indexes.get("bus", [])}
+        ab = {str(b) for b in da.indexes.get("bus", [])}
+        if not (cb & ab):
+            return
         for var in sorted(set(dc.data_vars) | set(da.data_vars)):
             if var not in dc.data_vars or var not in da.data_vars:
                 findings.append(
@@ -517,7 +580,20 @@ def run_comparison(prong: int, cand_root: Path, anch_root: Path) -> dict:
     all_findings: list[dict] = []
     pairs = prong_pairs(prong)
     if prong == 2:
-        pairs = [p for p in pairs if p.solve_stage or p.stage in ("clustered_network",)]
+        # Pre-cluster per-bus artifacts differ by design at prong 2 (different
+        # simpl-stage kmeans), so normally only clustered/solve stages compare.
+        # Under UNTIL=assembled those don't exist; the profile and demand
+        # pairs carry the comparison instead via their clustering-invariant
+        # system aggregates (compare_profiles skips per-bus vars when the two
+        # bus spaces are disjoint).
+        keep = ("clustered_network",)
+        pairs = [
+            p
+            for p in pairs
+            if p.solve_stage
+            or p.stage in keep
+            or (UNTIL == "assembled" and p.kind in ("profile", "demand_total"))
+        ]
     for pair in pairs:
         if prong == 2 and pair.stage == "clustered_network":
             pc, pa = cand_root / pair.candidate, anch_root / pair.anchor

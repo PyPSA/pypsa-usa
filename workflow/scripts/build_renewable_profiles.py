@@ -178,6 +178,18 @@ def remap_caps_to_cluster(
 
 
 # Get renewable snapshots for a given year using month/day from config
+def _drop_leap_day(sns):
+    """Drop Feb 29 from a CF-selection window (harness ledger DL-17).
+
+    GODEEEP CF time axes never carry a Feb 29 label: ``fix_godeeep_time``
+    shifts leap-year timestamps from the leap day onward by +1 day. A
+    leap-year selection window that requests Feb 29 therefore KeyErrors in
+    ``.sel(time=...)``; dropping it yields the standard 8760-hour year.
+    No-op for non-leap years.
+    """
+    return sns[~((sns.month == 2) & (sns.day == 29))]
+
+
 def get_renewable_snapshots(config, year):
     ren_sns_config = config.get("renewable_snapshots", {})
 
@@ -205,7 +217,7 @@ def get_renewable_snapshots(config, year):
             f"{snapshots_config['start']} to {snapshots_config['end']} "
             f"({'inclusive' if end_inclusive else 'exclusive'} end)",
         )
-        return get_snapshots(snapshots_config)
+        return _drop_leap_day(get_snapshots(snapshots_config))
     else:
         # Old format fallback
         snapshots_config = {
@@ -214,7 +226,7 @@ def get_renewable_snapshots(config, year):
             "inclusive": "left",
         }
         logger.info(f"Using renewable snapshots for full year {year}")
-        return get_snapshots(snapshots_config)
+        return _drop_leap_day(get_snapshots(snapshots_config))
 
 
 def plot_data(data):

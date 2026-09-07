@@ -45,17 +45,57 @@ model_topology:
 enable:
   build_cutout: false
 
-renewable_weather_years: [2019]
+# Historical 2012 GODEEEP CFs (user decision 2026-09-01): 2012 is the only
+# historical year PUBLISHED on Zenodo, so both sides can retrieve identical
+# bytes. Scenario/year/hub height are pinned HERE because each branch would
+# otherwise inherit them from a DIFFERENT file (candidate: the auto-loaded
+# repo_data/config/config.{common,default}.yaml; anchor: its own layered
+# config.common.yaml) — currently equal, but nothing keeps them so.
+renewable_scenarios: ["historical"]
+renewable_weather_years: [2012]     # CF year for historical scenarios (resolve_weather_year)
+godeeep_wind_height: "_125m"
 
-# Two full Sun-Sat January weeks (D5 in the master spec).
+# Full CF-extraction window. 2012 is a leap year: fix_godeeep_time shifts the
+# raw GODEEEP time axis past Feb 29, and get_renewable_snapshots drops Feb 29
+# from the selection window (harness ledger DL-17, patched onto the anchor by
+# build.py), yielding the standard 8760-hour year that maps 1:1 onto the 8760
+# network snapshots below.
+renewable_snapshots:
+  start_month: 1
+  start_day: 1
+  end_month: 12
+  end_day: 31
+  end_inclusive: true
+
+# Full model year (user decision 2026-09-01; supersedes the two-week D5
+# window from the master spec).
 snapshots:
-  start: "2019-01-06 00:00"
-  end: "2019-01-19 23:00"
+  start: "2019-01-01 00:00"
+  end: "2019-12-31 23:00"
   inclusive: both
 
 # Non-null value hard-required by the godeeep renewable dataset on both
 # branches (build_renewable_profiles raises otherwise).
 renewable_land_access: reference
+
+# Candidate-only: pin GODEEEP CF retrieval to the published Zenodo records so
+# both sides read byte-identical inputs. The candidate's default registry
+# (config.common.yaml) prefers the local Oak mirror, whose 2012 files are NOT
+# byte-identical to the Zenodo publication (md5 mismatch at equal size,
+# verified 2026-09-01: solar 04035cbc… vs Zenodo 53c13210…, wind a62f2442…
+# vs Zenodo 0115963d…). Lists replace wholesale in the config merge, so this
+# `sources:` drops the mirror entry. The anchor never reads this key — its
+# ZenodoScenarioDownloader hardcodes the SAME record ids.
+godeeep_cf_registry:
+  sources:
+    - kind: zenodo
+      datasets:
+        solar_historical_compressed:
+          record: 20127513
+          years: [2012]
+        wind_125m_historical_compressed:
+          record: 20127520
+          years: [2012]
 
 # Anchor-required: parse-time read in add_extra_components input ternary.
 # Values mirror v1-epic's config.common.yaml defaults.

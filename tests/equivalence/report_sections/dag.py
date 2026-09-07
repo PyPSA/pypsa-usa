@@ -15,7 +15,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from ..paths import anchor_final_target, final_target
+from ..paths import ANCHOR_CONFIGFILE, CONFIGFILE, anchor_final_target, final_target
 
 _NODE_RE = re.compile(r'(\d+)\[label = "([^"]+)"')
 _EDGE_RE = re.compile(r"(\d+) -> (\d+)")
@@ -28,14 +28,20 @@ _EDGE_CAND = "#2f8f2f"
 _EDGE_ANCH = "#c23b3b"
 
 
-def _rulegraph_dot(cwd: Path, target: str) -> str:
+def _rulegraph_dot(cwd: Path, target: str, configfile: str) -> str:
     """Return the dot text of ``snakemake --rulegraph`` run in ``cwd``.
+
+    ``configfile`` is side-specific (paths.CONFIGFILE for the candidate,
+    paths.ANCHOR_CONFIGFILE for the anchor): the candidate reads the tracked
+    repo_data template while the anchor reads its seeded config/ copy, and
+    the file name itself varies by interconnect (config.equivalence.yaml vs
+    config.equivalence-{ic}.yaml).
 
     Gurobi/pulp preamble and snakemake config chatter pollute stdout, so the
     dot source is extracted from the first line starting with ``digraph``.
     """
     cp = subprocess.run(
-        ["uv", "run", "snakemake", "--rulegraph", target, "--configfile", "config/config.equivalence.yaml"],
+        ["uv", "run", "snakemake", "--rulegraph", target, "--configfile", configfile],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -177,8 +183,8 @@ def render(ctx: dict) -> str:
         "walltime per side on a second line.</p>"
     )
     try:
-        cand_dot = _rulegraph_dot(ctx["cand_root"], final_target(1))
-        anch_dot = _rulegraph_dot(ctx["anch_root"], anchor_final_target(1))
+        cand_dot = _rulegraph_dot(ctx["cand_root"], final_target(1), CONFIGFILE)
+        anch_dot = _rulegraph_dot(ctx["anch_root"], anchor_final_target(1), ANCHOR_CONFIGFILE)
     except Exception as exc:  # rulegraph extraction failed — nothing to draw
         return (
             head + lead + "<p>Sorry — the diff-DAG could not be generated because the "

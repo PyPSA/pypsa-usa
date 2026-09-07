@@ -34,7 +34,27 @@ LL = "v1.0"
 OPTS = os.environ.get("EQ_OPTS", "REM-3h")
 SIMPL2 = os.environ.get("EQ_SIMPL", "20")  # prong-2 simpl granularity (prong 1 is always pass-through '')
 SECTOR = "E"
-HORIZON = "2030"  # godeeep planning-horizon subdir for profiles
+HORIZON = "2030"  # godeeep planning-horizon subdir for profiles (future scenarios only)
+
+
+def _profile_horizon_dir() -> str:
+    """Horizon path segment for profile artifacts, from the shared config.
+
+    Both branches emit profiles under a ``{planning_horizon}/`` subdir only
+    for GODEEEP *future* scenarios (``godeeep_planning_horizon`` in each
+    side's build_electricity.smk); historical runs emit flat paths. The
+    scenario is pinned in the shared harness config, so read it from there
+    rather than duplicating the choice here.
+    """
+    import yaml
+
+    cfg_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "workflow", CONFIGFILE
+    )
+    with open(cfg_path) as f:
+        cfg = yaml.safe_load(f)
+    scenarios = cfg.get("renewable_scenarios") or ["rcp85cooler"]
+    return "" if scenarios[0] == "historical" else f"{HORIZON}/"
 
 EQ = f"resources/{RUN}"
 RES = f"results/{RUN}"
@@ -55,6 +75,7 @@ def prong_pairs(prong: int) -> list[ArtifactPair]:
     """Comparable artifacts for prong 1 (simpl='') or prong 2 (simpl=SIMPL2)."""
     s = "" if prong == 1 else SIMPL2
     ic = INTERCONNECT
+    hdir = _profile_horizon_dir()  # "" for historical, f"{HORIZON}/" for future scenarios
     pairs = [
         # NOTE: these two CSVs are keyed at different granularities (anchor is
         # NODAL, pre-aggregation raw bus ids; candidate is substation-keyed),
@@ -69,14 +90,14 @@ def prong_pairs(prong: int) -> list[ArtifactPair]:
         ),
         ArtifactPair(
             stage="profile_onwind",
-            candidate=f"{EQ}/profiles/{ic}/{HORIZON}/profile_onwind_s{s}.nc",
-            anchor=f"{EQ}/{ic}/{HORIZON}/profile_onwind.nc",
+            candidate=f"{EQ}/profiles/{ic}/{hdir}profile_onwind_s{s}.nc",
+            anchor=f"{EQ}/{ic}/{hdir}profile_onwind.nc",
             kind="profile",
         ),
         ArtifactPair(
             stage="profile_solar",
-            candidate=f"{EQ}/profiles/{ic}/{HORIZON}/profile_solar_s{s}.nc",
-            anchor=f"{EQ}/{ic}/{HORIZON}/profile_solar.nc",
+            candidate=f"{EQ}/profiles/{ic}/{hdir}profile_solar_s{s}.nc",
+            anchor=f"{EQ}/{ic}/{hdir}profile_solar.nc",
             kind="profile",
         ),
     ]
@@ -149,11 +170,13 @@ def anchor_final_target(prong: int, solve: bool = True) -> str:
     return f"{EQ}/{INTERCONNECT}/{prepared}.nc"
 
 
-def assembled_target() -> str:
-    """Candidate assembled-stage target (prong 1)."""
-    return f"{EQ}/networks/{INTERCONNECT}/elec_s_l_pp.pkl"
+def assembled_target(prong: int = 1) -> str:
+    """Candidate assembled-stage target (add_electricity output)."""
+    s = "" if prong == 1 else SIMPL2
+    return f"{EQ}/networks/{INTERCONNECT}/elec_s{s}_l_pp.pkl"
 
 
-def anchor_assembled_target() -> str:
-    """Anchor assembled-stage target (its simplify output, prong 1)."""
-    return f"{EQ}/{INTERCONNECT}/elec_s.nc"
+def anchor_assembled_target(prong: int = 1) -> str:
+    """Anchor assembled-stage target (its simplify_network output)."""
+    s = "" if prong == 1 else SIMPL2
+    return f"{EQ}/{INTERCONNECT}/elec_s{s}.nc"
