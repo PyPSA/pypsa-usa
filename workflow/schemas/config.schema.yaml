@@ -90,7 +90,6 @@ properties:
       transmission_network: {enum: [reeds, tamu]}
       topological_boundaries: {enum: [county, reeds_zone, state]}
       interface_transmission_limits: {type: boolean}
-      trim: {type: boolean}
       include:
         description: >
           Zone subset for footprint-scoped runs. null means "no filter"; see the
@@ -285,7 +284,12 @@ properties:
         additionalProperties: false
         properties:
           enable: {type: boolean}
-          costs: {enum: [wholesale, carrier, float]}
+          representation: {enum: [store, generator]}
+          costs:
+            description: >
+              'wholesale' (EIA price series), a carrier name (that fleet's
+              average marginal cost), or a flat number in $/MWh.
+            type: [string, number]
           co2_emissions: {type: number}
           capacity_limit: {type: boolean}
           volume_limit: {}
@@ -296,7 +300,11 @@ properties:
         additionalProperties: false
         properties:
           enable: {type: boolean}
-          costs: {enum: [wholesale, carrier, float]}
+          costs:
+            description: >
+              'wholesale' (EIA price series), a carrier name (that fleet's
+              average marginal cost), or a flat number in $/MWh.
+            type: [string, number]
           capacity_limit: {type: boolean}
           volume_limit: {}
           balancing_period: {enum: [day, week, month, year]}

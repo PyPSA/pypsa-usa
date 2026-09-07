@@ -229,8 +229,8 @@ def plot_capacity_additions_bar(
     optimal_capacity = optimal_capacity.fillna(0)
 
     # Drop the synthetic "imports" carrier — it represents external power
-    # injection (from trim_network or the imports/exports config), not built
-    # capacity, and would otherwise dominate the bar by orders of magnitude.
+    # injection (from the imports/exports config), not built capacity, and would
+    # otherwise dominate the bar by orders of magnitude.
     hidden_carriers = {"imports", "Imports"}
     optimal_capacity = optimal_capacity.drop(
         index=[c for c in hidden_carriers if c in optimal_capacity.index],

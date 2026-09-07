@@ -228,6 +228,7 @@ electricity:
   # neighbors using historical EIA interchange data.
   imports:
     enable: false
+    representation: store                  # store = priced links off a bottomless Store; generator = priced generator (+ CPUC contracted units) behind an unpriced interface link
     costs: wholesale                       # wholesale | carrier | float — how imported energy is priced
     co2_emissions: 0.428                   # tCO2/MWh assigned to imported energy
     capacity_limit: true                   # cap import power to historical maxima

@@ -804,6 +804,9 @@ rule add_electricity:
         planning_horizons=config["scenario"]["planning_horizons"],
         eia_api=config["api"]["eia"],
         remote_contracted=config["electricity"].get("remote_contracted_resources", {}),
+        imports_representation=config_provider(
+            "electricity", "imports", "representation", default="store"
+        ),
     input:
         unpack(dynamic_fuel_price_files),
         unpack(remote_contracted_resource_files),
@@ -870,7 +873,11 @@ rule add_electricity:
             else []
         ),
     output:
-        NETWORKS + "{interconnect}/elec_s{simpl}_l_pp.pkl",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}_l_pp.pkl",
+        # CPUC contracted out-of-state units, serialized for attachment behind
+        # the model boundary when electricity.imports.representation == generator.
+        # Always declared; a sentinel is written otherwise.
+        remote_units=NETWORKS + "{interconnect}/remote_units_s{simpl}.pkl",
     log:
         LOGS + "{interconnect}/elec_s{simpl}_add_electricity.log",
     benchmark:
@@ -1064,6 +1071,7 @@ rule add_extra_components:
         + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
         flowgates=flowgates_for_extra_components,
         reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
+        remote_units=NETWORKS + "{interconnect}/remote_units_s{simpl}.pkl",
         co2_storage=(
             CO2 + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
             if config["scenario"]["sector"] == "" and config["co2"]["storage"] is True
@@ -1073,7 +1081,6 @@ rule add_extra_components:
     params:
         retirement=config["electricity"].get("retirement", "technical"),
         demand_response=config["electricity"].get("demand_response", {}),
-        trim_network=config_provider("model_topology", "trim", default=False),
         imports=config_provider("electricity", "imports", default={}),
         exports=config_provider("electricity", "exports", default={}),
         weather_year=config_provider("renewable_weather_years"),
