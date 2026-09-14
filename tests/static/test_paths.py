@@ -77,8 +77,11 @@ SBATCH_DRIVERS = sorted(
 )
 
 # Site software paths (gurobi's licence, the module tree) are not repository
-# paths and are allowed; a checkout location is not.
-ABSOLUTE_OAK_RE = re.compile(r"/oak/\S+")
+# paths and are allowed; a checkout location and a per-user scratch directory
+# are not. $OAK, $SCRATCH and $GROUP_SCRATCH exist precisely so these never have
+# to be written down, and a literal one silently fails the job for anyone whose
+# SUNet id is not the one it was written for.
+PER_USER_PATH_RE = re.compile(r"/oak/\S+|/scratch/groups/\S+|/scratch/users/\S+|/home/(users|groups)/\S+")
 
 
 @pytest.mark.fast
@@ -103,14 +106,37 @@ def test_sbatch_uses_the_serc_partition(sbatch_path):
 
 @pytest.mark.fast
 @pytest.mark.parametrize("sbatch_path", SBATCH_DRIVERS, ids=lambda p: p.name)
-def test_sbatch_has_no_absolute_repository_path(sbatch_path):
-    """No ``/oak/...`` literal: the checkout location is resolved, never written."""
+def test_sbatch_has_no_per_user_absolute_path(sbatch_path):
+    """No ``/oak/...`` or per-user scratch literal, in a directive or the body.
+
+    The checkout is resolved from ``$SLURM_SUBMIT_DIR``, the caches from
+    ``$GROUP_SCRATCH``, and the Slurm log paths are relative. A literal here is
+    the exact bug that made both predecessors of this driver fail on their first
+    line.
+    """
     violations = []
     for line_no, line in enumerate(sbatch_path.read_text().splitlines(), start=1):
-        for match in ABSOLUTE_OAK_RE.finditer(line):
+        for match in PER_USER_PATH_RE.finditer(line):
             violations.append((line_no, match.group(0)))
     assert not violations, (
-        f"{sbatch_path.name} hard-codes an absolute /oak path — resolve it from "
-        f"$SLURM_SUBMIT_DIR or an env knob instead:\n"
+        f"{sbatch_path.name} hard-codes a per-user absolute path — resolve it from "
+        f"$SLURM_SUBMIT_DIR, $GROUP_SCRATCH or an env knob instead:\n"
         + "\n".join(f"  line {ln}: {lit}" for ln, lit in violations)
     )
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("sbatch_path", SBATCH_DRIVERS, ids=lambda p: p.name)
+def test_sbatch_log_directives_are_relative(sbatch_path):
+    """``#SBATCH -o/-e`` must not name an absolute directory.
+
+    sbatch refuses the job outright when the log directory does not exist, and
+    an absolute site path is one someone else will not have. Relative means the
+    submit directory, which by construction exists.
+    """
+    bad = [
+        line.strip()
+        for line in sbatch_path.read_text().splitlines()
+        if re.match(r"^#SBATCH\s+-[oe]\s+/", line)
+    ]
+    assert not bad, f"{sbatch_path.name} writes Slurm logs to an absolute path: {bad}"

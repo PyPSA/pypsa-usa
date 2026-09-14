@@ -23,8 +23,14 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=160GB
 #SBATCH --signal=B:TERM@180
-#SBATCH -o /scratch/groups/iazevedo/kamran/eq-usa/%x-%j.out
-#SBATCH -e /scratch/groups/iazevedo/kamran/eq-usa/%x-%j.err
+#
+# Slurm's own capture goes to a RELATIVE path, i.e. into the directory you
+# submitted from, which by construction exists and is writable. An absolute
+# site path here is a per-user hard-code that silently fails the job for anyone
+# else. The driver additionally tees everything into <run_dir>/logs/, which is
+# the copy that stays with the run.
+#SBATCH -o slurm-eq-%j.out
+#SBATCH -e slurm-eq-%j.err
 
 set -euo pipefail
 
@@ -48,12 +54,41 @@ fi
 export EQ_INTERCONNECT="${EQ_INTERCONNECT:-usa}"
 export EQ_SIMPL="${EQ_SIMPL:-300}"
 export EQ_CLUSTERS="${EQ_CLUSTERS:-134}"
+# 3h is the emissions-UNCONSTRAINED twin and the default on both sides
+# (paths.OPTS must agree, or bash and python mint different run ids). The
+# national 1 Mt CO2 cap, EQ_OPTS=REM-3h, is OPT-IN: it looked infeasible at
+# USA scale on 2026-09-01 and a failed solve aborts the harness, so the run
+# that secures the comparison goes first.
 export EQ_OPTS="${EQ_OPTS:-3h}"
 export EQ_UNTIL="${EQ_UNTIL:-}"
 export EQ_BASELINE_REF="${EQ_BASELINE_REF:-master-benchmark}"
 EQ_PRONG="${EQ_PRONG:-2}"
 EQ_JOBS="${EQ_JOBS:-8}"
-EQ_TIMEOUT="${EQ_TIMEOUT:-43200}"
+# Per-SIDE snakemake cap. Two sides build sequentially inside one job, so a
+# flat default can exceed the job's own --time and get the whole thing killed
+# mid-rule instead of letting side one finish cleanly. Derive it from the time
+# this job actually has left, minus a margin for the compare/table/figure tail,
+# split across the two sides. Falls back to half of --time when Slurm cannot
+# tell us.
+_remaining_seconds() {
+    local end now
+    end="$(scontrol show job "${SLURM_JOB_ID:-}" 2>/dev/null \
+        | tr ' ' '\n' | sed -n 's/^EndTime=//p' | head -1)" || true
+    [ -n "$end" ] || return 1
+    end="$(date -d "$end" +%s 2>/dev/null)" || return 1
+    now="$(date +%s)"
+    echo $(( end - now ))
+}
+if [ -z "${EQ_TIMEOUT:-}" ]; then
+    if remaining="$(_remaining_seconds)" && [ "${remaining:-0}" -gt 3600 ]; then
+        # 900 s reserved for compare + tables + figures after the second build.
+        EQ_TIMEOUT=$(( (remaining - 900) / 2 ))
+        echo "[driver] EQ_TIMEOUT derived from the job's remaining time: ${EQ_TIMEOUT}s per side"
+    else
+        EQ_TIMEOUT=34200   # half of the 20 h --time above, minus the tail
+        echo "[driver] EQ_TIMEOUT could not be derived; using ${EQ_TIMEOUT}s per side"
+    fi
+fi
 EQ_EXTRA_ARGS="${EQ_EXTRA_ARGS:-}"
 
 # One run directory per run (plan D5). Minted here and exported so bash and
@@ -81,17 +116,17 @@ echo "[driver] job     : ${SLURM_JOB_ID:-<no slurm>} on $(hostname)"
 cleanup() {
     local rc=$?
     trap - EXIT TERM INT
-    echo "[driver] cleanup (exit $rc): stopping children"
-    # Everything we started except the tee that is writing this line.
-    for pid in $(pgrep -P $$ 2>/dev/null || true); do
-        [ "$pid" = "${TEE_PID:-}" ] && continue
-        kill -TERM "$pid" 2>/dev/null || true
-    done
-    sleep 5
-    for pid in $(pgrep -P $$ 2>/dev/null || true); do
-        [ "$pid" = "${TEE_PID:-}" ] && continue
-        kill -KILL "$pid" 2>/dev/null || true
-    done
+    echo "[driver] cleanup (exit $rc): stopping the run's process group"
+    # The work runs under `setsid`, in its OWN process group, for exactly this
+    # moment: snakemake forks rule processes that are not our direct children,
+    # so signalling only $$'s children leaves the solver running until Slurm
+    # kills the node. Signal the whole group by its negative pgid. The tee that
+    # is writing this line is NOT in that group, so the log survives the kill.
+    if [ -n "${WORK_PGID:-}" ]; then
+        kill -TERM -- "-$WORK_PGID" 2>/dev/null || true
+        sleep 10
+        kill -KILL -- "-$WORK_PGID" 2>/dev/null || true
+    fi
     if command -v squeue >/dev/null 2>&1 && [ -n "${SLURM_JOB_ID:-}" ]; then
         squeue --me -h -o '%i %j' \
             | awk -v tag="$EQ_RUN_ID" -v self="$SLURM_JOB_ID" '$1 != self && index($2, tag) {print $1}' \
@@ -138,11 +173,13 @@ echo "[driver] uv  : $(uv --version)"
 CACHE="${EQ_CACHE:-$GROUP_SCRATCH/kamran/pypsa-usa-eq-cache}"
 mkdir -p "$CACHE"
 
-# Optional top-up from another checkout's data tree. UNSET BY DEFAULT and it
-# should stay that way: the footprint-dependent directories below are
-# provenance-verified in the cache, and a sync from a regional campaign once
-# imported Texas-only nrel_exclusion artifacts into a USA run (job 41566193
-# built ERCOT profiles on BOTH sides). They are excluded even when it is set.
+# Optional top-up from another checkout's data tree, covering BOTH data/ and
+# cutouts/. UNSET BY DEFAULT and it should stay that way for a warm cache: the
+# footprint-dependent directories are provenance-verified there, and a sync from
+# a regional campaign once imported Texas-only nrel_exclusion artifacts into a
+# USA run (job 41566193 built ERCOT profiles on BOTH sides). Those three
+# directories are excluded even when EQ_STAGE_SRC is set; on a cold cache the
+# workflow's own retrieve rules fetch them from the declared Zenodo records.
 if [ -n "${EQ_STAGE_SRC:-}" ]; then
     echo "[driver] staging $EQ_STAGE_SRC -> $CACHE (footprint-dependent dirs excluded)"
     rsync -a --exclude 'nrel_exclusion/' --exclude 'godeeep/' --exclude 'zenodo/' \
@@ -150,23 +187,35 @@ if [ -n "${EQ_STAGE_SRC:-}" ]; then
     rsync -a "$EQ_STAGE_SRC/cutouts/" "$CACHE/cutouts/"
 fi
 
-# Fail fast if the verified inputs are missing or are the wrong footprint
-# (Texas caps are ~68K; national is 400K+).
+# Provenance check on the footprint-dependent inputs. ABSENT is fine — a cold
+# cache is a first run, and the workflow's own retrieve rules fetch these from
+# the declared Zenodo records. PRESENT BUT TOO SMALL is fatal: that is a
+# regional footprint sitting where a national one should be (Texas caps are
+# ~68K, national is 400K+), which builds ERCOT profiles on BOTH sides and looks
+# like a clean comparison. See docs/equivalence.md, "starting from an empty
+# cache".
+cold_cache=0
 for f in caps_onwind_reference.nc caps_solar_reference.nc \
          avail_onwind_reference.nc avail_solar_reference.nc; do
     p="$CACHE/data/nrel_exclusion/derived/$f"
-    if [ ! -s "$p" ] || [ "$(stat -c%s "$p")" -lt 400000 ]; then
-        echo "ERROR: $p missing or suspiciously small (regional footprint?)" >&2
+    if [ ! -e "$p" ]; then
+        cold_cache=1
+    elif [ "$(stat -c%s "$p")" -lt 400000 ]; then
+        echo "ERROR: $p is $(stat -c%s "$p") bytes, far below the national size." >&2
+        echo "       A regional footprint in the national cache builds the wrong" >&2
+        echo "       profiles on BOTH sides. Remove it and let the retrieve rules" >&2
+        echo "       refetch, or restage a verified copy." >&2
         exit 1
     fi
 done
 for f in godeeep/historical/solar_gen_cf_2012_compressed.nc \
          godeeep/historical/wind_gen_cf_2012_125m_compressed.nc; do
-    if [ ! -s "$CACHE/data/$f" ]; then
-        echo "ERROR: $CACHE/data/$f missing" >&2
-        exit 1
-    fi
+    [ -s "$CACHE/data/$f" ] || cold_cache=1
 done
+if [ "$cold_cache" = 1 ]; then
+    echo "[driver] cold cache at $CACHE: some footprint-dependent inputs are absent."
+    echo "[driver] the retrieve rules will fetch them; the FIRST run is much longer."
+fi
 
 for name in data cutouts; do
     tgt="$REPO/workflow/$name"
@@ -190,17 +239,25 @@ done
 # --- 6. The run --------------------------------------------------------------
 # run.py resolves the context, gates the config, writes run_meta.json, then
 # builds develop and master SEQUENTIALLY and compares.
-echo "[driver] prong=$EQ_PRONG interconnect=$EQ_INTERCONNECT simpl=$EQ_SIMPL clusters=$EQ_CLUSTERS opts=$EQ_OPTS until=${EQ_UNTIL:-<full>}"
+echo "[driver] prong=$EQ_PRONG interconnect=$EQ_INTERCONNECT simpl=$EQ_SIMPL clusters=$EQ_CLUSTERS opts=$EQ_OPTS until=${EQ_UNTIL:-<full>} jobs=$EQ_JOBS timeout=${EQ_TIMEOUT}s/side"
 # `set -e` would abort before $? could be read, so capture it explicitly: the
 # cleanup trap and the artifact listing below must run on a failed run too.
 status=0
+# setsid puts the whole run in its own process group so the cleanup trap can
+# take snakemake's grandchildren down with it. `&` + `wait` rather than a plain
+# foreground call, because bash only runs a trap between commands: a foreground
+# child would swallow the pre-timeout TERM until it returned on its own.
 # shellcheck disable=SC2086
-uv run python -m tests.equivalence.run \
+setsid uv run python -m tests.equivalence.run \
     --prong "$EQ_PRONG" \
     --side both \
     --jobs "$EQ_JOBS" \
     --timeout "$EQ_TIMEOUT" \
-    $EQ_EXTRA_ARGS || status=$?
+    $EQ_EXTRA_ARGS &
+WORK_PID=$!
+WORK_PGID="$WORK_PID"   # setsid makes the child its own group leader
+wait "$WORK_PID" || status=$?
+WORK_PGID=""
 
 echo "[driver] finished with status $status; artifacts in $RUN_DIR"
 ls -1 "$RUN_DIR" || true
