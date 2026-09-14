@@ -188,16 +188,43 @@ def test_exactly_one_manifest_commit(commits):
     )
 
 
-def test_hotfix_ids_resolve_when_the_registry_exists(commits):
-    """Once T4 lands hotfixes.yaml, every cited id must be in it."""
-    if not HOTFIXES.exists():
-        pytest.skip(f"{HOTFIXES.name} does not exist yet (T4); nothing to resolve against")
+def test_hotfix_ids_resolve(commits):
+    """Every id cited on the branch has a row in the registry.
+
+    The registry landed with T4, so this no longer skips: an id with no row is
+    a port nobody can trace back to a ledger entry.
+    """
+    assert HOTFIXES.exists(), (
+        f"{HOTFIXES.name} is missing; it is the machine-readable extract of "
+        "memory/plans/hotfix-ledger.md and every ported commit is checked against it"
+    )
     rows = yaml.safe_load(HOTFIXES.read_text()) or []
     known = {str(r.get("id")) for r in rows}
     missing = sorted(
         {c["trailers"]["Hot-fix"] for c in commits if c["trailers"].get("Hot-fix")} - known,
     )
     assert not missing, f"Hot-fix ids on {BRANCH} with no row in {HOTFIXES.name}: {missing}"
+
+
+def test_ported_commits_are_marked_ported_in_the_registry(commits):
+    """A fix on the baseline must read ``ported: true`` in the registry.
+
+    This is the join that keeps a neutralised difference out of the explanation
+    set. If the branch carries HF-8 but hotfixes.yaml still says
+    ``ported: false``, the comparison table will happily accept HF-8 as the
+    reason two sides that BOTH run it disagree.
+    """
+    rows = yaml.safe_load(HOTFIXES.read_text()) or []
+    registry = {str(r.get("id")): r for r in rows}
+    unmarked = sorted(
+        hid
+        for hid in {c["trailers"]["Hot-fix"] for c in commits if c["trailers"].get("Hot-fix")}
+        if not registry.get(hid, {}).get("ported")
+    )
+    assert not unmarked, (
+        f"{BRANCH} carries {unmarked} but {HOTFIXES.name} does not mark them ported: true — "
+        "a ported hot-fix runs on BOTH sides and must not stay a candidate explanation"
+    )
 
 
 def test_resources_commits_are_inert(commits):
