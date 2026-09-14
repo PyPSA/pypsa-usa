@@ -29,9 +29,8 @@ import pandas as pd
 import xarray as xr
 import yaml
 
-from .paths import INTERCONNECT, UNTIL, ArtifactPair, prong_pairs
+from .paths import INTERCONNECT, UNTIL, ArtifactPair, prong_pairs, run_dir
 
-REPO = Path(__file__).resolve().parents[2]
 RTOL = 1e-3
 ATOL = 1e-8
 OBJECTIVE_RTOL = 1e-3
@@ -623,8 +622,9 @@ def run_comparison(prong: int, develop_root: Path, master_root: Path) -> dict:
         "pass": not live,
         "findings": all_findings,
     }
-    suffix = "" if INTERCONNECT == "western" else f"_{INTERCONNECT}"
-    out = REPO / "workflow" / "results" / "equivalence" / f"findings_{prong}{suffix}.json"
+    # One run directory per run (plan D5): the findings sit beside
+    # run_meta.json and both manifests.
+    out = run_dir() / f"findings_{prong}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, indent=1, default=str))
     return result

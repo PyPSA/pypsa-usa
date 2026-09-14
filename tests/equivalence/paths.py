@@ -20,9 +20,15 @@ and has no develop counterpart.
 from __future__ import annotations
 
 import os
+import re
+import time
 from dataclasses import dataclass
+from pathlib import Path
 
+REPO = Path(__file__).resolve().parents[2]
 RUN = "equivalence"
+EQ = f"resources/{RUN}"
+RES = f"results/{RUN}"
 INTERCONNECT = os.environ.get("EQ_INTERCONNECT", "western")
 UNTIL = os.environ.get("EQ_UNTIL", "")  # 'assembled' = stop pairs at the assembled stage
 # The baseline branch, resolved to a sha at run time (never pinned here).
@@ -67,6 +73,47 @@ SECTOR = "E"
 HORIZON = "2030"  # godeeep planning-horizon subdir for profiles (future scenarios only)
 
 
+# --- One run directory per run (harness plan D5) -----------------------------
+# Every artifact of one harness invocation — run_meta.json, both manifests,
+# findings, tables/ and figures/ — lands under
+# ``workflow/results/equivalence/<run_id>/``. The id is frozen into
+# ``EQ_RUN_ID`` on first use so that every module in the process (and any
+# subprocess it spawns) resolves the SAME directory without having to be handed
+# it explicitly. Export ``EQ_RUN_ID`` yourself to name a run.
+
+_UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _slug(text: str) -> str:
+    """Filesystem-safe id component: no ``/``, no spaces, no shell metachars."""
+    return _UNSAFE.sub("-", text).strip("-") or "run"
+
+
+def run_id(prong: int | None = None) -> str:
+    """Resolve this run's id: ``EQ_RUN_ID``, else ``<ic>-p<prong>-<opts>-<stamp>``.
+
+    Frozen into the environment on first call, so a later call that does not
+    know the prong still resolves the id the first one minted.
+    """
+    existing = os.environ.get("EQ_RUN_ID")
+    if existing:
+        return _slug(existing)
+    part = f"-p{prong}" if prong is not None else ""
+    minted = _slug(f"{INTERCONNECT}{part}-{OPTS}-{time.strftime('%Y%m%d-%H%M')}")
+    os.environ["EQ_RUN_ID"] = minted
+    return minted
+
+
+def run_dir(prong: int | None = None) -> Path:
+    """``workflow/results/equivalence/<run_id>/`` in the develop checkout.
+
+    Both sides' artifacts are collected here: the baseline builds in its own
+    worktree but its manifest, like every other output of the comparison, is
+    written next to develop's so one directory is the whole run.
+    """
+    return REPO / "workflow" / RES / run_id(prong)
+
+
 def _profile_horizon_dir() -> str:
     """Horizon path segment for profile artifacts, from the shared config.
 
@@ -86,8 +133,6 @@ def _profile_horizon_dir() -> str:
     scenarios = cfg.get("renewable_scenarios") or ["rcp85cooler"]
     return "" if scenarios[0] == "historical" else f"{HORIZON}/"
 
-EQ = f"resources/{RUN}"
-RES = f"results/{RUN}"
 
 
 @dataclass(frozen=True)
