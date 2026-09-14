@@ -35,14 +35,24 @@ def _git(repo: Path, *args: str) -> str:
 
 @pytest.fixture
 def tmp_repo(tmp_path: Path) -> Path:
-    """A two-commit git repository with a ``master-benchmark`` branch."""
+    """A two-commit git repository with a ``master-benchmark`` branch.
+
+    It carries the minimum pypsa-usa shape provisioning touches — a
+    ``workflow/repo_data/config/`` with one template in it, and a ``.gitignore``
+    matching master's bare ``config/`` rule — so provisioning can run to
+    completion here without any of the real workflow or data.
+    """
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, "init", "-q", "-b", "master")
     _git(repo, "config", "user.email", "harness@example.invalid")
     _git(repo, "config", "user.name", "harness")
+    (repo / ".gitignore").write_text("config/\ndata/\ncutouts\n")
+    cfg = repo / "workflow" / "repo_data" / "config"
+    cfg.mkdir(parents=True)
+    (cfg / "config.cluster.yaml").write_text("cluster: {}\n")
     (repo / "a.txt").write_text("one\n")
-    _git(repo, "add", "a.txt")
+    _git(repo, "add", "-f", ".gitignore", "a.txt", "workflow")
     _git(repo, "commit", "-qm", "first")
     (repo / "b.txt").write_text("two\n")
     _git(repo, "add", "b.txt")
@@ -73,10 +83,9 @@ def test_resolve_baseline_sha_honours_env(monkeypatch, harness: Path):
 
 
 def test_baseline_ref_defaults_to_master_benchmark(monkeypatch):
+    """With no env override the baseline ref is master-benchmark."""
     monkeypatch.delenv("EQ_BASELINE_REF", raising=False)
-    from tests.equivalence import paths
-
-    assert paths.BASELINE_REF == "master-benchmark"
+    monkeypatch.setattr(build, "BASELINE_REF", "master-benchmark")
     assert build.baseline_ref() == "master-benchmark"
 
 
@@ -116,12 +125,8 @@ def test_unregistered_plain_directory_raises(harness: Path):
     assert "does not list it as a worktree" in str(exc.value)
 
 
-def test_registered_worktree_is_accepted(harness: Path, monkeypatch):
-    """A correctly registered worktree is reused and repointed, not refused.
-
-    The repo-specific seeding steps (symlinks, config copies) need a real
-    pypsa-usa layout, so only the git half of provisioning is exercised here.
-    """
+def test_registered_worktree_is_accepted(harness: Path):
+    """A correctly registered worktree is reused and repointed, not refused."""
     wt = build.BASELINE_WORKTREE
     sha = build.resolve_baseline_sha()
     first = _git(harness, "rev-parse", "HEAD~1")
@@ -132,8 +137,39 @@ def test_registered_worktree_is_accepted(harness: Path, monkeypatch):
     assert os.path.realpath(wt) in registered
     assert registered[os.path.realpath(wt)] == first
 
-    # Provisioning fails later (no workflow/ in the throwaway repo) but must
-    # first have checked the worktree out at the resolved baseline sha.
-    with pytest.raises((RuntimeError, FileNotFoundError, NotADirectoryError)):
-        build.provision_baseline_worktree()
+    assert build.provision_baseline_worktree() == wt
     assert _git(wt, "rev-parse", "HEAD") == sha
+    # Seeding ran: the layered template landed in the gitignored config/ overlay.
+    assert (wt / "workflow" / "config" / "config.cluster.yaml").exists()
+    # And it left the checkout clean, so a build is allowed to start.
+    assert build.checkout_dirt(wt) == []
+
+
+def test_clean_checkout_passes(harness: Path):
+    assert build.assert_clean_checkout("develop", harness) == []
+
+
+def test_dirty_tracked_file_refused(harness: Path):
+    """A modified TRACKED file blocks the build on either side."""
+    (harness / "a.txt").write_text("edited\n")
+    with pytest.raises(RuntimeError) as exc:
+        build.assert_clean_checkout("develop", harness)
+    msg = str(exc.value)
+    assert "a.txt" in msg
+    assert "EQ_ALLOW_DIRTY" in msg
+
+
+def test_dirty_allowed_by_env(monkeypatch, harness: Path):
+    """EQ_ALLOW_DIRTY=1 downgrades the refusal to a recorded warning."""
+    (harness / "a.txt").write_text("edited\n")
+    monkeypatch.setenv("EQ_ALLOW_DIRTY", "1")
+    dirt = build.assert_clean_checkout("develop", harness)
+    assert any("a.txt" in line for line in dirt)
+
+
+def test_untracked_files_do_not_count_as_dirty(harness: Path):
+    """The harness creates untracked files on both sides; they are not dirt."""
+    (harness / "workflow" / "cutouts").mkdir(parents=True, exist_ok=True)
+    (harness / "stray_artifact.txt").write_text("untracked\n")
+    assert build.checkout_dirt(harness) == []
+    assert build.assert_clean_checkout("master", harness) == []

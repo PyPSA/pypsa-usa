@@ -278,5 +278,3 @@ connect.sh
 workflow/data
 workflow/cutouts
 
-# transient equivalence-harness forced-rerun marker
-/.eq-force-rerun

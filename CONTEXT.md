@@ -29,8 +29,10 @@ self-describing, and the two must not drift.
 Harness terms, local to this repository:
 
 - **Baseline build** — the set of pipeline artifacts produced by building
-  `master-benchmark` in `.worktrees/master-benchmark`, detached at the sha
-  `EQ_BASELINE_REF` resolves to.
+  `master-benchmark` in `.worktrees/master-benchmark`, a registered git
+  worktree sitting at the sha `EQ_BASELINE_REF` resolves to. Whether it is
+  attached to the branch or detached is not forced: the branch is still being
+  built in that worktree.
 - **Develop build** — the artifacts produced by the tip of `develop` (or a PR
   branch) under the same configuration and data as the baseline build.
 - **Equivalence run** — one baseline build plus one develop build plus the

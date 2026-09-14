@@ -1,8 +1,10 @@
 """Build one side (``master`` or ``develop``) of an equivalence run.
 
 The develop side builds in the main checkout. The baseline builds in a
-dedicated git worktree detached at the resolved ``master-benchmark`` sha —
-a commit anyone can check out, diff and review.
+dedicated git worktree registered at the resolved ``master-benchmark`` sha —
+a commit anyone can check out, diff and review. Whether that worktree is
+attached to the branch or detached does not matter and is deliberately not
+forced: the branch is still being built in it.
 
 **There is no build-time patching.** Everything the baseline needs in order to
 run and to be compared lives as ordinary commits on ``master-benchmark``
@@ -18,10 +20,14 @@ Provisioning does, in order:
   directory that git does not list as a registered worktree (a leftover from a
   previous checkout location carries a ``.git`` file pointing at another
   repository's gitdir; adopting it would run git against the wrong repo);
-- check the worktree out at the resolved sha (``git worktree add --detach``, or
-  ``git -C <wt> checkout --detach`` when it exists at another sha);
+- make sure the worktree is at the resolved sha: ``git worktree add --detach``
+  when it does not exist, ``git -C <wt> checkout --detach`` when it exists at a
+  *different* sha, and nothing at all when it is already there (it may be
+  attached to ``master-benchmark``; that is left alone on purpose);
 - symlink ``workflow/data`` and ``workflow/cutouts`` from the main checkout
-  (both untracked/gitignored on both branches);
+  (untracked on both branches; master's ``.gitignore`` covers ``data/`` but
+  not ``cutouts``, which is why the clean-tree check below ignores untracked
+  files);
 - seed the gitignored layered configs from the baseline's own
   ``workflow/repo_data/config/`` (they are ``configfile:``-loaded
   unconditionally);
@@ -31,6 +37,11 @@ Provisioning does, in order:
 - ``touch`` retrieve_caiso_data's output if present so a fresh-checkout mtime
   on its tracked input xlsx does not retrigger a re-download into shared
   ``data/``.
+
+Before either side builds, ``assert_clean_checkout`` refuses a checkout whose
+TRACKED files differ from its commit — otherwise the sha the manifest records
+would not describe the code that ran. ``EQ_ALLOW_DIRTY=1`` builds anyway and
+the manifest carries ``dirty: true`` plus the offending paths.
 
 Instrumentation: after a build, ``write_manifest`` records git SHA, config
 hash, per-rule benchmark rows (wall time, max_rss) and output file sizes.
@@ -196,6 +207,9 @@ def provision_baseline_worktree() -> Path:
     # config/policy_constraints/ that rules reference as inputs.
     src_root = wf / "repo_data" / "config"
     dst_root = wf / "config"
+    # A fresh worktree has no workflow/config/ at all: master's .gitignore has a
+    # bare `config/` rule, so nothing under it is checked out.
+    dst_root.mkdir(parents=True, exist_ok=True)
     for entry in src_root.iterdir():
         dst = dst_root / entry.name
         if dst.exists():
@@ -242,6 +256,48 @@ def provision_baseline_worktree() -> Path:
         os.utime(caiso_out)
 
     return wt
+
+
+def checkout_dirt(root: Path) -> list[str]:
+    """Modified or staged TRACKED files in a checkout, one porcelain line each.
+
+    ``--untracked-files=no`` is deliberate. The harness itself creates untracked
+    files in both checkouts — the ``data``/``cutouts`` symlinks, the seeded
+    ``workflow/config/`` overlay, ``resources/``, ``results/``, ``benchmarks/``
+    — and master's ``.gitignore`` does not cover all of them. What invalidates
+    a run is a *tracked* file that differs from the commit whose sha the
+    manifest records.
+    """
+    cp = run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=root, timeout=120)
+    if cp.returncode != 0:
+        raise RuntimeError(f"git status failed in {root}:\n{cp.stderr[-2000:]}")
+    return [line for line in cp.stdout.splitlines() if line.strip()]
+
+
+def assert_clean_checkout(side: str, root: Path) -> list[str]:
+    """Refuse to build a side whose tracked files differ from its commit.
+
+    ``EQ_ALLOW_DIRTY=1`` builds anyway and the manifest then carries
+    ``dirty: true`` with the offending paths, so the numbers are never read as
+    coming from the recorded sha. That escape hatch is what keeps plan D2 ("a
+    dirty develop side is recorded and warned about, not refused") reachable
+    while the default stays a refusal.
+    """
+    dirt = checkout_dirt(root)
+    if not dirt:
+        return dirt
+    listing = "\n".join(dirt[:20])
+    more = f"\n... and {len(dirt) - 20} more" if len(dirt) > 20 else ""
+    if os.environ.get("EQ_ALLOW_DIRTY") == "1":
+        log(f"WARNING: {side} checkout {root} has uncommitted changes to tracked files; "
+            f"building anyway because EQ_ALLOW_DIRTY=1:\n{listing}{more}")
+        return dirt
+    raise RuntimeError(
+        f"{side} checkout {root} has uncommitted changes to tracked files, so the sha "
+        f"its manifest records would not describe the code that ran:\n{listing}{more}\n"
+        "Commit or stash them, or set EQ_ALLOW_DIRTY=1 to build anyway and have the "
+        "manifest record dirty: true."
+    )
 
 
 def side_root(side: str) -> Path:
@@ -314,6 +370,7 @@ def build_side(side: str, target: str, jobs: int = 4, timeout: int = 10800) -> d
     if side not in SIDES:
         raise ValueError(f"unknown side {side!r}; expected one of {SIDES}")
     wt = side_root(side)
+    assert_clean_checkout(side, wt)
     wf = wt / "workflow"
     cmd = snakemake_cmd(target, jobs, side_configfile(side))
     t0 = time.time()
@@ -330,11 +387,15 @@ def build_side(side: str, target: str, jobs: int = 4, timeout: int = 10800) -> d
 def write_manifest(side: str, wt: Path, target: str, wall: float) -> dict:
     wf = wt / "workflow"
     sha = run(["git", "rev-parse", "HEAD"], cwd=wt, timeout=60).stdout.strip()
+    dirt = checkout_dirt(wt)
     cfg = (wf / side_configfile(side)).read_bytes()
     manifest = {
         "side": side,
         "ref": baseline_ref() if side == "master" else "HEAD",
         "sha": sha,
+        # True only under EQ_ALLOW_DIRTY=1; build_side refuses otherwise.
+        "dirty": bool(dirt),
+        "dirty_paths": dirt[:50],
         "target": target,
         "wall_s": round(wall, 1),
         "config_sha256": hashlib.sha256(cfg).hexdigest(),
