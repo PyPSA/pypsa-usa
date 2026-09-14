@@ -48,6 +48,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
+from matplotlib.ticker import MaxNLocator
 
 from . import metrics
 from .paths import EQ, INTERCONNECT, SIMPL2, prong_pairs
@@ -262,7 +263,11 @@ def choropleth_triptych(
             joined.plot(column="v", ax=ax, cmap=cmap, vmin=vmin, vmax=vhi, legend=True, missing_kwds=MISSING_KW)
         else:
             miss = joined["v"].isna()
-            ax.scatter(joined.loc[miss, "x"], joined.loc[miss, "y"], c=MISSING_KW["color"], s=28, edgecolors="none")
+            size = max(40.0, min(260.0, 6000.0 / max(len(joined), 1)))
+            ax.scatter(
+                joined.loc[miss, "x"], joined.loc[miss, "y"],
+                c=MISSING_KW["color"], s=size, edgecolors="white", linewidths=0.5,
+            )
             sc = ax.scatter(
                 joined.loc[~miss, "x"],
                 joined.loc[~miss, "y"],
@@ -270,12 +275,21 @@ def choropleth_triptych(
                 cmap=cmap,
                 vmin=vmin,
                 vmax=vhi,
-                s=36,
-                edgecolors="none",
+                s=size,
+                edgecolors="white",
+                linewidths=0.5,
             )
-            fig.colorbar(sc, ax=ax, shrink=0.8)
+            ax.set_aspect("equal", adjustable="box")
+            ax.margins(0.15)
+            fig.colorbar(sc, ax=ax, shrink=0.7, fraction=0.045, pad=0.02)
         ax.set_title(f"{lab}\n{title} [{unit}]", fontsize=9)
-        ax.set_axis_off()
+        if is_geo:
+            ax.set_axis_off()
+        else:
+            # The point fallback has no coastline to orient against, so keep
+            # the coordinate axes as the spatial reference.
+            _style(ax, xlabel="x [deg]", ylabel="y [deg]")
+            ax.tick_params(labelsize=7)
     fig.tight_layout()
     return save_figure(fig, data, name, outdir)
 
@@ -327,27 +341,37 @@ def timeseries_pair(
     name: str,
     outdir: Path,
 ) -> tuple[Path, Path]:
-    """Two daily-mean time series plus their relative difference."""
+    """Two time series plus their relative difference.
+
+    A full benchmark year is resampled to daily means to stay legible; a short
+    series (fewer than three days, as in the unit tests) is drawn at its native
+    resolution, since a one-point daily mean plots nothing at all.
+    """
     if s_master is None or s_develop is None or len(s_master) == 0 or len(s_develop) == 0:
         return _empty_figure(title, name, outdir, note="no profile data")
+    resampled = False
+    dm, dd = s_master, s_develop
     try:
-        dm, dd = s_master.resample("D").mean(), s_develop.resample("D").mean()
+        rm, rd = s_master.resample("D").mean(), s_develop.resample("D").mean()
+        if min(len(rm), len(rd)) >= 3:
+            dm, dd, resampled = rm, rd, True
     except (TypeError, ValueError):  # non-datetime index
-        dm, dd = s_master, s_develop
+        pass
     n = min(len(dm), len(dd))
     idx = dm.index[:n]
     ym, yd = dm.to_numpy()[:n], dd.to_numpy()[:n]
     with np.errstate(divide="ignore", invalid="ignore"):
         rel = np.where(ym != 0, 100.0 * (yd - ym) / ym, np.nan)
     data = pd.DataFrame({"master": ym, "develop": yd, "delta": yd - ym, "delta_pct": rel}, index=idx)
+    marker = "o" if n <= 40 else None
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 5.5), sharex=True, height_ratios=[3, 1])
-    ax1.plot(idx, ym, color=SIDE_COLORS["master"], lw=1.2, label=LABELS["master"])
-    ax1.plot(idx, yd, color=SIDE_COLORS["develop"], lw=1.2, ls="--", label=LABELS["develop"])
+    ax1.plot(idx, ym, color=SIDE_COLORS["master"], lw=1.6, marker=marker, ms=4, label=LABELS["master"])
+    ax1.plot(idx, yd, color=SIDE_COLORS["develop"], lw=1.6, ls="--", marker=marker, ms=4, label=LABELS["develop"])
     ax1.legend(fontsize=8, frameon=False)
     ax1.set_title(title, fontsize=11)
-    _style(ax1, ylabel=f"{title}\n[{unit}, daily mean]")
+    _style(ax1, ylabel=f"{title}\n[{unit}{', daily mean' if resampled else ''}]")
     ax2.axhline(0, color="#999999", lw=0.8)
-    ax2.plot(idx, rel, color="#a03030", lw=0.9)
+    ax2.plot(idx, rel, color="#a03030", lw=1.2, marker=marker, ms=3)
     _style(ax2, xlabel="date", ylabel="develop - master [%]")
     fig.tight_layout()
     return save_figure(fig, data, name, outdir)
@@ -379,6 +403,7 @@ def findings_by_stage(findings: list[dict], name: str, outdir: Path) -> tuple[Pa
     ax.invert_yaxis()
     ax.legend(fontsize=8, frameon=False)
     ax.set_title("equivalence findings by stage", fontsize=11)
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     _style(ax, xlabel="number of findings")
     fig.tight_layout()
     return save_figure(fig, counts, name, outdir)

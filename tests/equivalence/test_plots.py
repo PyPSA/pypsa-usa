@@ -275,3 +275,12 @@ def test_export_all_degrades_gracefully(tmp_path):
     pngs, csvs = _stems(tmp_path, ".png"), _stems(tmp_path, ".csv")
     assert pngs == csvs
     assert {"objective", "dispatch_by_carrier", "findings_by_stage"} <= pngs
+
+
+def test_timeseries_pair_short_series_keeps_native_resolution(tmp_path):
+    """A 24-hour fixture resamples to one daily point, which plots nothing."""
+    ds = make_profile(n_bus=2, n_time=24, seed=30)
+    s = metrics.available_power(ds)
+    png, csv = plots.timeseries_pair(s, s * 1.05, "available power", "MW", "short_series", tmp_path)
+    assert png.exists()
+    assert len(pd.read_csv(csv, index_col=0)) == 24
