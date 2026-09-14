@@ -168,26 +168,42 @@ these win on both branches. Note that the `honor_planned_retirements` pin alone
 was inert on the baseline — `master` carried no code reading the key — which is
 why HF-3 was also ported as a commit.
 
-The gate distinguishes two kinds of difference, because they are not the same
-thing:
+The gate splits differences on whether the two sides can take different
+branches, not on whether a key is present:
 
-- a **value** difference — both sides carry the key and disagree about it — is
-  **fatal**. That is a real disagreement about what to compute. Measured on the
-  USA config today there are four, and every one of them is either pinned or
-  allowlisted with a reason.
-- a **presence-only** difference — one side's default layer supplies a key the
-  other's does not — is **recorded** in `run_meta.json`'s
-  `config_diff_allowed`, with the reason, and does not abort. There are well
-  over a hundred of these (develop's `config.default.yaml` base layer against
-  master's `config.{common,plotting,slurm}.yaml`), covering plotting, sector,
-  DAC and unused solver option sets. Aborting on them would mean the gate could
-  never pass and would simply be switched off, which is strictly worse than
-  putting the whole list on the record.
+| kind | meaning | severity |
+|---|---|---|
+| `value` | both sides carry the key and disagree | **fatal** |
+| `default_only` | present on one side only, with a **truthy** value | **fatal** |
+| `only_master` / `only_develop` | present on one side only, with a **falsy** value (`null`, `{}`, `[]`, `""`, `0`, `false`) | recorded |
 
-`EQ_STRICT_CONFIG_GATE=1` makes presence-only differences fatal too. That is how
-HF-20's owed master-vs-develop replay actually gets discharged: run it once,
-triage the list, and either pin the keys in the shared config or move them into
-`CONFIG_DIFF_ALLOWLIST` with signed reasons.
+The falsy/truthy split is the whole point, and it is not a nicety.
+`config.get(key, {})` followed by `if cfg:` is the shape all over this workflow:
+a falsy default-layer value takes the same branch as an absent key, and a truthy
+one does not. `electricity.demand_response: {marginal_cost: 999999, shift: 0}`
+is the case that proved it — develop-only, and truthy, so develop calls
+`add_demand_response`, which adds a `demand_response` **Carrier** before its own
+`shift == 0` early return, while the baseline's `.get(..., {})` adds nothing.
+Three stages of unwaived Carrier `row_set` findings, from a key that looks inert.
+It is now pinned on both sides.
+
+Measured on the USA config on 2026-09-14: 3 `value`, 46 `default_only`, 4 falsy
+presence-only. Every one of the 49 fatal ones is either pinned in the shared
+config or carries a signed line in `CONFIG_DIFF_ALLOWLIST` saying what was
+checked — dead keys nothing reads, blocks whose own `enable` is false, opts that
+this run does not select, solver option sets it does not use, per-rule
+`walltime` declarations the scheduler reads and no script does.
+
+Where an entry is safe because of its **value** and not just its key, it also
+has a guard in `_ALLOWLIST_GUARDS`, and an allowlisted key whose value moves out
+from under its reason stops being allowlisted. `costs.atb` is allowed only while
+develop's defaults still equal master's inline fallback; the `weighting_strategy`
+keys only while neither side says `population`; the default-off blocks only while
+they are off; the `walltime` blocks only while they contain nothing but
+walltimes.
+
+`EQ_STRICT_CONFIG_GATE=1` makes the falsy presence-only differences fatal too.
+That is how HF-20's owed master-vs-develop replay gets discharged in full.
 
 One normalisation is built in: `null`, `{}` and `[]` compare equal. The shared
 config writes `model_topology.include: {}`, which arrives as `None` on develop
@@ -224,12 +240,12 @@ sbatch tests/equivalence/run_equivalence.sbatch
 | `EQ_PRONG` | `2` | 1 = `simpl=''` pass-through, 2 = `simpl=$EQ_SIMPL` |
 | `EQ_SIMPL` | `300` | prong-2 granularity |
 | `EQ_CLUSTERS` | `134` | develop-dialect `{clusters}`; translated for the baseline |
-| `EQ_OPTS` | `3h` | `3h` is the unconstrained twin; `REM-3h` adds the national 1 Mt CO2 cap |
+| `EQ_OPTS` | `3h` | the emissions-unconstrained twin. `REM-3h` (national 1 Mt CO2 cap) is **opt-in** — see below |
 | `EQ_UNTIL` | *(unset)* | `assembled` stops before prepare/solve |
 | `EQ_BASELINE_REF` | `master-benchmark` | the baseline branch |
 | `EQ_RUN_ID` | minted | names the run directory |
 | `EQ_JOBS` | `8` | snakemake `-j` per side |
-| `EQ_TIMEOUT` | `43200` | per-side wall-clock cap, seconds |
+| `EQ_TIMEOUT` | derived | per-side wall-clock cap, seconds. Unset, it is computed from the job's own remaining time less a 900 s tail, split across the two sides, so a flat value can never outlive `--time` and get side one killed mid-rule |
 | `EQ_CACHE` | `$GROUP_SCRATCH/kamran/pypsa-usa-eq-cache` | the shared `data/` + `cutouts/` cache |
 | `EQ_STAGE_SRC` | *(unset)* | optional rsync top-up of the cache from another checkout |
 | `EQ_ALLOW_DIRTY` | *(unset)* | `1` builds a dirty checkout and records it |
@@ -245,6 +261,59 @@ off `$HOME`; exports `GRB_LICENSE_FILE` explicitly; refuses to replace a
 footprint; clears stale snakemake locks on both sides; and installs a trap that
 kills its children and `scancel`s any tagged Slurm job on **any** exit path,
 including the pre-timeout `TERM`.
+
+### Why `EQ_OPTS` defaults to the unconstrained twin
+
+`3h` is the emissions-unconstrained run. The national 1 Mt CO2 cap (`REM-3h`)
+looked **infeasible at USA scale** on 2026-09-01 — a barrier infeasibility
+verdict plus a stalled disambiguation simplex — and a failed solve aborts the
+whole harness before the comparison is written. Running the unconstrained twin
+first secures the master build, the comparison and the benchmark data before the
+REM question is settled. `paths.OPTS` carries the same default; the two must
+agree, or bash and python would mint different run ids for the same run.
+
+### Starting from an empty cache
+
+The three footprint-dependent directories — `nrel_exclusion/`, `godeeep/`,
+`zenodo/` — are **excluded from `EQ_STAGE_SRC` even when it is set**, so a cold
+`EQ_CACHE` is not filled by staging. It does not need to be: the workflow's own
+`retrieve_*` rules fetch them from the Zenodo records declared in
+`config.equivalence-usa.yaml`, and the driver detects the cold cache, says so,
+and continues. Expect the first run to be substantially longer.
+
+What the driver *will* refuse is an input that is **present and too small**.
+That is the distinction that matters: absent means "not fetched yet"; a 68 KB
+`caps_onwind_reference.nc` where a 400 KB+ national one belongs means a regional
+footprint is sitting in the national cache, which builds ERCOT profiles on both
+sides and looks like a clean comparison. Delete it and let the retrieve rules
+refetch, or restage a verified copy.
+
+Everything else — the ~13 GB of `data/` and `cutouts/` that is not
+footprint-dependent — either comes from `EQ_STAGE_SRC` (which covers both
+directories) or is retrieved by the workflow.
+
+### Recovering from a killed job
+
+The driver traps `TERM` (including Slurm's pre-timeout signal, 180 s before the
+wall) and kills the run's whole **process group**, so snakemake's rule processes
+die with it rather than running on until the node is reclaimed. That is CH2's
+missing piece: one of its sbatch scripts exists only to repair the two networks a
+controller killed mid-solve deleted.
+
+A job that dies without the trap firing (an OOM kill, a node failure) leaves
+snakemake metadata marking the in-flight outputs incomplete. `build.py` passes
+`--rerun-incomplete`, so the next run simply rebuilds them; the run directory
+means a resumed build picks up where the dead one stopped. If snakemake still
+refuses a specific file, clear just that file's metadata by hand rather than
+wiping the tree:
+
+```bash
+cd workflow                      # or .worktrees/master-benchmark/workflow
+uv run snakemake --cleanup-metadata resources/equivalence/networks/usa/elec_s300.nc
+```
+
+Stale directory locks from a killed predecessor are swept automatically at job
+start (`snakemake --unlock` on both sides).
 
 ### `EQ_STAGE_SRC` is off for a reason
 
@@ -292,6 +361,11 @@ logs/driver-<job>.log  what the driver did
 ```
 
 ### `run_meta.json`
+
+`run_meta.json` is written **before** the gate runs and rewritten after it, so
+a run the gate refuses still leaves provenance behind: `config_gate` reads
+`pending` / `passed` / `failed` / `skipped`, and `config_gate_error` carries the
+refusal. A run with no record is a run nobody can account for.
 
 Three shas, not one: `master_sha` (the branch point),
 `baseline_sha` (what actually built the baseline, plus how many commits it sits
