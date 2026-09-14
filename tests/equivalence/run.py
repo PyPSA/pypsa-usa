@@ -12,8 +12,8 @@ Order matters and is the point of this module:
 2. :func:`context.assert_config_equivalent` refuses to go further if the two
    sides would not be on the same config — *before* either build, so a long run
    is never spent comparing two different configurations.
-3. ``run_meta.json`` is written before the builds, so a run that dies halfway
-   still says what it was.
+3. ``run_meta.json`` is written BEFORE the gate and rewritten after it, so
+   even a run the gate refuses leaves the three shas and the reason behind.
 4. Both sides build, sequentially and never concurrently: they share one
    ``data/`` cache, and two concurrent DAGs would race on the same retrieve
    targets.
@@ -123,10 +123,10 @@ def main() -> int:
     args = ap.parse_args()
 
     ctx = context.build_context(args.prong)
-    allowed = context.assert_config_equivalent(ctx)
-    ctx = context.with_config_diff(ctx, allowed)
-    meta_path = context.write_run_meta(ctx)
-    print(f"[equivalence] run {ctx.run_id}: {meta_path}")
+    print(f"[equivalence] run {ctx.run_id}: {ctx.run_dir / 'run_meta.json'}")
+    # run_gate writes run_meta.json before the gate and rewrites it after, so a
+    # gate failure still leaves the provenance of the run it refused.
+    ctx = context.run_gate(ctx)
 
     solve = not args.skip_solve
     # EQ_UNTIL=assembled already stops the compared pairs at the assembled
