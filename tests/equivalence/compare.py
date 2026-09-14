@@ -3,9 +3,11 @@
 Tolerance policy (spec D2/D7):
 - floats: ``np.allclose(rtol=1e-3, atol=1e-8, equal_nan=True)``
 - indexes / integers / strings: exact, after sorting
-- solved network: objective within 0.1%, per-carrier capacity within 0.5%;
-  the objective is normalized to ``objective + objective_constant`` on both
-  sides so the pypsa 0.30 vs v1 reporting conventions compare like for like
+- solved network: objective and per-carrier capacity within
+  ``tables.TOLERANCES``; the objective is normalized to
+  ``objective + objective_constant`` on both sides, because the branches split
+  the total between those two terms differently (HF-13) while the sum is
+  invariant
 - row-set and column-set differences are first-class findings
 - representation-only differences are normalized before comparing: float-
   formatted integer labels ('35827.0' vs '35827') and Load names carrying a
@@ -29,12 +31,23 @@ import pandas as pd
 import xarray as xr
 import yaml
 
+from .metrics import objective_constant, total_objective
 from .paths import INTERCONNECT, UNTIL, ArtifactPair, prong_pairs, run_dir
+from .tables import TOLERANCES
 
-RTOL = 1e-3
+# Every tolerance below comes from ``tables.TOLERANCES``; none is restated here,
+# so the stage-by-stage findings and the comparison table cannot disagree about
+# what "within tolerance" means (T3 of memory/plans/harness-master-vs-develop.md).
+# The generic per-cell tolerance is the p_max_pu family's, which is the same
+# 1e-3 the p_nom_max and demand families use — those are the frames this
+# stage-by-stage pass actually walks.
+RTOL = TOLERANCES["p_max_pu"].rtol
+OBJECTIVE_RTOL = TOLERANCES["objective"].rtol
+CAPACITY_RTOL = TOLERANCES["capacity"].rtol
+CAPACITY_ATOL = TOLERANCES["capacity"].atol
+# Float-equality epsilon for cell comparison. Not a physical floor — the
+# per-family physical floors are ``tables.TOLERANCES[...].atol``.
 ATOL = 1e-8
-OBJECTIVE_RTOL = 1e-3
-CAPACITY_RTOL = 5e-3
 MAX_FINDINGS_PER_FRAME = 50
 WAIVERS_PATH = Path(__file__).parent / "waivers.yaml"
 
@@ -342,28 +355,27 @@ def _capacity_by_carrier(n) -> pd.DataFrame:
 
 def _objective_constant(n) -> float:
     """``objective_constant`` of a network, 0.0 when absent/NaN."""
-    val = getattr(n, "objective_constant", 0.0)
-    try:
-        val = float(val)
-    except (TypeError, ValueError):
-        return 0.0
-    return val if np.isfinite(val) else 0.0
+    return objective_constant(n)
 
 
 def _total_objective(n) -> float:
-    """Total system cost, independent of the reporting convention.
+    """Total system cost, invariant to how the two terms are split.
 
-    pypsa 0.30 reported ``Network.objective`` as the solver's objective value
-    only and carried the fixed-cost offset separately in
-    ``Network.objective_constant``; pypsa v1 / linopy 0.9 fold that constant
-    into ``objective`` and leave ``objective_constant`` at 0. Comparing raw
-    ``objective`` across the two conventions therefore manufactures a
-    difference exactly the size of the constant, even when the two solves are
-    identical. Both sides are normalized to ``objective + objective_constant``
-    — the total system cost either way — and the existing tolerance applies to
-    that. Each side's constant is read from its own file (missing -> 0.0).
+    Both pypsa 0.30 and pypsa 1.3 expose ``objective`` and
+    ``objective_constant`` separately (verified 2026-09-14). What differs
+    between the branches is how the total is split between them: on the CA leg
+    master reported ``-204,665,929.13`` with a constant of ``1,133,255,860.00``
+    while develop reported ``928,590,425.01`` with a constant of ``0.00``.
+    Comparing either term alone therefore manufactures a difference the size of
+    the constant even when the two solves agree, so both sides are normalized to
+    ``objective + objective_constant`` — the total system cost either way — and
+    the tolerance applies to that. Each side's constant is read from its own
+    file (missing -> 0.0).
+
+    The implementation lives in ``metrics.total_objective`` so the findings and
+    the comparison table normalise identically (HF-13).
     """
-    return float(n.objective) + _objective_constant(n)
+    return total_objective(n)
 
 
 def _compare_solved(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
@@ -393,7 +405,7 @@ def _compare_solved(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
         columns=sorted(set(cc.columns) | set(ca.columns)),
     ).fillna(0.0)
     mas = ca.reindex_like(both).fillna(0.0)
-    close = np.isclose(both.to_numpy(), mas.to_numpy(), rtol=CAPACITY_RTOL, atol=1.0)
+    close = np.isclose(both.to_numpy(), mas.to_numpy(), rtol=CAPACITY_RTOL, atol=CAPACITY_ATOL)
     if not close.all():
         rows, cols = np.where(~close)
         findings.append(
