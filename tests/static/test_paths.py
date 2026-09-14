@@ -63,3 +63,54 @@ def test_no_hardcoded_resources_interconnect_paths(smk_path):
         f"use a category constant ({', '.join(sorted(CATEGORY_CONSTANTS))}):\n"
         + "\n".join(f"  line {ln}: {lit!r}" for ln, lit in violations)
     )
+
+
+# --- The Sherlock driver -----------------------------------------------------
+# One parameterised sbatch script replaces run_usa.sbatch and run_usa_cf.sbatch.
+# Both of those died on their first line because they hard-coded
+# ``REPO=/oak/.../refactor/pypsa-usa``, a path that no longer exists — the same
+# class of bug as a hard-coded RESOURCES path above, and the reason the driver
+# now resolves its root from $SLURM_SUBMIT_DIR.
+
+SBATCH_DRIVERS = sorted(
+    (Path(__file__).resolve().parents[1] / "equivalence").glob("*.sbatch"),
+)
+
+# Site software paths (gurobi's licence, the module tree) are not repository
+# paths and are allowed; a checkout location is not.
+ABSOLUTE_OAK_RE = re.compile(r"/oak/\S+")
+
+
+@pytest.mark.fast
+def test_exactly_one_sbatch_driver():
+    """run_usa.sbatch and run_usa_cf.sbatch are gone, not renamed alongside."""
+    names = [p.name for p in SBATCH_DRIVERS]
+    assert names == ["run_equivalence.sbatch"], names
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("sbatch_path", SBATCH_DRIVERS, ids=lambda p: p.name)
+def test_sbatch_uses_the_serc_partition(sbatch_path):
+    """The project's partition is serc (PROJECT.md §4), not normal."""
+    source = sbatch_path.read_text()
+    assert re.search(r"^#SBATCH\s+-p\s+serc\b", source, re.MULTILINE), (
+        f"{sbatch_path.name} does not request -p serc"
+    )
+    assert not re.search(r"^#SBATCH\s+-p\s+normal\b", source, re.MULTILINE), (
+        f"{sbatch_path.name} still requests -p normal"
+    )
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("sbatch_path", SBATCH_DRIVERS, ids=lambda p: p.name)
+def test_sbatch_has_no_absolute_repository_path(sbatch_path):
+    """No ``/oak/...`` literal: the checkout location is resolved, never written."""
+    violations = []
+    for line_no, line in enumerate(sbatch_path.read_text().splitlines(), start=1):
+        for match in ABSOLUTE_OAK_RE.finditer(line):
+            violations.append((line_no, match.group(0)))
+    assert not violations, (
+        f"{sbatch_path.name} hard-codes an absolute /oak path — resolve it from "
+        f"$SLURM_SUBMIT_DIR or an env knob instead:\n"
+        + "\n".join(f"  line {ln}: {lit}" for ln, lit in violations)
+    )
