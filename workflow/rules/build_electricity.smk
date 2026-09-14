@@ -73,6 +73,9 @@ rule build_bus_regions:
         topological_boundaries=config_provider(
             "model_topology", "topological_boundaries"
         ),
+        model_topology_include=config_provider(
+            "model_topology", "include", default=None
+        ),
         focus_weights=config_provider("focus_weights"),
     input:
         country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
