@@ -29,13 +29,19 @@ import pandas as pd
 import xarray as xr
 import yaml
 
+from .metrics import objective_constant, total_objective
 from .paths import INTERCONNECT, UNTIL, ArtifactPair, prong_pairs
+from .tables import TOLERANCES
 
 REPO = Path(__file__).resolve().parents[2]
+# Generic frame tolerance for stage-by-stage cell comparison. The named metric
+# families live in ``tables.TOLERANCES`` and are imported, never restated here,
+# so the findings and the comparison table cannot disagree about what "within
+# tolerance" means (T3 of memory/plans/harness-master-vs-develop.md).
 RTOL = 1e-3
 ATOL = 1e-8
-OBJECTIVE_RTOL = 1e-3
-CAPACITY_RTOL = 5e-3
+OBJECTIVE_RTOL = TOLERANCES["objective"]
+CAPACITY_RTOL = TOLERANCES["capacity"]
 MAX_FINDINGS_PER_FRAME = 50
 WAIVERS_PATH = Path(__file__).parent / "waivers.yaml"
 
@@ -343,12 +349,7 @@ def _capacity_by_carrier(n) -> pd.DataFrame:
 
 def _objective_constant(n) -> float:
     """``objective_constant`` of a network, 0.0 when absent/NaN."""
-    val = getattr(n, "objective_constant", 0.0)
-    try:
-        val = float(val)
-    except (TypeError, ValueError):
-        return 0.0
-    return val if np.isfinite(val) else 0.0
+    return objective_constant(n)
 
 
 def _total_objective(n) -> float:
@@ -363,8 +364,11 @@ def _total_objective(n) -> float:
     identical. Both sides are normalized to ``objective + objective_constant``
     — the total system cost either way — and the existing tolerance applies to
     that. Each side's constant is read from its own file (missing -> 0.0).
+
+    The implementation lives in ``metrics.total_objective`` so the findings and
+    the comparison table normalise identically (HF-13).
     """
-    return float(n.objective) + _objective_constant(n)
+    return total_objective(n)
 
 
 def _compare_solved(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
