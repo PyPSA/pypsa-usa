@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 import yaml
 
 from tests.equivalence import compare, metrics, tables
+
+from .conftest import make_network
 
 pytestmark = pytest.mark.fast
 
@@ -286,7 +290,9 @@ def test_unknown_hotfix_id_does_not_explain():
     waivers = [{"metric": "capacity_existing_by_carrier", "key": "solar", "hotfix": "HF-99"}]
     out = tables.comparison_table(frames, {}, waivers)
     assert out.iloc[0]["verdict"] == "UNEXPLAINED"
-    assert "unknown id" in out.iloc[0]["hotfix"]
+    # The wording is hotfixes.explains'; assert the substance, not the string.
+    assert "HF-99" in out.iloc[0]["hotfix"]
+    assert "no row" in out.iloc[0]["hotfix"]
 
 
 def test_empty_registry_explains_nothing():
@@ -424,3 +430,133 @@ def test_verdict_counts_covers_every_verdict():
     assert set(tables.verdict_counts(pd.DataFrame(columns=tables.COMPARISON_COLUMNS))) == set(
         tables.VERDICT_ORDER,
     )
+
+
+# ---------------------------------------------------------------------------
+# Integration with T4's hot-fix registry and run-directory layout.
+# ---------------------------------------------------------------------------
+
+
+def test_load_hotfixes_delegates_to_the_registry_module():
+    """One loader, not two: the table layer must not re-read hotfixes.yaml."""
+    from tests.equivalence import hotfixes as hf
+
+    assert tables.load_hotfixes() == hf.load_hotfixes()
+
+
+def test_registry_ships_and_is_well_formed():
+    reg = tables.load_hotfixes()
+    assert reg, "hotfixes.yaml should have landed with T4"
+    assert all(k.startswith("HF-") for k in reg)
+    assert all("ported" in e for e in reg.values())
+
+
+def test_ported_registry_row_cannot_explain_a_real_difference():
+    """Against the shipped registry rows, not a hand-made one.
+
+    Each ported row is put in play alone, so nothing else in the registry can
+    explain the difference and the verdict is attributable to that row only.
+    """
+    from tests.equivalence import hotfixes as hf
+
+    reg = tables.load_hotfixes()
+    ported = sorted(hf.ported_ids(reg))
+    assert ported, "some rows should be marked ported after T1"
+    frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0})}
+    for hid in ported:
+        waivers = [{"metric": "capacity_existing_by_carrier", "key": "solar", "hotfix": hid}]
+        out = tables.comparison_table(frames, {hid: reg[hid]}, waivers)
+        assert out.iloc[0]["verdict"] == "UNEXPLAINED", hid
+        assert "ported" in out.iloc[0]["hotfix"], hid
+
+
+def test_no_ported_id_is_ever_credited_as_an_explanation():
+    """Across the whole shipped registry and every metric it claims."""
+    from tests.equivalence import hotfixes as hf
+
+    reg = tables.load_hotfixes()
+    ported = set(hf.ported_ids(reg))
+    frames = {
+        m: _metric_frame({"solar": 100.0}, {"solar": 180.0})
+        for m in tables.KNOWN_METRICS
+        if m != "objective"
+    }
+    out = tables.comparison_table(frames, reg)
+    credited = {
+        hid
+        for cell, verdict in zip(out["hotfix"], out["verdict"])
+        if verdict == "explained"
+        for hid in str(cell).split(",")
+        if hid
+    }
+    assert not (credited & ported), sorted(credited & ported)
+
+
+def test_real_waivers_hotfix_tags_stay_out_of_the_table():
+    """waivers.yaml carries `hotfix: HF-12` on cell waivers (T4).
+
+    Those entries key on stage/component/column/kind. If the table treated their
+    absent metric/key as wildcards, HF-12 — the pypsa stack migration, which is
+    not ported — would mark rows 'explained' that nothing in the registry claims.
+    The property asserted is exact: passing the real waivers changes no verdict.
+    """
+    tagged = [w for w in _real_waivers() if w.get("hotfix")]
+    assert tagged, "T4 added hotfix: tags to waivers.yaml"
+    assert all(
+        all(w.get(k) is None for k in ("metric", "key", "family")) for w in tagged
+    ), "a waiver that names a metric/key/family is a table waiver and must be reviewed here"
+    frames = {
+        "capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0}),
+        "dispatch_by_carrier": _metric_frame({"CCGT": 100.0}, {"CCGT": 180.0}),
+        "demand_by_zone": _metric_frame({"p1": 100.0}, {"p1": 180.0}),
+    }
+    reg = tables.load_hotfixes()
+    without = tables.comparison_table(frames, reg, [])
+    with_waivers = tables.comparison_table(frames, reg, _real_waivers())
+    pd.testing.assert_frame_equal(without, with_waivers)
+
+
+def test_registry_expect_patterns_are_all_satisfiable():
+    """A pattern that can never match any metric is dead configuration.
+
+    T4's registry was written in the plan's ``capacity/*`` family vocabulary,
+    which the matcher does not speak (a bare family must not claim every
+    difference in it). Translating those to metric-name globs is only safe if
+    something checks that each one still matches something.
+    """
+    dead = tables.unmatched_expect_patterns(tables.load_hotfixes())
+    assert dead == {}, f"expect patterns that can never match: {dead}"
+
+
+def test_known_metrics_covers_what_collect_metrics_produces():
+    """KNOWN_METRICS must stay in step with the metric names plots emits."""
+    from tests.equivalence import plots
+
+    master, develop = make_network(), make_network()
+    art = plots.Artifacts(
+        prong=2, develop_root=Path("/nonexistent"), master_root=Path("/nonexistent"),
+        n_master=master, n_develop=develop, solved_master=master, solved_develop=develop,
+    )
+    produced = set(plots.collect_metrics(art, []))
+    assert produced <= set(tables.KNOWN_METRICS), sorted(produced - set(tables.KNOWN_METRICS))
+
+
+def test_family_glob_in_the_old_vocabulary_is_rejected():
+    assert not tables.pattern_is_satisfiable("capacity/*")
+    assert not tables.pattern_is_satisfiable("capacity")
+    assert tables.pattern_is_satisfiable("capacity_existing_by_carrier/*")
+    assert tables.pattern_is_satisfiable("objective")
+
+
+def test_export_all_writes_the_run_directory_tables(tmp_path, monkeypatch):
+    """``tables.export_all(run_dir, ctx, result)`` is the hook run.py calls."""
+    from tests.equivalence import plots
+
+    frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 100.0})}
+    monkeypatch.setattr(plots, "run_metrics", lambda prong: (None, frames, []))
+    ctx = type("Ctx", (), {"prong": 2})()
+    comparison = tables.export_all(tmp_path, ctx, {"findings": []})
+    assert (tmp_path / "tables" / "comparison.csv").exists()
+    assert (tmp_path / "tables" / "comparison.md").exists()
+    assert (tmp_path / "tables" / "capacity_existing_by_carrier.csv").exists()
+    assert tables.verdict_counts(comparison)["equivalent"] == 1

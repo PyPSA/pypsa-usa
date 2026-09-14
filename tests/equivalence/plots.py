@@ -51,9 +51,8 @@ import xarray as xr
 from matplotlib.ticker import MaxNLocator
 
 from . import metrics
-from .paths import EQ, INTERCONNECT, SIMPL2, prong_pairs
+from .paths import EQ, INTERCONNECT, REPO, SIMPL2, prong_pairs
 
-REPO = Path(__file__).resolve().parents[2]
 DPI = 150
 
 LABELS = {"develop": "develop", "master": "master-benchmark (baseline)"}
@@ -549,6 +548,35 @@ def collect_metrics(art: Artifacts, missing: list[dict] | None = None) -> dict[s
     return {k: v for k, v in out.items() if v is not None}
 
 
+#: Per-process memo of ``(artifacts, metrics, missing)`` keyed by the run's
+#: prong and roots. ``tables.export_all`` and :func:`export_all` are called back
+#: to back by ``run.py`` and would otherwise load every network twice.
+_RUN_METRICS: dict[tuple[str, ...], tuple] = {}
+
+
+def run_metrics(
+    prong: int,
+    develop_root: Path | None = None,
+    master_root: Path | None = None,
+) -> tuple[Artifacts, dict[str, object], list[dict]]:
+    """``(artifacts, metric_frames, missing)`` for one run, computed once.
+
+    The result is memoised for the process, so the comparison table and the
+    figures are drawn from the *same* numbers and the networks are read once.
+    """
+    from .build import BASELINE_WORKTREE
+
+    develop_root = Path(develop_root or REPO / "workflow")
+    master_root = Path(master_root or BASELINE_WORKTREE / "workflow")
+    key = (str(prong), str(develop_root), str(master_root))
+    if key not in _RUN_METRICS:
+        art = load_artifacts(prong, develop_root, master_root)
+        missing: list[dict] = []
+        frames = collect_metrics(art, missing)
+        _RUN_METRICS[key] = (art, frames, missing)
+    return _RUN_METRICS[key]
+
+
 def _carrier_zone_slice(df: pd.DataFrame, carrier: str) -> tuple[pd.Series, pd.Series]:
     """(master, develop) zone Series for one carrier of a (zone, carrier) frame."""
     sub = df.xs(carrier, level="carrier")
@@ -566,20 +594,22 @@ def export_all(
 ) -> Path:
     """Render every required figure under ``<run_dir>/figures/``.
 
-    ``ctx`` is T4's ``RunContext``; only ``prong`` is read from it, and only
-    when ``artifacts`` is not supplied, so this works before T4 lands.
+    Called by ``run.py`` as ``export_all(ctx.run_dir, ctx)``; ``ctx`` is the
+    :class:`context.RunContext`, from which only ``prong`` is read. The
+    remaining arguments exist for the unit tests, which supply their own
+    fixtures instead of reading a run directory.
 
     Metrics that failed to compute are written to
     ``<run_dir>/missing_metrics.json`` so the failure survives the run even if
     nobody reads stdout. Returns the figures directory.
     """
     run_dir = Path(run_dir)
-    missing = [] if missing is None else missing
+    prong = int(getattr(ctx, "prong", 2))
     if artifacts is None:
-        prong = int(getattr(ctx, "prong", 2))
-        develop_root = Path(getattr(ctx, "develop_root", REPO / "workflow"))
-        master_root = Path(getattr(ctx, "master_root", REPO / ".worktrees" / "master-benchmark" / "workflow"))
-        artifacts = load_artifacts(prong, develop_root, master_root)
+        artifacts, computed, computed_missing = run_metrics(prong)
+        metric_frames = computed if metric_frames is None else metric_frames
+        missing = computed_missing if missing is None else missing
+    missing = [] if missing is None else missing
     m = collect_metrics(artifacts, missing) if metric_frames is None else metric_frames
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "missing_metrics.json").write_text(json.dumps(missing, indent=1))
@@ -633,14 +663,20 @@ def export_all(
                 f"{tech}_national_available_power", run_dir,
             )
 
-    findings_by_stage(findings if findings is not None else _read_findings(artifacts), "findings_by_stage", run_dir)
+    if findings is None:
+        findings = _read_findings(run_dir, artifacts.prong)
+    findings_by_stage(findings, "findings_by_stage", run_dir)
     return run_dir / "figures"
 
 
-def _read_findings(art: Artifacts) -> list[dict]:
-    """Findings from the prong's JSON, or ``[]`` when it has not been written."""
-    suffix = "" if INTERCONNECT == "western" else f"_{INTERCONNECT}"
-    p = art.develop_root / "results" / "equivalence" / f"findings_{art.prong}{suffix}.json"
+def _read_findings(run_dir: Path, prong: int) -> list[dict]:
+    """Findings from the run directory, or ``[]`` when they are not there yet.
+
+    One run directory per run (plan D5): ``compare.run_comparison`` writes
+    ``<run_dir>/findings_<prong>.json`` beside ``run_meta.json`` and both
+    manifests, so the figures read it from the same place.
+    """
+    p = Path(run_dir) / f"findings_{prong}.json"
     if not p.exists():
         return []
     try:

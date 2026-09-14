@@ -27,11 +27,13 @@ A row of the comparison table is one ``(metric, key)`` pair with a verdict:
     or on neither. Reported, not failed: the corresponding additive metric
     (capacity, dispatch) carries the substantive difference.
 
-A hot-fix marked ``ported: true`` is **not** a valid explanation: once it is a
-commit on ``master-benchmark`` its effect is present on *both* sides, so it
-cannot be the reason they differ. Neither is an id that does not resolve in the
-registry. Both are reported with the reason attached and the row stays
-``UNEXPLAINED``; when the registry is empty, nothing can be explained.
+Whether an id is an admissible explanation is decided by
+:func:`hotfixes.explains`, not here: an id that has no row in ``hotfixes.yaml``
+is rejected, and so is one marked ``ported: true`` — once a fix is a commit on
+``master-benchmark`` it runs on BOTH sides, so a difference tracing to it means
+the port is broken, not that the difference is explained. Rejections are
+reported verbatim in the ``hotfix`` column and the row stays ``UNEXPLAINED``;
+when the registry is empty, nothing can be explained.
 """
 
 from __future__ import annotations
@@ -42,7 +44,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import yaml
+
+from .hotfixes import explains
+from .hotfixes import load_hotfixes as _load_registry
 
 
 @dataclass(frozen=True)
@@ -101,6 +105,27 @@ VERDICT_ORDER = ("MISSING", "UNEXPLAINED", "one-sided", "undefined", "explained"
 #: Markdown is for reading, not for archiving — the CSV beside it is complete.
 MD_ROW_CAP = 60
 
+#: Every metric name ``plots.collect_metrics`` can produce, with one example
+#: per per-tech family. A hot-fix ``expect`` pattern is matched against these,
+#: so a pattern that can never match any of them is dead configuration and
+#: :func:`unmatched_expect_patterns` turns it into a test failure. Keep in step
+#: with ``plots.collect_metrics``.
+KNOWN_METRICS: tuple[str, ...] = (
+    "objective",
+    "capacity_existing_by_carrier",
+    "capacity_opt_by_carrier",
+    "p_nom_existing_by_zone_carrier",
+    "dispatch_by_carrier",
+    "capacity_factor_by_carrier",
+    "demand_by_zone",
+    "p_max_pu_quantiles_solar",
+    "p_max_pu_quantiles_onwind",
+    "p_nom_max_by_zone_solar",
+    "p_nom_max_by_zone_onwind",
+    "mean_cf_by_zone_solar",
+    "mean_cf_by_zone_onwind",
+)
+
 #: Waiver fields that can attach a waiver to a comparison-table row. A waiver
 #: naming none of them is a ``compare.py`` cell waiver (stage/component/column/
 #: kind) and has nothing to say about this table.
@@ -133,43 +158,15 @@ def tolerance_pct(metric: str) -> float:
     return tolerance_for(metric).rtol * 100.0
 
 
-def load_hotfixes(path: Path) -> dict[str, dict]:
-    """Load ``hotfixes.yaml`` into ``{id: entry}``; a missing file gives ``{}``.
+def load_hotfixes(path: Path | None = None) -> dict[str, dict]:
+    """The hot-fix registry as ``{id: entry}``; a missing file yields ``{}``.
 
-    The file is a YAML **list**; T4 owns writing it and its loader lives here so
-    that the table can be built before it exists. Expected schema of one entry:
-
-    ``id``
-        ``HF-n``, bare (not zero-padded), matching the ``#`` column of
-        ``memory/plans/hotfix-ledger.md``.
-    ``commit``
-        7- or 40-character sha of the develop commit that introduced it.
-    ``pr``
-        integer pull-request number.
-    ``title``
-        one-line description, non-empty.
-    ``confidence``
-        one of ``high``, ``medium``, ``low``, ``none`` — how strongly this
-        hot-fix is expected to move a benchmark number.
-    ``ported``
-        boolean. ``true`` once the fix has been ported onto
-        ``master-benchmark``, at which point it is present on both sides and is
-        **no longer an admissible explanation** for a difference.
-    ``expect`` *(optional)*
-        list of glob patterns naming the metrics this hot-fix is expected to
-        move. Patterns are matched against the **metric name** and against
-        ``"<metric>/<key>"`` — e.g. ``capacity_*`` for every capacity metric, or
-        ``capacity_existing_by_carrier/CCGT`` for one row. A bare tolerance
-        family (``capacity``) is deliberately NOT a match: a hot-fix that claims
-        a whole family explains every difference in it, which is how a real
-        regression gets waved through.
+    Delegates to :func:`hotfixes.load_hotfixes`, which owns ``hotfixes.yaml``
+    and its schema (``id``, ``commit``, ``pr``, ``title``, ``confidence``,
+    ``ported``, ``usa_noop``, optional ``expect``). Kept here as the name the
+    table layer imports, so there is one loader, not two.
     """
-    if not Path(path).exists():
-        return {}
-    raw = yaml.safe_load(Path(path).read_text()) or []
-    if isinstance(raw, dict):  # tolerate a mapping form
-        return {str(k): dict(v or {}, id=str(k)) for k, v in raw.items()}
-    return {str(e["id"]): dict(e) for e in raw if isinstance(e, dict) and e.get("id")}
+    return _load_registry(path)
 
 
 def _hotfix_matches(entry: dict, metric: str, key: str) -> bool:
@@ -179,6 +176,31 @@ def _hotfix_matches(entry: dict, metric: str, key: str) -> bool:
         patterns = [patterns]
     candidates = (metric, f"{metric}/{key}")
     return any(fnmatch(c, str(p)) for p in patterns for c in candidates)
+
+
+def pattern_is_satisfiable(pattern: str) -> bool:
+    """Can this ``expect`` glob ever match a metric this harness produces."""
+    return any(
+        fnmatch(m, pattern) or fnmatch(f"{m}/key", pattern) for m in KNOWN_METRICS
+    )
+
+
+def unmatched_expect_patterns(registry: dict[str, dict]) -> dict[str, list[str]]:
+    """``{hotfix id: patterns that can never match}`` — dead configuration.
+
+    An ``expect`` pattern written in a vocabulary the matcher does not speak is
+    worse than no pattern: it reads as a claim about which metrics a hot-fix can
+    move while doing nothing. The registry test fails on any entry here.
+    """
+    out: dict[str, list[str]] = {}
+    for hid, row in registry.items():
+        patterns = row.get("expect") or []
+        if isinstance(patterns, str):
+            patterns = [patterns]
+        dead = [str(p) for p in patterns if not pattern_is_satisfiable(str(p))]
+        if dead:
+            out[hid] = dead
+    return out
 
 
 def _waiver_hotfix(waivers: list[dict], metric: str, family: str, key: str) -> str | None:
@@ -228,16 +250,11 @@ def _explanation(
     ]
     if not ids:
         return "", False
-    usable = [h for h in ids if h in hotfixes and not hotfixes[h].get("ported", False)]
+    verdicts = {h: explains(h, hotfixes) for h in ids}
+    usable = [h for h, (ok, _) in verdicts.items() if ok]
     if usable:
         return ",".join(usable), True
-    return ",".join(_rejection(hotfixes, h) for h in ids), False
-
-
-def _rejection(hotfixes: dict[str, dict], hid: str) -> str:
-    if hid not in hotfixes:
-        return f"{hid} (unknown id; not in hotfixes.yaml)"
-    return f"{hid} (ported; not an explanation)"
+    return "; ".join(reason for _, reason in verdicts.values()), False
 
 
 def _as_frame(obj) -> pd.DataFrame:
@@ -457,3 +474,24 @@ def write_tables(tables: dict[str, pd.DataFrame], outdir: Path) -> list[Path]:
         md.write_text(to_markdown(tables["comparison"]))
         written.append(md)
     return written
+
+
+def export_all(run_dir: Path, ctx: object | None = None, result: dict | None = None) -> pd.DataFrame:
+    """Build the comparison table for one run and write ``<run_dir>/tables/``.
+
+    The entry point ``run.py`` calls. Metrics come from
+    :func:`plots.run_metrics`, which memoises them for the process, so the table
+    and the figures are drawn from the same numbers and the networks are read
+    once. ``result`` is the findings dict from ``compare.run_comparison``; it is
+    accepted so this hook has the whole run in hand, and is not needed to build
+    the table. Returns the comparison frame.
+    """
+    from . import plots
+    from .compare import load_waivers
+
+    prong = int(getattr(ctx, "prong", 2))
+    _artifacts, frames, missing = plots.run_metrics(prong)
+    comparison = comparison_table(frames, load_hotfixes(), load_waivers(), missing)
+    written = write_tables({**frames, "comparison": comparison}, run_dir)
+    print(f"[equivalence] tables: {len(written)} file(s) under {Path(run_dir) / 'tables'}")
+    return comparison

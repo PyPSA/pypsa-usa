@@ -340,3 +340,47 @@ def test_export_all_writes_missing_metrics_json(tmp_path):
     plots.export_all(tmp_path, artifacts=art, metric_frames={}, findings=[], missing=missing)
     written = json.loads((tmp_path / "missing_metrics.json").read_text())
     assert written == missing
+
+
+def test_run_metrics_is_memoised_so_the_networks_load_once(monkeypatch, tmp_path):
+    """tables.export_all and plots.export_all must not each read the networks."""
+    calls = []
+
+    def fake_load(prong, develop_root, master_root):
+        calls.append(prong)
+        return plots.Artifacts(prong=prong, develop_root=Path(develop_root), master_root=Path(master_root))
+
+    monkeypatch.setattr(plots, "load_artifacts", fake_load)
+    monkeypatch.setattr(plots, "_RUN_METRICS", {})
+    a1, m1, x1 = plots.run_metrics(2, tmp_path / "d", tmp_path / "m")
+    a2, m2, x2 = plots.run_metrics(2, tmp_path / "d", tmp_path / "m")
+    assert calls == [2]
+    assert a1 is a2 and m1 is m2 and x1 is x2
+
+
+def test_read_findings_uses_the_run_directory(tmp_path):
+    """Plan D5: findings sit in the run dir beside run_meta.json."""
+    (tmp_path / "findings_2.json").write_text(json.dumps({"findings": [{"stage": "demand", "waived": False}]}))
+    assert plots._read_findings(tmp_path, 2) == [{"stage": "demand", "waived": False}]
+    assert plots._read_findings(tmp_path, 1) == []
+
+
+def test_export_all_reads_findings_from_the_run_dir(tmp_path):
+    art = plots.Artifacts(prong=2, develop_root=tmp_path / "d", master_root=tmp_path / "m")
+    (tmp_path / "findings_2.json").write_text(
+        json.dumps({"findings": [{"stage": "demand", "waived": False}, {"stage": "demand", "waived": True}]}),
+    )
+    plots.export_all(tmp_path, artifacts=art, metric_frames={}, missing=[])
+    counts = pd.read_csv(tmp_path / "figures" / "findings_by_stage.csv", index_col=0)
+    assert counts.loc["demand", "live"] == 1
+    assert counts.loc["demand", "waived"] == 1
+
+
+def test_export_all_accepts_the_two_arg_form_run_py_uses():
+    """run.py calls export_all(ctx.run_dir, ctx); the signature must allow it."""
+    import inspect
+
+    params = list(inspect.signature(plots.export_all).parameters)
+    assert params[:2] == ["run_dir", "ctx"]
+    for name, param in list(inspect.signature(plots.export_all).parameters.items())[2:]:
+        assert param.default is not inspect.Parameter.empty, name
