@@ -95,7 +95,7 @@ Defined in `workflow/Snakefile`:
 
 - `workflow/repo_data/config/` is canonical and is what the Snakefile loads. It is also the source for `docs/source/configtables/` documentation.
 - `repo_data/config/config.default.yaml` — the scenario base layer: every user-facing knob, with defaults. Auto-loaded, and also the file users copy as a starting scenario.
-- `repo_data/config/config.tutorial.yaml`, `config.test.yaml` — sparse overlays (only keys that differ from the base). `config.equivalence*.yaml` are deliberately self-contained because the Tier C harness replays them against a pinned upstream anchor that does not load the base.
+- `repo_data/config/config.tutorial.yaml`, `config.test.yaml` — sparse overlays (only keys that differ from the base). `config.equivalence*.yaml` are deliberately self-contained because the Tier C harness replays them against the `master-benchmark` baseline, whose Snakefile does not load the base.
 - `workflow/config/` is untracked and holds only per-user files, seeded by `init_pypsa_usa.sh`: `config.default.yaml` (your scenario starting point), `config.api.yaml`, `config.slurm.yaml`. Do not add layered configs back into it.
 - `policy_constraints/` CSVs are read straight from `repo_data/config/policy_constraints/`.
 - The merged config is validated against `workflow/schemas/config.schema.yaml` at parse time (`snakemake.utils.validate`, `set_default=False`). The top level is open (snakemake/scenarios inject keys) but `electricity:`, `model_topology:`, `clustering:`, `solving:` etc. are closed, so a typo'd key fails loudly. Adding a config key means adding it to the schema.

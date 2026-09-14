@@ -1,18 +1,18 @@
 # PyPSA-USA equivalence-harness config — Tier C (see
 # docs/superpowers/specs/2026-08-07-pipeline-equivalence-and-perf-design.md).
-# One shared file drives BOTH the v1-epic candidate and the anchor
-# (upstream/develop e7f8bd70) baseline builds. The harness driver passes
+# One shared file drives BOTH the develop side and the master-benchmark
+# (baseline) side. The harness driver passes
 # explicit target paths, so scenario lists here document the run shape;
 # wildcards are taken from the targets. DO NOT use as a user-facing entry.
 #
-# Keys the ANCHOR requires from the main config (its layered common lacks
+# Keys MASTER requires from the main config (its layered common lacks
 # them): co2.storage, clustering.cluster_network.feature,
-# clustering.simplify_network.feature (prong 2). v1-epic ignores the extras.
+# clustering.simplify_network.feature (prong 2). develop ignores the extras.
 #
 # DELIBERATELY NOT A SPARSE OVERLAY. Unlike config.tutorial.yaml and
-# config.test.yaml, this file must stay self-contained: the anchor checkout
+# config.test.yaml, this file must stay self-contained: the master checkout
 # does NOT auto-load config.default.yaml, so any key dropped here would be
-# supplied to the candidate and missing on the anchor.
+# supplied to develop and missing on master.
 run:
   name: "equivalence"
   disable_progressbar: true
@@ -55,8 +55,8 @@ snapshots:
 # branches (build_renewable_profiles raises otherwise).
 renewable_land_access: reference
 
-# Anchor-required: parse-time read in add_extra_components input ternary.
-# Values mirror v1-epic's config.common.yaml defaults.
+# Master-required: parse-time read in add_extra_components input ternary.
+# Values mirror develop's config.common.yaml defaults.
 co2:
   storage: false
   network:
@@ -77,7 +77,7 @@ electricity:
     Link: []
   demand:
     profile: efs
-    # pin the legacy Breakthrough Pd weight: the anchor branch has no
+    # pin the legacy Breakthrough Pd weight: master has no
     # census-population method, so equivalence requires the legacy path
     bus_allocation: breakthrough
     scenario:
@@ -157,10 +157,10 @@ costs:
 clustering:
   simplify_network:
     algorithm: kmeans
-    feature: solar+onwind-time    # anchor-required key (prong 2); unused by kmeans math
+    feature: solar+onwind-time    # master-required key (prong 2); unused by kmeans math
   cluster_network:
     algorithm: kmeans
-    feature: solar+onwind-time    # anchor-required key; unused by kmeans math
+    feature: solar+onwind-time    # master-required key; unused by kmeans math
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:
@@ -211,9 +211,9 @@ solving:
       Seed: 123
       AggFill: 0
       PreDual: 0
-      # Mirrors config.default.yaml. Required explicitly here: the candidate
+      # Mirrors config.default.yaml. Required explicitly here: the develop
       # branch now auto-loads config.default.yaml as a base layer, so omitting
-      # this would hand the candidate a solver option the anchor never sees and
+      # this would hand develop a solver option master never sees and
       # break the like-for-like comparison.
       GURO_PAR_BARDENSETHRESH: 200
 

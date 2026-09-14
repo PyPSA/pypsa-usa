@@ -1,3 +1,5 @@
+> **Superseded 2026-09-14:** the anchor pin is retired; the baseline is the `master-benchmark` branch off `master`. See `memory/plans/harness-master-vs-develop.md` in the project brain.
+
 # Pipeline Evolution with Results-Equivalence Guarantee — Master Work Plan
 
 **Date:** 2026-08-07

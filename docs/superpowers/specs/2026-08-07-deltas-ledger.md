@@ -1,3 +1,5 @@
+> **Superseded 2026-09-14:** the anchor pin is retired; the baseline is the `master-benchmark` branch off `master`. See `memory/plans/harness-master-vs-develop.md` in the project brain.
+
 # Deltas Ledger — v1-epic vs anchor (upstream/develop e7f8bd70)
 
 One row per accepted result-difference between the candidate and the anchor
