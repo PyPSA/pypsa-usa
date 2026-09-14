@@ -1,30 +1,61 @@
-"""CLI orchestrator: build both sides, compare, report.
+"""CLI orchestrator: build both sides, compare, tabulate, report.
 
 uv run python -m tests.equivalence.run --prong 1 [--skip-solve] [--side both]
 
 Sides are ``master`` (the ``master-benchmark`` baseline, built in
 ``.worktrees/master-benchmark``) and ``develop`` (the main checkout).
+
+Outputs land in one run directory, ``workflow/results/equivalence/<run_id>/``:
+``tables/comparison.csv`` and ``tables/comparison.md`` (the verdict table) and
+``figures/`` (one PNG per figure, each beside the CSV it was drawn from).
+``EQ_RUN_ID`` names the directory; T4's ``context.build_context`` will supply it
+from the ``RunContext`` once that lands.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
+from tests.equivalence import plots, tables  # noqa: E402
 from tests.equivalence.build import BASELINE_WORKTREE, build_side  # noqa: E402
 from tests.equivalence.compare import run_comparison  # noqa: E402
 from tests.equivalence.paths import (  # noqa: E402
+    INTERCONNECT,
     UNTIL,
     assembled_target,
     baseline_assembled_target,
     baseline_final_target,
     final_target,
 )
-from tests.equivalence.plots import export_all  # noqa: E402
+
+HOTFIXES_PATH = Path(__file__).parent / "hotfixes.yaml"
+
+
+def run_dir_for(prong: int) -> Path:
+    """The run directory for this invocation (``EQ_RUN_ID`` wins)."""
+    run_id = os.environ.get("EQ_RUN_ID") or f"{INTERCONNECT}-p{prong}"
+    return REPO / "workflow" / "results" / "equivalence" / run_id
+
+
+def emit_results(prong: int, run_dir: Path, findings: list[dict]) -> dict[str, int]:
+    """Metrics -> comparison table -> figures. Returns the verdict counts."""
+    art = plots.load_artifacts(prong, REPO / "workflow", BASELINE_WORKTREE / "workflow")
+    metric_frames = plots.collect_metrics(art)
+    hotfixes = tables.load_hotfixes(HOTFIXES_PATH)
+    from tests.equivalence.compare import load_waivers
+
+    comparison = tables.comparison_table(metric_frames, hotfixes, load_waivers())
+    written = tables.write_tables({**metric_frames, "comparison": comparison}, run_dir)
+    print(f"[equivalence] wrote {len(written)} table(s) under {run_dir / 'tables'}")
+    figdir = plots.export_all(run_dir, artifacts=art, metric_frames=metric_frames, findings=findings)
+    print(f"[equivalence] figures: {figdir}")
+    return tables.verdict_counts(comparison)
 
 
 def main() -> int:
@@ -43,6 +74,12 @@ def main() -> int:
         type=int,
         default=10800,
         help="per-side snakemake wall-clock cap in seconds (USA-scale builds need far more than the 3h default)",
+    )
+    ap.add_argument(
+        "--tables",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="build the metrics, the comparison table and the figures (default: on)",
     )
     args = ap.parse_args()
 
@@ -64,16 +101,21 @@ def main() -> int:
         REPO / "workflow",
         BASELINE_WORKTREE / "workflow",
     )
-    # PNG plots instead of the HTML report (user decision 2026-09-01: the
-    # HTML wrapper added nothing over the figures themselves).
-    plots_dir = export_all()
+    run_dir = run_dir_for(args.prong)
+    counts = {"equivalent": 0, "explained": 0, "UNEXPLAINED": 0}
+    if args.tables:
+        counts = emit_results(args.prong, run_dir, result["findings"])
     print(
         f"[equivalence] prong {args.prong}: "
         f"{'PASS' if result['pass'] else 'FAIL'} "
         f"({result['n_live']} live / {result['n_findings']} total findings)",
     )
-    print(f"[equivalence] plots: {plots_dir}")
-    return 0 if result["pass"] else 1
+    print(
+        f"[equivalence] verdicts: {counts['equivalent']} equivalent, "
+        f"{counts['explained']} explained, {counts['UNEXPLAINED']} UNEXPLAINED",
+    )
+    print(f"[equivalence] comparison: {run_dir / 'tables' / 'comparison.md'}")
+    return 0 if (result["pass"] and counts["UNEXPLAINED"] == 0) else 1
 
 
 if __name__ == "__main__":
