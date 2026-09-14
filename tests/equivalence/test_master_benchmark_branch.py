@@ -227,6 +227,33 @@ def test_ported_commits_are_marked_ported_in_the_registry(commits):
     )
 
 
+def test_ported_shas_are_reachable_from_the_branch(branch, commits):
+    """Every ``ported_sha`` in the registry names a commit ON master-benchmark.
+
+    The branch is rebased when master moves, and a rebase rewrites every sha on
+    it. A stale ported_sha is worse than none: it points a reader at a dangling
+    object while still asserting the fix is on the baseline. Checked against the
+    live branch rather than against a written-down list.
+    """
+    rows = yaml.safe_load(HOTFIXES.read_text()) or []
+    on_branch = {c["sha"] for c in commits}
+    bad: list[str] = []
+    for row in rows:
+        sha = str(row.get("ported_sha") or "")
+        if not row.get("ported"):
+            assert not sha, f"{row['id']} is not ported but names ported_sha {sha}"
+            continue
+        if not sha:
+            continue  # shape is enforced in test_waiver_ledger
+        if not any(full.startswith(sha) for full in on_branch):
+            bad.append(f"{row['id']}: ported_sha {sha} is not a commit in {BASE}..{BRANCH}")
+    assert not bad, (
+        "stale ported_sha value(s) — master-benchmark was probably rebased; "
+        "re-read `git log --oneline master..master-benchmark` and update "
+        f"{HOTFIXES.name}:\n" + "\n".join(bad)
+    )
+
+
 def test_resources_commits_are_inert(commits):
     """A `resources` commit may not touch anything that can move a number.
 

@@ -40,14 +40,14 @@
   title: PUDL release pin v2025.2.0 -> v2026.8.0, and data_year (EIA-923 heat-rate / fuel-cost window) 2023 -> 2025
   confidence: high
   ported: true
-  ported_sha: 3b46c71
+  ported_sha: c10d60e
   usa_noop: false
   expect: [capacity/*, dispatch/*, objective/*]
   notes: >-
     Neutralised on two axes. The pudl_path half is pinned identically in both
     harness configs (decision 2, 2026-09-14), so there is nothing to port; the
     data_year half is a hard-coded constant the pin cannot reach and was ported
-    as 3b46c71 (and again inside f44033c). Ledger open item 1 is closed.
+    as c10d60e (and again inside 93751fe). Ledger open item 1 is closed.
 
 - id: HF-2
   commit: 34b643f
@@ -55,7 +55,7 @@
   title: EIA nerc_region NULL on recently-filed plants imputed from state, instead of the isin() filter silently deleting them
   confidence: high
   ported: true
-  ported_sha: f44033c
+  ported_sha: 93751fe
   usa_noop: false
   expect: [capacity/*]
   notes: >-
@@ -68,7 +68,7 @@
   title: Existing/proposed units retire on EIA planned_generator_retirement_date instead of a pinned 2100, gated on electricity.honor_planned_retirements
   confidence: high
   ported: true
-  ported_sha: 93665e6
+  ported_sha: b3afe50
   usa_noop: false
   expect: [capacity/*, dispatch/*, objective/*]
   notes: >-
@@ -82,7 +82,7 @@
   title: planned_generator_retirement_date takes the latest filing's value as-is instead of most-recent-non-null (a newer NULL = withdrawn announcement)
   confidence: medium
   ported: true
-  ported_sha: f44033c
+  ported_sha: 93751fe
   usa_noop: false
   expect: [capacity/*]
   notes: Ported implicitly with HF-8's wholesale adoption of build_powerplants.py.
@@ -139,7 +139,7 @@
   title: EIA-860 SCD tables pre-aggregated to one row per plant/generator before the LEFT JOINs, instead of ~24 report_date vintages fanning out per generator
   confidence: high
   ported: true
-  ported_sha: f44033c
+  ported_sha: 93751fe
   usa_noop: false
   expect: [objective/*, dispatch/*]
   notes: >-
@@ -155,7 +155,7 @@
   title: Empty-county sweep restricted to the ReEDS zones present in the model_topology.include-filtered network
   confidence: high
   ported: true
-  ported_sha: d6c73e0
+  ported_sha: bce8437
   usa_noop: true
   expect: [capacity/*, objective/*]
   notes: >-
@@ -169,7 +169,7 @@
   title: plants_must_add seam-plant fallback bounded to 100 km of the run's onshore+offshore regions in EPSG:5070
   confidence: high
   ported: true
-  ported_sha: 0c13807
+  ported_sha: d4dd4ff
   usa_noop: true
   expect: [capacity/*]
   notes: >-
@@ -182,7 +182,7 @@
   title: Missing EIA-860 summer/winter derates filled with 1.0 instead of propagating NaN
   confidence: medium
   ported: true
-  ported_sha: f44033c
+  ported_sha: 93751fe
   usa_noop: false
   expect: [p_max_pu/*, dispatch/*, objective/*]
   notes: >-
@@ -281,7 +281,7 @@
   develop: all three fixes live
   notes: >-
     PARTIALLY ported. build_powerplants.sanitize_uc_parameters / _clamp_series
-    came onto the baseline with HF-8's wholesale adoption (f44033c); the
+    came onto the baseline with HF-8's wholesale adoption (93751fe); the
     add_electricity.py and prepare_network.py halves did not, so `ported: false`
     keeps the row available as an explanation. A no-op while
     conventional.unit_commitment is false, but note that sanitize_uc_parameters
@@ -350,18 +350,19 @@
   commit: a7304ce
   pr: null
   title: build_renewable_profiles._drop_leap_day — Feb 29 dropped from the selection window so a leap weather year yields the standard 8760-hour axis
-  confidence: high
+  confidence: none
   ported: true
-  ported_sha: 9b36b3f
+  ported_sha: 572534f
   usa_noop: false
   expect: [p_max_pu/*, dispatch/*]
   notes: >-
-    Ledger DL-17; a harness-branch commit, so it has no upstream PR. fix_godeeep_time
-    shifts the raw GODEEEP time axis from the leap day onward by +1 day, so no CF
-    axis ever carries a Feb 29 label and a leap-year selection window KeyErrors
-    in .sel(time=...). The ONE ported row that is not a no-op on the USA config:
-    the usa leg runs historical 2012, and without it a bare-master baseline
-    cannot build at all.
+    Ledger DL-17; a harness-branch commit, so it has no upstream PR.
+    fix_godeeep_time shifts the raw GODEEEP time axis from the leap day onward
+    by +1 day, so no CF axis ever carries a Feb 29 label and a leap-year
+    selection window KeyErrors in .sel(time=...). The usa leg runs historical
+    2012, a leap year, so this is the one ported row that is not a no-op there —
+    but it is ON the baseline, so its confidence as an explanation for a
+    master-vs-develop difference is none.
 
 - id: HF-23
   commit: 01f742f
@@ -369,7 +370,7 @@
   title: "workflow/rules/common.smk materialises constants.py into the snakemake source cache so upstream #764's import chain resolves under a fresh cache"
   confidence: none
   ported: true
-  ported_sha: 5202d61
+  ported_sha: f65c90c
   usa_noop: false
   expect: []
   notes: >-
