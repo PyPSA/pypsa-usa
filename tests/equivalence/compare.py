@@ -474,8 +474,8 @@ def compare_profiles(pair: ArtifactPair, pc: Path, pa: Path, findings: list[dict
                         },
                     )
         # Per-bus variable comparison is only meaningful when the two sides
-        # share a bus space (prong 1). At prong 2 the develop is keyed by
-        # simpl-cluster IDs and the master by nodal IDs — zero overlap — so
+        # share a bus space (prong 1). At prong 2 develop is keyed by
+        # simpl-cluster IDs and master by nodal IDs — zero overlap — so
         # skip the per-var loop and let the system aggregates above carry the
         # comparison instead of emitting hundreds of vacuous row_set findings.
         cb = {str(b) for b in dc.indexes.get("bus", [])}

@@ -185,7 +185,7 @@
     data_var at any stage (pypsa 0.30 omitted attributes left at their default),
     and the 0.30-era default was True. The harness loads both sides under pypsa
     1.3, whose default is False, so the master reads back False while its actual
-    solve-time behaviour was True. The develop stores True explicitly because
+    solve-time behaviour was True. Develop stores True explicitly because
     the migration deliberately pins the 0.30 default to preserve per-period
     cyclicity. Both sides therefore behaved identically; the comparison
     manufactures the difference on read.
