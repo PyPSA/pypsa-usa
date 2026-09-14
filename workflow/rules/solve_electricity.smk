@@ -16,12 +16,6 @@ def ev_policy_input(wildcards):
 
 
 rule solve_network:
-    params:
-        solving=config_provider("solving"),
-        foresight=config_provider("foresight"),
-        planning_horizons=config["scenario"]["planning_horizons"],
-        transmission_network=config_provider("model_topology", "transmission_network"),
-        sector_config=config_provider("sector", default={}),
     input:
         network=RESOURCES
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
@@ -48,11 +42,17 @@ rule solve_network:
             BENCHMARKS
             + "solve_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}"
         )
+    conda:
+        "../envs/environment.yaml"
     threads: solver_threads
     resources:
         walltime=config_provider("walltime", "solve_network"),
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 150,
-    conda:
-        "../envs/environment.yaml"
+    params:
+        solving=config_provider("solving"),
+        foresight=config_provider("foresight"),
+        planning_horizons=config["scenario"]["planning_horizons"],
+        transmission_network=config_provider("model_topology", "transmission_network"),
+        sector_config=config_provider("sector", default={}),
     script:
         "../scripts/solve_network.py"

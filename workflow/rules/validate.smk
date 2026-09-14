@@ -1,11 +1,4 @@
 rule solve_network_validation:
-    params:
-        solving=config["solving"],
-        foresight=config["foresight"],
-        planning_horizons=config["scenario"]["planning_horizons"],
-        co2_sequestration_potential=config["sector"].get(
-            "co2_sequestration_potential", 200
-        ),
     input:
         network=RESOURCES
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
@@ -34,14 +27,18 @@ rule solve_network_validation:
     resources:
         walltime=config_provider("walltime", "solve_network_validation"),
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * 90,
+    params:
+        solving=config["solving"],
+        foresight=config["foresight"],
+        planning_horizons=config["scenario"]["planning_horizons"],
+        co2_sequestration_potential=config["sector"].get(
+            "co2_sequestration_potential", 200
+        ),
     script:
         "../scripts/solve_network.py"
 
 
 rule plot_validation_figures:
-    params:
-        eia_api=config["api"]["eia"],
-        snapshots=config["snapshots"],
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}_operations.nc",
@@ -68,5 +65,8 @@ rule plot_validation_figures:
     resources:
         walltime="00:30:00",
         mem_mb=5000,
+    params:
+        eia_api=config["api"]["eia"],
+        snapshots=config["snapshots"],
     script:
         "../scripts/plot_validation_production.py"
