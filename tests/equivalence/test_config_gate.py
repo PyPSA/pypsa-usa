@@ -74,33 +74,84 @@ def test_pudl_path_difference_raises_with_both_values(monkeypatch):
     assert "CONFIG_DIFF_ALLOWLIST" in msg
 
 
-def test_key_present_on_one_side_only_is_recorded_not_fatal(monkeypatch):
+def test_falsy_key_present_on_one_side_only_is_recorded_not_fatal(monkeypatch):
     """HF-20's diffuse class: recorded with its reason, not an abort.
 
-    There are well over a hundred of these between the two loaders' default
-    layers. Aborting on them would mean the gate never passes and gets switched
-    off, so they land in run_meta.json instead — where the owed HF-20 replay can
-    actually be read.
+    Only when the value is FALSY. ``config.get(key, {})`` followed by
+    ``if cfg:`` takes the same branch whether the key is absent or present-and-
+    falsy, so the side without it behaves as the side with it does.
     """
-    master = {k: v for k, v in BASE.items() if k != "renewable_land_access"}
-    _patch(monkeypatch, master, BASE)
+    develop = {**BASE, "some_disabled_flag": False}
+    _patch(monkeypatch, BASE, develop)
 
     allowed = context.assert_config_equivalent()
     assert len(allowed) == 1
-    assert allowed[0]["key"] == "renewable_land_access"
+    assert allowed[0]["key"] == "some_disabled_flag"
     assert allowed[0]["kind"] == "only_develop"
     assert "HF-20" in allowed[0]["reason"]
 
 
-def test_presence_only_difference_aborts_under_strict(monkeypatch):
-    master = {k: v for k, v in BASE.items() if k != "renewable_land_access"}
-    _patch(monkeypatch, master, BASE)
+@pytest.mark.parametrize("empty", [None, {}, [], "", 0, False])
+def test_every_falsy_literal_counts_as_absent(monkeypatch, empty):
+    develop = {**BASE, "some_unread_key": empty}
+    _patch(monkeypatch, BASE, develop)
+    allowed = context.assert_config_equivalent()
+    assert [d["kind"] for d in allowed] == ["only_develop"]
+
+
+def test_falsy_presence_only_aborts_under_strict(monkeypatch):
+    develop = {**BASE, "some_disabled_flag": False}
+    _patch(monkeypatch, BASE, develop)
     monkeypatch.setenv("EQ_STRICT_CONFIG_GATE", "1")
 
     with pytest.raises(RuntimeError) as exc:
         context.assert_config_equivalent()
-    assert "renewable_land_access" in str(exc.value)
+    assert "some_disabled_flag" in str(exc.value)
     assert "only_develop" in str(exc.value)
+
+
+def test_truthy_key_present_on_one_side_only_is_fatal(monkeypatch):
+    """The demand_response failure mode, in one test.
+
+    ``electricity.demand_response: {marginal_cost: 999999, shift: 0}`` lives in
+    develop's default layer only. It is TRUTHY, so develop calls
+    ``add_demand_response``, which adds a ``demand_response`` Carrier before its
+    own ``shift == 0`` early return, while the baseline's
+    ``.get("demand_response", {})`` is falsy and adds nothing — an unwaived
+    Carrier row_set finding at three stages. A gate that waves through every
+    present-on-one-side key would have shipped that.
+    """
+    master = {
+        **BASE,
+        "electricity": {k: v for k, v in BASE["electricity"].items()},
+    }
+    develop = {
+        **BASE,
+        "electricity": {
+            **BASE["electricity"],
+            "demand_response": {"marginal_cost": 999999, "shift": 0},
+        },
+    }
+    _patch(monkeypatch, master, develop)
+
+    with pytest.raises(RuntimeError) as exc:
+        context.assert_config_equivalent()
+    msg = str(exc.value)
+    assert "electricity.demand_response" in msg
+    assert "default_only" in msg
+
+
+def test_populated_subtree_against_an_empty_one_is_a_value_difference(monkeypatch):
+    """Not a scatter of present-on-one-side leaves: one differing mapping."""
+    master = {**BASE, "block": {}}
+    develop = {**BASE, "block": {"enable": True, "size": 3}}
+    _patch(monkeypatch, master, develop)
+
+    with pytest.raises(RuntimeError) as exc:
+        context.assert_config_equivalent()
+    msg = str(exc.value)
+    assert "block [value]" in msg
+    assert "block.enable" not in msg
 
 
 def test_value_difference_is_always_fatal(monkeypatch):
@@ -159,9 +210,25 @@ def test_every_blocking_difference_is_listed_at_once(monkeypatch):
     assert "4 differing key(s)" in msg
 
 
-def test_nested_allowlist_prefix_covers_children(monkeypatch):
+def test_subtree_present_on_one_side_is_reported_whole(monkeypatch):
+    """One entry for the whole block, not one per leaf inside it.
+
+    ``dac:`` exists on develop and nowhere on master. Six separate
+    ``dac.capital_cost``-style entries would be six copies of one fact, and six
+    allowlist rows to write.
+    """
     develop = {**BASE, "godeeep_cf_registry": {"sources": [{"kind": "zenodo"}]}}
     _patch(monkeypatch, BASE, develop)
+    allowed = context.assert_config_equivalent()
+    assert [d["key"] for d in allowed] == ["godeeep_cf_registry"]
+    assert allowed[0]["develop"] == {"sources": [{"kind": "zenodo"}]}
+
+
+def test_nested_allowlist_prefix_covers_children(monkeypatch):
+    """An allowlisted path covers keys underneath it."""
+    master = {**BASE, "godeeep_cf_registry": {"sources": [{"kind": "zenodo"}], "copy_local": True}}
+    develop = {**BASE, "godeeep_cf_registry": {"sources": [{"kind": "oak"}], "copy_local": True}}
+    _patch(monkeypatch, master, develop)
     allowed = context.assert_config_equivalent()
     assert [d["key"] for d in allowed] == ["godeeep_cf_registry.sources"]
 
@@ -208,3 +275,54 @@ def test_flatten_treats_the_scoping_keys_as_atomic():
         "model_topology.aggregate": {"a": 1},
         "clustering.cluster_network.algorithm": "kmeans",
     }
+
+
+# --- allowlist guards --------------------------------------------------------
+
+
+def test_allowlist_guard_rejects_a_moved_value():
+    """An allowlisted key whose value left its reason is not allowlisted.
+
+    ``costs.atb`` is allowed because develop's default layer supplies exactly
+    master's inline fallback. Change the scenario and the reason no longer
+    holds, so neither does the allowance.
+    """
+    ok = {
+        "key": "costs.atb",
+        "kind": "default_only",
+        "master": None,
+        "develop": {"scenario": "Moderate", "model_case": "Market", "overrides": None},
+    }
+    moved = {**ok, "develop": {**ok["develop"], "scenario": "Advanced"}}
+    assert context.allowlist_reason("costs.atb", ok) is not None
+    assert context.allowlist_reason("costs.atb", moved) is None
+
+
+def test_weighting_strategy_guard_rejects_population():
+    """The only branch either branch takes on this key is == 'population'."""
+    ok = {"key": "k", "kind": "default_only", "master": None, "develop": "demand-capacity"}
+    bad = {**ok, "develop": "population"}
+    key = "clustering.cluster_network.weighting_strategy"
+    assert context.allowlist_reason(key, ok) is not None
+    assert context.allowlist_reason(key, bad) is None
+
+
+def test_disabled_block_guard_rejects_an_enabled_block():
+    key = "electricity.imports"
+    off = {"key": key, "kind": "default_only", "master": None, "develop": {"enable": False}}
+    on = {**off, "develop": {"enable": True}}
+    assert context.allowlist_reason(key, off) is not None
+    assert context.allowlist_reason(key, on) is None
+
+
+def test_walltime_guard_rejects_a_block_with_anything_else_in_it():
+    key = "cluster_network"
+    ok = {"key": key, "kind": "default_only", "master": {"walltime": "09:00:00"}, "develop": None}
+    bad = {**ok, "master": {"walltime": "09:00:00", "algorithm": "kmeans"}}
+    assert context.allowlist_reason(key, ok) is not None
+    assert context.allowlist_reason(key, bad) is None
+
+
+def test_allowlist_without_a_diff_still_resolves():
+    """Callers that only have the key (docs, tests) get the reason unguarded."""
+    assert context.allowlist_reason("costs.atb") is not None

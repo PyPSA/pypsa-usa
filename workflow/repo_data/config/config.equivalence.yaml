@@ -77,9 +77,23 @@ co2:
 electricity:
   # Explicit on develop, where it is the shipped default. Master has no code
   # reading this key at all, so the pin alone could not neutralise HF-3 — the
-  # code was ported onto master-benchmark (93665e6) and the pin records the
+  # code was ported onto master-benchmark (b3afe50) and the pin records the
   # value both sides run. Harness plan decision 2, 2026-09-14.
   honor_planned_retirements: true
+  # Develop's config.default.yaml supplies this block and master's loaded
+  # config set does not. It looks inert — shift: 0 means no demand-response
+  # components are built — but BOTH branches guard the call with
+  # `if config["electricity"].get("demand_response", {})`, and
+  # add_demand_response adds the `demand_response` Carrier BEFORE its own
+  # `shift == 0` early return. Unpinned, develop gains a carrier the baseline
+  # never adds, and the comparison raises an unwaived Carrier row_set finding at
+  # extra_components, prepared_network and sectored_network. master-benchmark
+  # carries add_demand_response (it is master code, not a port), so pinning the
+  # same falsy-shift block on both sides makes them add the same carrier and
+  # build the same nothing else.
+  demand_response:
+    marginal_cost: 999999
+    shift: 0
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste]
   renewable_carriers: [onwind, solar, hydro]
   retirement: economic

@@ -34,6 +34,7 @@ import dataclasses
 import hashlib
 import json
 import os
+import re
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -72,6 +73,12 @@ class RunContext:
     config_sha256: str
     env_master: dict[str, str] = field(default_factory=dict)
     env_develop: dict[str, str] = field(default_factory=dict)
+    # 'pending' until the gate has run, then 'passed' / 'failed' / 'skipped'.
+    # run_meta.json is written BEFORE the gate, so a run that the gate stops
+    # still leaves provenance behind saying which three shas it was about to
+    # compare and why it did not.
+    config_gate: str = "pending"
+    config_gate_error: str = ""
     config_diff_allowed: list[dict] = field(default_factory=list)
     known_code_differences: list[dict] = field(default_factory=list)
     slurm_job_id: str | None = None
@@ -142,6 +149,8 @@ def build_context(prong: int, probe_env: bool = True) -> RunContext:
         config_sha256=config_sha256,
         env_master=env_master,
         env_develop=env_develop,
+        config_gate="pending",
+        config_gate_error="",
         config_diff_allowed=[],
         known_code_differences=known_code_differences(),
         slurm_job_id=os.environ.get("SLURM_JOB_ID"),
@@ -176,9 +185,34 @@ def write_run_meta(ctx: RunContext) -> Path:
     return out
 
 
-def with_config_diff(ctx: RunContext, allowed: list[dict]) -> RunContext:
+def with_config_diff(ctx: RunContext, allowed: list[dict], status: str = "passed", error: str = "") -> RunContext:
     """A copy of ``ctx`` carrying the gate's verdict (the dataclass is frozen)."""
-    return dataclasses.replace(ctx, config_diff_allowed=allowed)
+    return dataclasses.replace(
+        ctx,
+        config_gate=status,
+        config_gate_error=error,
+        config_diff_allowed=allowed,
+    )
+
+
+def run_gate(ctx: RunContext) -> RunContext:
+    """Write provenance, run the gate, rewrite provenance; re-raise on failure.
+
+    ``run_meta.json`` exists before the gate and is rewritten after it, so a
+    gate failure is not a run with no record: the file names the three shas, the
+    config sha and the reason the run stopped. Callers get the exception either
+    way.
+    """
+    write_run_meta(ctx)
+    try:
+        allowed = assert_config_equivalent(ctx)
+    except Exception as exc:
+        write_run_meta(with_config_diff(ctx, [], status="failed", error=str(exc)))
+        raise
+    status = "skipped" if any(d.get("kind") == "skipped" for d in allowed) else "passed"
+    ctx = with_config_diff(ctx, allowed, status=status)
+    write_run_meta(ctx)
+    return ctx
 
 
 # ---------------------------------------------------------------------------
@@ -256,15 +290,75 @@ def merged_config(side: str) -> dict:
     return json.loads(out.read_text())
 
 
-# (dotted key path, reason). A path matches itself and everything under it.
+# --- The allowlist ----------------------------------------------------------
 #
-# Seeded ONLY with differences that are deliberate and provable today. It is
-# meant to stay short: the first real run will fail this gate with the full list
-# of everything else the two loaders disagree about, and each of those is a
-# decision — pin it in the shared config, or add it here with a reason someone
-# signed. An allowlist grown by copy-pasting the failure message defeats the
-# gate.
+# (dotted key path, reason). A path matches itself and everything under it.
+# Every entry is a signed statement that this key cannot change what either
+# side computes on the standing whole-USA benchmark config. The entries below
+# were enumerated by actually running the gate against both merged configs on
+# 2026-09-14 and checking each one in the two branches' source; the reason says
+# what was checked, not that it was checked.
+#
+# Where safety depends on the VALUE and not just the key, the entry also has a
+# guard in _ALLOWLIST_GUARDS. An allowlisted key whose guard fails is not
+# allowlisted — that is what stops "develop's ATB defaults happen to match
+# master's inline fallback" from silently becoming "develop's ATB defaults are
+# allowed to be anything".
+
+
+def _is_time(v: object) -> bool:
+    return isinstance(v, str) and bool(re.fullmatch(r"\d+:\d{2}:\d{2}", v))
+
+
+def _present_value(diff: dict) -> object:
+    """The value from whichever side actually carries the key."""
+    return diff["develop"] if diff["master"] is None else diff["master"]
+
+
+def _rule_walltime_block(diff: dict) -> bool:
+    v = _present_value(diff)
+    return isinstance(v, dict) and set(v) == {"walltime"} and _is_time(v["walltime"])
+
+
+def _walltime_map(diff: dict) -> bool:
+    v = _present_value(diff)
+    return isinstance(v, dict) and bool(v) and all(_is_time(x) for x in v.values())
+
+
+def _time_scalar(diff: dict) -> bool:
+    return _is_time(_present_value(diff))
+
+
+def _not_population(diff: dict) -> bool:
+    return "population" not in (diff["master"], diff["develop"])
+
+
+def _atb_equals_inline_fallback(diff: dict) -> bool:
+    """Develop's ATB defaults must equal master's hard-coded fallback.
+
+    Both branches read it the same way — ``(costs_config or {}).get("atb") or
+    {}`` in ``_helpers``, with inline defaults ``scenario="Moderate"``,
+    ``model_case="Market"``, ``overrides={}``. Develop's default layer supplies
+    exactly those values, so the key being absent on master changes nothing.
+    Change any of them and it does.
+    """
+    v = _present_value(diff)
+    return (
+        isinstance(v, dict)
+        and v.get("scenario") == "Moderate"
+        and v.get("model_case") == "Market"
+        and not v.get("overrides")
+    )
+
+
+def _disabled_block(diff: dict) -> bool:
+    """A capability block whose own on-switch is off."""
+    v = _present_value(diff)
+    return isinstance(v, dict) and not v.get("enable", False) and not v.get("activate", False)
+
+
 CONFIG_DIFF_ALLOWLIST: tuple[tuple[str, str], ...] = (
+    # --- deliberate, harness-made -------------------------------------------
     (
         "scenario.clusters",
         "deliberate: harness commit 8371e9d changed {clusters} semantics on develop, so the "
@@ -276,29 +370,216 @@ CONFIG_DIFF_ALLOWLIST: tuple[tuple[str, str], ...] = (
         "develop-only retrieval plumbing (HF-15); master's ZenodoScenarioDownloader hardcodes "
         "the same record ids, so both sides fetch identical bytes",
     ),
+    # --- out of scope for this benchmark ------------------------------------
     (
         "sector.co2.policy",
-        "sector coupling is out of scope for this benchmark (scenario.sector is ''), and the "
-        "two branches ship the same CSV at different tracked paths (config/ vs repo_data/config/); "
-        "no sector rule runs, so no sector policy file is read",
+        "sector coupling is out of scope (scenario.sector is ''), and the two branches ship the "
+        "same CSV at different tracked paths (config/ vs repo_data/config/); no sector rule runs",
     ),
     (
         "sector.transport_sector.ev_policy",
         "same as sector.co2.policy: an out-of-scope sector policy CSV at two tracked paths",
     ),
+    (
+        "dac",
+        "direct-air-capture block, sector-coupling only and shipped enable: false; no sector rule "
+        "runs at scenario.sector ''",
+    ),
+    (
+        "renewable.EGS",
+        "EGS supply-curve settings; EGS is not in electricity.extendable_carriers.Generator for "
+        "this config, so aggregate_egs is not in the DAG on either side",
+    ),
+    (
+        "renewable.hydro",
+        "master-only atlite hydro-inflow settings (hydrobasins runoff, normalisation, PHS hours). "
+        "Both branches attach hydro from the Breakthrough/EIA fleet on this config; the atlite "
+        "hydro path is not in either DAG",
+    ),
+    (
+        "plotting",
+        "master-only plot axis limits and thresholds; no plotting rule is in the benchmark target "
+        "chain on either side",
+    ),
+    # --- opt-gated, and this run's opts do not select them -------------------
+    (
+        "electricity.SAFE_reservemargin",
+        "read only by the SAFE opt; this run's opts are 3h / REM-3h",
+    ),
+    (
+        "electricity.SAFE_regional_reservemargins",
+        "read only by the SAFE opt; this run's opts are 3h / REM-3h",
+    ),
+    (
+        "electricity.erm",
+        "read only by the ERM opt; this run's opts are 3h / REM-3h",
+    ),
+    (
+        "electricity.transmission_interface_limits",
+        "dead config key: no script reads it on either branch, and develop's solve rule takes the "
+        "CSV as a hard-coded rule input. model_topology.interface_transmission_limits is false here",
+    ),
+    (
+        "electricity.demand.scenario.eer_file",
+        "read only by the eer demand profile; this run pins electricity.demand.profile: efs",
+    ),
+    (
+        "electricity.demand.scenario.servm_weather_years",
+        "read only by the servm demand profile; this run pins electricity.demand.profile: efs",
+    ),
+    # --- capabilities shipped default-off (HF-21) ----------------------------
+    (
+        "conventional.ambient_derate",
+        "HF-21 default-off capability (enable: false); develop raises if it is ever enabled",
+    ),
+    (
+        "electricity.imports",
+        "HF-21 default-off capability (enable: false)",
+    ),
+    (
+        "electricity.exports",
+        "HF-21 default-off capability (enable: false)",
+    ),
+    (
+        "electricity.remote_contracted_resources",
+        "HF-21 default-off capability (enable: false)",
+    ),
+    (
+        "electricity.operational_reserve",
+        "default-off capability (activate: false)",
+    ),
+    (
+        "nrel_caps_reassign",
+        "HF-21 default-off capability (enable: false); flag-off output was verified "
+        "xr.testing.assert_identical to the pre-change code",
+    ),
+    (
+        "ucap",
+        "develop-only unforced-capacity block, shipped enable: false",
+    ),
+    (
+        "run.benchmark_cpuc_horizons",
+        "read only when run.benchmark_cpuc is true, which is itself develop-only and false "
+        "(HF-21)",
+    ),
+    # --- values that match the other side's inline fallback ------------------
+    (
+        "costs.atb",
+        "develop's default layer supplies exactly master's inline fallback — see "
+        "_atb_equals_inline_fallback; both branches read it as (costs_config or {}).get('atb') or {}",
+    ),
+    (
+        "clustering.cluster_network.weighting_strategy",
+        "the only branch either branch takes on this key is == 'population'; master resolves it to "
+        "None and develop to 'demand-capacity', so both take the same gen+load weighting",
+    ),
+    (
+        "clustering.simplify_network.weighting_strategy",
+        "same as clustering.cluster_network.weighting_strategy: neither value is 'population'",
+    ),
+    (
+        "offshore_network.enable",
+        "dead key: build_base_network reads only offshore_network['bus_spacing'] on both branches; "
+        "nothing reads 'enable'",
+    ),
+    # --- resource declarations, read by the scheduler and never by a script --
+    (
+        "walltime",
+        "develop's per-rule walltime block; a Slurm resource declaration, never read by a script. "
+        "HF-20 moved these from nine dead top-level <rule>.walltime keys into one block",
+    ),
+    (
+        "solving.walltime",
+        "solve-stage walltime; a Slurm resource declaration, never read by a script",
+    ),
+    (
+        "add_demand",
+        "master-only dead top-level <rule>.walltime key (HF-20 removed these on develop)",
+    ),
+    (
+        "add_electricity",
+        "master-only dead top-level <rule>.walltime key (HF-20 removed these on develop)",
+    ),
+    (
+        "build_renewable_profiles",
+        "master-only dead top-level <rule>.walltime key (HF-20 removed these on develop)",
+    ),
+    (
+        "cluster_network",
+        "master-only dead top-level <rule>.walltime key (HF-20 removed these on develop)",
+    ),
+    (
+        "simplify_network",
+        "master-only dead top-level <rule>.walltime key (HF-20 removed these on develop)",
+    ),
+    (
+        "solve_network",
+        "master-only dead top-level <rule>.walltime key (HF-20 removed these on develop)",
+    ),
+    (
+        "solve_network_validation",
+        "master-only dead top-level <rule>.walltime key (HF-20 removed these on develop)",
+    ),
+    # --- solver option sets this run does not select -------------------------
+    (
+        "solving.solver_options.cplex-default",
+        "alternative solver option set; this run pins solving.solver.options: gurobi-default, "
+        "which both sides carry identically",
+    ),
+    (
+        "solving.solver_options.highs-default",
+        "alternative solver option set; this run pins solving.solver.options: gurobi-default",
+    ),
+    (
+        "solving.solver_options.gurobi-fallback",
+        "alternative solver option set; this run pins solving.solver.options: gurobi-default",
+    ),
+    (
+        "solving.solver_options.gurobi-numeric-focus",
+        "alternative solver option set; this run pins solving.solver.options: gurobi-default",
+    ),
 )
+
+# Guards for the entries whose safety depends on the value, not just the key.
+_ALLOWLIST_GUARDS = {
+    "costs.atb": _atb_equals_inline_fallback,
+    "clustering.cluster_network.weighting_strategy": _not_population,
+    "clustering.simplify_network.weighting_strategy": _not_population,
+    "conventional.ambient_derate": _disabled_block,
+    "dac": _disabled_block,
+    "electricity.imports": _disabled_block,
+    "electricity.exports": _disabled_block,
+    "electricity.remote_contracted_resources": _disabled_block,
+    "electricity.operational_reserve": _disabled_block,
+    "nrel_caps_reassign": _disabled_block,
+    "ucap": _disabled_block,
+    "walltime": _walltime_map,
+    "solving.walltime": _time_scalar,
+    "add_demand": _rule_walltime_block,
+    "add_electricity": _rule_walltime_block,
+    "build_renewable_profiles": _rule_walltime_block,
+    "cluster_network": _rule_walltime_block,
+    "simplify_network": _rule_walltime_block,
+    "solve_network": _rule_walltime_block,
+    "solve_network_validation": _rule_walltime_block,
+}
 
 
 class _Empty:
-    """The one value that ``null``, ``{}`` and ``[]`` all normalise to.
+    """What ``null``, ``{}``, ``[]``, ``""``, ``0`` and ``False`` all mean here.
 
     ``model_topology.include:`` written as ``{}`` in the shared harness config
     arrives as ``None`` on develop, because snakemake's config merge has nothing
     to write when the update is an empty mapping. Every consumer treats an
     absent mapping and an empty mapping the same way — both are falsy, and both
     make the HF-9 / HF-10 gates evaluate ``False`` — so flagging that pair would
-    be noise. A *populated* mapping on one side and an empty one on the other
-    still differs, which is the case that matters.
+    be noise.
+
+    The same falsiness is what decides whether a key present on ONE side only
+    can change that side's behaviour. ``config["electricity"].get(k, {})``
+    followed by ``if cfg:`` is the shape all over this workflow; a key whose
+    default-layer value is falsy takes the same branch as an absent key, and a
+    key whose value is truthy does not. See :func:`_is_empty`.
     """
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
@@ -313,20 +594,31 @@ class _Empty:
 
 EMPTY = _Empty()
 
+_EMPTY_LITERALS = (None, {}, [], "", 0, False)
+
+
+def _is_empty(v: object) -> bool:
+    """Say whether a value is indistinguishable from the key being absent.
+
+    ``0`` and ``False`` count, and so do ``""``/``[]``/``{}``: every one of them
+    is falsy, so a ``if config.get(key):`` guard takes the absent branch. This
+    is the whole basis for treating some present-on-one-side keys as harmless.
+    """
+    return any(v is lit or (type(v) is type(lit) and v == lit) for lit in _EMPTY_LITERALS)
+
 
 def _norm_value(v: object) -> object:
-    return EMPTY if v is None or v == {} or v == [] else v
+    return EMPTY if _is_empty(v) else v
 
 
-# Keys compared as a WHOLE SUBTREE rather than leaf by leaf.
+# Keys compared as a WHOLE SUBTREE rather than recursed into.
 #
 # `model_topology.include` is the gate expression HF-9 and HF-10 hinge on: the
 # empty-county sweep and the seam-plant bound are scoped by it, and it is what
-# makes both of them no-ops on the whole-USA case. Flattened leaf by leaf, a
-# scoped develop (`include: {reeds_state: [CA]}`) against an unscoped master
-# (`include: {}`) produces only "present on one side" differences, which the
-# gate records rather than refuses. Compared whole, it is the value difference
-# it actually is.
+# makes both of them no-ops on the whole-USA case. Recursed into, a scoped
+# develop (`include: {reeds_state: [CA]}`) against an unscoped master
+# (`include: {}`) produces only "present on one side" differences; compared
+# whole, it is the value difference it actually is.
 _ATOMIC_KEYS = (
     "model_topology.include",
     "model_topology.aggregate",
@@ -334,6 +626,13 @@ _ATOMIC_KEYS = (
 
 
 def _flatten(d: dict, prefix: str = "") -> dict[str, object]:
+    """Dotted-path view of one config; atomic keys stay whole.
+
+    Used by tests and by anything that wants a flat view. The gate itself walks
+    the two configs TOGETHER (:func:`config_differences`), because a populated
+    subtree on one side against an empty one on the other is a single value
+    difference, not a scatter of present-on-one-side keys.
+    """
     out: dict[str, object] = {}
     for k, v in d.items():
         key = f"{prefix}{k}"
@@ -344,38 +643,90 @@ def _flatten(d: dict, prefix: str = "") -> dict[str, object]:
     return out
 
 
-def config_differences(master: dict, develop: dict) -> list[dict]:
-    """Every key the two merged configs disagree about, flattened and sorted.
+# `value` and `default_only` abort the run; `only_master`/`only_develop` are
+# recorded. See assert_config_equivalent for why the split falls here.
+FATAL_KINDS = ("value", "default_only")
 
-    Three kinds, all of them differences: ``value`` (both sides carry the key
-    with different values), ``only_master`` and ``only_develop``. A key present
-    on one side only is not benign — that is precisely the HF-20 failure mode,
-    where one loader supplies a default and the other falls through to a
-    script's inline fallback.
-    """
-    fm, fd = _flatten(master), _flatten(develop)
-    diffs: list[dict] = []
-    for key in sorted(set(fm) | set(fd)):
-        if key not in fm:
-            diffs.append({"key": key, "kind": "only_develop", "master": None, "develop": fd[key]})
-        elif key not in fd:
-            diffs.append({"key": key, "kind": "only_master", "master": fm[key], "develop": None})
-        elif _norm_value(fm[key]) != _norm_value(fd[key]):
-            diffs.append({"key": key, "kind": "value", "master": fm[key], "develop": fd[key]})
-    return diffs
-
-
-_DEFAULT_LAYER_REASON = (
-    "present on one side only: the two branches' default layers differ (HF-20). Recorded, not "
-    "fatal — set EQ_STRICT_CONFIG_GATE=1 to make presence-only differences abort the run"
+_FALSY_PRESENCE_REASON = (
+    "present on one side only with a FALSY value, so the side without the key takes the same "
+    "branch (HF-20's diffuse class). Recorded, not fatal — EQ_STRICT_CONFIG_GATE=1 aborts on "
+    "these too"
 )
 
 
-def allowlist_reason(key: str) -> str | None:
-    """The signed reason this key may differ, or ``None``."""
+def _presence_kind(side: str, value: object) -> str:
+    """``only_<side>`` when the value is falsy, ``default_only`` when it is not.
+
+    A key one side's default layer supplies and the other's does not is only
+    harmless if the value is falsy, because that is the branch the side WITHOUT
+    the key takes. ``electricity.demand_response: {marginal_cost: 999999,
+    shift: 0}`` is the counter-example that motivated this split: it is truthy,
+    so develop calls ``add_demand_response``, which adds a ``demand_response``
+    Carrier before its own ``shift == 0`` early return, while the baseline's
+    ``.get("demand_response", {})`` is falsy and adds nothing. One unwaived
+    Carrier row_set finding at three stages, from a key nobody thought could
+    matter.
+    """
+    return f"only_{side}" if _is_empty(value) else "default_only"
+
+
+def config_differences(master: dict, develop: dict) -> list[dict]:
+    """Every key the two merged configs disagree about, walked together.
+
+    Four kinds:
+
+    - ``value`` — both sides carry the key and disagree about it, or one side
+      has a populated mapping where the other has an empty one;
+    - ``default_only`` — present on one side only, with a TRUTHY value, so the
+      two sides can take different branches on it;
+    - ``only_master`` / ``only_develop`` — present on one side only with a falsy
+      value, which is the same branch the other side takes anyway.
+
+    The first two are the gate's business. The last two are the diffuse HF-20
+    class and are recorded rather than refused.
+    """
+    diffs: list[dict] = []
+    _walk(master, develop, "", diffs)
+    return diffs
+
+
+def _walk(master: dict, develop: dict, prefix: str, out: list[dict]) -> None:
+    for k in sorted(set(master) | set(develop)):
+        key = f"{prefix}{k}"
+        in_m, in_d = k in master, k in develop
+        mv, dv = master.get(k), develop.get(k)
+
+        if not in_m:
+            out.append({"key": key, "kind": _presence_kind("develop", dv), "master": None, "develop": dv})
+            continue
+        if not in_d:
+            out.append({"key": key, "kind": _presence_kind("master", mv), "master": mv, "develop": None})
+            continue
+
+        m_sub = isinstance(mv, dict) and bool(mv)
+        d_sub = isinstance(dv, dict) and bool(dv)
+        if m_sub and d_sub and key not in _ATOMIC_KEYS:
+            _walk(mv, dv, key + ".", out)
+        elif _norm_value(mv) != _norm_value(dv):
+            # Covers a populated subtree against {} / None / a scalar: the whole
+            # mapping is the differing value, not a scatter of missing leaves.
+            out.append({"key": key, "kind": "value", "master": mv, "develop": dv})
+
+
+def allowlist_reason(key: str, diff: dict | None = None) -> str | None:
+    """The signed reason this key may differ, or ``None``.
+
+    When ``diff`` is supplied and the matching entry has a guard, the guard has
+    to agree: an allowlisted key whose value has moved out from under its reason
+    is not allowlisted any more.
+    """
     for pattern, reason in CONFIG_DIFF_ALLOWLIST:
-        if key == pattern or key.startswith(pattern + "."):
-            return reason
+        if key != pattern and not key.startswith(pattern + "."):
+            continue
+        guard = _ALLOWLIST_GUARDS.get(pattern)
+        if guard is not None and diff is not None and not guard(diff):
+            return None
+        return reason
     return None
 
 
@@ -387,20 +738,27 @@ def assert_config_equivalent(ctx: RunContext | None = None) -> list[dict]:
     both values — one run of the gate should tell you everything to decide, not
     the first thing it tripped on.
 
-    Two severities, because the two kinds of difference are not the same thing:
+    Two severities, split on whether the two sides can take different branches:
 
-    - a **value** difference — both sides carry the key and disagree about it —
-      is fatal. That is a real disagreement about what to compute.
-    - a **presence-only** difference — one side's default layer supplies a key
-      the other's does not — is recorded, with its reason, in
-      ``run_meta.json``'s ``config_diff_allowed``, and does not abort. There are
-      well over a hundred of these between the two loaders (develop's
-      ``config.default.yaml`` base layer against master's
-      ``config.{common,plotting,slurm}.yaml``), covering plotting, sector, DAC
-      and unused solver option sets. Making them fatal would mean the gate could
-      never pass and would simply be switched off, which is strictly worse than
-      recording them. ``EQ_STRICT_CONFIG_GATE=1`` makes them fatal too, which is
-      how HF-20's owed master-vs-develop replay gets properly discharged.
+    - **fatal** — a ``value`` difference (both sides carry the key and disagree)
+      or a ``default_only`` difference (present on one side only, with a TRUTHY
+      value). Both mean the sides can compute different things. Every one of
+      these must be pinned in the shared config or allowlisted with a signed
+      reason.
+    - **recorded** — ``only_master`` / ``only_develop``, i.e. present on one
+      side only with a FALSY value. ``config.get(key, {})`` followed by
+      ``if cfg:`` takes the same branch either way, so the absent side behaves
+      as the present one does. These land in ``run_meta.json``'s
+      ``config_diff_allowed`` with their reason.
+      ``EQ_STRICT_CONFIG_GATE=1`` makes them fatal too, which is how HF-20's
+      owed master-vs-develop replay gets discharged in full.
+
+    The falsy/truthy split is not a nicety. ``electricity.demand_response:
+    {marginal_cost: 999999, shift: 0}`` lives in develop's default layer only;
+    it is truthy, so develop calls ``add_demand_response``, which adds a
+    ``demand_response`` Carrier *before* its own ``shift == 0`` early return,
+    while the baseline's ``.get(..., {})`` is falsy and adds nothing — three
+    stages of unwaived Carrier ``row_set`` findings from a key that looks inert.
 
     ``EQ_SKIP_CONFIG_GATE=1`` skips the check entirely and records that it was
     skipped. The gate shells out to snakemake twice; the escape hatch exists so
@@ -423,13 +781,13 @@ def assert_config_equivalent(ctx: RunContext | None = None) -> list[dict]:
     diffs = config_differences(merged_config("master"), merged_config("develop"))
     allowed, blocking = [], []
     for d in diffs:
-        reason = allowlist_reason(str(d["key"]))
+        reason = allowlist_reason(str(d["key"]), d)
         if reason is not None:
             allowed.append({**d, "reason": reason})
-        elif d["kind"] == "value" or strict:
+        elif d["kind"] in FATAL_KINDS or strict:
             blocking.append(d)
         else:
-            allowed.append({**d, "reason": _DEFAULT_LAYER_REASON})
+            allowed.append({**d, "reason": _FALSY_PRESENCE_REASON})
 
     if blocking:
         listing = "\n".join(
