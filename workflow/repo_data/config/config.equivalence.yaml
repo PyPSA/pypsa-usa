@@ -22,6 +22,14 @@ run:
 
 foresight: 'perfect'
 
+# --- Pinned identically on BOTH sides (harness plan "What 'the same config'
+# --- means", decision 2 of 2026-09-14; see memory/plans/harness-master-vs-develop.md).
+# Newest PUDL release referenced anywhere on develop. Master's loaded
+# config.common.yaml says v2025.2.0 and develop's says v2026.8.0; snakemake
+# applies --configfile AFTER every configfile: directive, so pinning it here
+# wins on both branches and HF-1's pudl_path half stops being a difference.
+pudl_path: s3://pudl.catalyst.coop/v2026.8.0
+
 scenario:
   interconnect: [western]
   clusters: [4s]           # reeds transport model: must equal CA's ReEDS zone count (p8-p11); 4s = all carriers aggregate to zones (user choice 2026-08-07; was plain 4 before the 2026-09-06 suffix change)
@@ -67,6 +75,11 @@ co2:
     discount_rate: 0.07
 
 electricity:
+  # Explicit on develop, where it is the shipped default. Master has no code
+  # reading this key at all, so the pin alone could not neutralise HF-3 — the
+  # code was ported onto master-benchmark (93665e6) and the pin records the
+  # value both sides run. Harness plan decision 2, 2026-09-14.
+  honor_planned_retirements: true
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste]
   renewable_carriers: [onwind, solar, hydro]
   retirement: economic
