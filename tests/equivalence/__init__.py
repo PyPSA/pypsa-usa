@@ -1,1 +1,1 @@
-"""Tier C equivalence harness: candidate (v1-epic) vs anchor (develop)."""
+"""Tier C equivalence harness: master-benchmark (baseline) vs develop."""

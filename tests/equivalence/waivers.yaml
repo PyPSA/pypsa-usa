@@ -7,7 +7,7 @@
   column: capital_cost
   kind: value
   ledger: DL-1
-  reason: stage-ordering artifact (anchor base-stage segment lengths); clustered ITL identical
+  reason: stage-ordering artifact (master base-stage segment lengths); clustered ITL identical
 - stage: assembled_substation_network
   component: Link
   column: capital_cost
@@ -43,7 +43,7 @@
   column: '*'
   kind: column_set
   ledger: DL-6
-  reason: anchor-only aggregate-named p_max_pu columns; content guarded by unwaived value compare on common names
+  reason: master-only aggregate-named p_max_pu columns; content guarded by unwaived value compare on common names
 - stage: '*'
   component: Generator_t.p_max_pu
   column: '*'
@@ -61,7 +61,7 @@
   column: ba_eia
   kind: column_set
   ledger: DL-6
-  reason: candidate-added schema column (metadata)
+  reason: develop-added schema column (metadata)
 - stage: '*'
   component: StorageUnit
   column: <index>
@@ -85,14 +85,14 @@
   column: Pd
   kind: value
   ledger: DL-8
-  reason: candidate conserves Pd through trafo removal, anchor static stale; Load_t.p_set finding-free
+  reason: develop conserves Pd through trafo removal, master static stale; Load_t.p_set finding-free
 - prong: 2
   stage: prong2_aggregates
   component: Generator.p_nom_by_carrier
   column: p_nom
   kind: value
   ledger: DL-9
-  reason: existing-RE silent-drop varies with cluster geometry; candidate closer to ground truth
+  reason: existing-RE silent-drop varies with cluster geometry; develop closer to ground truth
 - prong: 2
   stage: solved_network
   component: Network
@@ -146,8 +146,8 @@
   ledger: DL-15
   reason: pypsa v1 computes and serializes sub_network topology metadata that 0.30 left empty; no optimization input
   justification: >-
-    Candidate (pypsa 1.3) populates Bus.sub_network with the connected-component
-    label ('0','1',...); the anchor (pypsa 0.30) wrote empty strings at every
+    Develop (pypsa 1.3) populates Bus.sub_network with the connected-component
+    label ('0','1',...); the master (pypsa 0.30) wrote empty strings at every
     stage. sub_network is topology bookkeeping recomputed by determine_network_topology
     and is never read by the LOPF/expansion problem.
 - interconnect: western
@@ -158,8 +158,8 @@
   ledger: DL-15
   reason: pypsa v1 computes and serializes sub_network topology metadata that 0.30 left empty; no optimization input
   justification: >-
-    Same mechanism as Bus.sub_network: candidate labels every line with its
-    connected component, anchor stored empty strings. Topology bookkeeping only.
+    Same mechanism as Bus.sub_network: develop labels every line with its
+    connected component, master stored empty strings. Topology bookkeeping only.
 - interconnect: western
   stage: '*'
   component: SubNetwork
@@ -168,9 +168,9 @@
   ledger: DL-15
   reason: pypsa v1 computes and serializes sub_network topology metadata that 0.30 left empty; no optimization input
   justification: >-
-    Candidate-only SubNetwork component rows (7 at assembled, 1 at every
+    Develop-only SubNetwork component rows (7 at assembled, 1 at every
     clustered-and-later stage) are the serialized form of the same
-    connected-component labelling; the anchor exported no SubNetwork rows at
+    connected-component labelling; the master exported no SubNetwork rows at
     all. Derived from Bus/Line/Link/Transformer topology that is itself
     finding-free; not an optimization input.
 - interconnect: western
@@ -179,13 +179,13 @@
   column: cyclic_state_of_charge_per_period
   kind: value
   ledger: DL-15
-  reason: attribute absent from the anchor file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
+  reason: attribute absent from the master file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
   justification: >-
-    Verified: the anchor netCDF has no storage_units_cyclic_state_of_charge_per_period
+    Verified: the master netCDF has no storage_units_cyclic_state_of_charge_per_period
     data_var at any stage (pypsa 0.30 omitted attributes left at their default),
     and the 0.30-era default was True. The harness loads both sides under pypsa
-    1.3, whose default is False, so the anchor reads back False while its actual
-    solve-time behaviour was True. The candidate stores True explicitly because
+    1.3, whose default is False, so the master reads back False while its actual
+    solve-time behaviour was True. The develop stores True explicitly because
     the migration deliberately pins the 0.30 default to preserve per-period
     cyclicity. Both sides therefore behaved identically; the comparison
     manufactures the difference on read.
@@ -195,7 +195,7 @@
   column: cyclic_state_of_charge_per_period
   kind: value
   ledger: DL-15
-  reason: attribute absent from the anchor file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
+  reason: attribute absent from the master file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
   justification: see the clustered_network entry - same absent-attribute mechanism, same stage-invariant proof
 - interconnect: western
   stage: prepared_network
@@ -203,7 +203,7 @@
   column: cyclic_state_of_charge_per_period
   kind: value
   ledger: DL-15
-  reason: attribute absent from the anchor file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
+  reason: attribute absent from the master file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
   justification: see the clustered_network entry - same absent-attribute mechanism, same stage-invariant proof
 - interconnect: western
   stage: sectored_network
@@ -211,7 +211,7 @@
   column: cyclic_state_of_charge_per_period
   kind: value
   ledger: DL-15
-  reason: attribute absent from the anchor file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
+  reason: attribute absent from the master file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
   justification: see the clustered_network entry - same absent-attribute mechanism, same stage-invariant proof
 - stage: '*'
   component: Bus
@@ -219,11 +219,11 @@
   kind: column_set
   ledger: DL-16
   reason: >-
-    candidate-added schema column (PyPSA#777 population-based demand
-    allocation); absent on the anchor
+    develop-added schema column (PyPSA#777 population-based demand
+    allocation); absent on the master
   justification: >-
     numerically inert for equivalence: both config.equivalence.yaml and
     config.equivalence-usa.yaml pin demand.bus_allocation to breakthrough, so
-    the column carries the anchor's legacy Breakthrough Pd weighting. Demand
+    the column carries the master's legacy Breakthrough Pd weighting. Demand
     itself stays guarded by the UNWAIVED Load / Load_t.p_set comparisons; this
     waives only the presence of the column, not its content

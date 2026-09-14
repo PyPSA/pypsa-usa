@@ -1,6 +1,9 @@
 """CLI orchestrator: build both sides, compare, report.
 
 uv run python -m tests.equivalence.run --prong 1 [--skip-solve] [--side both]
+
+Sides are ``master`` (the ``master-benchmark`` baseline, built in
+``.worktrees/master-benchmark``) and ``develop`` (the main checkout).
 """
 
 from __future__ import annotations
@@ -12,13 +15,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
-from tests.equivalence.build import ANCHOR_WORKTREE, build_side  # noqa: E402
+from tests.equivalence.build import BASELINE_WORKTREE, build_side  # noqa: E402
 from tests.equivalence.compare import run_comparison  # noqa: E402
 from tests.equivalence.paths import (  # noqa: E402
     UNTIL,
-    anchor_assembled_target,
-    anchor_final_target,
     assembled_target,
+    baseline_assembled_target,
+    baseline_final_target,
     final_target,
 )
 from tests.equivalence.plots import export_all  # noqa: E402
@@ -30,7 +33,7 @@ def main() -> int:
     ap.add_argument("--skip-solve", action="store_true")
     ap.add_argument(
         "--side",
-        choices=("candidate", "anchor", "both", "none"),
+        choices=("develop", "master", "both", "none"),
         default="both",
         help="which builds to run before comparing",
     )
@@ -48,18 +51,18 @@ def main() -> int:
     # stage (paths.prong_pairs); build the matching targets too, or the run
     # would still drive the whole chain through the solve it is not comparing.
     if UNTIL == "assembled":
-        cand_target, anch_target = assembled_target(args.prong), anchor_assembled_target(args.prong)
+        dev_target, mas_target = assembled_target(args.prong), baseline_assembled_target(args.prong)
     else:
-        cand_target, anch_target = final_target(args.prong, solve), anchor_final_target(args.prong, solve)
-    if args.side in ("candidate", "both"):
-        build_side("candidate", cand_target, args.jobs, timeout=args.timeout)
-    if args.side in ("anchor", "both"):
-        build_side("anchor", anch_target, args.jobs, timeout=args.timeout)
+        dev_target, mas_target = final_target(args.prong, solve), baseline_final_target(args.prong, solve)
+    if args.side in ("develop", "both"):
+        build_side("develop", dev_target, args.jobs, timeout=args.timeout)
+    if args.side in ("master", "both"):
+        build_side("master", mas_target, args.jobs, timeout=args.timeout)
 
     result = run_comparison(
         args.prong,
         REPO / "workflow",
-        ANCHOR_WORKTREE / "workflow",
+        BASELINE_WORKTREE / "workflow",
     )
     # PNG plots instead of the HTML report (user decision 2026-09-01: the
     # HTML wrapper added nothing over the figures themselves).

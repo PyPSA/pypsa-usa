@@ -9,7 +9,7 @@
 #   1. Stages the shared data/ and cutouts/ caches from the CH2 checkout on
 #      Oak to $GROUP_SCRATCH (jobs must not do heavy I/O against Oak), then
 #      points workflow/data and workflow/cutouts at the staged copies.
-#   2. Runs the harness twice, candidate + anchor each time:
+#   2. Runs the harness twice, develop + master each time:
 #        run A  opts REM-3h : national 1,000,000 t CO2 cap
 #                             (regional_Co2_limits_equivalence_usa.csv)
 #        run B  opts 3h     : emissions-unconstrained twin
@@ -45,7 +45,7 @@ export GRB_LICENSE_FILE=/share/software/user/restricted/gurobi/11.0.2/licenses/g
 ml load gcc/12.4.0
 export CFLAGS="-Wno-error=incompatible-pointer-types"
 
-# System git (1.8, CentOS 7) predates `git worktree`, which anchor
+# System git (1.8, CentOS 7) predates `git worktree`, which baseline
 # provisioning needs.
 ml load system git/2.45.1
 
@@ -67,7 +67,7 @@ done
 cd "$REPO"
 
 # Clear stale snakemake locks left by a killed predecessor job (best-effort).
-for wf in "$REPO/workflow" "$REPO/.worktrees/anchor-e7f8bd70/workflow"; do
+for wf in "$REPO/workflow" "$REPO/.worktrees/master-benchmark/workflow"; do
     if [ -d "$wf/.snakemake/locks" ] && [ -n "$(ls -A "$wf/.snakemake/locks" 2>/dev/null)" ]; then
         (cd "$wf" && uv run snakemake --unlock) || true
     fi
@@ -86,7 +86,7 @@ archive() { # archive <label>: keep this run's manifests, findings + plots
 
 # Unconstrained run FIRST: the REM 1 Mt cap looks infeasible at USA scale
 # (barrier verdict + stalled disambiguation simplex, 2026-09-01), and a failed
-# solve aborts the harness — ordering this way secures the anchor build,
+# solve aborts the harness — ordering this way secures the master build,
 # comparison, and benchmark data before the REM question is settled.
 EQ_OPTS=3h uv run python -m tests.equivalence.run \
     --prong 2 --side both --jobs 8 --timeout 43200

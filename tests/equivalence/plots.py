@@ -10,14 +10,14 @@ cluster names: cluster IDs are ``p{zone}{subcluster} {i}`` with no separator
 labels that match almost nothing in reeds_shapes.geojson (the bug behind the
 first, mostly-grey report maps).
 
-- candidate profile bus -> zone: the s{simpl} clustered network's
+- develop profile bus -> zone: the s{simpl} clustered network's
   ``buses.reeds_zone``.
-- anchor profile bus -> zone: SUBSTATION id -> busmap_s{simpl} -> cluster ->
-  ``reeds_zone``. Anchor profile buses are substation ids ('39762.0'), NOT
-  its base-network bus ids — the two numbering spaces overlap numerically
+- master profile bus -> zone: SUBSTATION id -> busmap_s{simpl} -> cluster ->
+  ``reeds_zone``. The baseline's profile buses are substation ids ('39762.0'),
+  NOT its base-network bus ids — the two numbering spaces overlap numerically
   (base buses are 1..82549) but a direct join lands on the right zone only
   ~2% of the time (verified 2026-09-01). The busmap chain is the same join
-  the candidate's caps remap uses, which matches 100%.
+  develop's caps remap uses, which matches 100%.
 """
 
 from __future__ import annotations
@@ -33,27 +33,28 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from .build import BASELINE_WORKTREE
 from .paths import EQ, INTERCONNECT, SIMPL2, prong_pairs
 
 REPO = Path(__file__).resolve().parents[2]
-CAND_ROOT = REPO / "workflow"
-ANCHOR_ROOT = REPO / ".worktrees" / "anchor-e7f8bd70" / "workflow"
+DEVELOP_ROOT = REPO / "workflow"
+MASTER_ROOT = BASELINE_WORKTREE / "workflow"
 _SUF = "" if INTERCONNECT == "western" else f"_{INTERCONNECT}"
-OUTDIR = CAND_ROOT / "results" / "equivalence" / f"plots{_SUF}"
+OUTDIR = DEVELOP_ROOT / "results" / "equivalence" / f"plots{_SUF}"
 
-LABELS = {"candidate": "v1-epic (develop)", "anchor": "anchor (master)"}
+LABELS = {"develop": "develop", "master": "master-benchmark (baseline)"}
 DPI = 150
 
 
 def _zone_maps() -> tuple[pd.Series, pd.Series, gpd.GeoDataFrame]:
-    """(candidate bus->zone, anchor sub->zone, zone shapes)."""
+    """(develop bus->zone, master sub->zone, zone shapes)."""
     import pypsa
 
-    zones = gpd.read_file(CAND_ROOT / f"{EQ}/geospatial/{INTERCONNECT}/reeds_shapes.geojson").set_index("name")
-    nc = pypsa.Network(CAND_ROOT / f"{EQ}/networks/{INTERCONNECT}/elec_s{SIMPL2}.nc")
+    zones = gpd.read_file(DEVELOP_ROOT / f"{EQ}/geospatial/{INTERCONNECT}/reeds_shapes.geojson").set_index("name")
+    nc = pypsa.Network(DEVELOP_ROOT / f"{EQ}/networks/{INTERCONNECT}/elec_s{SIMPL2}.nc")
     zc = nc.buses["reeds_zone"].astype(str)
     busmap = pd.read_csv(
-        CAND_ROOT / f"{EQ}/busmaps/{INTERCONNECT}/busmap_s{SIMPL2}.csv", index_col=0, dtype=str
+        DEVELOP_ROOT / f"{EQ}/busmaps/{INTERCONNECT}/busmap_s{SIMPL2}.csv", index_col=0, dtype=str
     ).iloc[:, 0]
     busmap.index = busmap.index.astype(str)
     za = busmap.map(zc)  # substation id -> cluster -> reeds_zone
@@ -91,13 +92,13 @@ def _choropleth_row(zones, vc: pd.Series, va: pd.Series, title: str, unit: str, 
     vmax = float(np.nanmax([gc["v"].max(), ga["v"].max()]))
     dmax = float(np.nanmax(np.abs(diff))) or 1e-9
     fig, axes = plt.subplots(1, 3, figsize=(16, 4.6))
-    for ax, g, lab in ((axes[0], gc, LABELS["candidate"]), (axes[1], ga, LABELS["anchor"])):
+    for ax, g, lab in ((axes[0], gc, LABELS["develop"]), (axes[1], ga, LABELS["master"])):
         g.plot(column="v", ax=ax, cmap="viridis", vmin=0, vmax=vmax, legend=True, missing_kwds={"color": "#dddddd"})
         ax.set_title(f"{lab}\n{title} [{unit}]", fontsize=9)
     zones.join(diff.rename("v")).plot(
         column="v", ax=axes[2], cmap="RdBu_r", vmin=-dmax, vmax=dmax, legend=True, missing_kwds={"color": "#dddddd"}
     )
-    axes[2].set_title(f"{LABELS['candidate']} − {LABELS['anchor']}\n(grey = no data)", fontsize=9)
+    axes[2].set_title(f"{LABELS['develop']} − {LABELS['master']}\n(grey = no data)", fontsize=9)
     for ax in axes:
         ax.set_axis_off()
     _save(fig, name)
@@ -108,13 +109,13 @@ def export_profile_plots() -> None:
     pairs = [p for p in prong_pairs(2) if p.kind == "profile"]
     for pair in pairs:
         tech = pair.stage.replace("profile_", "")
-        pc, pa = CAND_ROOT / pair.candidate, ANCHOR_ROOT / pair.anchor
+        pc, pa = DEVELOP_ROOT / pair.develop, MASTER_ROOT / pair.master
         if not (pc.exists() and pa.exists()):
             print(f"[plots] skipping {tech}: artifact missing")
             continue
         with xr.open_dataset(pc) as dsc, xr.open_dataset(pa) as dsa:
             stats = {}
-            for side, ds, zmap in (("cand", dsc, zc), ("anch", dsa, za)):
+            for side, ds, zmap in (("develop", dsc, zc), ("master", dsa, za)):
                 pnom = ds["p_nom_max"].to_pandas()
                 pnom.index = pnom.index.map(str)
                 cf = ds["profile"].mean("time").to_pandas()
@@ -129,13 +130,13 @@ def export_profile_plots() -> None:
             avail_c = (dsc["profile"] * dsc["p_nom_max"]).sum("bus").to_pandas() / 1e3
             avail_a = (dsa["profile"] * dsa["p_nom_max"]).sum("bus").to_pandas() / 1e3
 
-        _choropleth_row(zones, stats["cand"][0], stats["anch"][0], f"{tech} installable potential", "GW", f"{tech}_potential_zones")
-        _choropleth_row(zones, stats["cand"][1], stats["anch"][1], f"{tech} potential-weighted mean CF", "-", f"{tech}_meancf_zones")
+        _choropleth_row(zones, stats["develop"][0], stats["master"][0], f"{tech} installable potential", "GW", f"{tech}_potential_zones")
+        _choropleth_row(zones, stats["develop"][1], stats["master"][1], f"{tech} potential-weighted mean CF", "-", f"{tech}_meancf_zones")
 
         day_c, day_a = avail_c.resample("D").mean(), avail_a.resample("D").mean()
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 5.5), sharex=True, height_ratios=[3, 1])
-        ax1.plot(day_c.index, day_c.values, label=LABELS["candidate"], lw=1.0)
-        ax1.plot(day_a.index, day_a.values, label=LABELS["anchor"], lw=1.0, alpha=0.75)
+        ax1.plot(day_c.index, day_c.values, label=LABELS["develop"], lw=1.0)
+        ax1.plot(day_a.index, day_a.values, label=LABELS["master"], lw=1.0, alpha=0.75)
         ax1.set_ylabel("national available power [GW]\n(daily mean)")
         ax1.legend(fontsize=8)
         ax1.set_title(f"{tech}: Σ profile·p_nom_max over all buses")

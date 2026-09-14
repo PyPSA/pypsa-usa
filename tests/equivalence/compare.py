@@ -39,7 +39,7 @@ CAPACITY_RTOL = 5e-3
 MAX_FINDINGS_PER_FRAME = 50
 WAIVERS_PATH = Path(__file__).parent / "waivers.yaml"
 
-# Anchor artifacts float-format integer bus labels ('35827.0'); candidate
+# Master artifacts float-format integer bus labels ('35827.0'); develop
 # writes them bare ('35827'). Pure representation — normalize on both sides.
 _FLOAT_INT_LABEL = re.compile(r"\d+\.0")
 
@@ -54,7 +54,7 @@ def load_network(path: Path):
     import pypsa
 
     # Keep network frames on numpy object dtype under pandas 3 (matches
-    # _helpers), so candidate and anchor networks compare on equal footing.
+    # _helpers), so develop and master networks compare on equal footing.
     if hasattr(pypsa, "options"):
         pypsa.options.api.legacy_string_dtype = True
 
@@ -87,7 +87,7 @@ def _numeric(s: pd.Series) -> bool:
 
 
 def _rel_pct(a: float, b: float) -> float | None:
-    """Relative difference of a vs anchor b, in percent (None if undefined)."""
+    """Relative difference of a vs master b, in percent (None if undefined)."""
     if np.isnan(a) or np.isnan(b) or b == 0:
         return None
     return round(abs(a - b) / abs(b) * 100.0, 3)
@@ -133,8 +133,8 @@ def _normalize_frame(
 def compare_frames(
     stage: str,
     component: str,
-    cand: pd.DataFrame,
-    anch: pd.DataFrame,
+    dev: pd.DataFrame,
+    mas: pd.DataFrame,
     findings: list[dict],
 ) -> None:
     """Compare two indexed DataFrames; append findings in place.
@@ -145,9 +145,9 @@ def compare_frames(
     ``MAX_FINDINGS_PER_FRAME`` with a single 'suppressed' finding.
     """
     local: list[dict] = []
-    cand = _normalize_frame(cand, "candidate", stage, component, local)
-    anch = _normalize_frame(anch, "anchor", stage, component, local)
-    ci, ai = set(cand.index), set(anch.index)
+    dev = _normalize_frame(dev, "develop", stage, component, local)
+    mas = _normalize_frame(mas, "master", stage, component, local)
+    ci, ai = set(dev.index), set(mas.index)
     if ci != ai:
         local.append(
             {
@@ -155,18 +155,18 @@ def compare_frames(
                 "component": component,
                 "column": "<index>",
                 "kind": "row_set",
-                "detail": f"candidate-only={sorted(ci - ai)[:8]} (n={len(ci - ai)}), "
-                f"anchor-only={sorted(ai - ci)[:8]} (n={len(ai - ci)})",
+                "detail": f"develop-only={sorted(ci - ai)[:8]} (n={len(ci - ai)}), "
+                f"master-only={sorted(ai - ci)[:8]} (n={len(ai - ci)})",
             },
         )
     common = sorted(ci & ai)
     if not common:
         findings.extend(local)
         return
-    cand = cand.loc[common]
-    anch = anch.loc[common]
+    dev = dev.loc[common]
+    mas = mas.loc[common]
 
-    cc, ac = set(cand.columns), set(anch.columns)
+    cc, ac = set(dev.columns), set(mas.columns)
     for col in sorted(cc ^ ac, key=str):
         local.append(
             {
@@ -174,11 +174,11 @@ def compare_frames(
                 "component": component,
                 "column": str(col),
                 "kind": "column_set",
-                "detail": "candidate-only" if col in cc else "anchor-only",
+                "detail": "develop-only" if col in cc else "master-only",
             },
         )
     for col in sorted(cc & ac, key=str):
-        a, b = cand[col], anch[col]
+        a, b = dev[col], mas[col]
         if _numeric(a) and _numeric(b):
             av, bv = a.astype(float).to_numpy(), b.astype(float).to_numpy()
             close = np.isclose(av, bv, rtol=RTOL, atol=ATOL, equal_nan=True)
@@ -199,8 +199,8 @@ def compare_frames(
                             "examples": [
                                 {
                                     "id": common[i],
-                                    "candidate": None if np.isnan(av[i]) else float(av[i]),
-                                    "anchor": None if np.isnan(bv[i]) else float(bv[i]),
+                                    "develop": None if np.isnan(av[i]) else float(av[i]),
+                                    "master": None if np.isnan(bv[i]) else float(bv[i]),
                                     "rel_pct": _rel_pct(av[i], bv[i]),
                                 }
                                 for i in worst
@@ -223,7 +223,7 @@ def compare_frames(
                         "detail": {
                             "n_diff": int(neq.sum()),
                             "n_total": len(av),
-                            "examples": [{"id": str(i), "candidate": av[i], "anchor": bv[i]} for i in ex],
+                            "examples": [{"id": str(i), "develop": av[i], "master": bv[i]} for i in ex],
                         },
                     },
                 )
@@ -245,7 +245,7 @@ def compare_frames(
 def _loads_by_bus(n) -> tuple[pd.DataFrame, dict[str, str]] | None:
     """Static Load frame re-keyed on bus, plus name->bus map for _t columns.
 
-    Anchor Load names carry a carrier suffix ('35827 AC') while candidate
+    Master Load names carry a carrier suffix ('35827 AC') while develop
     names are bare bus ids — re-keying on the ``bus`` attribute makes the two
     comparable. Returns None when loads are not one-per-bus (caller falls
     back to name comparison and emits a finding).
@@ -278,7 +278,7 @@ def compare_networks(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
                 "component": "Network",
                 "column": "snapshots",
                 "kind": "row_set",
-                "detail": f"candidate n={len(nc.snapshots)}, anchor n={len(na.snapshots)}",
+                "detail": f"develop n={len(nc.snapshots)}, master n={len(na.snapshots)}",
             },
         )
     if pair.solve_stage:
@@ -295,7 +295,7 @@ def compare_networks(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
         if name == "Load":
             kc, ka = _loads_by_bus(nc), _loads_by_bus(na)
             if kc is None or ka is None:
-                bad = [s for s, k in (("candidate", kc), ("anchor", ka)) if k is None]
+                bad = [s for s, k in (("develop", kc), ("master", ka)) if k is None]
                 findings.append(
                     {
                         "stage": pair.stage,
@@ -377,12 +377,12 @@ def _compare_solved(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
                 "column": "objective",
                 "kind": "value",
                 "detail": {
-                    "candidate": oc,
-                    "anchor": oa,
-                    "candidate_raw": float(nc.objective),
-                    "anchor_raw": float(na.objective),
-                    "candidate_constant": _objective_constant(nc),
-                    "anchor_constant": _objective_constant(na),
+                    "develop": oc,
+                    "master": oa,
+                    "develop_raw": float(nc.objective),
+                    "master_raw": float(na.objective),
+                    "develop_constant": _objective_constant(nc),
+                    "master_constant": _objective_constant(na),
                     "rel": abs(oc - oa) / max(abs(oa), 1e-9),
                     "rel_pct": round(abs(oc - oa) / max(abs(oa), 1e-9) * 100.0, 4),
                 },
@@ -393,8 +393,8 @@ def _compare_solved(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
         index=sorted(set(cc.index) | set(ca.index)),
         columns=sorted(set(cc.columns) | set(ca.columns)),
     ).fillna(0.0)
-    anch = ca.reindex_like(both).fillna(0.0)
-    close = np.isclose(both.to_numpy(), anch.to_numpy(), rtol=CAPACITY_RTOL, atol=1.0)
+    mas = ca.reindex_like(both).fillna(0.0)
+    close = np.isclose(both.to_numpy(), mas.to_numpy(), rtol=CAPACITY_RTOL, atol=1.0)
     if not close.all():
         rows, cols = np.where(~close)
         findings.append(
@@ -407,9 +407,9 @@ def _compare_solved(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
                     {
                         "carrier": str(both.index[r]),
                         "component": str(both.columns[c]),
-                        "candidate": float(both.iloc[r, c]),
-                        "anchor": float(anch.iloc[r, c]),
-                        "rel_pct": _rel_pct(float(both.iloc[r, c]), float(anch.iloc[r, c])),
+                        "develop": float(both.iloc[r, c]),
+                        "master": float(mas.iloc[r, c]),
+                        "rel_pct": _rel_pct(float(both.iloc[r, c]), float(mas.iloc[r, c])),
                     }
                     for r, c in zip(rows, cols)
                 ],
@@ -420,7 +420,7 @@ def _compare_solved(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
 def compare_profiles(pair: ArtifactPair, pc: Path, pa: Path, findings: list[dict]) -> None:
     with xr.open_dataset(pc) as dc, xr.open_dataset(pa) as da:
         # Clustering-invariant system aggregates. At prong 2 the two sides'
-        # bus spaces are disjoint (candidate: simpl-cluster IDs, anchor: nodal
+        # bus spaces are disjoint (develop: simpl-cluster IDs, master: nodal
         # IDs), so the per-bus comparison below degenerates to a row_set
         # finding; these aggregates are the substantive CF-construction
         # comparison there. Potential is the extensive caps rollup; the
@@ -437,8 +437,8 @@ def compare_profiles(pair: ArtifactPair, pc: Path, pa: Path, findings: list[dict
                         "column": "sum(p_nom_max)",
                         "kind": "value",
                         "detail": {
-                            "candidate": tc,
-                            "anchor": ta,
+                            "develop": tc,
+                            "master": ta,
                             "rel": abs(tc - ta) / max(abs(ta), 1e-9),
                             "rel_pct": round(abs(tc - ta) / max(abs(ta), 1e-9) * 100.0, 4),
                         },
@@ -464,18 +464,18 @@ def compare_profiles(pair: ArtifactPair, pc: Path, pa: Path, findings: list[dict
                             "detail": {
                                 "hours_compared": int(n),
                                 "hours_mismatched": int(bad.sum()),
-                                "len_candidate": int(len(sc)),
-                                "len_anchor": int(len(sa)),
+                                "len_develop": int(len(sc)),
+                                "len_master": int(len(sa)),
                                 "worst_rel_pct": round(float(rel.max()) * 100.0, 4),
                                 "mean_rel_pct": round(float(rel.mean()) * 100.0, 4),
-                                "candidate_total_mwh": float(vc.sum()),
-                                "anchor_total_mwh": float(va.sum()),
+                                "develop_total_mwh": float(vc.sum()),
+                                "master_total_mwh": float(va.sum()),
                             },
                         },
                     )
         # Per-bus variable comparison is only meaningful when the two sides
-        # share a bus space (prong 1). At prong 2 the candidate is keyed by
-        # simpl-cluster IDs and the anchor by nodal IDs — zero overlap — so
+        # share a bus space (prong 1). At prong 2 the develop is keyed by
+        # simpl-cluster IDs and the master by nodal IDs — zero overlap — so
         # skip the per-var loop and let the system aggregates above carry the
         # comparison instead of emitting hundreds of vacuous row_set findings.
         cb = {str(b) for b in dc.indexes.get("bus", [])}
@@ -490,7 +490,7 @@ def compare_profiles(pair: ArtifactPair, pc: Path, pa: Path, findings: list[dict
                         "component": var,
                         "column": "<var>",
                         "kind": "column_set",
-                        "detail": "candidate-only" if var in dc.data_vars else "anchor-only",
+                        "detail": "develop-only" if var in dc.data_vars else "master-only",
                     },
                 )
                 continue
@@ -502,10 +502,10 @@ def compare_profiles(pair: ArtifactPair, pc: Path, pa: Path, findings: list[dict
             compare_frames(pair.stage, var, fc.T, fa.T, findings)
 
 
-def compare_pair(pair: ArtifactPair, cand_root: Path, anch_root: Path) -> list[dict]:
+def compare_pair(pair: ArtifactPair, develop_root: Path, master_root: Path) -> list[dict]:
     findings: list[dict] = []
-    pc, pa = cand_root / pair.candidate, anch_root / pair.anchor
-    for side, p in (("candidate", pc), ("anchor", pa)):
+    pc, pa = develop_root / pair.develop, master_root / pair.master
+    for side, p in (("develop", pc), ("master", pa)):
         if not p.exists():
             findings.append(
                 {
@@ -523,8 +523,8 @@ def compare_pair(pair: ArtifactPair, cand_root: Path, anch_root: Path) -> list[d
     elif pair.kind == "profile":
         compare_profiles(pair, pc, pa, findings)
     elif pair.kind == "demand_total":
-        # The two demand CSVs are keyed at different granularities (anchor is
-        # nodal pre-aggregation, candidate substation-keyed), so per-bus
+        # The two demand CSVs are keyed at different granularities (master is
+        # nodal pre-aggregation, develop substation-keyed), so per-bus
         # comparison is meaningless here — it is covered by the assembled
         # network's Load_t.p_set. Compare the clustering-invariant system
         # total instead.
@@ -538,8 +538,8 @@ def compare_pair(pair: ArtifactPair, cand_root: Path, anch_root: Path) -> list[d
                     "column": "system_total",
                     "kind": "value",
                     "detail": {
-                        "candidate": tc,
-                        "anchor": ta,
+                        "develop": tc,
+                        "master": ta,
                         "rel": abs(tc - ta) / max(abs(ta), 1e-9),
                         "rel_pct": round(abs(tc - ta) / max(abs(ta), 1e-9) * 100.0, 4),
                     },
@@ -560,7 +560,7 @@ def prong2_aggregates(nc, na) -> list[dict]:
                 "component": "Load",
                 "column": "total_energy",
                 "kind": "value",
-                "detail": {"candidate": lc, "anchor": la},
+                "detail": {"develop": lc, "master": la},
             },
         )
     gc = nc.generators.groupby("carrier").p_nom.sum()
@@ -575,7 +575,7 @@ def prong2_aggregates(nc, na) -> list[dict]:
     return findings
 
 
-def run_comparison(prong: int, cand_root: Path, anch_root: Path) -> dict:
+def run_comparison(prong: int, develop_root: Path, master_root: Path) -> dict:
     waivers = load_waivers()
     all_findings: list[dict] = []
     pairs = prong_pairs(prong)
@@ -596,7 +596,7 @@ def run_comparison(prong: int, cand_root: Path, anch_root: Path) -> dict:
         ]
     for pair in pairs:
         if prong == 2 and pair.stage == "clustered_network":
-            pc, pa = cand_root / pair.candidate, anch_root / pair.anchor
+            pc, pa = develop_root / pair.develop, master_root / pair.master
             if pc.exists() and pa.exists():
                 all_findings += prong2_aggregates(load_network(pc), load_network(pa))
             else:
@@ -610,7 +610,7 @@ def run_comparison(prong: int, cand_root: Path, anch_root: Path) -> dict:
                     },
                 )
             continue
-        all_findings += compare_pair(pair, cand_root, anch_root)
+        all_findings += compare_pair(pair, develop_root, master_root)
     for f in all_findings:
         f["prong"] = prong
         f["interconnect"] = INTERCONNECT

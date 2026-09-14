@@ -1,8 +1,8 @@
 #!/bin/bash
 # USA-scale Tier C equivalence run, CF-comparison variant: prong 2
 # (simpl=300), EQ_UNTIL=assembled — builds both sides through
-# build_renewable_profiles / demand / add_electricity (candidate) and
-# simplify_network (anchor) and compares the demand + profile artifacts.
+# build_renewable_profiles / demand / add_electricity (develop) and
+# simplify_network (master) and compares the demand + profile artifacts.
 # No prepare/solve: this grounds the master-vs-develop renewable-CF
 # construction comparison in data without paying for the full-year solve.
 #
@@ -50,7 +50,7 @@ export GRB_LICENSE_FILE=/share/software/user/restricted/gurobi/11.0.2/licenses/g
 ml load gcc/12.4.0
 export CFLAGS="-Wno-error=incompatible-pointer-types"
 
-# System git (1.8, CentOS 7) predates `git worktree`, which anchor
+# System git (1.8, CentOS 7) predates `git worktree`, which baseline
 # provisioning needs.
 ml load system git/2.45.1
 
@@ -93,7 +93,7 @@ done
 cd "$REPO"
 
 # Clear stale snakemake locks left by a killed predecessor job (best-effort).
-for wf in "$REPO/workflow" "$REPO/.worktrees/anchor-e7f8bd70/workflow"; do
+for wf in "$REPO/workflow" "$REPO/.worktrees/master-benchmark/workflow"; do
     if [ -d "$wf/.snakemake/locks" ] && [ -n "$(ls -A "$wf/.snakemake/locks" 2>/dev/null)" ]; then
         (cd "$wf" && uv run snakemake --unlock) || true
     fi
