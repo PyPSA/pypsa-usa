@@ -44,7 +44,8 @@ would not describe the code that ran. ``EQ_ALLOW_DIRTY=1`` builds anyway and
 the manifest carries ``dirty: true`` plus the offending paths.
 
 Instrumentation: after a build, ``write_manifest`` records git SHA, config
-hash, per-rule benchmark rows (wall time, max_rss) and output file sizes.
+hash, per-rule benchmark rows (wall time, max_rss) and output file sizes, into
+this run's directory (``paths.run_dir()``).
 """
 
 from __future__ import annotations
@@ -59,7 +60,7 @@ import sys
 import time
 from pathlib import Path
 
-from .paths import BASELINE_CONFIGFILE, BASELINE_REF, CONFIGFILE, baseline_clusters
+from .paths import BASELINE_CONFIGFILE, BASELINE_REF, CONFIGFILE, baseline_clusters, run_dir
 
 REPO = Path(__file__).resolve().parents[2]
 SIDES = ("master", "develop")
@@ -403,12 +404,12 @@ def write_manifest(side: str, wt: Path, target: str, wall: float) -> dict:
         "file_sizes": collect_sizes(wf),
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
-    out = REPO / "workflow" / "results" / "equivalence"
+    # One run directory per run (plan D5): both sides' manifests land next to
+    # run_meta.json, the findings and the figures, so a run is one directory
+    # rather than a set of files that have to be matched up by suffix.
+    out = run_dir()
     out.mkdir(parents=True, exist_ok=True)
-    from .paths import INTERCONNECT
-
-    suffix = "" if INTERCONNECT == "western" else f"_{INTERCONNECT}"
-    path = out / f"manifest_{side}{suffix}.json"
+    path = out / f"manifest_{side}.json"
     path.write_text(json.dumps(manifest, indent=1))
     log(f"manifest -> {path}")
     return manifest

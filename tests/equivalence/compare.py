@@ -32,10 +32,9 @@ import xarray as xr
 import yaml
 
 from .metrics import objective_constant, total_objective
-from .paths import INTERCONNECT, UNTIL, ArtifactPair, prong_pairs
+from .paths import INTERCONNECT, UNTIL, ArtifactPair, prong_pairs, run_dir
 from .tables import TOLERANCES
 
-REPO = Path(__file__).resolve().parents[2]
 # Every tolerance below comes from ``tables.TOLERANCES``; none is restated here,
 # so the stage-by-stage findings and the comparison table cannot disagree about
 # what "within tolerance" means (T3 of memory/plans/harness-master-vs-develop.md).
@@ -635,8 +634,9 @@ def run_comparison(prong: int, develop_root: Path, master_root: Path) -> dict:
         "pass": not live,
         "findings": all_findings,
     }
-    suffix = "" if INTERCONNECT == "western" else f"_{INTERCONNECT}"
-    out = REPO / "workflow" / "results" / "equivalence" / f"findings_{prong}{suffix}.json"
+    # One run directory per run (plan D5): the findings sit beside
+    # run_meta.json and both manifests.
+    out = run_dir() / f"findings_{prong}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, indent=1, default=str))
     return result

@@ -1,68 +1,100 @@
-"""CLI orchestrator: build both sides, compare, tabulate, report.
+"""CLI orchestrator: resolve the run, gate the config, build both sides, compare.
 
-uv run python -m tests.equivalence.run --prong 1 [--skip-solve] [--side both]
+    uv run python -m tests.equivalence.run --prong 2 [--skip-solve] [--side both]
 
 Sides are ``master`` (the ``master-benchmark`` baseline, built in
 ``.worktrees/master-benchmark``) and ``develop`` (the main checkout).
 
-Outputs land in one run directory, ``workflow/results/equivalence/<run_id>/``:
-``tables/comparison.csv`` and ``tables/comparison.md`` (the verdict table) and
-``figures/`` (one PNG per figure, each beside the CSV it was drawn from).
-``EQ_RUN_ID`` names the directory; T4's ``context.build_context`` will supply it
-from the ``RunContext`` once that lands.
+Order matters and is the point of this module:
+
+1. :func:`context.build_context` resolves the three shas, both environments and
+   the translated wildcards, and mints the run directory.
+2. :func:`context.assert_config_equivalent` refuses to go further if the two
+   sides would not be on the same config — *before* either build, so a long run
+   is never spent comparing two different configurations.
+3. ``run_meta.json`` is written before the builds, so a run that dies halfway
+   still says what it was.
+4. Both sides build, sequentially and never concurrently: they share one
+   ``data/`` cache, and two concurrent DAGs would race on the same retrieve
+   targets.
+5. Compare, then tabulate and plot.
+
+Exit 0 only when there are no unwaived findings and no ``UNEXPLAINED`` rows in
+the comparison table.
 """
 
 from __future__ import annotations
 
 import argparse
-import os
+import inspect
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
-from tests.equivalence import plots, tables  # noqa: E402
+from tests.equivalence import context  # noqa: E402
 from tests.equivalence.build import BASELINE_WORKTREE, build_side  # noqa: E402
 from tests.equivalence.compare import run_comparison  # noqa: E402
 from tests.equivalence.paths import (  # noqa: E402
-    INTERCONNECT,
     UNTIL,
     assembled_target,
     baseline_assembled_target,
     baseline_final_target,
     final_target,
 )
-
-HOTFIXES_PATH = Path(__file__).parent / "hotfixes.yaml"
-
-
-def run_dir_for(prong: int) -> Path:
-    """The run directory for this invocation (``EQ_RUN_ID`` wins)."""
-    run_id = os.environ.get("EQ_RUN_ID") or f"{INTERCONNECT}-p{prong}"
-    return REPO / "workflow" / "results" / "equivalence" / run_id
+from tests.equivalence.plots import export_all  # noqa: E402
 
 
-def emit_results(prong: int, run_dir: Path, findings: list[dict]) -> dict[str, int]:
-    """Metrics -> comparison table -> figures. Returns the verdict counts.
+def _export_figures(ctx: context.RunContext) -> Path:
+    """Call ``plots.export_all`` through whichever signature it currently has.
 
-    A metric that raises lands in ``missing`` and becomes a ``MISSING`` row, so
-    a criterion cannot drop out of the comparison and still exit 0.
+    T3 of the harness plan gives it ``(run_dir, ctx)``; before that lands it is
+    zero-arg and writes to its own module-level ``OUTDIR``. Bridging here keeps
+    the run directory authoritative without editing a file T3 owns.
     """
-    art = plots.load_artifacts(prong, REPO / "workflow", BASELINE_WORKTREE / "workflow")
-    missing: list[dict] = []
-    metric_frames = plots.collect_metrics(art, missing)
-    hotfixes = tables.load_hotfixes(HOTFIXES_PATH)
-    from tests.equivalence.compare import load_waivers
+    if len(inspect.signature(export_all).parameters) >= 2:
+        return export_all(ctx.run_dir, ctx)
+    return export_all()
 
-    comparison = tables.comparison_table(metric_frames, hotfixes, load_waivers(), missing)
-    written = tables.write_tables({**metric_frames, "comparison": comparison}, run_dir)
-    print(f"[equivalence] wrote {len(written)} table(s) under {run_dir / 'tables'}")
-    figdir = plots.export_all(
-        run_dir, artifacts=art, metric_frames=metric_frames, findings=findings, missing=missing,
-    )
-    print(f"[equivalence] figures: {figdir}")
-    return tables.verdict_counts(comparison)
+
+def _export_tables(ctx: context.RunContext, result: dict) -> None:
+    """Hand the run off to T3's table layer, if it is present.
+
+    The hook is ``tables.export_all(run_dir, ctx, findings)``; until T3 lands
+    there is no ``tables`` module and the run completes on the findings alone.
+    Nothing here interprets the table — the verdict counts are read back from
+    the artifact it writes, so this module and that one agree by construction.
+    """
+    try:
+        from tests.equivalence import tables
+    except ImportError:
+        print("[equivalence] tables: module not present; skipping the comparison table")
+        return
+    export = getattr(tables, "export_all", None)
+    if export is None:
+        print("[equivalence] tables: no export_all hook; skipping the comparison table")
+        return
+    export(ctx.run_dir, ctx, result)
+
+
+def _verdict_counts(run_dir: Path) -> dict[str, int]:
+    """``{verdict: count}`` read back from ``tables/comparison.csv``.
+
+    Reads the artifact rather than the code that made it, so an empty dict means
+    "no table was written", not "the table said nothing".
+    """
+    path = run_dir / "tables" / "comparison.csv"
+    if not path.exists():
+        return {}
+    import csv
+
+    counts: dict[str, int] = {}
+    with path.open(newline="") as fh:
+        for row in csv.DictReader(fh):
+            verdict = row.get("verdict", "")
+            counts[verdict] = counts.get(verdict, 0) + 1
+    return counts
 
 
 def main() -> int:
@@ -86,9 +118,15 @@ def main() -> int:
         "--tables",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="build the metrics, the comparison table and the figures (default: on)",
+        help="write the comparison table (tables/comparison.{csv,md})",
     )
     args = ap.parse_args()
+
+    ctx = context.build_context(args.prong)
+    allowed = context.assert_config_equivalent(ctx)
+    ctx = context.with_config_diff(ctx, allowed)
+    meta_path = context.write_run_meta(ctx)
+    print(f"[equivalence] run {ctx.run_id}: {meta_path}")
 
     solve = not args.skip_solve
     # EQ_UNTIL=assembled already stops the compared pairs at the assembled
@@ -98,6 +136,7 @@ def main() -> int:
         dev_target, mas_target = assembled_target(args.prong), baseline_assembled_target(args.prong)
     else:
         dev_target, mas_target = final_target(args.prong, solve), baseline_final_target(args.prong, solve)
+    # Sequential, never concurrent: one shared data/ cache.
     if args.side in ("develop", "both"):
         build_side("develop", dev_target, args.jobs, timeout=args.timeout)
     if args.side in ("master", "both"):
@@ -108,24 +147,32 @@ def main() -> int:
         REPO / "workflow",
         BASELINE_WORKTREE / "workflow",
     )
-    run_dir = run_dir_for(args.prong)
-    counts = dict.fromkeys(tables.VERDICT_ORDER, 0)
     if args.tables:
-        counts = emit_results(args.prong, run_dir, result["findings"])
+        _export_tables(ctx, result)
+    verdicts = _verdict_counts(ctx.run_dir)
+    comparison_md = ctx.run_dir / "tables" / "comparison.md"
+    # PNG figures instead of the HTML report (user decision 2026-09-01: the
+    # HTML wrapper added nothing over the figures themselves).
+    figures_dir = _export_figures(ctx)
+
+    unexplained = verdicts.get("UNEXPLAINED", 0)
+    ok = result["pass"] and unexplained == 0
+    print(f"[equivalence] run id         : {ctx.run_id}  (prong {ctx.prong}, {ctx.interconnect})")
+    print(f"[equivalence] master         : {ctx.master_sha[:12]}")
+    print(f"[equivalence] master-benchmark: {ctx.baseline_sha[:12]} (+{ctx.baseline_commits_on_top_of_master})")
     print(
-        f"[equivalence] prong {args.prong}: "
-        f"{'PASS' if result['pass'] else 'FAIL'} "
-        f"({result['n_live']} live / {result['n_findings']} total findings)",
+        f"[equivalence] develop        : {ctx.develop_sha[:12]} (+{ctx.develop_commits_ahead_of_master})"
+        + ("  DIRTY" if ctx.develop_dirty else ""),
     )
     print(
-        f"[equivalence] verdicts: {counts['equivalent']} equivalent, "
-        f"{counts['explained']} explained, {counts['one-sided']} one-sided, "
-        f"{counts['undefined']} undefined, {counts['UNEXPLAINED']} UNEXPLAINED, "
-        f"{counts['MISSING']} MISSING",
+        f"[equivalence] verdicts       : {verdicts.get('equivalent', 0)} equivalent / "
+        f"{verdicts.get('explained', 0)} explained / {unexplained} UNEXPLAINED; "
+        f"{result['n_live']} live of {result['n_findings']} findings",
     )
-    print(f"[equivalence] comparison: {run_dir / 'tables' / 'comparison.md'}")
-    failing = sum(counts.get(v, 0) for v in tables.FAILING_VERDICTS)
-    return 0 if (result["pass"] and failing == 0) else 1
+    print(f"[equivalence] table          : {comparison_md if comparison_md.exists() else '(not written)'}")
+    print(f"[equivalence] figures        : {figures_dir}")
+    print(f"[equivalence] prong {args.prong}: {'PASS' if ok else 'FAIL'}")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

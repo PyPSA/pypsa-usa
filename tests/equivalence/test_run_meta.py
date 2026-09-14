@@ -1,0 +1,163 @@
+"""``RunContext`` and ``run_meta.json``, on a throwaway git repository.
+
+Tier A (``fast``): a ~10-line repo in ``tmp_path`` with ``master``,
+``master-benchmark`` and a branch standing in for ``develop``. No pypsa, no
+``data/``, no build, and ``probe_env=False`` so nothing shells out to ``uv``.
+
+What has to hold, because ``run_meta.json`` is the only record of what produced
+a number:
+
+- three distinct 40-char shas, one per ref, resolved from the repo rather than
+  pinned anywhere;
+- the develop side's dirtiness is *recorded*, not refused — a dirty run is
+  readable as long as it says it was dirty (plan D2);
+- the run id is a directory name: no ``/``, no spaces.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from tests.equivalence import build, context, paths
+
+pytestmark = pytest.mark.fast
+
+
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+@pytest.fixture
+def tmp_repo(tmp_path: Path) -> Path:
+    """Build master -> master-benchmark (+1) and a develop-like branch (+1)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "master")
+    _git(repo, "config", "user.email", "harness@example.invalid")
+    _git(repo, "config", "user.name", "harness")
+    (repo / "a.txt").write_text("one\n")
+    _git(repo, "add", "a.txt")
+    _git(repo, "commit", "-qm", "master tip")
+
+    _git(repo, "switch", "-q", "-c", "master-benchmark")
+    (repo / "ported.txt").write_text("port(HF-8)\n")
+    _git(repo, "add", "ported.txt")
+    _git(repo, "commit", "-qm", "port(HF-8): something")
+
+    _git(repo, "switch", "-q", "-c", "feat/harness", "master")
+    (repo / "b.txt").write_text("two\n")
+    _git(repo, "add", "b.txt")
+    _git(repo, "commit", "-qm", "develop tip")
+    return repo
+
+
+@pytest.fixture
+def harness(monkeypatch, tmp_repo: Path) -> Path:
+    """Point every module's REPO at the throwaway repo and mint a fresh id."""
+    monkeypatch.setattr(build, "REPO", tmp_repo)
+    monkeypatch.setattr(build, "BASELINE_WORKTREE", tmp_repo / ".worktrees" / "master-benchmark")
+    monkeypatch.setattr(paths, "REPO", tmp_repo)
+    monkeypatch.setattr(context, "REPO", tmp_repo)
+    # setenv-then-delenv so monkeypatch records the pre-existing value and
+    # undoes it at teardown: paths.run_id() FREEZES the id into the environment,
+    # and a leaked EQ_RUN_ID would redirect every later test's run directory.
+    monkeypatch.setenv("EQ_RUN_ID", "placeholder")
+    monkeypatch.delenv("EQ_RUN_ID")
+    monkeypatch.setenv("EQ_BASELINE_REF", "placeholder")
+    monkeypatch.delenv("EQ_BASELINE_REF")
+    monkeypatch.setattr(paths, "BASELINE_REF", "master-benchmark")
+    return tmp_repo
+
+
+def test_run_id_is_filesystem_safe(harness, monkeypatch):
+    monkeypatch.setenv("EQ_RUN_ID", "usa/p2 REM-3h")
+    rid = paths.run_id(2)
+    assert "/" not in rid and " " not in rid
+    assert rid == "usa-p2-REM-3h"
+
+
+def test_run_id_is_frozen_after_the_first_call(harness, monkeypatch):
+    """A later call that does not know the prong resolves the same directory."""
+    first = paths.run_id(2)
+    assert "-p2-" in first
+    assert paths.run_id() == first
+    assert paths.run_dir() == paths.run_dir(2)
+
+
+def test_run_dir_is_under_the_develop_checkout(harness):
+    rd = paths.run_dir(1)
+    assert rd.parent == harness / "workflow" / "results" / "equivalence"
+
+
+def test_context_carries_three_distinct_shas(harness):
+    ctx = context.build_context(2, probe_env=False)
+    for name in ("master_sha", "baseline_sha", "develop_sha"):
+        sha = getattr(ctx, name)
+        assert len(sha) == 40, f"{name}={sha!r}"
+    assert ctx.master_sha == _git(harness, "rev-parse", "master")
+    assert ctx.baseline_sha == _git(harness, "rev-parse", "master-benchmark")
+    assert ctx.develop_sha == _git(harness, "rev-parse", "HEAD")
+    assert len({ctx.master_sha, ctx.baseline_sha, ctx.develop_sha}) == 3
+    assert ctx.baseline_commits_on_top_of_master == 1
+    assert ctx.develop_commits_ahead_of_master == 1
+    assert ctx.baseline_ref == "master-benchmark"
+    assert ctx.develop_ref == "feat/harness"
+
+
+def test_context_records_the_translated_clusters(harness):
+    """Both dialects are recorded, because the two sides ran different literals."""
+    ctx = context.build_context(2, probe_env=False)
+    assert ctx.clusters_develop == paths.CLUSTERS
+    assert ctx.clusters_baseline == paths.baseline_clusters()
+
+
+def test_dirty_develop_is_recorded_not_refused(harness):
+    (harness / "b.txt").write_text("edited\n")
+    ctx = context.build_context(2, probe_env=False)
+    assert ctx.develop_dirty is True
+
+
+def test_clean_develop_is_recorded_clean(harness):
+    ctx = context.build_context(2, probe_env=False)
+    assert ctx.develop_dirty is False
+
+
+def test_run_meta_round_trips(harness):
+    ctx = context.build_context(1, probe_env=False)
+    ctx = context.with_config_diff(ctx, [{"key": "scenario.clusters", "reason": "translated"}])
+    path = context.write_run_meta(ctx)
+
+    assert path == ctx.run_dir / "run_meta.json"
+    meta = json.loads(path.read_text())
+    assert meta["run_id"] == ctx.run_id
+    assert meta["prong"] == 1
+    for name in ("master_sha", "baseline_sha", "develop_sha"):
+        assert len(meta[name]) == 40
+    assert meta["config_diff_allowed"][0]["key"] == "scenario.clusters"
+    assert meta["run_dir"] == str(ctx.run_dir)
+    # known_code_differences comes from the hot-fix registry and must never
+    # contain a hot-fix that is ported onto the baseline.
+    assert meta["known_code_differences"], "no candidate explanations recorded"
+    assert meta["known_code_differences"][0]["key"].startswith("{clusters}")
+
+
+def test_slurm_job_id_is_captured(harness, monkeypatch):
+    monkeypatch.setenv("SLURM_JOB_ID", "43441927")
+    assert context.build_context(2, probe_env=False).slurm_job_id == "43441927"
+
+
+def test_missing_baseline_branch_points_at_t1(harness, monkeypatch):
+    monkeypatch.setenv("EQ_BASELINE_REF", "no-such-branch")
+    with pytest.raises(RuntimeError) as exc:
+        context.build_context(2, probe_env=False)
+    assert "T1" in str(exc.value)

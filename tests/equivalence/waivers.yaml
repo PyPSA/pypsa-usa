@@ -1,7 +1,16 @@
 # Machine-readable waivers for the equivalence harness (spec D8).
 # Each entry suppresses exactly one signed-off delta and MUST reference a row
 # in docs/superpowers/specs/2026-08-07-deltas-ledger.md.
-# Fields: stage, component, column, kind ('*' wildcards allowed), ledger, reason.
+#
+# Fields: stage, component, column, kind ('*' wildcards allowed), ledger,
+# reason, and the optional `hotfix:`.
+#
+# `hotfix: HF-<n>` names the row in tests/equivalence/hotfixes.yaml — the
+# machine-readable extract of memory/plans/hotfix-ledger.md — that CAUSES the
+# waived delta. `ledger:` says the delta was signed off; `hotfix:` says which
+# change on develop produces it, so a waiver and a comparison-table row that
+# describe the same difference can be recognised as one thing. Optional because
+# several deltas predate both branches and belong to no hot-fix.
 - stage: assembled_substation_network
   component: Line
   column: capital_cost
@@ -144,6 +153,7 @@
   column: sub_network
   kind: value
   ledger: DL-15
+  hotfix: HF-12
   reason: pypsa v1 computes and serializes sub_network topology metadata that 0.30 left empty; no optimization input
   justification: >-
     Develop (pypsa 1.3) populates Bus.sub_network with the connected-component
@@ -156,6 +166,7 @@
   column: sub_network
   kind: value
   ledger: DL-15
+  hotfix: HF-12
   reason: pypsa v1 computes and serializes sub_network topology metadata that 0.30 left empty; no optimization input
   justification: >-
     Same mechanism as Bus.sub_network: develop labels every line with its
@@ -166,6 +177,7 @@
   column: <index>
   kind: row_set
   ledger: DL-15
+  hotfix: HF-12
   reason: pypsa v1 computes and serializes sub_network topology metadata that 0.30 left empty; no optimization input
   justification: >-
     Develop-only SubNetwork component rows (7 at assembled, 1 at every
@@ -179,6 +191,7 @@
   column: cyclic_state_of_charge_per_period
   kind: value
   ledger: DL-15
+  hotfix: HF-12
   reason: attribute absent from the master file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
   justification: >-
     Verified: the master netCDF has no storage_units_cyclic_state_of_charge_per_period
@@ -195,6 +208,7 @@
   column: cyclic_state_of_charge_per_period
   kind: value
   ledger: DL-15
+  hotfix: HF-12
   reason: attribute absent from the master file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
   justification: see the clustered_network entry - same absent-attribute mechanism, same stage-invariant proof
 - interconnect: western
@@ -203,6 +217,7 @@
   column: cyclic_state_of_charge_per_period
   kind: value
   ledger: DL-15
+  hotfix: HF-12
   reason: attribute absent from the master file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
   justification: see the clustered_network entry - same absent-attribute mechanism, same stage-invariant proof
 - interconnect: western
@@ -211,6 +226,7 @@
   column: cyclic_state_of_charge_per_period
   kind: value
   ledger: DL-15
+  hotfix: HF-12
   reason: attribute absent from the master file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
   justification: see the clustered_network entry - same absent-attribute mechanism, same stage-invariant proof
 - stage: '*'
@@ -218,6 +234,7 @@
   column: load_weight
   kind: column_set
   ledger: DL-16
+  hotfix: HF-6
   reason: >-
     develop-added schema column (PyPSA#777 population-based demand
     allocation); absent on the master
