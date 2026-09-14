@@ -1,24 +1,33 @@
-"""Build one side (candidate or anchor) of an equivalence run.
+"""Build one side (``master`` or ``develop``) of an equivalence run.
 
-Candidate builds run in the main checkout. Anchor builds run in a dedicated
-git worktree of the pinned anchor SHA, provisioned per the plan:
+The develop side builds in the main checkout. The baseline builds in a
+dedicated git worktree detached at the resolved ``master-benchmark`` sha —
+a commit anyone can check out, diff and review.
 
+**There is no build-time patching.** Everything the baseline needs in order to
+run and to be compared lives as ordinary commits on ``master-benchmark``
+(``BENCHMARK-BRANCH.md`` on that branch is its manifest; the project brain's
+``memory/plans/harness-master-vs-develop.md`` T1 is the policy). The old
+sentinel/string-surgery machinery and its ``.eq-force-rerun`` marker are gone:
+the baseline that actually ran is now a sha, not a mutated working tree.
+
+Provisioning does, in order:
+
+- resolve ``BASELINE_REF`` to a full sha;
+- ``git worktree prune``, then **refuse** a ``.worktrees/master-benchmark``
+  directory that git does not list as a registered worktree (a leftover from a
+  previous checkout location carries a ``.git`` file pointing at another
+  repository's gitdir; adopting it would run git against the wrong repo);
+- check the worktree out at the resolved sha (``git worktree add --detach``, or
+  ``git -C <wt> checkout --detach`` when it exists at another sha);
 - symlink ``workflow/data`` and ``workflow/cutouts`` from the main checkout
   (both untracked/gitignored on both branches);
-- seed the gitignored layered configs (``config.cluster/plotting/api/sector``)
-  from the anchor's own ``workflow/repo_data/config/`` (they are
-  ``configfile:``-loaded unconditionally) — the tracked ``config.common.yaml``
-  comes from git;
-- copy the shared ``config.equivalence.yaml`` in;
-- apply the documented BUILD-INFRA patch to ``rules/common.smk`` (the
-  upstream #764 ``constants`` source-cache import bug; same fix as v1-epic
-  commit e43fa927). Infra-only: cannot affect numbers;
-- apply the documented ADOPTED-FIX patches: ``build_bus_regions`` (DL-11:
-  footprint-scoped empty-county sweep), ``build_powerplants`` (DL-12:
-  pre-aggregate EIA-860 history before the LEFT JOINs) and ``add_electricity``
-  (DL-13: bound the must-add seam-plant fallback to the model footprint).
-  Results-affecting BY DESIGN and applied to BOTH sides by user decision so
-  the harness keeps comparing like-for-like; see the deltas ledger;
+- seed the gitignored layered configs from the baseline's own
+  ``workflow/repo_data/config/`` (they are ``configfile:``-loaded
+  unconditionally);
+- copy the shared ``config.equivalence*.yaml`` in, with ``{clusters}``
+  translated into the baseline's dialect (``paths.baseline_clusters``);
+- sync the harness-only policy CSVs and the per-user API keys;
 - ``touch`` retrieve_caiso_data's output if present so a fresh-checkout mtime
   on its tracked input xlsx does not retrigger a re-download into shared
   ``data/``.
@@ -37,40 +46,27 @@ import shutil
 import subprocess
 import sys
 import time
-from collections.abc import Iterable
 from pathlib import Path
 
-from .paths import ANCHOR_CONFIGFILE, CONFIGFILE, anchor_clusters
+from .paths import BASELINE_CONFIGFILE, BASELINE_REF, CONFIGFILE, baseline_clusters
 
 REPO = Path(__file__).resolve().parents[2]
-ANCHOR_SHA = "e7f8bd70"
-ANCHOR_WORKTREE = REPO / ".worktrees" / "anchor-e7f8bd70"
-INFRA_PATCH_MARK = "materialize sibling modules"  # idempotence marker
-ADOPTED_FIX_MARK = "restricting empty-county sweep"  # idempotence marker (DL-11)
-# DL-12 sentinel: a CTE name that exists only in the candidate's
-# build_powerplants.py query. Guards the file-adoption patch against silently
-# copying a wrong/stale source file over the anchor's script.
-POWERPLANTS_FIX_MARK = "ges_latest"
-POWERPLANTS_SCRIPT = "workflow/scripts/build_powerplants.py"
-# DL-13 sentinel: the seam-bound helper's name. Present in the candidate's
-# add_electricity.py only after the seam fix, and never in the pristine anchor.
-SEAM_FIX_MARK = "_drop_distant_seam_plants"
-ADD_ELECTRICITY_SCRIPT = "workflow/scripts/add_electricity.py"
-# DL-17 sentinel: the leap-day-drop helper's name. Present in the candidate's
-# build_renewable_profiles.py only after the fix, never in the pristine anchor.
-LEAP_FIX_MARK = "_drop_leap_day"
-BUILD_PROFILES_SCRIPT = "workflow/scripts/build_renewable_profiles.py"
-FORCE_RERUN_MARKER = ".eq-force-rerun"  # rules to -R once after a newly applied patch
+SIDES = ("master", "develop")
+BASELINE_WORKTREE = REPO / ".worktrees" / "master-benchmark"
 
-# The ANCHOR's layered set (pinned upstream e7f8bd70), not the candidate's —
-# it still reads every layer out of config/ and still calls the SLURM file
-# config.cluster.yaml.
-LAYERED_CONFIGS = [
-    "config.cluster.yaml",
-    "config.plotting.yaml",
-    "config.api.yaml",
-    "config.sector.yaml",
-]
+# Packages whose resolved version is recorded per side (the two branches pin
+# different pypsa/pandas/linopy majors, so this is load-bearing provenance).
+ENV_PACKAGES = ("pypsa", "pandas", "linopy", "numpy")
+_VERSION_PROBE = (
+    "import json, platform, importlib.metadata as md\n"
+    "out = {'python': platform.python_version()}\n"
+    f"for pkg in {ENV_PACKAGES!r}:\n"
+    "    try:\n"
+    "        out[pkg] = md.version(pkg)\n"
+    "    except Exception:\n"
+    "        out[pkg] = ''\n"
+    "print(json.dumps(out))\n"
+)
 
 
 def log(msg: str) -> None:
@@ -88,17 +84,100 @@ def run(cmd: list[str], cwd: Path, timeout: int = 7200) -> subprocess.CompletedP
     )
 
 
-def provision_anchor_worktree() -> Path:
-    """Create/refresh the anchor worktree; idempotent."""
-    wt = ANCHOR_WORKTREE
-    if not wt.exists():
-        wt.parent.mkdir(exist_ok=True)
-        cp = run(
-            ["git", "worktree", "add", "--detach", str(wt), ANCHOR_SHA],
-            cwd=REPO,
+def baseline_ref() -> str:
+    """The ref the baseline is built from, read at call time.
+
+    ``EQ_BASELINE_REF`` wins over the module default so a long-lived process
+    (and a test) can change it without re-importing ``paths``.
+    """
+    return os.environ.get("EQ_BASELINE_REF") or BASELINE_REF
+
+
+def resolve_baseline_sha() -> str:
+    """Full sha of the baseline ref, resolved at run time.
+
+    Raises with a pointer to T1 of the harness plan when the branch does not
+    exist locally — the baseline is a branch someone has to build, not a pin
+    this module can invent.
+    """
+    ref = baseline_ref()
+    cp = run(["git", "rev-parse", f"{ref}^{{commit}}"], cwd=REPO, timeout=60)
+    sha = cp.stdout.strip()
+    if cp.returncode != 0 or len(sha) != 40:
+        raise RuntimeError(
+            f"cannot resolve baseline ref {ref!r} in {REPO}.\n"
+            "The baseline is the master-benchmark branch, not a pinned commit: "
+            "create it first (T1 of memory/plans/harness-master-vs-develop.md — "
+            "`git switch -c master-benchmark master`, then port the documented "
+            "commits), or set EQ_BASELINE_REF to an existing ref.\n"
+            f"git said: {(cp.stderr or cp.stdout).strip()[-500:]}"
         )
+    return sha
+
+
+def _registered_worktrees() -> dict[str, str]:
+    """``{realpath: HEAD sha}`` for every worktree git currently lists."""
+    cp = run(["git", "worktree", "list", "--porcelain"], cwd=REPO, timeout=60)
+    if cp.returncode != 0:
+        raise RuntimeError(f"git worktree list failed:\n{cp.stderr[-2000:]}")
+    out: dict[str, str] = {}
+    path = None
+    for line in cp.stdout.splitlines():
+        if line.startswith("worktree "):
+            path = os.path.realpath(line[len("worktree ") :])
+            out[path] = ""
+        elif line.startswith("HEAD ") and path is not None:
+            out[path] = line[len("HEAD ") :].strip()
+    return out
+
+
+def _foreign_gitdir(wt: Path) -> str:
+    """What a directory that is not a registered worktree claims to be."""
+    dot_git = wt / ".git"
+    if dot_git.is_file():
+        text = dot_git.read_text().strip()
+        for line in text.splitlines():
+            if line.startswith("gitdir:"):
+                return line.split("gitdir:", 1)[1].strip()
+        return f"a .git file with no gitdir: line ({text[:200]!r})"
+    if dot_git.is_dir():
+        return f"a nested git repository at {dot_git}"
+    return f"no .git entry at all ({dot_git})"
+
+
+def provision_baseline_worktree() -> Path:
+    """Create/refresh the baseline worktree at the resolved sha; idempotent."""
+    sha = resolve_baseline_sha()
+    wt = BASELINE_WORKTREE
+    wt.parent.mkdir(parents=True, exist_ok=True)
+
+    # Drop records of worktrees whose directory is gone, so the registration
+    # check below reflects reality rather than stale bookkeeping.
+    run(["git", "worktree", "prune"], cwd=REPO, timeout=120)
+    registered = _registered_worktrees()
+    key = os.path.realpath(wt)
+
+    if wt.exists() and key not in registered:
+        raise RuntimeError(
+            f"{wt} exists but git does not list it as a worktree of {REPO}; "
+            f"it points at {_foreign_gitdir(wt)}. This is a leftover from a "
+            "previous checkout location — running git against it would target "
+            "another repository. Remove or rename it, then re-run; refusing to "
+            "adopt it."
+        )
+
+    if key in registered:
+        if registered[key] != sha:
+            cp = run(["git", "-C", str(wt), "checkout", "--detach", sha], cwd=REPO, timeout=600)
+            if cp.returncode != 0:
+                raise RuntimeError(f"git checkout --detach {sha} failed:\n{cp.stderr[-2000:]}")
+            log(f"baseline worktree repointed {registered[key][:12]} -> {sha[:12]}")
+    else:
+        cp = run(["git", "worktree", "add", "--detach", str(wt), sha], cwd=REPO, timeout=600)
         if cp.returncode != 0:
             raise RuntimeError(f"git worktree add failed:\n{cp.stderr[-2000:]}")
+        log(f"baseline worktree created at {sha[:12]} ({baseline_ref()})")
+
     wf = wt / "workflow"
 
     # Shared data dirs via symlink (never copied — 13G).
@@ -111,7 +190,7 @@ def provision_anchor_worktree() -> Path:
             raise RuntimeError(f"{link} exists and is not a symlink; refusing")
         link.symlink_to(target)
 
-    # Seed every gitignored config entry from the anchor's own templates
+    # Seed every gitignored config entry from the baseline's own templates
     # (mirrors tests/integration/conftest.py::_seed_runtime_configs and
     # init_pypsa_usa.sh): layered yaml files AND directories such as
     # config/policy_constraints/ that rules reference as inputs.
@@ -126,13 +205,13 @@ def provision_anchor_worktree() -> Path:
         else:
             shutil.copy2(entry, dst)
 
-    # Shared harness configs (kept in sync from the candidate repo_data copies).
-    # The anchor keeps the pre-2026-09-06 {clusters} suffix semantics, so
-    # scenario.clusters is translated on the way in (paths.anchor_clusters).
+    # Shared harness configs (kept in sync from the develop repo_data copies).
+    # master keeps the pre-2026-09-06 {clusters} suffix semantics, so
+    # scenario.clusters is translated on the way in (paths.baseline_clusters).
     for cfg in (REPO / "workflow" / "repo_data" / "config").glob("config.equivalence*.yaml"):
         text = re.sub(
             r"^(\s*clusters:\s*\[)([^\]]*)(\])",
-            lambda m: m.group(1) + ", ".join(anchor_clusters(v.strip()) for v in m.group(2).split(",")) + m.group(3),
+            lambda m: m.group(1) + ", ".join(baseline_clusters(v.strip()) for v in m.group(2).split(",")) + m.group(3),
             cfg.read_text(),
             count=1,
             flags=re.MULTILINE,
@@ -140,24 +219,21 @@ def provision_anchor_worktree() -> Path:
         (wf / "config" / cfg.name).write_text(text)
 
     # Harness-specific policy CSVs (e.g. the USA national CO2 cap) are
-    # referenced by repo_data-relative paths in the shared configs; the pinned
-    # anchor checkout does not ship them, so sync them from the candidate.
+    # referenced by repo_data-relative paths in the shared configs; master does
+    # not ship them, so sync them from the develop checkout.
     pc_src = REPO / "workflow" / "repo_data" / "config" / "policy_constraints"
     pc_dst = wf / "repo_data" / "config" / "policy_constraints"
     for csv in pc_src.glob("*equivalence*.csv"):
         shutil.copy2(csv, pc_dst / csv.name)
         shutil.copy2(csv, wf / "config" / "policy_constraints" / csv.name)
 
-    # Per-user API keys live in the candidate's untracked config/ overlay
-    # (never in the tracked repo_data templates). Mirror them onto the anchor
-    # so both sides run with the same credentials. Infra-only: identical key,
-    # cannot move numbers.
+    # Per-user API keys live in the develop checkout's untracked config/
+    # overlay (never in the tracked repo_data templates). Mirror them onto the
+    # baseline so both sides run with the same credentials. Infra-only:
+    # identical key, cannot move numbers.
     api_overlay = REPO / "workflow" / "config" / "config.api.yaml"
     if api_overlay.exists():
         shutil.copy2(api_overlay, wf / "config" / "config.api.yaml")
-
-    apply_infra_patches(wt)
-    apply_adopted_fix_patches(wt)
 
     # Fresh-checkout mtime on the tracked caiso xlsx must not retrigger a
     # re-download into the SHARED data/ tree.
@@ -168,472 +244,48 @@ def provision_anchor_worktree() -> Path:
     return wt
 
 
-def apply_infra_patches(wt: Path) -> None:
-    """Documented build-infrastructure patches to the anchor worktree.
-
-    Rule: a patch may make the anchor RUNNABLE but must not be able to change
-    numbers. Every patch added here needs a matching entry in
-    docs/CHANGELOG-v1-epic.md.
-    """
-    common = wt / "workflow" / "rules" / "common.smk"
-    text = common.read_text()
-    if INFRA_PATCH_MARK not in text:
-        needle = 'path = workflow.source_path("../scripts/_helpers.py")\n'
-        if needle not in text:
-            raise RuntimeError("anchor common.smk shape unexpected; refusing to patch")
-        patched = text.replace(
-            needle,
-            needle
-            + "# EQUIVALENCE-HARNESS INFRA PATCH (documented in "
-            + "docs/CHANGELOG-v1-epic.md):\n"
-            + "# materialize sibling modules _helpers.py imports into the "
-            + "source cache.\n"
-            + 'workflow.source_path("../scripts/constants.py")\n',
-        )
-        common.write_text(patched)
-        log("applied infra patch: common.smk constants source-cache fix")
-
-
-def mark_force_rerun(wt: Path, rules: Iterable[str]) -> None:
-    """Record rules to ``-R`` on the next build of this side (merge-safe).
-
-    The harness runs snakemake with ``--rerun-triggers mtime``, under which
-    code/rule changes NEVER invalidate existing outputs — a freshly patched
-    worktree with pre-patch artifacts would silently keep them and the harness
-    would compare fixed-vs-unfixed (2026-08-23 adversarial-review blocker).
-    Deleting the rule's outputs is NOT enough either: when the final target is
-    otherwise up-to-date, snakemake never revisits missing intermediates
-    (observed 2026-08-23). ``build_side`` turns this marker into
-    ``-R <rules>`` and clears it on success.
-
-    Merges with any pending marker so a second patch in the same provision
-    (or a patch applied while an earlier marker is still pending) cannot drop
-    the earlier rules.
-    """
-    marker = wt / FORCE_RERUN_MARKER
-    existing = marker.read_text().split() if marker.exists() else []
-    merged = list(dict.fromkeys([*existing, *rules]))
-    if not merged:
-        return
-    marker.write_text("\n".join(merged) + "\n")
-    log(f"one-shot forced-rerun marker now: {merged}")
-
-
-def snakemake_attrs(text: str) -> set[str]:
-    """Names a script pulls off ``snakemake.input/params/output``."""
-    return set(re.findall(r"snakemake\.(?:input|params|output)\.(\w+)", text))
-
-
-def apply_adopted_fix_patches(wt: Path) -> None:
-    """Adopted results-affecting fixes, mirrored onto the anchor by decision.
-
-    Unlike ``apply_infra_patches`` these CAN change numbers — that is the
-    point. Each entry is a fix the user countersigned into the ledger with an
-    explicit decision to patch BOTH sides so the harness keeps comparing
-    like-for-like instead of freezing a known-wrong anchor behavior.
-
-    DL-11 (countersigned 2026-08-23): scope build_bus_regions' empty-county
-    sweep to the model_topology.include footprint. Same change as v1-epic
-    commit ccfe4b77; without it a CA-scoped run's regions cover ~7x the
-    state and attach the whole interconnect fleet.
-
-    DL-12 (2026-08-23): adopt the candidate's build_powerplants.py wholesale.
-    v1-epic pre-aggregates EIA-860 history in DuckDB CTEs (``ges_latest`` /
-    ``plants_latest`` / ``yg_latest``) BEFORE its LEFT JOINs; the anchor
-    aggregates only after the join fan-out, so ~24 years of ``report_date``
-    duplicate rows reweight the ``mean()`` that produces heat_rate /
-    fuel_cost / efficiency. Left unpatched this is the dominant prong-1
-    residual (solved objective rel 2.34%, CCGT/OCGT p_nom_opt split).
-
-    DL-13 (countersigned 2026-08-23): bound ``add_electricity``'s "must add"
-    seam-plant fallback to SEAM_PLANT_MAX_KM of the model footprint in
-    footprint-scoped runs. Same change as v1-epic commit d98cb93f. Without it
-    a CA-scoped run attaches 23 out-of-footprint plants / 1,887.4 MW (nearest
-    890 km away) to California buses. Gated on ``model_topology.include``, so
-    it is a no-op for unfiltered interconnect/usa runs on both sides.
-
-    DL-17 (2026-09-01): drop Feb 29 from ``get_renewable_snapshots``'s
-    CF-selection window in ``build_renewable_profiles.py``. Required for leap
-    weather years (historical 2012, the only Zenodo-published historical
-    year); no-op otherwise. See ``apply_leap_day_adoption``.
-    """
-    applied_rules: list[str] = []
-    smk = wt / "workflow" / "rules" / "build_electricity.smk"
-    text = smk.read_text()
-    if ADOPTED_FIX_MARK not in text:
-        needle = (
-            "rule build_bus_regions:\n"
-            "    params:\n"
-            "        topological_boundaries=config_provider(\n"
-            '            "model_topology", "topological_boundaries"\n'
-            "        ),\n"
-        )
-        if needle not in text:
-            raise RuntimeError("anchor build_electricity.smk shape unexpected; refusing to patch")
-        smk.write_text(
-            text.replace(
-                needle,
-                needle
-                + "        # EQUIVALENCE-HARNESS ADOPTED-FIX PATCH DL-11: "
-                + "restricting empty-county sweep\n"
-                + '        model_topology_include=config_provider("model_topology", "include", default=None),\n',
-            ),
-        )
-        log("applied adopted-fix patch DL-11: build_electricity.smk include param")
-        applied_rules.append("build_bus_regions")
-
-    script = wt / "workflow" / "scripts" / "build_bus_regions.py"
-    text = script.read_text()
-    if ADOPTED_FIX_MARK not in text:
-        needle_params = "    # Params\n    topological_boundaries = snakemake.params.topological_boundaries\n"
-        needle_sweep = (
-            "    # Identify empty counties WITHIN the interconnect's BA shapes total footprint "
-            "(using reeds BA shapes for a cleaner shape)\n"
-            "    combined_bus_regions = gpd_reeds.geometry.union_all()\n"
-        )
-        if needle_params not in text or needle_sweep not in text:
-            raise RuntimeError("anchor build_bus_regions.py shape unexpected; refusing to patch")
-        text = text.replace(
-            needle_params,
-            needle_params + "    include_filter = snakemake.params.model_topology_include\n",
-        )
-        text = text.replace(
-            needle_sweep,
-            "    # EQUIVALENCE-HARNESS ADOPTED-FIX PATCH DL-11 (same as v1-epic ccfe4b77):\n"
-            "    # scope the empty-county sweep to the include-filtered footprint.\n"
-            "    if include_filter:\n"
-            "        gpd_reeds = gpd_reeds.loc[gpd_reeds.index.isin(n.buses.reeds_zone.unique())]\n"
-            "        logger.info(\n"
-            '            "model_topology.include set: restricting empty-county sweep to %d ReEDS zones present in the filtered network.",\n'
-            "            len(gpd_reeds),\n"
-            "        )\n"
-            "    combined_bus_regions = gpd_reeds.geometry.union_all()\n",
-        )
-        script.write_text(text)
-        log("applied adopted-fix patch DL-11: build_bus_regions.py footprint-scoped sweep")
-        applied_rules.append("build_bus_regions")
-
-    apply_powerplants_adoption(wt, applied_rules)
-    apply_seam_adoption(wt, applied_rules)
-    apply_leap_day_adoption(wt, applied_rules)
-
-    if applied_rules:
-        mark_force_rerun(wt, applied_rules)
-
-
-def apply_powerplants_adoption(wt: Path, applied_rules: list[str]) -> None:
-    """DL-12: adopt the candidate's build_powerplants.py onto the anchor.
-
-    Dynamic file adoption rather than textual surgery: the candidate file is
-    read from the live REPO checkout so the patch self-maintains if v1-epic's
-    query evolves, and any drift re-triggers the forced rerun. The two rule
-    definitions are byte-identical apart from the output path, and the script
-    is layout-agnostic (it only ever touches ``snakemake.output.powerplants``),
-    so the anchor's flat ``resources/powerplants.csv`` layout is preserved.
-
-    Safety rails, all of which raise rather than guess:
-      * the candidate file must carry the DL-12 sentinel CTE;
-      * every ``snakemake.input/params/output`` name the candidate file reads
-        must also be read by the anchor's PRISTINE script (fetched from git,
-        not from the possibly already-patched worktree), i.e. the candidate
-        cannot demand a rule key the anchor's rule does not define.
-    """
-    cand_src = REPO / "workflow" / "scripts" / "build_powerplants.py"
-    if not cand_src.exists():
-        raise RuntimeError(f"candidate {POWERPLANTS_SCRIPT} missing; refusing to patch")
-    cand_text = cand_src.read_text()
-    if POWERPLANTS_FIX_MARK not in cand_text:
-        raise RuntimeError(
-            f"candidate {POWERPLANTS_SCRIPT} lacks the DL-12 sentinel "
-            f"{POWERPLANTS_FIX_MARK!r}; refusing to adopt an unexpected file",
-        )
-
-    cp = run(["git", "show", f"{ANCHOR_SHA}:{POWERPLANTS_SCRIPT}"], cwd=wt)
-    if cp.returncode != 0:
-        raise RuntimeError(f"cannot read pristine anchor {POWERPLANTS_SCRIPT}:\n{cp.stderr[-2000:]}")
-    orig_text = cp.stdout
-    if POWERPLANTS_FIX_MARK in orig_text:
-        raise RuntimeError(
-            f"pristine anchor {POWERPLANTS_SCRIPT} already contains "
-            f"{POWERPLANTS_FIX_MARK!r}; DL-12 premise is wrong — refusing to patch",
-        )
-    missing = snakemake_attrs(cand_text) - snakemake_attrs(orig_text)
-    if missing:
-        raise RuntimeError(
-            f"candidate {POWERPLANTS_SCRIPT} reads snakemake keys the anchor's "
-            f"build_powerplants rule does not provide: {sorted(missing)}; "
-            "refusing wholesale adoption (do targeted query surgery instead)",
-        )
-
-    dst = wt / POWERPLANTS_SCRIPT
-    if dst.read_text() == cand_text:
-        return
-    dst.write_text(cand_text)
-    log("applied adopted-fix patch DL-12: build_powerplants.py adopted from candidate")
-    applied_rules.append("build_powerplants")
-
-
-def apply_seam_adoption(wt: Path, applied_rules: list[str]) -> None:
-    """DL-13: mirror the seam-plant bound onto the anchor's add_electricity.py.
-
-    Wholesale file adoption (the DL-12 mechanism) is NOT available here:
-    v1-epic's ``add_electricity.py`` legitimately differs from the anchor's in
-    the simplify-early bus2sub/sub_id removals, the ``length_factor=1.0``
-    decision (DL-1/DL-2) and the schema-logging calls. Copying it over would
-    smuggle those unrelated deltas onto the anchor. So this is targeted string
-    surgery instead.
-
-    What it introduces, matching the candidate's semantics exactly:
-      * the ``SEAM_PLANT_MAX_KM`` module constant;
-      * the ``_drop_distant_seam_plants`` helper;
-      * a ``footprint_scoped: bool = False`` parameter on
-        ``filter_plants_by_region``, applied right after the
-        ``plants_must_add.set_index`` that closes the fallback's construction;
-      * ``main()`` wiring that reads ``model_topology.include`` off
-        ``snakemake.config`` and passes ``footprint_scoped=bool(include)``.
-
-    Difference from the candidate: none in the code that runs. The whole
-    ``filter_plants_by_region`` body is byte-identical between e7f8bd70 and
-    v1-epic (verified 2026-08-24), so the anchor takes the same
-    ``footprint_scoped`` parameter plumbing rather than the inlined-config
-    variant that a divergent anchor shape would have forced. Only the comment
-    banners differ, marking the lines as harness patches.
-
-    The constant block and the helper body are sliced out of the LIVE candidate
-    file rather than duplicated here, so the numeric logic the two sides run is
-    the same text and any drift in v1-epic's helper re-triggers the forced
-    rerun. The four wiring edits are hardcoded because they are the part that
-    must adapt to the anchor's own shape.
-
-    Safety rails, all of which raise rather than guess:
-      * the candidate file must carry the DL-13 sentinel and yield both slices;
-      * every needle is verified against the PRISTINE anchor file fetched from
-        git, not the possibly already-patched worktree;
-      * the pristine anchor must NOT already contain the sentinel, else the
-        DL-13 premise is wrong;
-      * the assembled result must carry the sentinel exactly three times and be
-        wired end to end before anything is written.
-
-    Idempotent by CONTENT (like DL-12), not by the sentinel, so that an edit to
-    v1-epic's helper propagates here instead of being skipped as "already
-    patched" — the anchor must never run a stale copy of the candidate's logic.
-    """
-    dst = wt / ADD_ELECTRICITY_SCRIPT
-    cand_src = REPO / "workflow" / "scripts" / "add_electricity.py"
-    if not cand_src.exists():
-        raise RuntimeError(f"candidate {ADD_ELECTRICITY_SCRIPT} missing; refusing to patch")
-    cand_text = cand_src.read_text()
-    if SEAM_FIX_MARK not in cand_text:
-        raise RuntimeError(
-            f"candidate {ADD_ELECTRICITY_SCRIPT} lacks the DL-13 sentinel "
-            f"{SEAM_FIX_MARK!r}; refusing to mirror an unexpected file",
-        )
-
-    # Slice the constant block and the helper out of the candidate.
-    try:
-        const_start = cand_text.index("# Maximum distance from the model footprint")
-        const_end = cand_text.index("SEAM_PLANT_MAX_KM = 100.0") + len("SEAM_PLANT_MAX_KM = 100.0")
-        helper_start = cand_text.index(f"def {SEAM_FIX_MARK}(")
-        helper_end = cand_text.index("def filter_plants_by_region(")
-    except ValueError as exc:
-        raise RuntimeError(
-            f"cannot slice the DL-13 constant/helper out of the candidate "
-            f"{ADD_ELECTRICITY_SCRIPT}; its shape changed: {exc}",
-        ) from None
-    if not (const_start < const_end < helper_start < helper_end):
-        raise RuntimeError(
-            f"candidate {ADD_ELECTRICITY_SCRIPT} DL-13 slices are out of order; refusing to patch",
-        )
-    const_block = cand_text[const_start:const_end]
-    helper_block = cand_text[helper_start:helper_end]
-
-    cp = run(["git", "show", f"{ANCHOR_SHA}:{ADD_ELECTRICITY_SCRIPT}"], cwd=wt)
-    if cp.returncode != 0:
-        raise RuntimeError(f"cannot read pristine anchor {ADD_ELECTRICITY_SCRIPT}:\n{cp.stderr[-2000:]}")
-    orig_text = cp.stdout
-    if SEAM_FIX_MARK in orig_text:
-        raise RuntimeError(
-            f"pristine anchor {ADD_ELECTRICITY_SCRIPT} already contains "
-            f"{SEAM_FIX_MARK!r}; DL-13 premise is wrong — refusing to patch",
-        )
-
-    banner = "    # EQUIVALENCE-HARNESS ADOPTED-FIX PATCH DL-13 (same as v1-epic d98cb93f):\n"
-    needle_logger = "logger = logging.getLogger(__name__)\n"
-    needle_signature = (
-        "def filter_plants_by_region(\n"
-        "    plants: pd.DataFrame,\n"
-        "    regions_onshore: gpd.GeoDataFrame,\n"
-        "    regions_offshore: gpd.GeoDataFrame,\n"
-        "    reeds_shapes: gpd.GeoDataFrame,\n"
-        "    all_reeds_shapes: gpd.GeoDataFrame,\n"
-        "    reeds_memberships: pd.DataFrame,\n"
-        ") -> pd.DataFrame:\n"
-    )
-    needle_set_index = '        plants_must_add.set_index("generator_name", inplace=True)\n'
-    needle_main_call = (
-        "    plants = filter_plants_by_region(\n"
-        "        plants,\n"
-        "        regions_onshore,\n"
-        "        regions_offshore,\n"
-        "        reeds_shapes,\n"
-        "        all_reeds_shapes,\n"
-        "        reeds_memberships,\n"
-        "    )\n"
-    )
-    needles = {
-        "logger": needle_logger,
-        "signature": needle_signature,
-        "set_index": needle_set_index,
-        "main_call": needle_main_call,
-    }
-    bad = {name: orig_text.count(n) for name, n in needles.items() if orig_text.count(n) != 1}
-    if bad:
-        raise RuntimeError(
-            f"anchor {ADD_ELECTRICITY_SCRIPT} shape unexpected; refusing to patch. "
-            f"Needles not found exactly once: {bad}",
-        )
-
-    text = orig_text
-    # 1. module constant, right after the logger. The slice is inserted verbatim;
-    #    a module-level banner above it marks it as a harness patch.
-    text = text.replace(
-        needle_logger,
-        needle_logger
-        + "\n"
-        + "# EQUIVALENCE-HARNESS ADOPTED-FIX PATCH DL-13 (same as v1-epic d98cb93f):\n"
-        + const_block
-        + "\n",
-    )
-    # 2. helper, immediately above filter_plants_by_region (its only caller).
-    text = text.replace(needle_signature, helper_block + needle_signature)
-    # 3. the gated parameter on the signature.
-    text = text.replace(
-        needle_signature,
-        needle_signature.replace(
-            "    reeds_memberships: pd.DataFrame,\n",
-            "    reeds_memberships: pd.DataFrame,\n" + banner + "    footprint_scoped: bool = False,\n",
-        ),
-    )
-    # 4. the gated call, right after plants_must_add is finished being built.
-    text = text.replace(
-        needle_set_index,
-        needle_set_index
-        + "\n"
-        + banner.replace("    #", "        #")
-        + "        # The regions layers only tile the model footprint when the run is\n"
-        + "        # scoped with model_topology.include, so the unconditional add-back\n"
-        + "        # above leaks far-away plants into the model. Bound it — but only for\n"
-        + "        # scoped runs, so unfiltered interconnect/usa runs stay byte-identical.\n"
-        + "        if footprint_scoped:\n"
-        + f"            plants_must_add = {SEAM_FIX_MARK}(\n"
-        + "                plants_must_add,\n"
-        + "                regions_onshore,\n"
-        + "                regions_offshore,\n"
-        + "            )\n",
-    )
-    # 5. main() wiring off snakemake.config.
-    text = text.replace(
-        needle_main_call,
-        banner
-        + "    # A run scoped with model_topology.include tiles regions over the footprint\n"
-        + "    # only; the seam-plant fallback must then be distance-bounded.\n"
-        + '    include_filter = snakemake.config.get("model_topology", {}).get("include") or {}\n'
-        + needle_main_call.replace(
-            "        reeds_memberships,\n    )\n",
-            "        reeds_memberships,\n        footprint_scoped=bool(include_filter),\n    )\n",
-        ),
-    )
-
-    if text.count(SEAM_FIX_MARK) != 3:  # def, gated call, constant comment
-        raise RuntimeError(
-            f"DL-13 patch produced {text.count(SEAM_FIX_MARK)} sentinel occurrences "
-            "in the anchor (expected 3); refusing to write a half-applied patch",
-        )
-    if "footprint_scoped=bool(include_filter)" not in text or "if footprint_scoped:" not in text:
-        raise RuntimeError("DL-13 patch did not wire footprint_scoped end to end; refusing to write")
-
-    # Idempotence is by CONTENT, not by the sentinel: the patched text is always
-    # rebuilt from the pristine anchor plus the live candidate slices, so a later
-    # edit to v1-epic's helper re-applies here and re-arms the forced rerun
-    # instead of leaving the anchor running a stale copy of it.
-    if dst.read_text() == text:
-        return
-    dst.write_text(text)
-    log("applied adopted-fix patch DL-13: add_electricity.py seam-plant bound")
-    applied_rules.append("add_electricity")
-
-
-def apply_leap_day_adoption(wt: Path, applied_rules: list[str]) -> None:
-    """DL-17: mirror the leap-day drop onto the anchor's build_renewable_profiles.py.
-
-    ``get_renewable_snapshots`` builds the CF-selection window with
-    ``pd.date_range``, which includes Feb 29 for leap weather years (e.g. the
-    Zenodo-published historical 2012). ``fix_godeeep_time`` shifts the raw
-    GODEEEP time axis past the leap day, so ``.sel(time=...)`` on the window
-    KeyErrors. The candidate wraps both returns in ``_drop_leap_day``; the
-    anchor gets the same code by slice adoption.
-
-    Mechanism (DL-13 family, but simpler): the region between the
-    ``# Get renewable snapshots`` banner comment and ``def plot_data(`` is
-    byte-identical between e7f8bd70 and the pre-fix candidate (verified
-    2026-09-01), so the candidate's slice — which now also carries the
-    ``_drop_leap_day`` helper — replaces the anchor's slice wholesale. Sliced
-    from the LIVE candidate file so both sides run the same text and candidate
-    drift re-triggers the forced rerun. Content-idempotent like DL-12/13.
-    No-op for non-leap weather years, so it cannot move numbers on the
-    recorded 2019/2030 baselines.
-    """
-    dst = wt / BUILD_PROFILES_SCRIPT
-    cand_src = REPO / BUILD_PROFILES_SCRIPT
-    if not cand_src.exists():
-        raise RuntimeError(f"candidate {BUILD_PROFILES_SCRIPT} missing; refusing to patch")
-    cand_text = cand_src.read_text()
-    if LEAP_FIX_MARK not in cand_text:
-        raise RuntimeError(
-            f"candidate {BUILD_PROFILES_SCRIPT} lacks the DL-17 sentinel "
-            f"{LEAP_FIX_MARK!r}; refusing to mirror an unexpected file",
-        )
-
-    start_mark = "# Get renewable snapshots for a given year using month/day from config"
-    end_mark = "def plot_data("
-
-    def _slice(text: str, name: str) -> tuple[int, int]:
-        try:
-            start = text.index(start_mark)
-            end = text.index(end_mark)
-        except ValueError as exc:
-            raise RuntimeError(
-                f"cannot locate the DL-17 slice in {name}; its shape changed: {exc}",
-            ) from None
-        if not start < end:
-            raise RuntimeError(f"DL-17 slice out of order in {name}; refusing to patch")
-        return start, end
-
-    c0, c1 = _slice(cand_text, f"candidate {BUILD_PROFILES_SCRIPT}")
-    cand_block = cand_text[c0:c1]
-    if LEAP_FIX_MARK not in cand_block:
-        raise RuntimeError(
-            f"candidate {BUILD_PROFILES_SCRIPT} DL-17 slice lost the sentinel; refusing to patch",
-        )
-
-    anchor_text = dst.read_text()
-    a0, a1 = _slice(anchor_text, f"anchor {BUILD_PROFILES_SCRIPT}")
-    new_text = anchor_text[:a0] + cand_block + anchor_text[a1:]
-    if anchor_text == new_text:
-        return
-    dst.write_text(new_text)
-    log("applied adopted-fix patch DL-17: build_renewable_profiles.py leap-day drop")
-    applied_rules.append("build_renewable_profiles")
+def side_root(side: str) -> Path:
+    """Repository root a side builds in (provisions the baseline on demand)."""
+    if side not in SIDES:
+        raise ValueError(f"unknown side {side!r}; expected one of {SIDES}")
+    return provision_baseline_worktree() if side == "master" else REPO
 
 
 def side_configfile(side: str) -> str:
     """Where each side's copy of the shared harness config lives.
 
-    The candidate loads it from the tracked ``repo_data/config/`` templates;
-    the anchor is a pinned upstream checkout that only looks in ``config/``,
-    and ``provision_anchor_worktree`` copies the file there.
+    develop loads it from the tracked ``repo_data/config/`` templates; master's
+    Snakefile only looks in ``config/``, and ``provision_baseline_worktree``
+    copies the file there.
     """
-    return ANCHOR_CONFIGFILE if side == "anchor" else CONFIGFILE
+    if side not in SIDES:
+        raise ValueError(f"unknown side {side!r}; expected one of {SIDES}")
+    return BASELINE_CONFIGFILE if side == "master" else CONFIGFILE
+
+
+def side_env_versions(wt: Path) -> dict[str, str]:
+    """Resolved ``{'python','pypsa','pandas','linopy','numpy'}`` for one side.
+
+    Read from that side's OWN venv: ``uv run`` inside a worktree resolves that
+    worktree's ``pyproject.toml``/``uv.lock``, and the two branches pin
+    different pypsa/pandas/linopy majors. A probe failure is logged and
+    returned as empty strings rather than raised — provenance must not abort a
+    ten-hour build.
+    """
+    blank = dict.fromkeys(("python", *ENV_PACKAGES), "")
+    try:
+        cp = run(["uv", "run", "python", "-c", _VERSION_PROBE], cwd=wt, timeout=900)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log(f"env probe failed in {wt}: {exc}")
+        return blank
+    if cp.returncode != 0:
+        log(f"env probe failed in {wt} (exit {cp.returncode}): {cp.stderr[-500:]}")
+        return blank
+    try:
+        return json.loads(cp.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        log(f"env probe produced unparseable output in {wt}: {cp.stdout[-500:]!r}")
+        return blank
 
 
 def snakemake_cmd(
@@ -659,22 +311,16 @@ def snakemake_cmd(
 
 def build_side(side: str, target: str, jobs: int = 4, timeout: int = 10800) -> dict:
     """Run snakemake for one side; returns manifest dict (also written)."""
-    assert side in ("candidate", "anchor")
-    wt = provision_anchor_worktree() if side == "anchor" else REPO
+    if side not in SIDES:
+        raise ValueError(f"unknown side {side!r}; expected one of {SIDES}")
+    wt = side_root(side)
     wf = wt / "workflow"
     cmd = snakemake_cmd(target, jobs, side_configfile(side))
-    marker = wt / FORCE_RERUN_MARKER
-    forced = marker.read_text().split() if marker.exists() else []
-    if forced:
-        cmd += ["-R", *forced]
-        log(f"{side}: forcing rerun of {forced} (newly applied patch)")
     t0 = time.time()
     cp = run(cmd, cwd=wf, timeout=timeout)
     wall = time.time() - t0
     ok = cp.returncode == 0
     log(f"{side} build {'OK' if ok else 'FAILED'} in {wall:.0f}s")
-    if ok and forced:
-        marker.unlink()
     if not ok:
         tail = "\n".join((cp.stderr or cp.stdout).splitlines()[-120:])
         raise RuntimeError(f"{side} snakemake failed (exit {cp.returncode}):\n{tail}")
@@ -683,10 +329,11 @@ def build_side(side: str, target: str, jobs: int = 4, timeout: int = 10800) -> d
 
 def write_manifest(side: str, wt: Path, target: str, wall: float) -> dict:
     wf = wt / "workflow"
-    sha = run(["git", "rev-parse", "HEAD"], cwd=wt).stdout.strip()
+    sha = run(["git", "rev-parse", "HEAD"], cwd=wt, timeout=60).stdout.strip()
     cfg = (wf / side_configfile(side)).read_bytes()
     manifest = {
         "side": side,
+        "ref": baseline_ref() if side == "master" else "HEAD",
         "sha": sha,
         "target": target,
         "wall_s": round(wall, 1),
