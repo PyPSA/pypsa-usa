@@ -132,6 +132,62 @@ def test_clean_develop_is_recorded_clean(harness):
     assert ctx.develop_dirty is False
 
 
+def test_run_id_slug_is_written_back_to_the_environment(harness, monkeypatch):
+    """The sbatch driver builds the run-dir path from $EQ_RUN_ID itself.
+
+    If slugging changed anything and we kept the raw value in the environment,
+    bash and python would disagree about where the run lives.
+    """
+    monkeypatch.setenv("EQ_RUN_ID", "usa/p2 REM-3h")
+    import os
+
+    assert paths.run_id(2) == "usa-p2-REM-3h"
+    assert os.environ["EQ_RUN_ID"] == "usa-p2-REM-3h"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["../escape", "..", "a/../../b", "..\\windows", "....", "./."],
+)
+def test_run_id_cannot_climb_out_of_the_results_directory(harness, monkeypatch, raw):
+    monkeypatch.setenv("EQ_RUN_ID", raw)
+    rid = paths.run_id(2)
+    assert "/" not in rid and "\\" not in rid
+    assert ".." not in rid
+    assert paths.run_dir(2).parent == harness / "workflow" / "results" / "equivalence"
+
+
+def test_gate_status_starts_pending(harness):
+    assert context.build_context(2, probe_env=False).config_gate == "pending"
+
+
+def test_run_gate_leaves_provenance_when_the_gate_fails(harness, monkeypatch):
+    """A refused run still says which three shas it was about to compare."""
+    ctx = context.build_context(2, probe_env=False)
+
+    def _boom(_ctx=None):
+        raise RuntimeError("pudl_path differs")
+
+    monkeypatch.setattr(context, "assert_config_equivalent", _boom)
+    with pytest.raises(RuntimeError):
+        context.run_gate(ctx)
+
+    meta = json.loads((ctx.run_dir / "run_meta.json").read_text())
+    assert meta["config_gate"] == "failed"
+    assert "pudl_path differs" in meta["config_gate_error"]
+    assert len(meta["baseline_sha"]) == 40
+    assert len(meta["develop_sha"]) == 40
+
+
+def test_run_gate_records_pass(harness, monkeypatch):
+    ctx = context.build_context(2, probe_env=False)
+    monkeypatch.setattr(context, "assert_config_equivalent", lambda _ctx=None: [{"key": "k", "reason": "r"}])
+    ctx = context.run_gate(ctx)
+    meta = json.loads((ctx.run_dir / "run_meta.json").read_text())
+    assert meta["config_gate"] == "passed"
+    assert meta["config_diff_allowed"][0]["key"] == "k"
+
+
 def test_run_meta_round_trips(harness):
     ctx = context.build_context(1, probe_env=False)
     ctx = context.with_config_diff(ctx, [{"key": "scenario.clusters", "reason": "translated"}])

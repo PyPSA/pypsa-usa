@@ -67,7 +67,14 @@ def baseline_clusters(wc: str = CLUSTERS) -> str:
 
 
 BASELINE_CLUSTERS = baseline_clusters()
-OPTS = os.environ.get("EQ_OPTS", "REM-3h")
+# Default to the emissions-UNCONSTRAINED twin. The national 1 Mt CO2 cap
+# (REM-3h) looked infeasible at USA scale on 2026-09-01 — barrier verdict
+# plus a stalled disambiguation simplex — and a failed solve aborts the
+# harness, so the run that secures the comparison goes first. REM-3h is
+# opt-in: EQ_OPTS=REM-3h. tests/equivalence/run_equivalence.sbatch carries
+# the same default; the two must agree or the sbatch and python would mint
+# different run ids.
+OPTS = os.environ.get("EQ_OPTS", "3h")
 SIMPL2 = os.environ.get("EQ_SIMPL", "20")  # prong-2 simpl granularity (prong 1 is always pass-through '')
 SECTOR = "E"
 HORIZON = "2030"  # godeeep planning-horizon subdir for profiles (future scenarios only)
@@ -85,8 +92,16 @@ _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def _slug(text: str) -> str:
-    """Filesystem-safe id component: no ``/``, no spaces, no shell metachars."""
-    return _UNSAFE.sub("-", text).strip("-") or "run"
+    r"""Filesystem-safe id component: no separator, no traversal, no metachars.
+
+    The result is appended to a results directory, so it must not be able to
+    climb out of it. Everything outside ``[A-Za-z0-9._-]`` collapses to ``-``
+    (which kills ``/``, ``\\`` and whitespace), and any run of dots is then
+    reduced to one, so ``..`` and ``...`` cannot survive as path traversal.
+    """
+    slug = _UNSAFE.sub("-", text)
+    slug = re.sub(r"\.{2,}", ".", slug).strip(".-")
+    return slug or "run"
 
 
 def run_id(prong: int | None = None) -> str:
@@ -97,7 +112,13 @@ def run_id(prong: int | None = None) -> str:
     """
     existing = os.environ.get("EQ_RUN_ID")
     if existing:
-        return _slug(existing)
+        # Write the SLUG back, not the raw value: the sbatch driver builds the
+        # run directory path from $EQ_RUN_ID itself, so if slugging changed
+        # anything the two would disagree about where the run lives.
+        slug = _slug(existing)
+        if slug != existing:
+            os.environ["EQ_RUN_ID"] = slug
+        return slug
     part = f"-p{prong}" if prong is not None else ""
     minted = _slug(f"{INTERCONNECT}{part}-{OPTS}-{time.strftime('%Y%m%d-%H%M')}")
     os.environ["EQ_RUN_ID"] = minted

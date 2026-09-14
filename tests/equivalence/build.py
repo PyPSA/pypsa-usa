@@ -363,6 +363,12 @@ def snakemake_cmd(
         "greedy",
         "--rerun-triggers",
         "mtime",
+        # A predecessor job killed mid-rule (the driver's walltime, an OOM)
+        # leaves snakemake metadata marking those outputs incomplete, and the
+        # next run refuses to start until someone intervenes. Re-run them
+        # instead: the whole point of the run directory is that a resumed build
+        # picks up where the dead one stopped.
+        "--rerun-incomplete",
     ]
 
 
