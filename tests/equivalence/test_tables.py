@@ -17,12 +17,20 @@ def _metric_frame(master: dict[str, float], develop: dict[str, float]) -> pd.Dat
 
 
 def test_tolerances_are_the_single_source_of_truth():
-    """``compare.py`` must import them, not restate them."""
-    assert compare.OBJECTIVE_RTOL is tables.TOLERANCES["objective"]
-    assert compare.CAPACITY_RTOL is tables.TOLERANCES["capacity"]
+    """``compare.py`` must import every tolerance, not restate any of them."""
+    assert compare.OBJECTIVE_RTOL == tables.TOLERANCES["objective"].rtol
+    assert compare.CAPACITY_RTOL == tables.TOLERANCES["capacity"].rtol
+    assert compare.CAPACITY_ATOL == tables.TOLERANCES["capacity"].atol
+    assert compare.RTOL == tables.TOLERANCES["p_max_pu"].rtol
     src = (__import__("pathlib").Path(compare.__file__)).read_text()
-    assert "OBJECTIVE_RTOL = 1e-3" not in src
-    assert "CAPACITY_RTOL = 5e-3" not in src
+    for literal in ("OBJECTIVE_RTOL = 1e-3", "CAPACITY_RTOL = 5e-3", "RTOL = 1e-3", "atol=1.0"):
+        assert literal not in src, f"{literal!r} is a second home for a tolerance"
+
+
+def test_every_family_has_a_relative_and_an_absolute_tolerance():
+    for family, tol in tables.TOLERANCES.items():
+        assert tol.rtol > 0, family
+        assert tol.atol >= 0, family
 
 
 def test_tolerance_family_resolution():
@@ -50,7 +58,7 @@ def test_comparison_table_verdicts():
         ),
     }
     hotfixes = {
-        "HF-8": {"id": "HF-8", "ported": False, "expect": ["capacity/onwind"]},
+        "HF-8": {"id": "HF-8", "ported": False, "expect": ["capacity_existing_by_carrier/onwind"]},
     }
     out = tables.comparison_table(frames, hotfixes)
     assert list(out.columns) == tables.COMPARISON_COLUMNS
@@ -62,13 +70,14 @@ def test_comparison_table_verdicts():
     assert out.iloc[0]["verdict"] == "UNEXPLAINED"
     assert out.iloc[0]["key"] == "CCGT"
     assert dict(zip(out["key"], out["hotfix"]))["onwind"] == "HF-8"
-    assert (out["tolerance_pct"] == tables.TOLERANCES["capacity"] * 100.0).all()
+    assert (out["tolerance_pct"] == tables.TOLERANCES["capacity"].rtol * 100.0).all()
+    assert (out["tolerance_abs"] == tables.TOLERANCES["capacity"].atol).all()
 
 
 def test_ported_hotfix_is_not_an_explanation():
     """A fix on ``master-benchmark`` is on BOTH sides, so it explains nothing."""
     frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0})}
-    hotfixes = {"HF-8": {"id": "HF-8", "ported": True, "expect": ["capacity/*"]}}
+    hotfixes = {"HF-8": {"id": "HF-8", "ported": True, "expect": ["capacity_existing_by_carrier/*"]}}
     out = tables.comparison_table(frames, hotfixes)
     assert out.iloc[0]["verdict"] == "UNEXPLAINED"
     assert "ported" in out.iloc[0]["hotfix"]
@@ -78,8 +87,8 @@ def test_ported_hotfix_is_not_an_explanation():
 def test_unported_hotfix_wins_over_a_ported_one():
     frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0})}
     hotfixes = {
-        "HF-8": {"id": "HF-8", "ported": True, "expect": ["capacity/*"]},
-        "HF-16": {"id": "HF-16", "ported": False, "expect": ["capacity/*"]},
+        "HF-8": {"id": "HF-8", "ported": True, "expect": ["capacity_existing_by_carrier/*"]},
+        "HF-16": {"id": "HF-16", "ported": False, "expect": ["capacity_existing_by_carrier/*"]},
     }
     out = tables.comparison_table(frames, hotfixes)
     assert out.iloc[0]["verdict"] == "explained"
@@ -136,7 +145,8 @@ def test_comparison_table_empty_input():
     out = tables.comparison_table({}, {})
     assert out.empty
     assert list(out.columns) == tables.COMPARISON_COLUMNS
-    assert tables.verdict_counts(out) == {"equivalent": 0, "explained": 0, "UNEXPLAINED": 0}
+    assert tables.verdict_counts(out) == dict.fromkeys(tables.VERDICT_ORDER, 0)
+    assert tables.n_failing(out) == 0
 
 
 def test_write_tables_roundtrip(tmp_path):
@@ -212,3 +222,205 @@ def test_repo_hotfixes_file_loads_if_present():
         pytest.skip("hotfixes.yaml not written yet (T4)")
     assert all(k.startswith("HF-") for k in out)
     assert all("ported" in e for e in out.values())
+
+
+# ---------------------------------------------------------------------------
+# Verifier defect 1: a cell waiver must not explain every row in the table.
+# ---------------------------------------------------------------------------
+
+
+def _real_waivers():
+    """The shape every entry in waivers.yaml actually has."""
+    from pathlib import Path
+
+    import yaml as _yaml
+
+    return _yaml.safe_load((Path(tables.__file__).parent / "waivers.yaml").read_text()) or []
+
+
+def test_cell_waiver_shape_never_explains_a_table_row():
+    """waivers.yaml entries key on stage/component/column/kind, never metric/key.
+
+    Treating their absent metric/key/family as wildcards let a single
+    hotfix:-tagged cell waiver explain every over-tolerance row in every family.
+    """
+    frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0})}
+    waiver = {"stage": "*", "component": "Bus", "column": "control", "kind": "value", "hotfix": "HF-8"}
+    hotfixes = {"HF-8": {"id": "HF-8", "ported": False}}
+    out = tables.comparison_table(frames, hotfixes, [waiver])
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert out.iloc[0]["hotfix"] == ""
+
+
+def test_real_waivers_file_explains_nothing_in_the_table():
+    frames = {
+        "capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0}),
+        "dispatch_by_carrier": _metric_frame({"CCGT": 100.0}, {"CCGT": 180.0}),
+    }
+    hotfixes = {f"HF-{i}": {"id": f"HF-{i}", "ported": False} for i in range(1, 22)}
+    out = tables.comparison_table(frames, hotfixes, _real_waivers())
+    assert set(out["verdict"]) == {"UNEXPLAINED"}
+
+
+def test_waiver_naming_only_the_family_explains_that_family():
+    frames = {"dispatch_by_carrier": _metric_frame({"CCGT": 100.0}, {"CCGT": 180.0})}
+    hotfixes = {"HF-14": {"id": "HF-14", "ported": False}}
+    out = tables.comparison_table(frames, hotfixes, [{"family": "dispatch", "hotfix": "HF-14"}])
+    assert out.iloc[0]["verdict"] == "explained"
+
+
+def test_waiver_naming_a_different_metric_does_not_explain():
+    frames = {"dispatch_by_carrier": _metric_frame({"CCGT": 100.0}, {"CCGT": 180.0})}
+    hotfixes = {"HF-14": {"id": "HF-14", "ported": False}}
+    out = tables.comparison_table(frames, hotfixes, [{"metric": "demand_by_zone", "hotfix": "HF-14"}])
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+
+
+# ---------------------------------------------------------------------------
+# Verifier defect 2: an id must resolve in the registry; no bare-family globs.
+# ---------------------------------------------------------------------------
+
+
+def test_unknown_hotfix_id_does_not_explain():
+    frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0})}
+    waivers = [{"metric": "capacity_existing_by_carrier", "key": "solar", "hotfix": "HF-99"}]
+    out = tables.comparison_table(frames, {}, waivers)
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert "unknown id" in out.iloc[0]["hotfix"]
+
+
+def test_empty_registry_explains_nothing():
+    frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0})}
+    waivers = [{"metric": "capacity_existing_by_carrier", "key": "solar", "hotfix": "HF-8"}]
+    out = tables.comparison_table(frames, {}, waivers)
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+
+
+def test_bare_family_expect_glob_does_not_match():
+    """``expect: [capacity]`` would claim every capacity metric at once."""
+    frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0})}
+    hotfixes = {"HF-8": {"id": "HF-8", "ported": False, "expect": ["capacity"]}}
+    out = tables.comparison_table(frames, hotfixes)
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+
+
+def test_metric_name_expect_glob_matches():
+    frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0})}
+    hotfixes = {"HF-8": {"id": "HF-8", "ported": False, "expect": ["capacity_*"]}}
+    out = tables.comparison_table(frames, hotfixes)
+    assert out.iloc[0]["verdict"] == "explained"
+    assert out.iloc[0]["hotfix"] == "HF-8"
+
+
+# ---------------------------------------------------------------------------
+# Verifier defect 3: an absolute floor, so solver noise is not a difference.
+# ---------------------------------------------------------------------------
+
+
+def test_solver_noise_on_an_unbuilt_carrier_is_equivalent():
+    """1e-7 MW on a carrier neither side built is noise, not a -100 % delta."""
+    frames = {"capacity_opt_by_carrier": _metric_frame({"coal": 1e-7}, {"coal": 0.0})}
+    out = tables.comparison_table(frames, {})
+    assert out.iloc[0]["delta_pct"] == pytest.approx(-100.0)
+    assert out.iloc[0]["verdict"] == "equivalent"
+
+
+def test_appear_from_nothing_below_the_floor_is_equivalent():
+    frames = {"capacity_opt_by_carrier": _metric_frame({"coal": 0.0}, {"coal": 1e-4})}
+    out = tables.comparison_table(frames, {})
+    assert np.isnan(out.iloc[0]["delta_pct"])
+    assert out.iloc[0]["verdict"] == "equivalent"
+
+
+def test_appear_from_nothing_above_the_floor_is_unexplained():
+    frames = {"capacity_opt_by_carrier": _metric_frame({"coal": 0.0}, {"coal": 500.0})}
+    out = tables.comparison_table(frames, {})
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+
+
+def test_absolute_floor_does_not_swallow_a_real_difference():
+    frames = {"capacity_opt_by_carrier": _metric_frame({"coal": 100.0}, {"coal": 180.0})}
+    out = tables.comparison_table(frames, {})
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+
+
+def test_objective_has_no_absolute_floor():
+    """A dollar of objective must not be excused by a MW-sized floor."""
+    assert tables.TOLERANCES["objective"].atol == 0.0
+    frames = {"objective": _metric_frame({"total": 0.0}, {"total": 0.5})}
+    out = tables.comparison_table(frames, {})
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+
+
+def test_tolerance_abs_is_reported():
+    frames = {"capacity_opt_by_carrier": _metric_frame({"coal": 100.0}, {"coal": 100.0})}
+    out = tables.comparison_table(frames, {})
+    assert out.iloc[0]["tolerance_abs"] == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Verifier defect 4: ratio metrics keep NaN; NaN is not "equivalent, 0 vs 0".
+# ---------------------------------------------------------------------------
+
+
+def test_nan_on_both_sides_is_undefined_not_equivalent():
+    df = metrics.frame(
+        pd.Series({"coal": np.nan}), pd.Series({"coal": np.nan}), name="carrier", fill=None,
+    )
+    out = tables.comparison_table({"capacity_factor_by_carrier": df}, {})
+    assert out.iloc[0]["verdict"] == "undefined"
+
+
+def test_one_sided_nan_is_flagged_not_minus_one_hundred_percent():
+    df = metrics.frame(
+        pd.Series({"coal": np.nan}), pd.Series({"coal": 0.4}), name="carrier", fill=None,
+    )
+    out = tables.comparison_table({"capacity_factor_by_carrier": df}, {})
+    assert out.iloc[0]["verdict"] == "one-sided"
+    assert out.iloc[0]["hotfix"] == "develop only"
+
+
+def test_one_sided_and_undefined_do_not_fail_the_run():
+    df = metrics.frame(
+        pd.Series({"a": np.nan, "b": np.nan}), pd.Series({"a": 0.4, "b": np.nan}),
+        name="carrier", fill=None,
+    )
+    out = tables.comparison_table({"capacity_factor_by_carrier": df}, {})
+    assert tables.n_failing(out) == 0
+    assert tables.verdict_counts(out)["one-sided"] == 1
+    assert tables.verdict_counts(out)["undefined"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Verifier defect 5: a metric that raises becomes a MISSING row, not a skip.
+# ---------------------------------------------------------------------------
+
+
+def test_missing_metric_becomes_a_missing_row():
+    missing = [{"metric": "p_nom_existing_by_zone_carrier", "reason": "ValueError: no reeds_zone"}]
+    out = tables.comparison_table({}, {}, None, missing)
+    assert len(out) == 1
+    assert out.iloc[0]["verdict"] == "MISSING"
+    assert out.iloc[0]["metric"] == "p_nom_existing_by_zone_carrier"
+    assert "reeds_zone" in out.iloc[0]["hotfix"]
+
+
+def test_missing_rows_fail_the_run_and_sort_first():
+    frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 100.0})}
+    missing = [{"metric": "demand_by_zone", "reason": "ValueError: boom"}]
+    out = tables.comparison_table(frames, {}, None, missing)
+    assert out.iloc[0]["verdict"] == "MISSING"
+    assert tables.n_failing(out) == 1
+    assert tables.verdict_counts(out)["MISSING"] == 1
+
+
+def test_missing_metric_with_an_unknown_name_still_lands():
+    out = tables.comparison_table({}, {}, None, [{"metric": "nobody_assigned_this", "reason": "x"}])
+    assert out.iloc[0]["verdict"] == "MISSING"
+    assert np.isnan(out.iloc[0]["tolerance_pct"])
+
+
+def test_verdict_counts_covers_every_verdict():
+    assert set(tables.verdict_counts(pd.DataFrame(columns=tables.COMPARISON_COLUMNS))) == set(
+        tables.VERDICT_ORDER,
+    )

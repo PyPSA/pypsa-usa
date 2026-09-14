@@ -93,13 +93,30 @@ def _rel_pct(delta: pd.Series, master: pd.Series) -> pd.Series:
     return pd.Series(out, index=master.index)
 
 
-def frame(master: pd.Series, develop: pd.Series, name: str = "key") -> pd.DataFrame:
+def frame(
+    master: pd.Series,
+    develop: pd.Series,
+    name: str = "key",
+    fill: float | None = 0.0,
+) -> pd.DataFrame:
     """Assemble the four-column metric frame from two keyed Series.
 
-    The two sides are aligned on the union of their keys; a key present on only
-    one side contributes 0.0 on the other, which is the honest reading (the
-    carrier/zone genuinely has no capacity there) and keeps the frame
-    rectangular for plotting.
+    The two sides are aligned on the union of their keys.
+
+    ``fill`` decides what a one-sided key means, and the two cases are NOT the
+    same:
+
+    - **Additive metrics** (capacity MW, dispatch MWh, demand MW, installable
+      potential MW) pass ``fill=0.0``. A carrier or zone absent on one side
+      genuinely has zero capacity there, so 0.0 is the honest reading and the
+      resulting -100 % is a real difference.
+    - **Ratio metrics** (capacity factor, capacity-factor quantiles) pass
+      ``fill=None`` and keep NaN. A carrier with no capacity has an *undefined*
+      capacity factor, not a capacity factor of zero; filling it with 0.0 would
+      manufacture a -100 % difference out of a quantity that does not exist, and
+      an all-NaN row would read as "equivalent, 0 vs 0".
+      ``tables.comparison_table`` gives those rows the verdicts ``undefined``
+      and ``one-sided``.
     """
     master = pd.Series(master, dtype=float)
     develop = pd.Series(develop, dtype=float)
@@ -113,8 +130,10 @@ def frame(master: pd.Series, develop: pd.Series, name: str = "key") -> pd.DataFr
         # labels 'mean' and 'p_nom_max_weighted_mean'); keep declaration order.
         pass
     idx.name = name
-    m = master.reindex(idx).astype(float).fillna(0.0)
-    d = develop.reindex(idx).astype(float).fillna(0.0)
+    m = master.reindex(idx).astype(float)
+    d = develop.reindex(idx).astype(float)
+    if fill is not None:
+        m, d = m.fillna(fill), d.fillna(fill)
     delta = d - m
     return pd.DataFrame(
         {"master": m, "develop": d, "delta": delta, "delta_pct": _rel_pct(delta, m)},
@@ -259,7 +278,7 @@ def capacity_factor_by_carrier(n_master, n_develop) -> pd.DataFrame:
     m, d = _capacity_factor_series(n_master), _capacity_factor_series(n_develop)
     if m is None or d is None:
         return empty_frame("carrier")
-    return frame(m.dropna(), d.dropna(), name="carrier")
+    return frame(m, d, name="carrier", fill=None)
 
 
 def objective_constant(n) -> float:
@@ -273,26 +292,29 @@ def objective_constant(n) -> float:
 
 
 def total_objective(n) -> float:
-    """Total system cost, independent of the reporting convention (HF-13)."""
+    """``objective + objective_constant`` — the total, invariant to the split (HF-13)."""
     return float(n.objective) + objective_constant(n)
 
 
 def objective_row(n_master, n_develop) -> pd.Series:
-    """Total system cost, normalised across the two pypsa reporting conventions.
+    """Total system cost, normalised across the two branches.
 
-    **HF-13** (hot-fix ledger; deltas-ledger DL-15 class C): master runs
-    pypsa 0.30, which reports ``Network.objective`` as the SOLVER objective only
-    and carries the fixed-cost offset separately in ``objective_constant``;
-    develop runs pypsa 1.3 / linopy 0.9, which folds the offset into
-    ``objective`` and leaves ``objective_constant`` at 0. **The reported
-    objective is not comparable across the branches** — comparing it raw
-    manufactures a difference exactly the size of the constant, even when the two
-    solves are identical. Both sides are therefore normalised to
-    ``objective + objective_constant`` and the ``objective`` tolerance applies to
-    that.
+    **HF-13** (hot-fix ledger; deltas-ledger DL-15 class C). Both pypsa 0.30 and
+    pypsa 1.3 expose ``objective`` and ``objective_constant`` as two separate
+    attributes — verified 2026-09-14. (The ledger's wording, that v1 "folds the
+    offset into ``objective`` and leaves ``objective_constant`` at 0", is not a
+    property of the library and should not be relied on.) What the two branches
+    do differ on is **how the total is split between the two terms**: on the CA
+    leg master reported ``-204,665,929.13`` with a constant of
+    ``1,133,255,860.00`` while develop reported ``928,590,425.01`` with a
+    constant of ``0.00``. Comparing either term on its own therefore manufactures
+    a difference the size of the constant even when the two solves agree.
 
-    Ledger reference on the CA leg: develop ``928,590,425.01`` against master
-    ``-204,665,929.13 + 1,133,255,860.00``, relative difference 5.3e-07.
+    The **sum** is the total system cost and is invariant to that split, so both
+    sides are normalised to ``objective + objective_constant`` and the
+    ``objective`` tolerance applies to that. Normalising is also what lets a
+    0.30-written network be read under 1.3 without the split mattering. On the CA
+    leg the normalised values agree to a relative difference of 5.3e-07.
 
     Returns a Series indexed by :data:`OBJECTIVE_INDEX`. The ``*_raw`` and
     ``*_constant`` entries exist for the reader; they are never compared.
@@ -359,7 +381,9 @@ def p_max_pu_quantiles(
     m_vals += [float(vm.mean()) if vm.size else float("nan"), _potential_weighted_mean_cf(ds_master)]
     d_vals += [float(vd.mean()) if vd.size else float("nan"), _potential_weighted_mean_cf(ds_develop)]
     idx = pd.Index(keys, name="quantile", dtype=object)
-    return frame(pd.Series(m_vals, index=idx), pd.Series(d_vals, index=idx), name="quantile")
+    return frame(
+        pd.Series(m_vals, index=idx), pd.Series(d_vals, index=idx), name="quantile", fill=None,
+    )
 
 
 def _p_nom_max_by_zone(ds, zone: pd.Series) -> pd.Series:
@@ -409,6 +433,7 @@ def mean_cf_by_zone(ds_master, ds_develop, zone_master: pd.Series, zone_develop:
         _mean_cf_by_zone(ds_master, zone_master),
         _mean_cf_by_zone(ds_develop, zone_develop),
         name="zone",
+        fill=None,
     )
 
 

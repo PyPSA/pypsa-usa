@@ -482,46 +482,69 @@ def load_artifacts(prong: int, develop_root: Path, master_root: Path) -> Artifac
     return art
 
 
-def _safe(fn, *a, **kw):
-    """Run a metric, returning ``None`` if its inputs are not shaped for it."""
+def _safe(metric: str, missing: list[dict], fn, *a, **kw):
+    """Run a metric; on failure record it in ``missing`` and return ``None``.
+
+    A metric that cannot be computed is a criterion vanishing from the
+    comparison, which is worse than a difference — so it is never swallowed.
+    ``tables.comparison_table`` turns every entry of ``missing`` into a
+    ``MISSING`` row, and ``run.py`` exits non-zero while any remain.
+    """
     try:
         return fn(*a, **kw)
     except (ValueError, KeyError, AttributeError, TypeError) as exc:
-        print(f"[plots] skipping {getattr(fn, '__name__', fn)}: {exc}")
+        reason = f"{type(exc).__name__}: {exc}"
+        print(f"[plots] MISSING {metric}: {reason}")
+        missing.append({"metric": metric, "reason": reason})
         return None
 
 
-def collect_metrics(art: Artifacts) -> dict[str, object]:
+def collect_metrics(art: Artifacts, missing: list[dict] | None = None) -> dict[str, object]:
     """Every metric frame the comparison table and the figures need.
 
-    Metrics whose artifacts are missing are simply absent from the result, so a
-    pre-solve run produces the input-distribution half of the table and a full
-    run produces all of it.
+    A metric whose *artifacts* were never built is simply absent (a pre-solve run
+    legitimately has no dispatch). A metric whose artifacts exist but which
+    **raises** is appended to ``missing`` and surfaces as a ``MISSING`` row in
+    the comparison table — that is the difference between "not run yet" and
+    "the criterion broke".
     """
     out: dict[str, object] = {}
+    miss = missing if missing is not None else []
     pre = (art.n_master, art.n_develop)
     solved = (art.solved_master, art.solved_develop)
     if all(x is not None for x in pre):
-        out["capacity_existing_by_carrier"] = _safe(metrics.capacity_by_carrier, *pre, attr="p_nom")
-        out["p_nom_existing_by_zone_carrier"] = _safe(metrics.capacity_by_zone_carrier, *pre, attr="p_nom")
-        out["demand_by_zone"] = _safe(metrics.demand_by_zone, *pre)
+        out["capacity_existing_by_carrier"] = _safe(
+            "capacity_existing_by_carrier", miss, metrics.capacity_by_carrier, *pre, attr="p_nom",
+        )
+        out["p_nom_existing_by_zone_carrier"] = _safe(
+            "p_nom_existing_by_zone_carrier", miss, metrics.capacity_by_zone_carrier, *pre, attr="p_nom",
+        )
+        out["demand_by_zone"] = _safe("demand_by_zone", miss, metrics.demand_by_zone, *pre)
     if all(x is not None for x in solved):
-        out["objective"] = _safe(metrics.objective_row, *solved)
-        out["capacity_opt_by_carrier"] = _safe(metrics.capacity_by_carrier, *solved, attr="p_nom_opt")
-        out["dispatch_by_carrier"] = _safe(metrics.dispatch_by_carrier, *solved)
-        out["capacity_factor_by_carrier"] = _safe(metrics.capacity_factor_by_carrier, *solved)
+        out["objective"] = _safe("objective", miss, metrics.objective_row, *solved)
+        out["capacity_opt_by_carrier"] = _safe(
+            "capacity_opt_by_carrier", miss, metrics.capacity_by_carrier, *solved, attr="p_nom_opt",
+        )
+        out["dispatch_by_carrier"] = _safe("dispatch_by_carrier", miss, metrics.dispatch_by_carrier, *solved)
+        out["capacity_factor_by_carrier"] = _safe(
+            "capacity_factor_by_carrier", miss, metrics.capacity_factor_by_carrier, *solved,
+        )
     for pair in art.profile_pairs:
         tech = pair.stage.replace("profile_", "")
         dp, mp = art.develop_root / pair.develop, art.master_root / pair.master
         if not (dp.exists() and mp.exists()):
             continue
         with xr.open_dataset(dp) as dsd, xr.open_dataset(mp) as dsm:
-            out[f"p_max_pu_quantiles_{tech}"] = _safe(metrics.p_max_pu_quantiles, dsm, dsd)
+            out[f"p_max_pu_quantiles_{tech}"] = _safe(
+                f"p_max_pu_quantiles_{tech}", miss, metrics.p_max_pu_quantiles, dsm, dsd,
+            )
             out[f"p_nom_max_by_zone_{tech}"] = _safe(
-                metrics.p_nom_max_by_zone, dsm, dsd, art.zone_master, art.zone_develop,
+                f"p_nom_max_by_zone_{tech}", miss, metrics.p_nom_max_by_zone,
+                dsm, dsd, art.zone_master, art.zone_develop,
             )
             out[f"mean_cf_by_zone_{tech}"] = _safe(
-                metrics.mean_cf_by_zone, dsm, dsd, art.zone_master, art.zone_develop,
+                f"mean_cf_by_zone_{tech}", miss, metrics.mean_cf_by_zone,
+                dsm, dsd, art.zone_master, art.zone_develop,
             )
     return {k: v for k, v in out.items() if v is not None}
 
@@ -538,21 +561,28 @@ def export_all(
     artifacts: Artifacts | None = None,
     metric_frames: dict[str, object] | None = None,
     findings: list[dict] | None = None,
+    missing: list[dict] | None = None,
     zone_carriers: int = 6,
 ) -> Path:
     """Render every required figure under ``<run_dir>/figures/``.
 
     ``ctx`` is T4's ``RunContext``; only ``prong`` is read from it, and only
     when ``artifacts`` is not supplied, so this works before T4 lands.
-    Returns the figures directory.
+
+    Metrics that failed to compute are written to
+    ``<run_dir>/missing_metrics.json`` so the failure survives the run even if
+    nobody reads stdout. Returns the figures directory.
     """
     run_dir = Path(run_dir)
+    missing = [] if missing is None else missing
     if artifacts is None:
         prong = int(getattr(ctx, "prong", 2))
         develop_root = Path(getattr(ctx, "develop_root", REPO / "workflow"))
         master_root = Path(getattr(ctx, "master_root", REPO / ".worktrees" / "master-benchmark" / "workflow"))
         artifacts = load_artifacts(prong, develop_root, master_root)
-    m = collect_metrics(artifacts) if metric_frames is None else metric_frames
+    m = collect_metrics(artifacts, missing) if metric_frames is None else metric_frames
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "missing_metrics.json").write_text(json.dumps(missing, indent=1))
 
     objective_figure(m.get("objective"), "objective", run_dir)
     paired_bar(m.get("capacity_existing_by_carrier"), "existing capacity", "MW", "capacity_existing_by_carrier", run_dir)

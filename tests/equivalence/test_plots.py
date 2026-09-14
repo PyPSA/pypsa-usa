@@ -6,6 +6,9 @@ Figures are rendered to an Agg backend under ``tmp_path``; nothing here reads
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -284,3 +287,56 @@ def test_timeseries_pair_short_series_keeps_native_resolution(tmp_path):
     png, csv = plots.timeseries_pair(s, s * 1.05, "available power", "MW", "short_series", tmp_path)
     assert png.exists()
     assert len(pd.read_csv(csv, index_col=0)) == 24
+
+
+# ---------------------------------------------------------------------------
+# Verifier defect 5: a metric that raises is recorded, never silently skipped.
+# ---------------------------------------------------------------------------
+
+
+def test_missing_reeds_zone_is_recorded_not_skipped():
+    """capacity_by_zone_carrier raising must not delete the criterion.
+
+    Before this, ``_safe`` swallowed the ValueError, the geographic-assignment
+    criterion vanished from comparison.csv and the run still exited 0.
+    """
+    from tests.equivalence import tables
+
+    master, develop = make_network(), make_network()
+    for n in (master, develop):
+        n.buses.drop(columns=["reeds_zone"], inplace=True)
+    art = plots.Artifacts(
+        prong=2, develop_root=Path("/nonexistent/dev"), master_root=Path("/nonexistent/mas"),
+        n_master=master, n_develop=develop,
+    )
+    missing = []
+    frames = plots.collect_metrics(art, missing)
+    names = {e["metric"] for e in missing}
+    assert "p_nom_existing_by_zone_carrier" in names
+    assert "demand_by_zone" in names
+    assert "p_nom_existing_by_zone_carrier" not in frames
+    assert any("reeds_zone" in e["reason"] for e in missing)
+
+    table = tables.comparison_table(frames, {}, None, missing)
+    verdicts = dict(zip(table["metric"], table["verdict"]))
+    assert verdicts["p_nom_existing_by_zone_carrier"] == "MISSING"
+    assert tables.n_failing(table) >= 1
+
+
+def test_collect_metrics_records_nothing_when_all_is_well():
+    art = plots.Artifacts(
+        prong=2, develop_root=Path("/nonexistent/dev"), master_root=Path("/nonexistent/mas"),
+        n_master=make_network(), n_develop=make_network(),
+    )
+    missing = []
+    frames = plots.collect_metrics(art, missing)
+    assert missing == []
+    assert "p_nom_existing_by_zone_carrier" in frames
+
+
+def test_export_all_writes_missing_metrics_json(tmp_path):
+    art = plots.Artifacts(prong=2, develop_root=tmp_path / "d", master_root=tmp_path / "m")
+    missing = [{"metric": "demand_by_zone", "reason": "ValueError: boom"}]
+    plots.export_all(tmp_path, artifacts=art, metric_frames={}, findings=[], missing=missing)
+    written = json.loads((tmp_path / "missing_metrics.json").read_text())
+    assert written == missing

@@ -44,16 +44,23 @@ def run_dir_for(prong: int) -> Path:
 
 
 def emit_results(prong: int, run_dir: Path, findings: list[dict]) -> dict[str, int]:
-    """Metrics -> comparison table -> figures. Returns the verdict counts."""
+    """Metrics -> comparison table -> figures. Returns the verdict counts.
+
+    A metric that raises lands in ``missing`` and becomes a ``MISSING`` row, so
+    a criterion cannot drop out of the comparison and still exit 0.
+    """
     art = plots.load_artifacts(prong, REPO / "workflow", BASELINE_WORKTREE / "workflow")
-    metric_frames = plots.collect_metrics(art)
+    missing: list[dict] = []
+    metric_frames = plots.collect_metrics(art, missing)
     hotfixes = tables.load_hotfixes(HOTFIXES_PATH)
     from tests.equivalence.compare import load_waivers
 
-    comparison = tables.comparison_table(metric_frames, hotfixes, load_waivers())
+    comparison = tables.comparison_table(metric_frames, hotfixes, load_waivers(), missing)
     written = tables.write_tables({**metric_frames, "comparison": comparison}, run_dir)
     print(f"[equivalence] wrote {len(written)} table(s) under {run_dir / 'tables'}")
-    figdir = plots.export_all(run_dir, artifacts=art, metric_frames=metric_frames, findings=findings)
+    figdir = plots.export_all(
+        run_dir, artifacts=art, metric_frames=metric_frames, findings=findings, missing=missing,
+    )
     print(f"[equivalence] figures: {figdir}")
     return tables.verdict_counts(comparison)
 
@@ -102,7 +109,7 @@ def main() -> int:
         BASELINE_WORKTREE / "workflow",
     )
     run_dir = run_dir_for(args.prong)
-    counts = {"equivalent": 0, "explained": 0, "UNEXPLAINED": 0}
+    counts = dict.fromkeys(tables.VERDICT_ORDER, 0)
     if args.tables:
         counts = emit_results(args.prong, run_dir, result["findings"])
     print(
@@ -112,10 +119,13 @@ def main() -> int:
     )
     print(
         f"[equivalence] verdicts: {counts['equivalent']} equivalent, "
-        f"{counts['explained']} explained, {counts['UNEXPLAINED']} UNEXPLAINED",
+        f"{counts['explained']} explained, {counts['one-sided']} one-sided, "
+        f"{counts['undefined']} undefined, {counts['UNEXPLAINED']} UNEXPLAINED, "
+        f"{counts['MISSING']} MISSING",
     )
     print(f"[equivalence] comparison: {run_dir / 'tables' / 'comparison.md'}")
-    return 0 if (result["pass"] and counts["UNEXPLAINED"] == 0) else 1
+    failing = sum(counts.get(v, 0) for v in tables.FAILING_VERDICTS)
+    return 0 if (result["pass"] and failing == 0) else 1
 
 
 if __name__ == "__main__":

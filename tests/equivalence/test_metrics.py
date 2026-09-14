@@ -240,3 +240,58 @@ def test_available_power_shape():
     assert s.iloc[0] == pytest.approx(
         float((ds["profile"].isel(time=0) * ds["p_nom_max"]).sum()),
     )
+
+
+# ---------------------------------------------------------------------------
+# Verifier defect 4: additive metrics fill with 0.0; ratio metrics keep NaN.
+# ---------------------------------------------------------------------------
+
+
+def test_frame_fill_none_keeps_nan_on_one_side():
+    out = metrics.frame(pd.Series({"a": np.nan}), pd.Series({"a": 0.4}), fill=None)
+    assert np.isnan(out.loc["a", "master"])
+    assert out.loc["a", "develop"] == pytest.approx(0.4)
+    assert np.isnan(out.loc["a", "delta"])
+    assert np.isnan(out.loc["a", "delta_pct"])
+
+
+def test_frame_fill_none_keeps_a_one_sided_key_nan():
+    out = metrics.frame(pd.Series({"a": 1.0}), pd.Series({"b": 2.0}), fill=None)
+    assert np.isnan(out.loc["a", "develop"])
+    assert np.isnan(out.loc["b", "master"])
+
+
+def test_capacity_factor_keeps_nan_for_a_carrier_with_no_capacity():
+    """A carrier with no capacity has an undefined CF, not a CF of zero."""
+    master = make_network()
+    develop = make_network()
+    develop.generators.loc["b2 CCGT", ["p_nom", "p_nom_opt"]] = 0.0
+    out = metrics.capacity_factor_by_carrier(master, develop)
+    assert np.isnan(out.loc["CCGT", "develop"])
+    assert out.loc["CCGT", "develop"] != 0.0
+
+
+def test_capacity_stays_zero_filled():
+    """Additive metrics must keep the 0-fill: absent capacity really is 0 MW."""
+    master = make_network()
+    develop = make_network()
+    develop.generators.drop(index="b2 CCGT", inplace=True)
+    out = metrics.capacity_by_carrier(master, develop, attr="p_nom")
+    assert out.loc["CCGT", "develop"] == 0.0
+    assert out.loc["CCGT", "delta_pct"] == pytest.approx(-100.0)
+
+
+def test_p_max_pu_quantiles_keep_nan_on_an_empty_side():
+    ds = make_profile(n_bus=2, n_time=8, seed=40)
+    empty = ds.isel(bus=slice(0, 0))
+    out = metrics.p_max_pu_quantiles(ds, empty)
+    assert np.isnan(out.loc["mean", "develop"])
+    assert not np.isnan(out.loc["mean", "master"])
+
+
+def test_mean_cf_by_zone_keeps_nan_for_a_zero_potential_zone():
+    ds = make_profile(n_bus=2, n_time=8, seed=41)
+    ds["p_nom_max"][:] = 0.0
+    zone = pd.Series({"b0": "p1", "b1": "p1"})
+    out = metrics.mean_cf_by_zone(ds, ds, zone, zone)
+    assert np.isnan(out.loc["p1", "master"])
