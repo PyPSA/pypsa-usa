@@ -184,7 +184,8 @@ def _drop_leap_day(sns):
     GODEEEP CF time axes never carry a Feb 29 label: ``fix_godeeep_time``
     shifts leap-year timestamps from the leap day onward by +1 day. A
     leap-year selection window that requests Feb 29 therefore KeyErrors in
-    ``.sel(time=...)``; dropping it yields the standard 8760-hour year.
+    ``.sel(time=...)``; dropping it yields the standard non-leap-year hour count
+    (HOURS_PER_YEAR).
     No-op for non-leap years.
     """
     return sns[~((sns.month == 2) & (sns.day == 29))]
