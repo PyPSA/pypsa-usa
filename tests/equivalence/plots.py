@@ -491,7 +491,12 @@ def _safe(metric: str, missing: list[dict], fn, *a, **kw):
     """
     try:
         return fn(*a, **kw)
-    except (ValueError, KeyError, AttributeError, TypeError) as exc:
+    except Exception as exc:
+        # Deliberately broad. The four-exception list this replaced let an
+        # IndexError or an OSError from one metric abort the whole export,
+        # losing every other metric AND the MISSING row that would have
+        # explained it. KeyboardInterrupt and SystemExit derive from
+        # BaseException, not Exception, so they still propagate.
         reason = f"{type(exc).__name__}: {exc}"
         print(f"[plots] MISSING {metric}: {reason}")
         missing.append({"metric": metric, "reason": reason})

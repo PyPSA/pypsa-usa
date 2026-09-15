@@ -45,6 +45,9 @@ RTOL = TOLERANCES["p_max_pu"].rtol
 OBJECTIVE_RTOL = TOLERANCES["objective"].rtol
 CAPACITY_RTOL = TOLERANCES["capacity"].rtol
 CAPACITY_ATOL = TOLERANCES["capacity"].atol
+# National available power (profile x p_nom_max, MW) summed over buses. The
+# p_max_pu family's own declared floor, not a literal invented at the call site.
+PROFILE_ATOL = TOLERANCES["p_max_pu"].atol
 # Float-equality epsilon for cell comparison. Not a physical floor — the
 # per-family physical floors are ``tables.TOLERANCES[...].atol``.
 ATOL = 1e-8
@@ -462,7 +465,7 @@ def compare_profiles(pair: ArtifactPair, pc: Path, pa: Path, findings: list[dict
                 # same weather differently (e.g. horizon-relabeled years).
                 n = min(len(sc), len(sa))
                 vc, va = sc.to_numpy()[:n], sa.to_numpy()[:n]
-                bad = ~np.isclose(vc, va, rtol=RTOL, atol=1e-6)
+                bad = ~np.isclose(vc, va, rtol=RTOL, atol=PROFILE_ATOL)
                 if len(sc) != len(sa) or bad.any():
                     denom = np.maximum(np.abs(va), 1e-9)
                     rel = np.abs(vc - va) / denom
