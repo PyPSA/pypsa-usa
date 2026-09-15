@@ -278,3 +278,13 @@ connect.sh
 workflow/data
 workflow/cutouts
 
+
+# Slurm's own stdout/stderr capture. The sbatch scripts deliberately use a
+# RELATIVE -o/-e path (the submit directory always exists and is writable,
+# unlike a per-user absolute one), so these land in the repository root.
+slurm-ctrl-*.out
+slurm-ctrl-*.err
+slurm-report-*.out
+slurm-report-*.err
+slurm-eq-*.out
+slurm-eq-*.err

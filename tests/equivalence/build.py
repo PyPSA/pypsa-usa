@@ -345,12 +345,42 @@ def side_env_versions(wt: Path) -> dict[str, str]:
         return blank
 
 
+EXECUTORS = ("local", "slurm")
+
+
+def executor_profile() -> Path | None:
+    """The snakemake profile EQ_EXECUTOR asks for, or None for in-job runs.
+
+    ``local`` (the default) keeps both sides in ONE job, which is what an
+    equivalence comparison wants: identical environment for master and develop
+    and no scheduler nondeterminism inside the thing being measured.
+
+    ``slurm`` submits each rule as its own Slurm job through the Sherlock
+    profile, so solve_network gets its own big-memory node while the build
+    rules get small ones, and every rule lands in ``sacct`` with its own
+    MaxRSS. The two sides still build SEQUENTIALLY from the one controller.
+
+    The profile path is absolute and always the DEVELOP checkout's, so both
+    sides use the same scheduler settings even though the master-benchmark
+    worktree predates the profile.
+    """
+    ex = os.environ.get("EQ_EXECUTOR", "local")
+    if ex not in EXECUTORS:
+        raise ValueError(f"EQ_EXECUTOR={ex!r}; expected one of {EXECUTORS}")
+    if ex == "local":
+        return None
+    profile = REPO / "workflow" / "snakemake_profiles" / "sherlock"
+    if not (profile / "config.yaml").is_file():
+        raise FileNotFoundError(f"EQ_EXECUTOR=slurm but no profile at {profile}")
+    return profile
+
+
 def snakemake_cmd(
     target: str,
     jobs: int = 4,
     configfile: str = CONFIGFILE,
 ) -> list[str]:
-    return [
+    cmd = [
         "uv",
         "run",
         "snakemake",
@@ -370,6 +400,12 @@ def snakemake_cmd(
         # picks up where the dead one stopped.
         "--rerun-incomplete",
     ]
+    profile = executor_profile()
+    if profile is not None:
+        # Explicit flags above still win: snakemake loads a profile as argparse
+        # DEFAULTS, so -j / --scheduler / --rerun-triggers are unaffected.
+        cmd += ["--profile", str(profile)]
+    return cmd
 
 
 def build_side(side: str, target: str, jobs: int = 4, timeout: int = 10800) -> dict:

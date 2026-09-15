@@ -1,0 +1,162 @@
+# =============================================================================
+# PyPSA-USA — Sherlock Slurm profile (per-rule job submission)
+# =============================================================================
+# Snakemake 7.32.4, `--cluster` / `--cluster-status` / `--cluster-cancel`.
+# NOT the Snakemake 8 executor-plugin interface: this repo pins 7.32.4
+# (`uv run snakemake --version`), where `executor: slurm` and `local-rules:`
+# do not exist.
+#
+# Used by the controller job, never by hand on a login node:
+#
+#     sbatch workflow/run_slurm.sbatch <configfile> [targets...]
+#
+# and, from inside a compute node that already has the venv:
+#
+#     uv run snakemake --profile workflow/snakemake_profiles/sherlock \
+#         --configfile repo_data/config/config.tutorial.yaml -n
+#
+# -----------------------------------------------------------------------------
+# WHERE SITE SETTINGS LIVE — this file, not a --cluster-config YAML.
+# -----------------------------------------------------------------------------
+# CH2 kept partition/account/email in `config/config.cluster.yaml` and read
+# them back as `{cluster.account}` under `--cluster-config`. Three reasons not
+# to copy that:
+#
+#   1. `--cluster-config` is deprecated in Snakemake 7 and REMOVED in 8, so a
+#      site file written in that dialect has to be rewritten at the upgrade.
+#   2. A blank YAML value renders as `-A ''` / `-p `, which is a hard sbatch
+#      submission error rather than "use the default". The tracked template in
+#      this repo (repo_data/config/config.slurm.yaml `__default__:`) ships with
+#      exactly those blanks — see docs/audits/slurm-execution-audit.md, S1.
+#   3. `--profile` already reads this file, so one file holds both the
+#      scheduler flags and the site values.
+#
+# Per-user overrides therefore come from environment variables with tracked
+# defaults, expanded by the shell: Snakemake runs the submit command through
+# `subprocess.check_output(..., shell=True, env=os.environ)`
+# (snakemake/executors/__init__.py:1258-1265), so `${VAR:-default}` works and
+# an UNSET variable means "the default below", never an empty flag.
+#
+#   PYPSA_SLURM_PARTITION   default serc
+#   PYPSA_SLURM_LOGDIR      default logs/slurm (relative to workflow/)
+#   PYPSA_JOB_TAG           default run; set by run_slurm.sbatch to its own job
+#                           id so a controller can scancel ONLY its own children
+#   PYPSA_SBATCH_EXTRA      free-form extra sbatch flags, e.g.
+#                           "--account iazevedo --mail-type FAIL --mail-user x@y"
+#
+# On Sherlock `-A` is not needed: `sacctmgr show assoc user=$USER` returns the
+# single association `iazevedo`, which is therefore the default account, and
+# AccountingStorageEnforce=associations,limits,qos,safe accepts it implicitly.
+# Verified 2026-09-14.
+#
+# Braces are DOUBLED because Snakemake runs this string through `str.format()`
+# to fill `{rule}`, `{threads}` and `{resources.*}`; `${{VAR:-x}}` reaches the
+# shell as `${VAR:-x}`.
+# =============================================================================
+
+cluster: >-
+  sbatch
+  --parsable
+  --export=ALL
+  --partition ${{PYPSA_SLURM_PARTITION:-serc}}
+  --job-name smk-${{PYPSA_JOB_TAG:-run}}-{rule}
+  --cpus-per-task {threads}
+  --mem {resources.mem_mb}
+  --time {resources.walltime}
+  --output ${{PYPSA_SLURM_LOGDIR:-logs/slurm}}/{rule}/{rule}-%j.out
+  --error ${{PYPSA_SLURM_LOGDIR:-logs/slurm}}/{rule}/{rule}-%j.err
+  ${{PYPSA_SBATCH_EXTRA:-}}
+
+# Without this hook a Slurm-killed job (OUT_OF_MEMORY, TIMEOUT, NODE_FAIL)
+# never writes its exit-code file and the controller waits forever. That is the
+# single thing CH2 lacked and the reason `restart-times` below can work at all:
+# Snakemake has to LEARN the job died before it can retry it with attempt=2.
+# The path is relative to the working directory, i.e. workflow/.
+cluster-status: snakemake_profiles/sherlock/slurm-status.sh
+cluster-cancel: scancel
+cluster-cancel-nargs: 500
+
+# 60 concurrent Slurm jobs. The fan-out rules (build_renewable_profiles over
+# carriers x horizons, solve_network over the ll x opts cross product) are what
+# this is for; CH2 ran at --jobs 20 per controller with 6 controllers live.
+jobs: 60
+# Cores the CONTROLLER itself may use for rules Snakemake runs locally
+# (localrules: dag, clean). Must not exceed the controller job's --cpus-per-task.
+local-cores: 2
+
+# Lustre metadata can lag behind a job's exit by a minute at fan-out; 60 s
+# (CH2's value) produced spurious MissingOutputException.
+latency-wait: 120
+
+# Retry a failed job twice. Every `mem_mb=lambda ..., attempt: ...` rule
+# (17 of them, see below) then asks for 2x and 3x the memory on the retries,
+# so a first-attempt OOM self-corrects. Useless without cluster-status above.
+restart-times: 2
+
+# A predecessor controller killed mid-rule leaves outputs marked incomplete;
+# re-run them rather than refusing to start.
+rerun-incomplete: true
+
+# One failed branch must not idle the other 59 slots.
+keep-going: true
+printshellcmds: true
+
+# mtime only. Param/input/code hashes cascade a full rebuild whenever a config
+# comment changes, and two controllers sharing one data/ cache then race on the
+# same retrieve targets (CH2's `--rerun-triggers mtime`, same reason).
+rerun-triggers: [mtime]
+
+# The ILP scheduler costs minutes of controller CPU on a DAG this wide and buys
+# nothing when the jobs go to separate nodes anyway.
+scheduler: greedy
+
+# Rate limits: sbatch and sacct are shared cluster services.
+max-jobs-per-second: 5
+max-status-checks-per-second: 1
+
+# -----------------------------------------------------------------------------
+# Floors for rules that declare nothing.
+# -----------------------------------------------------------------------------
+# 5 rules declare no mem_mb (plot_natural_gas, retrieve_sector_databundle,
+# retrieve_res_eulp, retrieve_com_eulp, docs_figures) and ~30 declare no
+# walltime. Without a default, `--time {resources.walltime}` fails to format
+# and NOTHING is submitted (audit S1).
+default-resources:
+  - mem_mb=8000
+  - walltime="02:00:00"
+
+# -----------------------------------------------------------------------------
+# Measured overrides. Each REPLACES the rule's own mem_mb expression, including
+# its `attempt` multiplier, so `restart-times` cannot rescue these three —
+# retune them from measurements instead:
+#     uv run python workflow/report_benchmarks.py workflow/benchmarks
+#     bash workflow/collect_solve_statistics.sh
+# Sized for the USA footprint (the benchmark campaign). Comment them out for
+# california/tutorial-scale runs, where they only cost queue priority.
+# Sources: docs/audits/slurm-execution-audit.md 5.2 and 5.3, USA s300 c134a,
+# 2026-09-01.
+# -----------------------------------------------------------------------------
+set-resources:
+  # measured 27,827 MB; the rule asks for 1,063 MB (26x UNDER -> certain OOM)
+  - aggregate_to_substations:mem_mb=44000
+  # measured 27,673 MB; the rule asks for 949 MB (29x UNDER -> certain OOM)
+  - cluster_resources:mem_mb=44000
+  # measured 7,372 MB at opts=3h; the rule's input.size formula asks for
+  # O(300,000 MB), which no partition will schedule. 64 GB is ~2.5x the
+  # projected full-year-hourly footprint.
+  - solve_network:mem_mb=64000
+
+# -----------------------------------------------------------------------------
+# Deliberately NOT set here
+# -----------------------------------------------------------------------------
+# set-threads: solve_network reads `threads: solver_threads`, which tracks
+#   solving.solver_options.<set>.threads. Pinning it here would desync the
+#   Gurobi thread count from --cpus-per-task. Same for build_renewable_profiles
+#   (atlite.nprocesses) and build_cutout.
+#
+# local-rules: does not exist in Snakemake 7.32.4 (8.x only), so the 15
+#   retrieve_* rules are each submitted as their own Slurm job even though most
+#   finish in seconds. Known cost, carried over from CH2. The 7.x lever is the
+#   `localrules:` directive in workflow/Snakefile, which is a repo-wide
+#   statement and not a site one; changing it is out of scope here. See
+#   docs/hpc.md, "known costs".

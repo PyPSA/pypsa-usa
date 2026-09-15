@@ -62,6 +62,14 @@ export EQ_CLUSTERS="${EQ_CLUSTERS:-134}"
 export EQ_OPTS="${EQ_OPTS:-3h}"
 export EQ_UNTIL="${EQ_UNTIL:-}"
 export EQ_BASELINE_REF="${EQ_BASELINE_REF:-master-benchmark}"
+# local (default) = snakemake runs every rule inside THIS job, which is what an
+# equivalence comparison wants: one environment for both sides, no scheduler
+# nondeterminism inside the thing being measured. slurm = each rule is
+# submitted as its own Slurm job through workflow/snakemake_profiles/sherlock,
+# from this same controller; both sides still build SEQUENTIALLY. Use it when
+# the DAG's memory is heterogeneous or is being profiled (per-rule sacct
+# MaxRSS). See docs/equivalence.md and docs/hpc.md for the decision rule.
+export EQ_EXECUTOR="${EQ_EXECUTOR:-local}"
 EQ_PRONG="${EQ_PRONG:-2}"
 EQ_JOBS="${EQ_JOBS:-8}"
 # Per-SIDE snakemake cap. Two sides build sequentially inside one job, so a
@@ -165,6 +173,21 @@ command -v uv >/dev/null 2>&1 || { echo "ERROR: uv not on PATH (ml load devel uv
 echo "[driver] git : $(git --version)"
 echo "[driver] uv  : $(uv --version)"
 
+# EQ_EXECUTOR=slurm only: the profile names every child job smk-$PYPSA_JOB_TAG-
+# <rule> and writes it to $PYPSA_SLURM_LOGDIR/<rule>/, which sbatch will NOT
+# create for us -- a missing directory kills the child at launch with no
+# diagnostic. The tag is this driver's own job id, so the cleanup trap above
+# cancels this run's children and nobody else's.
+if [ "$EQ_EXECUTOR" = slurm ]; then
+    export PYPSA_JOB_TAG="${PYPSA_JOB_TAG:-${SLURM_JOB_ID:-eq}}"
+    export PYPSA_SLURM_PARTITION="${PYPSA_SLURM_PARTITION:-serc}"
+    export PYPSA_SLURM_LOGDIR="${PYPSA_SLURM_LOGDIR:-${SCRATCH:-/tmp}/pypsa-usa/slurm-logs/$PYPSA_JOB_TAG}"
+    grep -hoE '^rule[[:space:]]+[A-Za-z0-9_]+' "$REPO"/workflow/Snakefile "$REPO"/workflow/rules/*.smk \
+        | awk '{print $2}' | sort -u \
+        | while read -r r; do mkdir -p "$PYPSA_SLURM_LOGDIR/$r"; done
+    echo "[driver] executor: slurm; child logs in $PYPSA_SLURM_LOGDIR/<rule>/"
+fi
+
 # --- 4. Shared data + cutouts ------------------------------------------------
 # 13 GB of inputs live once, on $GROUP_SCRATCH, and BOTH sides read them through
 # symlinks: workflow/{data,cutouts} in the develop checkout point at the cache,
@@ -239,7 +262,7 @@ done
 # --- 6. The run --------------------------------------------------------------
 # run.py resolves the context, gates the config, writes run_meta.json, then
 # builds develop and master SEQUENTIALLY and compares.
-echo "[driver] prong=$EQ_PRONG interconnect=$EQ_INTERCONNECT simpl=$EQ_SIMPL clusters=$EQ_CLUSTERS opts=$EQ_OPTS until=${EQ_UNTIL:-<full>} jobs=$EQ_JOBS timeout=${EQ_TIMEOUT}s/side"
+echo "[driver] prong=$EQ_PRONG interconnect=$EQ_INTERCONNECT simpl=$EQ_SIMPL clusters=$EQ_CLUSTERS opts=$EQ_OPTS until=${EQ_UNTIL:-<full>} jobs=$EQ_JOBS timeout=${EQ_TIMEOUT}s/side executor=$EQ_EXECUTOR"
 # `set -e` would abort before $? could be read, so capture it explicitly: the
 # cleanup trap and the artifact listing below must run on a failed run too.
 status=0

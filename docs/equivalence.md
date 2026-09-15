@@ -251,6 +251,7 @@ sbatch tests/equivalence/run_equivalence.sbatch
 | `EQ_ALLOW_DIRTY` | *(unset)* | `1` builds a dirty checkout and records it |
 | `EQ_SKIP_CONFIG_GATE` | *(unset)* | `1` skips the config gate and records that |
 | `EQ_STRICT_CONFIG_GATE` | *(unset)* | `1` makes presence-only config differences fatal too |
+| `EQ_EXECUTOR` | `local` | `local` = snakemake runs every rule inside this job; `slurm` = one Slurm job per rule. See below |
 
 The driver loads `gcc/12.4.0` (GCC 14 hard-errors on the datrie source build),
 `system git/2.45.1` (system git 1.8 predates `git worktree`) and `devel uv`;
@@ -261,6 +262,43 @@ off `$HOME`; exports `GRB_LICENSE_FILE` explicitly; refuses to replace a
 footprint; clears stale snakemake locks on both sides; and installs a trap that
 kills its children and `scancel`s any tagged Slurm job on **any** exit path,
 including the pre-timeout `TERM`.
+
+### `EQ_EXECUTOR`: monolithic by default, per-rule when you are profiling
+
+`EQ_EXECUTOR=local` (the default) is the **monolithic** mode: one Slurm job
+builds develop, then master, with snakemake running every rule inside it and no
+`--cluster`. That is deliberate, and it is the project's standing rule for an
+equivalence comparison — *equivalence and benchmark comparisons always use
+monolithic, even when the size rule says per-rule, unless the run is too big to
+fit one node.* Two arms compared against each other must share one environment;
+per-rule submission would spread them across nodes with different CPUs and
+different queue histories and add scheduler nondeterminism to the thing being
+measured. Both sides also share one `data/` cache, so two concurrent DAGs would
+race on the same `retrieve_*` targets.
+
+`EQ_EXECUTOR=slurm` submits each rule as its own Slurm job through
+`workflow/snakemake_profiles/sherlock`, still driven sequentially — develop
+then master — from this same controller. Use it when:
+
+* **memory is being profiled.** A monolithic run reports one peak for the whole
+  DAG; the per-rule mode puts every rule in `sacct` with its own `MaxRSS`,
+  which is the input `workflow/collect_solve_statistics.sh` merges with the
+  `benchmark:` TSVs. *Memory-profiling runs always use per-rule submission.*
+* **memory is heterogeneous.** At USA scale `solve_network` wants tens of GB
+  while most build rules want under 2.5 GB; a monolithic job has to reserve
+  the maximum for the whole run.
+* the DAG will not fit one node at all.
+
+Both sides use the **develop** checkout's profile, by absolute path, so the
+scheduler settings are identical even though the `master-benchmark` worktree
+predates it. The driver derives `PYPSA_JOB_TAG` from its own job id, names
+every child `smk-<tag>-<rule>`, creates `$PYPSA_SLURM_LOGDIR/<rule>/` for each
+rule (sbatch will not), and its existing cleanup trap `scancel`s exactly those
+children. `docs/hpc.md` has the full decision rule and the site settings.
+
+```bash
+EQ_EXECUTOR=slurm sbatch tests/equivalence/run_equivalence.sbatch
+```
 
 ### Why `EQ_OPTS` defaults to the unconstrained twin
 
