@@ -112,9 +112,10 @@ def run_id(prong: int | None = None) -> str:
     """
     existing = os.environ.get("EQ_RUN_ID")
     if existing:
-        # Write the SLUG back, not the raw value: the sbatch driver builds the
-        # run directory path from $EQ_RUN_ID itself, so if slugging changed
-        # anything the two would disagree about where the run lives.
+        # Write the SLUG back, not the raw value. run_equivalence.sbatch slugs
+        # EQ_RUN_ID through `python -m tests.equivalence.paths --slug` before it
+        # builds the run-directory path, so the two agree by construction; this
+        # keeps that true for any other caller that sets the variable by hand.
         slug = _slug(existing)
         if slug != existing:
             os.environ["EQ_RUN_ID"] = slug
@@ -279,3 +280,17 @@ def baseline_assembled_target(prong: int = 1) -> str:
     """Baseline assembled-stage target (its simplify_network output)."""
     s = "" if prong == 1 else SIMPL2
     return f"{EQ}/{INTERCONNECT}/elec_s{s}.nc"
+
+
+if __name__ == "__main__":  # pragma: no cover - a shell entry point
+    # `python -m tests.equivalence.paths --slug "<raw>"` so the sbatch driver
+    # can apply EXACTLY this slugging rule when it builds the run-directory
+    # path, instead of a sed pipeline that would drift from _slug.
+    import argparse
+
+    _ap = argparse.ArgumentParser(description="Path helpers for the equivalence harness.")
+    _ap.add_argument("--slug", metavar="TEXT", help="print the filesystem-safe form of TEXT")
+    _args = _ap.parse_args()
+    if _args.slug is None:
+        _ap.error("nothing to do; pass --slug TEXT")
+    print(_slug(_args.slug))

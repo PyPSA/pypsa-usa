@@ -85,58 +85,16 @@ if [ -z "${EQ_TIMEOUT:-}" ]; then
         EQ_TIMEOUT=$(( (remaining - 900) / 2 ))
         echo "[driver] EQ_TIMEOUT derived from the job's remaining time: ${EQ_TIMEOUT}s per side"
     else
-        EQ_TIMEOUT=34200   # half of the 20 h --time above, minus the tail
+        # --time is 20:00:00 = 72000 s; same arithmetic as the derived branch.
+        EQ_TIMEOUT=$(( (72000 - 900) / 2 ))
         echo "[driver] EQ_TIMEOUT could not be derived; using ${EQ_TIMEOUT}s per side"
     fi
 fi
 EQ_EXTRA_ARGS="${EQ_EXTRA_ARGS:-}"
 
-# One run directory per run (plan D5). Minted here and exported so bash and
-# python resolve the SAME directory; tests/equivalence/paths.run_id() honours
-# EQ_RUN_ID over its own default.
-export EQ_RUN_ID="${EQ_RUN_ID:-${EQ_INTERCONNECT}-p${EQ_PRONG}-${EQ_OPTS}-$(date +%Y%m%d-%H%M)}"
-RUN_DIR="$REPO/workflow/results/equivalence/$EQ_RUN_ID"
-LOG_DIR="$RUN_DIR/logs"
-mkdir -p "$LOG_DIR"
-
-# From here on everything this driver prints is also kept with the run, so the
-# run directory is self-contained even after the $SCRATCH slurm logs age out.
-exec > >(tee -a "$LOG_DIR/driver-${SLURM_JOB_ID:-local}.log") 2>&1
-TEE_PID=$!
-echo "[driver] repo    : $REPO"
-echo "[driver] run id  : $EQ_RUN_ID"
-echo "[driver] run dir : $RUN_DIR"
-echo "[driver] job     : ${SLURM_JOB_ID:-<no slurm>} on $(hostname)"
-
-# --- 2. Never leave orphans --------------------------------------------------
-# CH2's controllers were killed mid-solve and left half-written networks plus
-# queued children behind; one of its sbatch scripts exists only to repair that
-# damage. Kill our own process tree, and scancel any Slurm job this run tagged,
-# on any exit path including the pre-timeout TERM.
-cleanup() {
-    local rc=$?
-    trap - EXIT TERM INT
-    echo "[driver] cleanup (exit $rc): stopping the run's process group"
-    # The work runs under `setsid`, in its OWN process group, for exactly this
-    # moment: snakemake forks rule processes that are not our direct children,
-    # so signalling only $$'s children leaves the solver running until Slurm
-    # kills the node. Signal the whole group by its negative pgid. The tee that
-    # is writing this line is NOT in that group, so the log survives the kill.
-    if [ -n "${WORK_PGID:-}" ]; then
-        kill -TERM -- "-$WORK_PGID" 2>/dev/null || true
-        sleep 10
-        kill -KILL -- "-$WORK_PGID" 2>/dev/null || true
-    fi
-    if command -v squeue >/dev/null 2>&1 && [ -n "${SLURM_JOB_ID:-}" ]; then
-        squeue --me -h -o '%i %j' \
-            | awk -v tag="$EQ_RUN_ID" -v self="$SLURM_JOB_ID" '$1 != self && index($2, tag) {print $1}' \
-            | xargs -r scancel || true
-    fi
-    exit "$rc"
-}
-trap cleanup EXIT TERM INT
-
-# --- 3. Environment ----------------------------------------------------------
+# --- 2. Environment ----------------------------------------------------------
+# Before anything that needs uv or git: the run id below is slugged by calling
+# into the harness itself, so the interpreter has to exist first.
 # Caches off $HOME (15 GB, NFS-backed): uv, pip, matplotlib and everything else
 # that defaults there.
 export UV_CACHE_DIR="${UV_CACHE_DIR:-$GROUP_SCRATCH/kamran/cache/uv}"
@@ -165,7 +123,57 @@ command -v uv >/dev/null 2>&1 || { echo "ERROR: uv not on PATH (ml load devel uv
 echo "[driver] git : $(git --version)"
 echo "[driver] uv  : $(uv --version)"
 
-# --- 4. Shared data + cutouts ------------------------------------------------
+# --- 3. The run directory ----------------------------------------------------
+# One run directory per run (plan D5). Slugged through the SAME rule python
+# uses, by calling it, so the directory bash creates and the directory python
+# writes into cannot diverge. A raw EQ_RUN_ID of "usa/p2 cap" would otherwise
+# have bash mkdir a nested path while python wrote to "usa-p2-cap".
+cd "$REPO"
+_raw_run_id="${EQ_RUN_ID:-${EQ_INTERCONNECT}-p${EQ_PRONG}-${EQ_OPTS}-$(date +%Y%m%d-%H%M)}"
+EQ_RUN_ID="$(uv run python -m tests.equivalence.paths --slug "$_raw_run_id")"
+export EQ_RUN_ID
+RUN_DIR="$REPO/workflow/results/equivalence/$EQ_RUN_ID"
+LOG_DIR="$RUN_DIR/logs"
+mkdir -p "$LOG_DIR"
+
+# From here on everything this driver prints is also kept with the run, so the
+# run directory is self-contained even after the Slurm logs age out.
+exec > >(tee -a "$LOG_DIR/driver-${SLURM_JOB_ID:-local}.log") 2>&1
+TEE_PID=$!
+echo "[driver] repo    : $REPO"
+echo "[driver] run id  : $EQ_RUN_ID"
+echo "[driver] run dir : $RUN_DIR"
+echo "[driver] job     : ${SLURM_JOB_ID:-<no slurm>} on $(hostname)"
+
+# --- 4. Never leave orphans --------------------------------------------------
+# CH2's controllers were killed mid-solve and left half-written networks plus
+# queued children behind; one of its sbatch scripts exists only to repair that
+# damage. Kill our own process tree, and scancel any Slurm job this run tagged,
+# on any exit path including the pre-timeout TERM.
+cleanup() {
+    local rc=$?
+    trap - EXIT TERM INT
+    echo "[driver] cleanup (exit $rc): stopping the run's process group"
+    # The work runs under `setsid`, in its OWN process group, for exactly this
+    # moment: snakemake forks rule processes that are not our direct children,
+    # so signalling only $$'s children leaves the solver running until Slurm
+    # kills the node. Signal the whole group by its negative pgid. The tee that
+    # is writing this line is NOT in that group, so the log survives the kill.
+    if [ -n "${WORK_PGID:-}" ]; then
+        kill -TERM -- "-$WORK_PGID" 2>/dev/null || true
+        sleep 10
+        kill -KILL -- "-$WORK_PGID" 2>/dev/null || true
+    fi
+    if command -v squeue >/dev/null 2>&1 && [ -n "${SLURM_JOB_ID:-}" ]; then
+        squeue --me -h -o '%i %j' \
+            | awk -v tag="$EQ_RUN_ID" -v self="$SLURM_JOB_ID" '$1 != self && index($2, tag) {print $1}' \
+            | xargs -r scancel || true
+    fi
+    exit "$rc"
+}
+trap cleanup EXIT TERM INT
+
+# --- 5. Shared data + cutouts ------------------------------------------------
 # 13 GB of inputs live once, on $GROUP_SCRATCH, and BOTH sides read them through
 # symlinks: workflow/{data,cutouts} in the develop checkout point at the cache,
 # and the baseline worktree's copies point at the develop checkout's
@@ -226,9 +234,8 @@ for name in data cutouts; do
     ln -sfn "$CACHE/$name" "$tgt"
 done
 
-# --- 5. Clear stale snakemake locks ------------------------------------------
+# --- 6. Clear stale snakemake locks ------------------------------------------
 # Left behind by a killed predecessor job; best-effort on both sides.
-cd "$REPO"
 for wf in "$REPO/workflow" "$REPO/.worktrees/master-benchmark/workflow"; do
     if [ -d "$wf/.snakemake/locks" ] && [ -n "$(ls -A "$wf/.snakemake/locks" 2>/dev/null)" ]; then
         echo "[driver] clearing stale locks in $wf"
@@ -236,7 +243,7 @@ for wf in "$REPO/workflow" "$REPO/.worktrees/master-benchmark/workflow"; do
     fi
 done
 
-# --- 6. The run --------------------------------------------------------------
+# --- 7. The run --------------------------------------------------------------
 # run.py resolves the context, gates the config, writes run_meta.json, then
 # builds develop and master SEQUENTIALLY and compares.
 echo "[driver] prong=$EQ_PRONG interconnect=$EQ_INTERCONNECT simpl=$EQ_SIMPL clusters=$EQ_CLUSTERS opts=$EQ_OPTS until=${EQ_UNTIL:-<full>} jobs=$EQ_JOBS timeout=${EQ_TIMEOUT}s/side"
