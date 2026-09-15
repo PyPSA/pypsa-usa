@@ -99,9 +99,7 @@ def test_every_row_has_the_required_fields(registry):
 def test_ported_rows_name_their_baseline_commit(registry):
     """A ported row says WHICH master-benchmark commit carries it."""
     bad = [
-        hid
-        for hid, row in sorted(registry.items())
-        if row.get("ported") and not str(row.get("ported_sha", "")).strip()
+        hid for hid, row in sorted(registry.items()) if row.get("ported") and not str(row.get("ported_sha", "")).strip()
     ]
     assert not bad, f"ported rows with no ported_sha: {bad}"
 
@@ -190,3 +188,152 @@ def test_live_code_differences_excludes_ported_and_usa_noops(registry):
 
 def test_missing_registry_file_yields_empty(tmp_path):
     assert hf.load_hotfixes(tmp_path / "nope.yaml") == {}
+
+
+# --- the waiver file's own shape ---------------------------------------------
+
+#: Every field a waiver entry may carry. Selection: which row or cell it is
+#: about. Scope: which run it was measured on. Bounds: how far the explanation
+#: reaches. Provenance: where the sign-off is written down.
+WAIVER_SELECT_FIELDS = ("stage", "component", "column", "kind", "metric", "key", "family")
+WAIVER_SCOPE_FIELDS = ("interconnect", "prong")
+WAIVER_BOUND_FIELDS = ("expect_sign", "max_abs_pct")
+WAIVER_PROVENANCE_FIELDS = ("ledger", "hotfix", "reason", "justification")
+WAIVER_FIELDS = frozenset(
+    WAIVER_SELECT_FIELDS + WAIVER_SCOPE_FIELDS + WAIVER_BOUND_FIELDS + WAIVER_PROVENANCE_FIELDS,
+)
+
+
+def test_no_waiver_carries_an_unknown_field(waivers):
+    """A misspelled field is silently ignored by the matcher, so it is a failure here."""
+    bad = sorted({k for w in waivers for k in w if k not in WAIVER_FIELDS})
+    assert not bad, f"unknown waiver fields (typo, or add them to WAIVER_FIELDS): {bad}"
+
+
+def test_every_waiver_selects_something(waivers):
+    bad = [w for w in waivers if not any(w.get(k) is not None for k in WAIVER_SELECT_FIELDS)]
+    assert not bad, f"waivers that name neither a cell nor a table row: {bad}"
+
+
+def test_waiver_bounds_are_well_formed(waivers):
+    """``expect_sign``/``max_abs_pct`` must be usable, and only on table waivers.
+
+    A bound on a CELL waiver would be dead configuration: ``compare.is_waived``
+    has no delta to check it against. A bound the matcher cannot parse is worse
+    than none, because it reads as a limit while enforcing nothing.
+    """
+    bad: list[str] = []
+    for w in waivers:
+        bounds = [k for k in WAIVER_BOUND_FIELDS if k in w]
+        if not bounds:
+            continue
+        label = f"{w.get('metric')}/{w.get('key')}"
+        if not any(w.get(k) is not None for k in ("metric", "key", "family")):
+            bad.append(f"{label}: {bounds} on a cell waiver, which has no delta to bound")
+        if "expect_sign" in w and w["expect_sign"] not in ("+", "-"):
+            bad.append(f"{label}: expect_sign={w['expect_sign']!r}, expected '+' or '-'")
+        if "max_abs_pct" in w:
+            try:
+                cap = float(w["max_abs_pct"])
+            except (TypeError, ValueError):
+                bad.append(f"{label}: max_abs_pct={w['max_abs_pct']!r} is not a number")
+            else:
+                if not cap > 0:
+                    bad.append(f"{label}: max_abs_pct={cap} must be > 0")
+    assert not bad, "malformed waiver bounds:\n" + "\n".join(bad)
+
+
+def test_every_table_waiver_is_bounded(waivers):
+    """A table waiver with no bounds explains any sign and any magnitude.
+
+    That is how an HF-24 waiver written for +1.1 % of extra potential would have
+    signed off a -50 % row. New table waivers state what they measured.
+    """
+    unbounded = [
+        f"{w.get('metric')}/{w.get('key')}"
+        for w in waivers
+        if any(w.get(k) is not None for k in ("metric", "key", "family"))
+        and not any(k in w for k in WAIVER_BOUND_FIELDS)
+    ]
+    assert not unbounded, f"table waivers with no expect_sign/max_abs_pct: {unbounded}"
+
+
+# --- the two waiver kinds must not be confused for each other ----------------
+
+
+def test_table_waivers_name_a_known_metric(waivers):
+    """A table waiver whose metric matches nothing is dead configuration."""
+    from tests.equivalence.tables import KNOWN_METRICS
+
+    bad = [
+        str(w.get("metric"))
+        for w in waivers
+        if w.get("metric") not in (None, "*") and str(w.get("metric")) not in KNOWN_METRICS
+    ]
+    assert not bad, f"waiver metrics that match no known metric: {sorted(set(bad))}"
+
+
+@pytest.mark.parametrize(
+    "named",
+    [
+        {"metric": "p_nom_max_by_zone_onwind", "key": "p8"},
+        # The wildcard form is the dangerous one: `metric: '*'` used to read as
+        # "names no metric", so the entry fell through to the cell branch where
+        # its four absent cell fields wildcard onto EVERY finding in the run.
+        {"metric": "*", "key": "*"},
+        {"metric": "*"},
+        {"family": "p_nom_max"},
+    ],
+)
+def test_a_table_waiver_never_silences_a_finding(named):
+    """``compare.is_waived`` must ignore any waiver that names a table row.
+
+    A table waiver carries no stage/component/column/kind, and ``is_waived``
+    treats an absent field as a wildcard — so without the guard, one
+    ``{metric: ..., prong: 2, interconnect: western}`` row would waive EVERY
+    western prong-2 finding, including the live ones it says nothing about.
+    Naming ``metric``/``key``/``family`` at all is what makes it a table waiver;
+    the VALUE, wildcard or not, does not change that.
+    """
+    from tests.equivalence import compare
+
+    table_waiver = [{"interconnect": "western", "prong": 2, "ledger": "DL-18", "hotfix": "HF-24", **named}]
+    finding = {
+        "stage": "profile_onwind",
+        "component": "system_available_mw",
+        "column": "sum_bus(profile*p_nom_max)",
+        "kind": "value",
+        "prong": 2,
+        "interconnect": "western",
+    }
+    assert compare.is_waived(finding, table_waiver) is False
+
+
+def test_the_shipped_waivers_leave_system_available_mw_live():
+    """The HF-24 waivers cover potential, never the CF-weighted available power.
+
+    ``system_available_mw`` is the metric that would catch a real capacity-factor
+    construction difference; waiving it would hollow out prong 2.
+    """
+    from tests.equivalence import compare
+
+    shipped = compare.load_waivers()
+    for tech in ("onwind", "solar"):
+        live = {
+            "stage": f"profile_{tech}",
+            "component": "system_available_mw",
+            "column": "sum_bus(profile*p_nom_max)",
+            "kind": "value",
+            "prong": 2,
+            "interconnect": "western",
+        }
+        assert compare.is_waived(live, shipped) is False, tech
+        waived = dict(live, component="system_potential_mw", column="sum(p_nom_max)")
+        assert compare.is_waived(waived, shipped) is True, tech
+
+
+def test_hf24_is_a_live_explanation(registry):
+    """HF-24 is a develop-only fix, so it may explain a difference."""
+    assert "HF-24" in registry
+    ok, reason = hf.explains("HF-24", registry)
+    assert ok, reason

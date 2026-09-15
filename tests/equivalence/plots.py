@@ -32,13 +32,23 @@ mostly-grey report maps.
   NOT its base-network bus ids: the two numbering spaces overlap numerically but
   a direct join lands on the right zone only ~2% of the time (verified
   2026-09-01). The busmap chain is the same join develop's caps remap uses.
+
+At **prong 2** every profile metric is computed after master's nodal file has
+been rolled up onto develop's cluster bus space by
+``metrics.aggregate_profile_to_clusters`` (the same ``busmap_s{simpl}``), so the
+two sides are compared at one resolution. Master's bus ids are then cluster ids,
+so the master side of those metrics takes the *develop* cluster->zone map, not
+the substation->zone chain above. Clusters only one side carries are then
+removed by ``metrics.common_cluster_subset`` — the pooled statistics are over
+the shared population, and the one-sided clusters are reported as their own
+``cluster_set`` finding rather than smeared across every quantile row.
 """
 
 from __future__ import annotations
 
 import json
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import matplotlib
@@ -264,8 +274,12 @@ def choropleth_triptych(
             miss = joined["v"].isna()
             size = max(40.0, min(260.0, 6000.0 / max(len(joined), 1)))
             ax.scatter(
-                joined.loc[miss, "x"], joined.loc[miss, "y"],
-                c=MISSING_KW["color"], s=size, edgecolors="white", linewidths=0.5,
+                joined.loc[miss, "x"],
+                joined.loc[miss, "y"],
+                c=MISSING_KW["color"],
+                s=size,
+                edgecolors="white",
+                linewidths=0.5,
             )
             sc = ax.scatter(
                 joined.loc[~miss, "x"],
@@ -385,7 +399,10 @@ def findings_by_stage(findings: list[dict], name: str, outdir: Path) -> tuple[Pa
         df["waived"] = False
     df["waived"] = df["waived"].fillna(False).astype(bool)
     counts = (
-        df.groupby([df["stage"].astype(str), df["waived"]]).size().unstack(fill_value=0).rename(
+        df.groupby([df["stage"].astype(str), df["waived"]])
+        .size()
+        .unstack(fill_value=0)
+        .rename(
             columns={False: "live", True: "waived"},
         )
     )
@@ -428,6 +445,15 @@ class Artifacts:
     zone_master: pd.Series | None = None
     zone_develop: pd.Series | None = None
     zones: object | None = None
+    #: develop's ``busmap_s{simpl}`` (substation id -> cluster bus). Prong 2
+    #: only; it is what rolls master's nodal profiles onto develop's bus space.
+    busmap: pd.Series | None = None
+    #: ``{tech: metrics.cluster_sets(...)}`` — what the two cluster sets were
+    #: after the prong-2 rollup, and what the one-sided clusters are worth in
+    #: MW. Filled by :func:`collect_metrics`; the pooled profile metrics are
+    #: computed over the common clusters only, so this is the record of what
+    #: they left out.
+    cluster_sets: dict[str, dict] = field(default_factory=dict)
 
     @property
     def profile_pairs(self) -> list:
@@ -439,6 +465,8 @@ def _zone_maps(develop_root: Path):
     """(develop bus->zone, master substation->zone, zone shapes or None)."""
     import geopandas as gpd
     import pypsa
+
+    from .compare import load_busmap
 
     zc = pd.Series(dtype=object)
     za = pd.Series(dtype=object)
@@ -454,10 +482,8 @@ def _zone_maps(develop_root: Path):
             # No shapes: fall back to a point map built from the network's own
             # bus coordinates, averaged per zone.
             zones = nc.buses.groupby(zc)[["x", "y"]].mean()
-        bm = develop_root / f"{EQ}/busmaps/{INTERCONNECT}/busmap_s{SIMPL2}.csv"
-        if bm.exists():
-            busmap = pd.read_csv(bm, index_col=0, dtype=str).iloc[:, 0]
-            busmap.index = busmap.index.astype(str)
+        busmap = load_busmap(develop_root)
+        if busmap is not None:
             za = busmap.map(zc)  # substation id -> cluster -> reeds_zone
     return zc, za, zones
 
@@ -478,6 +504,10 @@ def load_artifacts(prong: int, develop_root: Path, master_root: Path) -> Artifac
         elif pair.stage == "clustered_network":
             art.n_develop, art.n_master = load_network(dp), load_network(mp)
     art.zone_develop, art.zone_master, art.zones = _zone_maps(art.develop_root)
+    if prong == 2:
+        from .compare import load_busmap
+
+        art.busmap = load_busmap(art.develop_root)
     return art
 
 
@@ -518,37 +548,102 @@ def collect_metrics(art: Artifacts, missing: list[dict] | None = None) -> dict[s
     solved = (art.solved_master, art.solved_develop)
     if all(x is not None for x in pre):
         out["capacity_existing_by_carrier"] = _safe(
-            "capacity_existing_by_carrier", miss, metrics.capacity_by_carrier, *pre, attr="p_nom",
+            "capacity_existing_by_carrier",
+            miss,
+            metrics.capacity_by_carrier,
+            *pre,
+            attr="p_nom",
         )
         out["p_nom_existing_by_zone_carrier"] = _safe(
-            "p_nom_existing_by_zone_carrier", miss, metrics.capacity_by_zone_carrier, *pre, attr="p_nom",
+            "p_nom_existing_by_zone_carrier",
+            miss,
+            metrics.capacity_by_zone_carrier,
+            *pre,
+            attr="p_nom",
         )
         out["demand_by_zone"] = _safe("demand_by_zone", miss, metrics.demand_by_zone, *pre)
     if all(x is not None for x in solved):
         out["objective"] = _safe("objective", miss, metrics.objective_row, *solved)
         out["capacity_opt_by_carrier"] = _safe(
-            "capacity_opt_by_carrier", miss, metrics.capacity_by_carrier, *solved, attr="p_nom_opt",
+            "capacity_opt_by_carrier",
+            miss,
+            metrics.capacity_by_carrier,
+            *solved,
+            attr="p_nom_opt",
         )
         out["dispatch_by_carrier"] = _safe("dispatch_by_carrier", miss, metrics.dispatch_by_carrier, *solved)
         out["capacity_factor_by_carrier"] = _safe(
-            "capacity_factor_by_carrier", miss, metrics.capacity_factor_by_carrier, *solved,
+            "capacity_factor_by_carrier",
+            miss,
+            metrics.capacity_factor_by_carrier,
+            *solved,
         )
     for pair in art.profile_pairs:
         tech = pair.stage.replace("profile_", "")
         dp, mp = art.develop_root / pair.develop, art.master_root / pair.master
         if not (dp.exists() and mp.exists()):
             continue
-        with xr.open_dataset(dp) as dsd, xr.open_dataset(mp) as dsm:
+        with xr.open_dataset(dp) as dsd, xr.open_dataset(mp) as dsm_raw:
+            # Prong 2: master's file is NODAL (substation buses), develop's is
+            # at s{simpl}. Every metric below is resolution-sensitive —
+            # p_max_pu_quantiles pools (time, bus) values, so 544 sites and the
+            # 19 clusters they roll up into give different distributions no
+            # matter what the refactor did — so master is aggregated onto
+            # develop's bus space FIRST. The zone-keyed metrics are
+            # aggregation-invariant but take the same input, so the table and
+            # the figures describe one object rather than two.
+            dsm, dsd_cmp = dsm_raw, dsd
+            zone_m = art.zone_master
+            if art.prong == 2 and art.busmap is not None and "bus" in dsm_raw.dims:
+                agg = _safe(
+                    f"aggregate_master_profile_{tech}",
+                    miss,
+                    metrics.aggregate_profile_to_clusters,
+                    dsm_raw,
+                    art.busmap,
+                )
+                if agg is None:
+                    # The rollup is the precondition of all three metrics
+                    # below; computing them on mismatched resolutions would
+                    # publish numbers that mean nothing. The MISSING row
+                    # ``_safe`` just recorded is the honest outcome.
+                    continue
+                # Same resolution is not the same population. A cluster only
+                # one side has (western: develop's ``p87 0``, 96 MW onwind /
+                # 2,158 MW solar) puts a whole 8,760-hour column into one pool
+                # and nothing into the other, which smears a row-set difference
+                # across every quantile row. It is taken out here and reported
+                # once, as the ``cluster_set`` finding compare.py emits.
+                dsm, dsd_cmp, info = metrics.common_cluster_subset(agg, dsd)
+                art.cluster_sets[tech] = info
+                # Master is now keyed by cluster bus, so its zone map is
+                # develop's cluster->zone map, NOT the substation->zone chain
+                # that addressed the nodal file.
+                zone_m = art.zone_develop
             out[f"p_max_pu_quantiles_{tech}"] = _safe(
-                f"p_max_pu_quantiles_{tech}", miss, metrics.p_max_pu_quantiles, dsm, dsd,
+                f"p_max_pu_quantiles_{tech}",
+                miss,
+                metrics.p_max_pu_quantiles,
+                dsm,
+                dsd_cmp,
             )
             out[f"p_nom_max_by_zone_{tech}"] = _safe(
-                f"p_nom_max_by_zone_{tech}", miss, metrics.p_nom_max_by_zone,
-                dsm, dsd, art.zone_master, art.zone_develop,
+                f"p_nom_max_by_zone_{tech}",
+                miss,
+                metrics.p_nom_max_by_zone,
+                dsm,
+                dsd_cmp,
+                zone_m,
+                art.zone_develop,
             )
             out[f"mean_cf_by_zone_{tech}"] = _safe(
-                f"mean_cf_by_zone_{tech}", miss, metrics.mean_cf_by_zone,
-                dsm, dsd, art.zone_master, art.zone_develop,
+                f"mean_cf_by_zone_{tech}",
+                miss,
+                metrics.mean_cf_by_zone,
+                dsm,
+                dsd_cmp,
+                zone_m,
+                art.zone_develop,
             )
     return {k: v for k, v in out.items() if v is not None}
 
@@ -579,7 +674,35 @@ def run_metrics(
         missing: list[dict] = []
         frames = collect_metrics(art, missing)
         _RUN_METRICS[key] = (art, frames, missing)
+        _record_cluster_sets(art)
     return _RUN_METRICS[key]
+
+
+def _record_cluster_sets(art: Artifacts) -> None:
+    """Put the rollup facts behind the TABLE numbers into ``run_meta.json``.
+
+    ``compare.run_comparison`` records the same thing from the findings side,
+    but the two sides do not always both run: at ``EQ_UNTIL=full`` the profile
+    pairs are dropped from the comparison while the table still computes every
+    profile metric. Whichever ran last is the one that describes the numbers a
+    reader is holding, so both write the field and they agree by construction —
+    same busmap, same files, same ``metrics.cluster_sets``.
+    """
+    if art.prong != 2 or not art.cluster_sets:
+        return
+    from . import context
+
+    records = [
+        {"kind": "profile_rollup", "stage": f"profile_{tech}", "rolled_up": True, **info}
+        for tech, info in sorted(art.cluster_sets.items())
+    ]
+    try:
+        context.update_run_meta(
+            master_profile_stage=context.master_profile_stage(art.prong, rolled_up=True),
+            profile_cluster_sets=records,
+        )
+    except OSError as exc:  # pragma: no cover - provenance must never kill a run
+        print(f"[plots] could not update run_meta.json: {exc}")
 
 
 def _carrier_zone_slice(df: pd.DataFrame, carrier: str) -> tuple[pd.Series, pd.Series]:
@@ -620,10 +743,14 @@ def export_all(
     (run_dir / "missing_metrics.json").write_text(json.dumps(missing, indent=1))
 
     objective_figure(m.get("objective"), "objective", run_dir)
-    paired_bar(m.get("capacity_existing_by_carrier"), "existing capacity", "MW", "capacity_existing_by_carrier", run_dir)
+    paired_bar(
+        m.get("capacity_existing_by_carrier"), "existing capacity", "MW", "capacity_existing_by_carrier", run_dir
+    )
     paired_bar(m.get("capacity_opt_by_carrier"), "optimised capacity", "MW", "capacity_opt_by_carrier", run_dir)
     paired_bar(m.get("dispatch_by_carrier"), "annual dispatch", "MWh", "dispatch_by_carrier", run_dir)
-    paired_bar(m.get("capacity_factor_by_carrier"), "realised capacity factor", "-", "capacity_factor_by_carrier", run_dir)
+    paired_bar(
+        m.get("capacity_factor_by_carrier"), "realised capacity factor", "-", "capacity_factor_by_carrier", run_dir
+    )
     paired_bar(m.get("demand_by_zone"), "demand by zone", "MW", "demand_zones", run_dir)
 
     zc = m.get("p_nom_existing_by_zone_carrier")
@@ -632,8 +759,13 @@ def export_all(
         for carrier in list(top.index)[:zone_carriers]:
             vm, vd = _carrier_zone_slice(zc, carrier)
             choropleth_triptych(
-                artifacts.zones, vm, vd, f"{carrier} existing capacity", "MW",
-                f"p_nom_existing_zones_{carrier}", run_dir,
+                artifacts.zones,
+                vm,
+                vd,
+                f"{carrier} existing capacity",
+                "MW",
+                f"p_nom_existing_zones_{carrier}",
+                run_dir,
             )
 
     for pair in artifacts.profile_pairs:
@@ -647,25 +779,40 @@ def export_all(
             cf = m.get(f"mean_cf_by_zone_{tech}")
             if pot is not None:
                 choropleth_triptych(
-                    artifacts.zones, pot["master"] / 1e3, pot["develop"] / 1e3,
-                    f"{tech} installable potential", "GW", f"{tech}_potential_zones", run_dir,
+                    artifacts.zones,
+                    pot["master"] / 1e3,
+                    pot["develop"] / 1e3,
+                    f"{tech} installable potential",
+                    "GW",
+                    f"{tech}_potential_zones",
+                    run_dir,
                 )
             if cf is not None:
                 choropleth_triptych(
-                    artifacts.zones, cf["master"], cf["develop"],
-                    f"{tech} potential-weighted mean CF", "-", f"{tech}_meancf_zones", run_dir,
+                    artifacts.zones,
+                    cf["master"],
+                    cf["develop"],
+                    f"{tech} potential-weighted mean CF",
+                    "-",
+                    f"{tech}_meancf_zones",
+                    run_dir,
                 )
             duration_curve(
                 pd.Series(metrics.profile_values(dsm)),
                 pd.Series(metrics.profile_values(dsd)),
-                f"{tech} capacity factor", "-", f"p_max_pu_duration_{tech}", run_dir,
+                f"{tech} capacity factor",
+                "-",
+                f"p_max_pu_duration_{tech}",
+                run_dir,
                 color=carrier_color(tech),
             )
             timeseries_pair(
                 metrics.available_power(dsm) / 1e3,
                 metrics.available_power(dsd) / 1e3,
-                f"{tech}: sum over buses of profile x p_nom_max", "GW",
-                f"{tech}_national_available_power", run_dir,
+                f"{tech}: sum over buses of profile x p_nom_max",
+                "GW",
+                f"{tech}_national_available_power",
+                run_dir,
             )
 
     if findings is None:

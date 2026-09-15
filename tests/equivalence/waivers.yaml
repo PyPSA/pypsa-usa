@@ -2,8 +2,35 @@
 # Each entry suppresses exactly one signed-off delta and MUST reference a row
 # in docs/superpowers/specs/2026-08-07-deltas-ledger.md.
 #
-# Fields: stage, component, column, kind ('*' wildcards allowed), ledger,
-# reason, and the optional `hotfix:`.
+# There are TWO kinds of entry here and an entry is one or the other, never
+# both:
+#
+#   CELL waiver   stage, component, column, kind ('*' wildcards allowed).
+#                 Suppresses a stage-by-stage finding in compare.py.
+#   TABLE waiver  metric, key (optionally family). Explains one row of
+#                 tables.comparison_table, turning UNEXPLAINED into explained.
+#
+# Each kind ignores the other's fields, and `compare.is_waived` SKIPS any entry
+# that names metric/key/family: its four cell fields are absent, and absent
+# means "any", so a table waiver read as a cell waiver would silence every
+# finding in the run.
+#
+# Both kinds take `ledger:` (required), `reason:`, the optional `hotfix:`, and
+# the optional scope fields `interconnect:` and `prong:` — a scope field that is
+# set must match the run, so a waiver measured on one leg cannot sign off
+# another.
+#
+# A TABLE waiver may also BOUND the difference it explains:
+#
+#   expect_sign   '+' or '-', the sign of (develop - master).
+#   max_abs_pct   upper bound on |delta %|.
+#
+# Without them a waiver is unbounded in sign and magnitude: the HF-24 entry
+# written for "+2,158 MW of potential master silently dropped" (+1.1 %) would
+# equally explain a -50 % row or a 10,000x one. A row outside the bounds is
+# reported as `waiver HF-n bounds violated (sign|magnitude)` and stays
+# UNEXPLAINED. `max_abs_pct` also refuses an undefined delta % (master 0,
+# develop non-zero): the bound cannot be shown to hold.
 #
 # `hotfix: HF-<n>` names the row in tests/equivalence/hotfixes.yaml — the
 # machine-readable extract of memory/plans/hotfix-ledger.md — that CAUSES the
@@ -244,3 +271,89 @@
     the column carries the master's legacy Breakthrough Pd weighting. Demand
     itself stays guarded by the UNWAIVED Load / Load_t.p_set comparisons; this
     waives only the presence of the column, not its content
+# DL-18 / HF-24 - master silently drops NREL caps capacity for substations with
+# zero GODEEEP availability or no intersecting CF cell; develop retains them.
+# Measured on the western leg (smoke-western-20260915-1141, 2026-09-15): 7
+# onwind buses / 546 MW and 4 solar buses / 2,566 MW, bus 37808 being the whole
+# of cluster p87's solar. Develop's potential is therefore HIGHER, which is the
+# sign of the fix (expect_sign: '+'), and the measured rows are +0.19 % to
+# +1.15 %, an order of magnitude inside max_abs_pct: 5. Scoped to western prong
+# 2 and to the four zone keys that actually move; the usa leg must be measured
+# before it is waived there.
+- interconnect: western
+  prong: 2
+  metric: p_nom_max_by_zone_onwind
+  key: p8
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_abs_pct: 5
+  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
+- interconnect: western
+  prong: 2
+  metric: p_nom_max_by_zone_onwind
+  key: p9
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_abs_pct: 5
+  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
+- interconnect: western
+  prong: 2
+  metric: p_nom_max_by_zone_onwind
+  key: p10
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_abs_pct: 5
+  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
+- interconnect: western
+  prong: 2
+  metric: p_nom_max_by_zone_solar
+  key: p8
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_abs_pct: 5
+  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
+- interconnect: western
+  prong: 2
+  stage: profile_onwind
+  component: system_potential_mw
+  column: sum(p_nom_max)
+  kind: value
+  ledger: DL-18
+  hotfix: HF-24
+  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
+- interconnect: western
+  prong: 2
+  stage: profile_solar
+  component: system_potential_mw
+  column: sum(p_nom_max)
+  kind: value
+  ledger: DL-18
+  hotfix: HF-24
+  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
+# The develop-only cluster itself. After the prong-2 rollup master has 18 onwind
+# / 19 solar clusters and develop 19 / 20: `p87 0` (96 MW onwind, 2,158 MW
+# solar) is HF-24's bus 37808, which master dropped entirely. Reported once,
+# here, instead of leaking into every pooled quantile row - the pooled profile
+# metrics are computed over the common clusters only.
+- interconnect: western
+  prong: 2
+  stage: profile_onwind
+  component: cluster_set
+  column: <index>
+  kind: row_set
+  ledger: DL-18
+  hotfix: HF-24
+  reason: develop-only cluster p87 0 (96 MW onwind) is HF-24's retained NREL caps capacity at bus 37808; master has no such cluster
+- interconnect: western
+  prong: 2
+  stage: profile_solar
+  component: cluster_set
+  column: <index>
+  kind: row_set
+  ledger: DL-18
+  hotfix: HF-24
+  reason: develop-only cluster p87 0 (2,158 MW solar) is HF-24's retained NREL caps capacity at bus 37808; master has no such cluster

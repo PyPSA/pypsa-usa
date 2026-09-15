@@ -381,6 +381,91 @@ aggregation. `master` does not carry that commit, so the harness translates the
 value; without the translation the two sides would build different generator
 sets and the comparison would be meaningless.
 
+### At prong 2, master's profiles are rolled up first
+
+The two branches do not build renewable profiles at the same resolution. Master
+writes `profile_{tech}.nc` keyed by **substation** (western: 544 onwind, 808
+solar buses); develop writes `profile_{tech}_s{simpl}.nc` keyed by **cluster**
+(19 and 20). Every profile statistic is a property of that bus population as
+much as of the weather — pooling `(time, bus)` values from 544 sites and from
+the 19 clusters they roll up into gives different quantiles no matter what the
+refactor did. Compared as they sit, the `p_max_pu_quantiles_*` rows measure the
+clustering, and they cannot come out equivalent even in principle.
+
+So at prong 2 the harness passes master's file through
+`metrics.aggregate_profile_to_clusters` with develop's own
+`busmap_s{simpl}.csv` *before* any profile metric is taken: `profile` becomes
+the `p_nom_max`-weighted mean per cluster, `p_nom_max` / `potential` / `weight`
+are summed, `average_distance` is a capacity-weighted mean. `p_nom_max`
+weighting is what makes `sum_bus(profile * p_nom_max)` — the national
+available-power series — exactly invariant under the rollup, so the system
+aggregate means the same thing before and after. Master's buses are then cluster
+ids, so its side of the zone-keyed metrics joins through develop's
+cluster→`reeds_zone` map rather than the substation→zone chain. A bus missing
+from the busmap is dropped with a logged count, never silently — and "missing"
+is strict: only the float-formatted integer form (`'35827.0'` for `35827`) is
+reconciled, so `'35827.5'` and `'035827'` are counted as drops rather than
+truncated onto a real bus. A cluster whose total weight is zero gets a **NaN**
+profile, not 0.0, so it contributes nothing to the pooled statistics — exactly
+as develop's own all-NaN clusters do. Prong 1 compares two nodal files
+bus-for-bus and is untouched.
+
+#### A cluster on one side only is a row-set difference
+
+Same resolution is not the same population. On the western leg the rollup leaves
+master with 18 onwind / 19 solar clusters while develop has 19 / 20: `p87 0`
+(96 MW of onwind, 2,158 MW of solar — HF-24's bus 37808) exists only on develop,
+because master silently dropped the substation it is made of. Pooled in, that
+one cluster put a whole 8,760-hour column into develop's quantile pool and
+nothing into master's, which moved the onwind quantile deltas from
+−0.09 / +0.51 / 0.00 % to −7.98 / −2.73 / +1.33 % (p25/p50/p95): a missing
+cluster reading as a capacity-factor difference.
+
+So after the rollup the harness compares the two cluster sets and emits one
+finding — `stage: profile_{tech}`, `component: cluster_set`, `column: <index>`,
+`kind: row_set` — whose detail names every one-sided cluster with its
+`p_nom_max` in MW. The pooled metrics (`p_max_pu_quantiles_*`,
+`mean_cf_by_zone_*`, `p_nom_max_by_zone_*`) are then computed over the
+**common** clusters only. The one-sided capacity is not lost: it is in that
+finding, and in the clustering-invariant `system_potential_mw` /
+`system_available_mw` aggregates, which are still taken over everything each
+side built.
+
+`run_meta.json` records which object the numbers came from, in
+`master_profile_stage`, and what the rollup found, in `profile_cluster_sets`.
+The stage is derived from what actually happened, not from the prong:
+`build_context` runs before either side builds and can only say the rollup is
+planned; the comparison rewrites the field with `nodal->s{simpl}
+(p_nom_max-weighted)` when the rollup ran, and `nodal (rollup did NOT run: ...)`
+when there was no busmap to run it with.
+
+### A waiver is bounded in sign and magnitude
+
+A TABLE waiver in `tests/equivalence/waivers.yaml` may carry two optional
+fields:
+
+| field | meaning |
+|---|---|
+| `expect_sign` | `'+'` or `'-'`: the sign of `develop − master` the waiver was written for |
+| `max_abs_pct` | upper bound on the row's `abs(delta %)` |
+
+Without them a waiver is a blank cheque. The HF-24 entry on
+`p_nom_max_by_zone_solar/p8` was written for "+2,158 MW of potential that master
+silently dropped" (+1.1 %); matched on metric and key alone it would equally
+have explained a −50 % row — the opposite of the fix's known direction — or a
+10,000× one. A row outside the bounds is reported in the hot-fix column as
+`waiver HF-n bounds violated (sign|magnitude)` and stays **UNEXPLAINED**. An
+undefined `delta %` (master 0, develop non-zero) fails `max_abs_pct` too: the
+bound cannot be shown to hold. The shipped HF-24 waivers carry
+`expect_sign: '+'` and `max_abs_pct: 5`, against measured rows of +0.19 % to
++1.15 %.
+
+Bounds belong on table waivers only — a cell waiver has no delta to bound, and
+`test_waiver_bounds_are_well_formed` fails one that carries them. A waiver that
+names `metric`, `key` or `family` **at all**, wildcard included, is a table
+waiver and is never read as a cell waiver: `{metric: '*', key: '*', prong: 2}`
+names no cell field, so read as one it would waive every finding in the run.
+
 ### Reading `comparison.md`
 
 One row per (metric, key), with `master`, `develop`, `delta`, `delta_pct`, the

@@ -217,3 +217,66 @@ def test_missing_baseline_branch_points_at_t1(harness, monkeypatch):
     with pytest.raises(RuntimeError) as exc:
         context.build_context(2, probe_env=False)
     assert "T1" in str(exc.value)
+
+
+def test_master_profile_stage_is_recorded_per_prong(harness):
+    """A CF quantile is meaningless without the bus population it was taken over.
+
+    Prong 2 compares master's SUBSTATION-resolution profile file against
+    develop's s{simpl} file, so the harness rolls master up first; run_meta.json
+    has to say so, or a reader cannot tell which object produced the number.
+    ``build_context`` runs before either side builds, so all it can honestly
+    record is that the rollup is PLANNED; the comparison rewrites it.
+    """
+    assert context.build_context(1, probe_env=False).master_profile_stage == "nodal"
+    meta = json.loads(
+        context.write_run_meta(context.build_context(2, probe_env=False)).read_text(),
+    )
+    assert meta["master_profile_stage"] == f"nodal; rollup to s{paths.SIMPL2} planned, not yet run"
+
+
+def test_master_profile_stage_reports_what_actually_happened():
+    """The field is derived from the observed rollup, never from the prong alone.
+
+    A prong-2 run whose ``busmap_s{simpl}.csv`` was missing compared two
+    different bus resolutions. Saying 'nodal->s20' because the prong is 2 would
+    describe a rollup that never ran.
+    """
+    assert context.master_profile_stage(1) == "nodal"
+    assert context.master_profile_stage(1, rolled_up=False) == "nodal"
+    assert context.master_profile_stage(2, rolled_up=True) == f"nodal->s{paths.SIMPL2} (p_nom_max-weighted)"
+    not_run = context.master_profile_stage(2, rolled_up=False)
+    assert "did NOT run" in not_run
+    assert "planned" in context.master_profile_stage(2)
+
+
+def test_update_run_meta_merges_into_the_existing_record(harness, tmp_path):
+    """Post-comparison provenance lands in the SAME file as the shas."""
+    ctx = context.build_context(2, probe_env=False)
+    context.write_run_meta(ctx)
+
+    path = context.update_run_meta(
+        run_dir=ctx.run_dir,
+        master_profile_stage="nodal->s20 (p_nom_max-weighted)",
+        profile_cluster_sets=[{"stage": "profile_onwind", "only_develop": {"p87 0": 96.0}}],
+    )
+    meta = json.loads(path.read_text())
+
+    assert path == ctx.run_dir / "run_meta.json"
+    assert meta["master_profile_stage"] == "nodal->s20 (p_nom_max-weighted)"
+    assert meta["profile_cluster_sets"][0]["only_develop"] == {"p87 0": 96.0}
+    # Everything already in the record survives the merge.
+    assert meta["develop_sha"] == ctx.develop_sha
+    assert meta["run_id"] == ctx.run_id
+
+
+def test_update_run_meta_creates_the_file_when_there_is_none(tmp_path):
+    path = context.update_run_meta(run_dir=tmp_path / "fresh", profile_cluster_sets=[])
+    assert json.loads(path.read_text()) == {"profile_cluster_sets": []}
+
+
+def test_run_context_declares_the_cluster_set_field(harness):
+    ctx = context.build_context(2, probe_env=False)
+    assert ctx.profile_cluster_sets == []
+    meta = json.loads(context.write_run_meta(ctx).read_text())
+    assert meta["profile_cluster_sets"] == []

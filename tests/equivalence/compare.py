@@ -31,9 +31,14 @@ import pandas as pd
 import xarray as xr
 import yaml
 
-from .metrics import objective_constant, total_objective
-from .paths import INTERCONNECT, UNTIL, ArtifactPair, prong_pairs, run_dir
-from .tables import TOLERANCES
+from .metrics import (
+    aggregate_profile_to_clusters,
+    cluster_sets,
+    objective_constant,
+    total_objective,
+)
+from .paths import EQ, INTERCONNECT, SIMPL2, UNTIL, ArtifactPair, prong_pairs, run_dir
+from .tables import TOLERANCES, WAIVER_MATCH_KEYS
 
 # Every tolerance below comes from ``tables.TOLERANCES``; none is restated here,
 # so the stage-by-stage findings and the comparison table cannot disagree about
@@ -92,8 +97,43 @@ def load_waivers() -> list[dict]:
     return []
 
 
+def load_busmap(develop_root: Path, simpl: str = SIMPL2) -> pd.Series | None:
+    """Develop's ``busmap_s{simpl}.csv`` as substation id -> cluster bus.
+
+    ``None`` when the file is absent (prong 1 never needs it, and a run stopped
+    before ``cluster_resources`` has not written one). Both the index and the
+    values are strings; the substation ids are bare ('35827') while master's
+    profile bus labels are float-formatted ('35827.0'), which
+    ``metrics.normalize_bus_ids`` reconciles at join time.
+    """
+    p = Path(develop_root) / f"{EQ}/busmaps/{INTERCONNECT}/busmap_s{simpl}.csv"
+    if not p.exists():
+        return None
+    bm = pd.read_csv(p, index_col=0, dtype=str).iloc[:, 0]
+    bm.index = bm.index.astype(str)
+    return bm.astype(str)
+
+
 def is_waived(finding: dict, waivers: list[dict]) -> bool:
+    """Does any CELL waiver cover this finding.
+
+    A waiver that names a comparison-table row (``metric``/``key``/``family``,
+    :data:`tables.WAIVER_MATCH_KEYS`) is skipped outright. Its four cell fields
+    are absent, and absent means "any" here — so without this guard a single
+    ``{metric: p_nom_max_by_zone_onwind, prong: 2, interconnect: western}``
+    table waiver would silently waive EVERY western prong-2 finding.
+
+    MENTIONING one of those keys is enough to be skipped, whatever the value.
+    Reading ``metric: '*'`` as "not a table waiver" put the worst case back:
+    ``{metric: '*', key: '*', prong: 2, interconnect: western}`` names no cell
+    field at all, so every absent field wildcards and the entry waives every
+    western prong-2 finding — including ``system_available_mw``, the one that
+    would catch a real capacity-factor difference. A waiver that names a metric
+    is about the comparison table, even when the metric it names is "any".
+    """
     for w in waivers:
+        if any(k in w for k in WAIVER_MATCH_KEYS):
+            continue
         if all(
             w.get(k) in (None, "*", finding.get(k))
             for k in ("stage", "component", "column", "kind", "prong", "interconnect")
@@ -436,15 +476,68 @@ def _compare_solved(pair: ArtifactPair, nc, na, findings: list[dict]) -> None:
         )
 
 
-def compare_profiles(pair: ArtifactPair, pc: Path, pa: Path, findings: list[dict]) -> None:
-    with xr.open_dataset(pc) as dc, xr.open_dataset(pa) as da:
-        # Clustering-invariant system aggregates. At prong 2 the two sides'
-        # bus spaces are disjoint (develop: simpl-cluster IDs, master: nodal
-        # IDs), so the per-bus comparison below degenerates to a row_set
-        # finding; these aggregates are the substantive CF-construction
-        # comparison there. Potential is the extensive caps rollup; the
-        # available-power series folds CF weighting differences into one
-        # comparable national time series.
+def compare_profiles(
+    pair: ArtifactPair,
+    pc: Path,
+    pa: Path,
+    findings: list[dict],
+    prong: int = 1,
+    busmap: pd.Series | None = None,
+    notes: list[dict] | None = None,
+) -> None:
+    """Compare two renewable-profile files; append findings in place.
+
+    ``notes`` collects non-finding facts about the comparison — whether the
+    prong-2 rollup ran and what the two cluster sets were — for
+    ``run_meta.json``. They are NOT findings: a rollup that ran is not a
+    difference, and the cluster-set difference gets its own finding below.
+    """
+    with xr.open_dataset(pc) as dc, xr.open_dataset(pa) as da_raw:
+        # At prong 2 master's file is NODAL (substation buses) and develop's is
+        # at s{simpl} cluster resolution. sum(p_nom_max) and
+        # sum_bus(profile*p_nom_max) are both aggregation-invariant, so they
+        # would compare either way — but they must be computed from the same
+        # object the table and the figures use, or a reader cannot tell whether
+        # a residual is physics or resolution. So master is rolled up onto the
+        # cluster bus space first (HF-24's silent-drop delta survives the
+        # rollup: it is a real missing-capacity difference, not a resolution
+        # artifact).
+        da = da_raw
+        rolled_up = prong == 2 and busmap is not None and "bus" in da_raw.dims
+        if rolled_up:
+            da = aggregate_profile_to_clusters(da_raw, busmap)
+            # A cluster on one side only is a ROW-SET difference and is reported
+            # as one. Before this finding existed the only trace of develop's
+            # p87 0 (96 MW onwind / 2,158 MW solar, HF-24's bus 37808) was a
+            # smear across every pooled quantile row, which reads as a
+            # capacity-factor difference rather than as missing capacity.
+            info = cluster_sets(da, dc)
+            if notes is not None:
+                notes.append({"kind": "profile_rollup", "stage": pair.stage, "rolled_up": True, **info})
+            if not info["equal"]:
+                findings.append(
+                    {
+                        "stage": pair.stage,
+                        "component": "cluster_set",
+                        "column": "<index>",
+                        "kind": "row_set",
+                        "detail": {
+                            "n_master": info["n_master"],
+                            "n_develop": info["n_develop"],
+                            "n_common": info["n_common"],
+                            "only_develop": info["only_develop"],
+                            "only_master": info["only_master"],
+                            "only_develop_mw": info["only_develop_mw"],
+                            "only_master_mw": info["only_master_mw"],
+                            "note": (
+                                "p_nom_max in MW per one-sided cluster; the pooled profile metrics "
+                                "are computed over the common clusters only"
+                            ),
+                        },
+                    },
+                )
+        elif notes is not None and prong == 2:
+            notes.append({"kind": "profile_rollup", "stage": pair.stage, "rolled_up": False})
         if "p_nom_max" in dc and "p_nom_max" in da:
             tc = float(dc["p_nom_max"].sum())
             ta = float(da["p_nom_max"].sum())
@@ -493,16 +586,20 @@ def compare_profiles(pair: ArtifactPair, pc: Path, pa: Path, findings: list[dict
                         },
                     )
         # Per-bus variable comparison is only meaningful when the two sides
-        # share a bus space (prong 1). At prong 2 develop is keyed by
+        # share a bus space as BUILT (prong 1). At prong 2 develop is keyed by
         # simpl-cluster IDs and master by nodal IDs — zero overlap — so
         # skip the per-var loop and let the system aggregates above carry the
         # comparison instead of emitting hundreds of vacuous row_set findings.
+        # The test is deliberately made against the unaggregated master
+        # (``da_raw``): the rollup above exists to make the SYSTEM aggregates
+        # and the table metrics comparable, not to manufacture a per-bus
+        # comparison the two DAGs never actually shared.
         cb = {str(b) for b in dc.indexes.get("bus", [])}
-        ab = {str(b) for b in da.indexes.get("bus", [])}
+        ab = {str(b) for b in da_raw.indexes.get("bus", [])}
         if not (cb & ab):
             return
-        for var in sorted(set(dc.data_vars) | set(da.data_vars)):
-            if var not in dc.data_vars or var not in da.data_vars:
+        for var in sorted(set(dc.data_vars) | set(da_raw.data_vars)):
+            if var not in dc.data_vars or var not in da_raw.data_vars:
                 findings.append(
                     {
                         "stage": pair.stage,
@@ -513,7 +610,7 @@ def compare_profiles(pair: ArtifactPair, pc: Path, pa: Path, findings: list[dict
                     },
                 )
                 continue
-            vc, va = dc[var], da[var]
+            vc, va = dc[var], da_raw[var]
             fc = vc.transpose("time", "bus").to_pandas() if "time" in vc.dims else vc.to_pandas().to_frame(var)
             fa = va.transpose("time", "bus").to_pandas() if "time" in va.dims else va.to_pandas().to_frame(var)
             fc.columns = fc.columns.map(str)
@@ -521,7 +618,14 @@ def compare_profiles(pair: ArtifactPair, pc: Path, pa: Path, findings: list[dict
             compare_frames(pair.stage, var, fc.T, fa.T, findings)
 
 
-def compare_pair(pair: ArtifactPair, develop_root: Path, master_root: Path) -> list[dict]:
+def compare_pair(
+    pair: ArtifactPair,
+    develop_root: Path,
+    master_root: Path,
+    prong: int = 1,
+    busmap: pd.Series | None = None,
+    notes: list[dict] | None = None,
+) -> list[dict]:
     findings: list[dict] = []
     pc, pa = develop_root / pair.develop, master_root / pair.master
     for side, p in (("develop", pc), ("master", pa)):
@@ -540,7 +644,7 @@ def compare_pair(pair: ArtifactPair, develop_root: Path, master_root: Path) -> l
     if pair.kind in ("network", "network_pkl_vs_nc"):
         compare_networks(pair, load_network(pc), load_network(pa), findings)
     elif pair.kind == "profile":
-        compare_profiles(pair, pc, pa, findings)
+        compare_profiles(pair, pc, pa, findings, prong=prong, busmap=busmap, notes=notes)
     elif pair.kind == "demand_total":
         # The two demand CSVs are keyed at different granularities (master is
         # nodal pre-aggregation, develop substation-keyed), so per-bus
@@ -597,7 +701,11 @@ def prong2_aggregates(nc, na) -> list[dict]:
 def run_comparison(prong: int, develop_root: Path, master_root: Path) -> dict:
     waivers = load_waivers()
     all_findings: list[dict] = []
+    notes: list[dict] = []
     pairs = prong_pairs(prong)
+    # Prong 2 only: the map that rolls master's nodal profiles onto develop's
+    # cluster bus space (see compare_profiles).
+    busmap = load_busmap(develop_root) if prong == 2 else None
     if prong == 2:
         # Pre-cluster per-bus artifacts differ by design at prong 2 (different
         # simpl-stage kmeans), so normally only clustered/solve stages compare.
@@ -609,9 +717,7 @@ def run_comparison(prong: int, develop_root: Path, master_root: Path) -> dict:
         pairs = [
             p
             for p in pairs
-            if p.solve_stage
-            or p.stage in keep
-            or (UNTIL == "assembled" and p.kind in ("profile", "demand_total"))
+            if p.solve_stage or p.stage in keep or (UNTIL == "assembled" and p.kind in ("profile", "demand_total"))
         ]
     for pair in pairs:
         if prong == 2 and pair.stage == "clustered_network":
@@ -629,17 +735,26 @@ def run_comparison(prong: int, develop_root: Path, master_root: Path) -> dict:
                     },
                 )
             continue
-        all_findings += compare_pair(pair, develop_root, master_root)
+        all_findings += compare_pair(
+            pair,
+            develop_root,
+            master_root,
+            prong=prong,
+            busmap=busmap,
+            notes=notes,
+        )
     for f in all_findings:
         f["prong"] = prong
         f["interconnect"] = INTERCONNECT
         f["waived"] = is_waived(f, waivers)
     live = [f for f in all_findings if not f["waived"]]
+    cluster_note = [n for n in notes if n.get("kind") == "profile_rollup"]
     result = {
         "prong": prong,
         "n_findings": len(all_findings),
         "n_live": len(live),
         "pass": not live,
+        "profile_cluster_sets": cluster_note,
         "findings": all_findings,
     }
     # One run directory per run (plan D5): the findings sit beside
@@ -647,4 +762,27 @@ def run_comparison(prong: int, develop_root: Path, master_root: Path) -> dict:
     out = run_dir() / f"findings_{prong}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, indent=1, default=str))
+    _record_profile_cluster_sets(prong, cluster_note)
     return result
+
+
+def _record_profile_cluster_sets(prong: int, cluster_note: list[dict]) -> None:
+    """Put the rollup facts in ``run_meta.json``, beside the shas they belong to.
+
+    ``master_profile_stage`` is rewritten from what actually happened rather
+    than from the prong: ``build_context`` runs before any artifact exists, so
+    at that point the rollup is a plan, not a fact. A run whose busmap was
+    missing rolled nothing up, and the provenance record has to say so — a CF
+    quantile taken over 544 substations and one taken over 19 clusters are not
+    the same number.
+    """
+    from . import context
+
+    rolled = [n for n in cluster_note if n.get("rolled_up")]
+    fields: dict[str, object] = {"profile_cluster_sets": cluster_note}
+    if prong == 1 or cluster_note:
+        fields["master_profile_stage"] = context.master_profile_stage(
+            prong,
+            rolled_up=bool(rolled) if cluster_note else None,
+        )
+    context.update_run_meta(**fields)

@@ -30,10 +30,20 @@ keeps it from coming back.
 
 from __future__ import annotations
 
+import logging
+import re
+
 import numpy as np
 import pandas as pd
+import xarray as xr
+
+logger = logging.getLogger(__name__)
 
 COLUMNS = ["master", "develop", "delta", "delta_pct"]
+
+#: Bus-dimensioned profile variables that are EXTENSIVE (MW, MW-potential, a
+#: raw cell weight): a cluster's value is the sum of its members'.
+PROFILE_SUM_VARS = ("p_nom_max", "potential", "weight")
 
 #: Index of the Series returned by :func:`objective_row`. The ``*_raw`` and
 #: ``*_constant`` entries are carried for the reader and are NEVER compared —
@@ -58,12 +68,41 @@ def empty_frame(name: str = "key") -> pd.DataFrame:
     return pd.DataFrame(columns=COLUMNS, index=pd.Index([], name=name, dtype=object))
 
 
+def float_int_label(label) -> str | None:
+    """``'39762.0' -> '39762'``; ``None`` when the label is not that form.
+
+    The ONLY representation difference this harness reconciles is master's
+    float-formatted integer bus labels against develop's bare ones. Everything
+    else stays unmapped, deliberately:
+
+    - ``'35827.5'`` is not an integer id at all. ``int(float(b))`` would truncate
+      it onto bus 35827 and quietly merge two different things.
+    - ``'035827'`` is a different string for the same integer, but it is not the
+      float formatting this exists for; a zero-padded id is a foreign labelling
+      convention and is dropped (and counted) rather than guessed at.
+
+    A label that does not resolve is unmapped, which makes it a *counted drop*
+    in :func:`aggregate_profile_to_clusters` rather than an invisible merge.
+    """
+    s = str(label).strip()
+    try:
+        v = float(s)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(v) or not float(v).is_integer():
+        return None
+    norm = str(int(v))
+    return norm if s == norm or re.fullmatch(re.escape(norm) + r"\.0+", s) else None
+
+
 def normalize_bus_ids(idx, mapper: pd.Series) -> pd.Series:
     """Map bus ids onto a bus->value Series, tolerating '39762.0' vs '39762'.
 
     Master artifacts float-format integer bus labels; develop writes them bare.
     The difference is pure representation, so try the literal label first and
-    fall back to the integer form for whatever did not resolve.
+    fall back to the integer form (:func:`float_int_label`) for whatever did not
+    resolve. A label that is neither — ``'35827.5'``, ``'035827'`` — stays NaN,
+    so the caller counts it as a drop instead of absorbing it into a neighbour.
 
     Returns a Series indexed by the stringified input labels.
     """
@@ -71,12 +110,7 @@ def normalize_bus_ids(idx, mapper: pd.Series) -> pd.Series:
     out = pd.Series(ids, index=ids).map(mapper)
     miss = out.isna()
     if miss.any():
-        norm = []
-        for b in out.index[miss]:
-            try:
-                norm.append(str(int(float(b))))
-            except (TypeError, ValueError):
-                norm.append(b)
+        norm = [float_int_label(b) for b in out.index[miss]]
         out.loc[miss] = pd.Series(norm, index=out.index[miss]).map(mapper).to_numpy()
     return out
 
@@ -338,6 +372,239 @@ def objective_row(n_master, n_develop) -> pd.Series:
     ).reindex(OBJECTIVE_INDEX)
 
 
+def aggregate_profile_to_clusters(
+    ds: xr.Dataset,
+    busmap: pd.Series,
+    weight: str = "p_nom_max",
+) -> xr.Dataset:
+    """Aggregate a NODAL renewable-profile Dataset onto its ``{simpl}`` clusters.
+
+    This is the prong-2 pre-step that makes the two sides' profile metrics
+    comparable at all. Master builds ``profile_{tech}.nc`` at SUBSTATION
+    resolution (western: 544 onwind / 808 solar buses) while develop builds
+    ``profile_{tech}_s{simpl}.nc`` at cluster resolution (19 / 20 buses). Every
+    distributional statistic — quantiles, means, per-zone weighted means — is
+    resolution-dependent, so comparing the two files as they sit measures the
+    clustering, not the refactor. Passing master through this function first
+    puts both sides on the same bus space.
+
+    ``busmap`` is the develop-side ``busmap_s{simpl}.csv``: substation id ->
+    cluster bus. Master's profile bus labels are float-formatted integers
+    ('35827.0') where the busmap's index is bare ('35827'); the join goes
+    through :func:`normalize_bus_ids`, so either form resolves.
+
+    Aggregation rules, one per variable class:
+
+    - ``profile`` — ``weight``-weighted mean over the cluster's member buses.
+      With the default ``weight="p_nom_max"`` this makes
+      ``sum_bus(profile * p_nom_max)`` **exactly invariant** under aggregation,
+      which is what lets the national available-power series stay a like-for-like
+      comparison (``test_aggregate_preserves_available_power``).
+    - :data:`PROFILE_SUM_VARS` (``p_nom_max``, ``potential``, ``weight``) —
+      summed; they are extensive.
+    - every other bus-dimensioned variable (``average_distance``) —
+      ``p_nom_max``-weighted mean; they are intensive per unit of capacity.
+    - variables without a ``bus`` dimension pass through untouched.
+
+    Buses present in ``ds`` but **absent from** ``busmap`` are dropped, with a
+    ``logging.warning`` naming the count — never silently, because a silent drop
+    is exactly the master-side bug (HF-24) this prong is trying to measure. A
+    cluster whose total weight is zero would divide 0/0, so its ``profile`` is
+    **NaN** and counted. NaN, not 0.0: the pooled quantile metrics drop
+    non-finite values, so a zero-weight master cluster contributes nothing —
+    exactly as an all-NaN develop cluster does. Filled with 0.0 it would instead
+    push 8,760 zeros into master's pool and none into develop's, moving every
+    low quantile by the asymmetry alone. Both counts are also written to the
+    returned Dataset's ``attrs`` as ``eq_dropped_buses`` and
+    ``eq_zero_weight_clusters`` so a caller can assert on them.
+
+    The output carries the SAME variable names and dims as the input, so every
+    metric in this module accepts it unchanged.
+    """
+    if "bus" not in ds.dims:
+        raise ValueError("dataset has no 'bus' dimension; nothing to aggregate")
+
+    buses = pd.Index([str(b) for b in ds.indexes["bus"]], name="bus")
+    mapped = normalize_bus_ids(buses, pd.Series(busmap).astype(str))
+    keep = mapped.notna().to_numpy()
+    n_dropped = int((~keep).sum())
+    if n_dropped:
+        logger.warning(
+            "aggregate_profile_to_clusters: %d of %d buses are absent from the busmap "
+            "and were dropped (first few: %s)",
+            n_dropped,
+            len(buses),
+            ", ".join(str(b) for b in buses[~keep][:5]),
+        )
+    sub = ds.isel(bus=np.flatnonzero(keep))
+    n_keep = int(keep.sum())
+    labels = np.asarray(mapped.to_numpy()[keep], dtype=object)
+    pos = pd.RangeIndex(n_keep)
+
+    def _weights(name: str) -> pd.Series:
+        """Positional weight vector for an intensive average (NaN -> 0)."""
+        if name in sub:
+            v = np.nan_to_num(np.asarray(sub[name].values, dtype=float), nan=0.0)
+        else:
+            v = np.ones(n_keep, dtype=float)
+        return pd.Series(v, index=pos)
+
+    w_profile = _weights(weight)
+    w_intensive = _weights("p_nom_max")
+    den_profile = w_profile.groupby(labels).sum()
+    den_intensive = w_intensive.groupby(labels).sum()
+    clusters = pd.Index(den_profile.index, name="bus")
+    n_zero_weight = int((den_profile == 0).sum())
+    if n_zero_weight:
+        logger.warning(
+            "aggregate_profile_to_clusters: %d of %d clusters have zero total '%s'; "
+            "their profile is NaN (undefined), not 0.0",
+            n_zero_weight,
+            len(clusters),
+            weight,
+        )
+
+    data_vars: dict[str, object] = {}
+    for name, da in sub.data_vars.items():
+        if "bus" not in da.dims:
+            data_vars[name] = da
+            continue
+        w = w_profile if name == "profile" else w_intensive
+        den = den_profile if name == "profile" else den_intensive
+        if "time" in da.dims:
+            f = da.transpose("time", "bus").to_pandas()
+            f.columns = pos
+            if name in PROFILE_SUM_VARS:
+                agg = f.T.groupby(labels).sum().T
+            else:
+                # den.where(den != 0) is NaN for a zero-weight cluster, so the
+                # quotient is NaN — an undefined intensive quantity, left
+                # undefined. See the zero-weight note in the docstring.
+                num = f.mul(w, axis=1).T.groupby(labels).sum().T
+                agg = num.div(den.where(den != 0), axis=1)
+            data_vars[name] = (("time", "bus"), agg.reindex(columns=clusters).to_numpy())
+        else:
+            s = pd.Series(np.asarray(da.values, dtype=float), index=pos)
+            if name in PROFILE_SUM_VARS:
+                agg1 = s.groupby(labels).sum()
+            else:
+                agg1 = (s * w).groupby(labels).sum() / den.where(den != 0)
+            data_vars[name] = (("bus",), agg1.reindex(clusters).to_numpy())
+
+    coords = {"bus": clusters.to_numpy()}
+    if "time" in sub.coords:
+        coords["time"] = sub["time"].to_numpy()
+    out_ds = xr.Dataset(data_vars, coords=coords, attrs=dict(ds.attrs))
+    out_ds.attrs["eq_dropped_buses"] = n_dropped
+    out_ds.attrs["eq_zero_weight_clusters"] = n_zero_weight
+    out_ds.attrs["eq_aggregated_from_buses"] = int(len(buses))
+    return out_ds
+
+
+def _bus_labels(ds) -> pd.Index:
+    """The dataset's bus coordinate as plain strings."""
+    if "bus" not in ds.dims:
+        raise ValueError("dataset has no 'bus' dimension")
+    return pd.Index([str(b) for b in ds.indexes["bus"]], name="bus")
+
+
+def _p_nom_max_by_bus(ds) -> pd.Series:
+    """``p_nom_max`` per bus, MW; an empty Series when the variable is absent."""
+    if "p_nom_max" not in ds:
+        return pd.Series(dtype=float)
+    return pd.Series(np.asarray(ds["p_nom_max"].values, dtype=float), index=_bus_labels(ds))
+
+
+def cluster_sets(ds_master, ds_develop) -> dict:
+    """Which clusters each side carries, and what the one-sided ones are worth.
+
+    A cluster present on ONE side only is not a small difference: pooled over
+    ``(time, bus)``, its whole profile lands in one side's quantile pool and
+    nothing lands in the other's. On the western smoke leg develop has one such
+    cluster (``p87 0``: 96 MW of onwind, 2,158 MW of solar, HF-24's bus 37808),
+    and it alone moved the onwind quantile deltas from -0.09/+0.51/0.00 % to
+    -7.98/-2.73/+1.33 % (p25/p50/p95). Left unnamed, that reads as a
+    capacity-factor difference the refactor caused.
+
+    Returns ``{n_master, n_develop, n_common, only_master, only_develop,
+    only_master_mw, only_develop_mw, equal}``, where the two ``only_*`` entries
+    map cluster id -> its ``p_nom_max`` in MW. JSON-serialisable throughout, so
+    it goes straight into a finding's ``detail`` and into ``run_meta.json``.
+    """
+    bm, bd = set(_bus_labels(ds_master)), set(_bus_labels(ds_develop))
+    pm, pd_ = _p_nom_max_by_bus(ds_master), _p_nom_max_by_bus(ds_develop)
+    only_master = {b: float(pm.get(b, float("nan"))) for b in sorted(bm - bd)}
+    only_develop = {b: float(pd_.get(b, float("nan"))) for b in sorted(bd - bm)}
+    return {
+        "n_master": len(bm),
+        "n_develop": len(bd),
+        "n_common": len(bm & bd),
+        "only_master": only_master,
+        "only_develop": only_develop,
+        "only_master_mw": float(np.nansum(list(only_master.values()))) if only_master else 0.0,
+        "only_develop_mw": float(np.nansum(list(only_develop.values()))) if only_develop else 0.0,
+        "equal": bm == bd,
+    }
+
+
+#: ``attrs`` keys :func:`common_cluster_subset` stamps on both returned Datasets.
+CLUSTER_SET_ATTRS = (
+    "eq_common_clusters",
+    "eq_only_master_clusters",
+    "eq_only_develop_clusters",
+    "eq_only_master_mw",
+    "eq_only_develop_mw",
+)
+
+
+def common_cluster_subset(ds_master, ds_develop) -> tuple[xr.Dataset, xr.Dataset, dict]:
+    """Restrict both Datasets to the clusters they SHARE; report the rest.
+
+    The pooled profile metrics (:func:`p_max_pu_quantiles`,
+    :func:`mean_cf_by_zone`, :func:`p_nom_max_by_zone`) are meaningful only over
+    a common population. A cluster one side does not have is a **row-set**
+    difference, not a distributional one, and pooling it in leaks into every
+    quantile row — so it is taken out here and reported by
+    :func:`cluster_sets` instead, where a waiver can name it once rather than a
+    dozen times.
+
+    Returns ``(master_subset, develop_subset, info)``; ``info`` is what
+    :func:`cluster_sets` returned, and the same facts are stamped on both
+    subsets' ``attrs`` (:data:`CLUSTER_SET_ATTRS`) so a caller holding only a
+    Dataset can still say what was removed.
+    """
+    info = cluster_sets(ds_master, ds_develop)
+    lm, ld = _bus_labels(ds_master), _bus_labels(ds_develop)
+    common = sorted(set(lm) & set(ld))
+    pos_m = {b: i for i, b in enumerate(lm)}
+    pos_d = {b: i for i, b in enumerate(ld)}
+    m = ds_master.isel(bus=[pos_m[b] for b in common])
+    d = ds_develop.isel(bus=[pos_d[b] for b in common])
+    stamp = {
+        "eq_common_clusters": info["n_common"],
+        "eq_only_master_clusters": list(info["only_master"]),
+        "eq_only_develop_clusters": list(info["only_develop"]),
+        "eq_only_master_mw": info["only_master_mw"],
+        "eq_only_develop_mw": info["only_develop_mw"],
+    }
+    for side in (m, d):
+        side.attrs.update(stamp)
+    if not info["equal"]:
+        logger.warning(
+            "common_cluster_subset: master has %d clusters and develop %d; "
+            "master-only=%s (%.1f MW), develop-only=%s (%.1f MW). The pooled profile "
+            "metrics are computed over the %d common clusters only.",
+            info["n_master"],
+            info["n_develop"],
+            list(info["only_master"]) or "-",
+            info["only_master_mw"],
+            list(info["only_develop"]) or "-",
+            info["only_develop_mw"],
+            info["n_common"],
+        )
+    return m, d, info
+
+
 def profile_values(ds) -> np.ndarray:
     """Flattened finite ``profile`` values of a renewable-profile Dataset."""
     if "profile" not in ds:
@@ -366,10 +633,24 @@ def p_max_pu_quantiles(
     """Capacity-factor distribution of two renewable-profile Datasets.
 
     Each Dataset carries a ``profile`` variable over ``(time, bus)``. Quantiles
-    are taken over the **flattened** ``(time, bus)`` array, so the two sides stay
-    comparable when their bus spaces differ (which they do at prong 2, where
-    develop is keyed by simpl-cluster ids and master by nodal ids and the overlap
-    is empty).
+    are taken over the flattened ``(time, bus)`` array.
+
+    **Both inputs must be at the same bus resolution.** Flattening does not make
+    two different resolutions comparable — it makes the difference invisible.
+    A quantile of the pooled ``(time, bus)`` values is a property of the bus
+    population as much as of the weather: 544 substation-level wind sites and
+    the 19 clusters they aggregate into have genuinely different CF
+    distributions (cluster averaging cuts the tails), so comparing the two
+    measures the clustering and is guaranteed to differ no matter what the
+    refactor did. At prong 2 the caller therefore passes master's nodal file
+    through :func:`aggregate_profile_to_clusters` first; prong 1 is already
+    bus-for-bus.
+
+    Same resolution is not enough — it must also be the same bus SET. A cluster
+    only one side has contributes its whole 8,760-hour column to one pool and
+    nothing to the other, which is a row-set difference masquerading as a
+    distributional one. :func:`common_cluster_subset` takes those out and
+    reports them separately; the caller runs it before this function.
 
     Index: one entry per requested quantile (the float itself), plus ``"mean"``
     and ``"p_nom_max_weighted_mean"``.
@@ -382,7 +663,10 @@ def p_max_pu_quantiles(
     d_vals += [float(vd.mean()) if vd.size else float("nan"), _potential_weighted_mean_cf(ds_develop)]
     idx = pd.Index(keys, name="quantile", dtype=object)
     return frame(
-        pd.Series(m_vals, index=idx), pd.Series(d_vals, index=idx), name="quantile", fill=None,
+        pd.Series(m_vals, index=idx),
+        pd.Series(d_vals, index=idx),
+        name="quantile",
+        fill=None,
     )
 
 

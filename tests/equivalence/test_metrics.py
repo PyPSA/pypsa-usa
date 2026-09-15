@@ -9,6 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
 
 from tests.equivalence import metrics
 
@@ -155,7 +156,13 @@ def test_objective_constant_nan_is_zero():
 
 
 def test_p_max_pu_quantiles_disjoint_bus_spaces():
-    """Prong 2 has no shared bus ids; the distribution must still compare."""
+    """Disjoint bus LABELS do not stop the function returning a frame.
+
+    Robustness only — NOT the prong-2 design. Two datasets at different bus
+    RESOLUTIONS are not comparable this way whatever their labels say, which is
+    why prong 2 rolls master up first (see
+    ``test_aggregated_master_matches_develop_when_the_pipelines_agree``).
+    """
     ds_m = make_profile(n_bus=3, n_time=24, seed=2, bus_prefix="m")
     ds_d = make_profile(n_bus=5, n_time=24, seed=3, bus_prefix="d")
     assert not set(ds_m.bus.values) & set(ds_d.bus.values)
@@ -295,3 +302,277 @@ def test_mean_cf_by_zone_keeps_nan_for_a_zero_potential_zone():
     zone = pd.Series({"b0": "p1", "b1": "p1"})
     out = metrics.mean_cf_by_zone(ds, ds, zone, zone)
     assert np.isnan(out.loc["p1", "master"])
+
+
+# ---------------------------------------------------------------------------
+# aggregate_profile_to_clusters — the prong-2 precondition.
+#
+# Master builds profiles at SUBSTATION resolution (western: 544 onwind buses)
+# and develop at s{simpl} cluster resolution (19). Every distributional
+# statistic downstream is resolution-sensitive, so the rollup is what makes the
+# comparison a comparison. These tests pin the three properties it is relied on
+# for: the extensive quantity is conserved, the intensive one is the explicit
+# capacity-weighted mean, and master's float-formatted bus labels join.
+# ---------------------------------------------------------------------------
+
+
+def _busmap(pairs: dict[str, str]) -> pd.Series:
+    return pd.Series(pairs, dtype=object)
+
+
+def test_aggregate_preserves_available_power():
+    """``sum_bus(profile * p_nom_max)`` is invariant under the rollup.
+
+    This is the whole reason ``p_nom_max`` is the default weight: the national
+    available-power series that ``compare_profiles`` compares must mean the same
+    thing before and after aggregation, or the rollup would itself become a
+    source of difference.
+    """
+    ds = make_profile(n_bus=3, n_time=24, seed=50)
+    out = metrics.aggregate_profile_to_clusters(ds, _busmap({"b0": "c0", "b1": "c0", "b2": "c1"}))
+
+    assert list(out.indexes["bus"]) == ["c0", "c1"]
+    assert out.sizes["time"] == 24
+    assert set(out.data_vars) == set(ds.data_vars)
+    before = metrics.available_power(ds)
+    after = metrics.available_power(out)
+    assert np.allclose(before.to_numpy(), after.to_numpy(), rtol=1e-9, atol=1e-9)
+    assert float(out["p_nom_max"].sum()) == pytest.approx(float(ds["p_nom_max"].sum()))
+
+
+def test_aggregate_two_buses_equals_the_explicit_capacity_weighted_mean():
+    ds = make_profile(n_bus=2, n_time=24, seed=51)
+    out = metrics.aggregate_profile_to_clusters(ds, _busmap({"b0": "c0", "b1": "c0"}))
+
+    p = np.asarray(ds["profile"].values, dtype=float)
+    cap = np.asarray(ds["p_nom_max"].values, dtype=float)
+    expected = (p[:, 0] * cap[0] + p[:, 1] * cap[1]) / (cap[0] + cap[1])
+    assert np.allclose(np.asarray(out["profile"].values).ravel(), expected)
+    assert float(out["p_nom_max"].sel(bus="c0")) == pytest.approx(cap.sum())
+
+
+def test_aggregate_joins_float_formatted_master_bus_ids():
+    """Master writes '35827.0'; ``busmap_s{simpl}.csv`` is indexed '35827'."""
+    ds = make_profile(n_bus=2, n_time=8, seed=52, bus_prefix="")
+    ds = ds.assign_coords(bus=["35827.0", "35828.0"])
+    out = metrics.aggregate_profile_to_clusters(ds, _busmap({"35827": "p101 1", "35828": "p101 1"}))
+
+    assert list(out.indexes["bus"]) == ["p101 1"]
+    assert out.attrs["eq_dropped_buses"] == 0
+    assert float(out["p_nom_max"].sum()) == pytest.approx(float(ds["p_nom_max"].sum()))
+
+
+def test_aggregate_drops_unmapped_buses_and_counts_them(caplog):
+    """A bus absent from the busmap is dropped LOUDLY, never silently."""
+    ds = make_profile(n_bus=3, n_time=8, seed=53)
+    with caplog.at_level("WARNING", logger="tests.equivalence.metrics"):
+        out = metrics.aggregate_profile_to_clusters(ds, _busmap({"b0": "c0", "b1": "c0"}))
+
+    assert list(out.indexes["bus"]) == ["c0"]
+    assert out.attrs["eq_dropped_buses"] == 1
+    assert out.attrs["eq_aggregated_from_buses"] == 3
+    assert "b2" in caplog.text
+    cap = np.asarray(ds["p_nom_max"].values, dtype=float)
+    assert float(out["p_nom_max"].sum()) == pytest.approx(cap[:2].sum())
+
+
+def test_aggregate_zero_weight_cluster_is_nan_not_zero():
+    """A zero-weight cluster has an UNDEFINED profile, and must not pool as 0.
+
+    Filled with 0.0 it pushed 8,760 zeros into master's quantile pool while an
+    all-NaN develop cluster contributed nothing, so the two sides' pools were
+    not the same size and every low quantile moved on that asymmetry alone.
+    """
+    ds = make_profile(n_bus=2, n_time=8, seed=54)
+    ds["p_nom_max"][:] = 0.0
+    out = metrics.aggregate_profile_to_clusters(ds, _busmap({"b0": "c0", "b1": "c0"}))
+
+    assert out.attrs["eq_zero_weight_clusters"] == 1
+    assert np.isnan(np.asarray(out["profile"].values)).all()
+    assert metrics.profile_values(out).size == 0
+
+
+def test_zero_weight_master_and_all_nan_develop_pool_symmetrically():
+    """The two sides' undefined clusters must both contribute nothing."""
+    master = make_profile(n_bus=3, n_time=6, seed=57)
+    master["p_nom_max"][:] = np.array([0.0, 0.0, 10.0])
+    agg = metrics.aggregate_profile_to_clusters(
+        master,
+        _busmap({"b0": "z", "b1": "z", "b2": "ok"}),
+    )
+    develop = agg.copy(deep=True)
+    develop["profile"].loc[{"bus": "z"}] = np.nan  # develop's own undefined form
+
+    assert metrics.profile_values(agg).size == metrics.profile_values(develop).size
+    out = metrics.p_max_pu_quantiles(agg, develop)
+    assert np.allclose(out["delta"].dropna().to_numpy(), 0.0)
+
+
+# ---------------------------------------------------------------------------
+# Bus-id normalisation: only the float-formatted integer form is reconciled.
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_bus_ids_only_absorbs_the_float_integer_form():
+    """'35827.5' and '035827' are NOT bus 35827 and must stay unmapped.
+
+    ``str(int(float(b)))`` truncated both onto 35827, merging a half-labelled id
+    and a zero-padded one into a real bus and under-reporting the drop count
+    that is the whole signal of the master-side silent drop (HF-24).
+    """
+    ids = ["35827.0", "35827.5", "035827", "35828", "99999.0", "40000.0"]
+    mapper = pd.Series({"35827": "p101 1", "35828": "p101 1", "99999": "p2 0"})
+    out = metrics.normalize_bus_ids(ids, mapper)
+
+    assert out["35827.0"] == "p101 1"
+    assert out["35828"] == "p101 1"
+    assert out["99999.0"] == "p2 0"
+    for unmapped in ("35827.5", "035827", "40000.0"):
+        assert pd.isna(out[unmapped]), unmapped
+
+
+def test_float_int_label_forms():
+    assert metrics.float_int_label("35827.0") == "35827"
+    assert metrics.float_int_label("35827.00") == "35827"
+    assert metrics.float_int_label("35827") == "35827"
+    assert metrics.float_int_label("35827.5") is None
+    assert metrics.float_int_label("035827") is None
+    assert metrics.float_int_label("p101 1") is None
+    assert metrics.float_int_label("nan") is None
+
+
+def test_aggregate_counts_a_non_integer_label_as_a_drop(caplog):
+    ds = make_profile(n_bus=3, n_time=4, seed=58, bus_prefix="")
+    ds = ds.assign_coords(bus=["35827.0", "35827.5", "35828"])
+    with caplog.at_level("WARNING", logger="tests.equivalence.metrics"):
+        out = metrics.aggregate_profile_to_clusters(
+            ds,
+            _busmap({"35827": "c0", "35828": "c0"}),
+        )
+
+    assert out.attrs["eq_dropped_buses"] == 1
+    assert out.attrs["eq_aggregated_from_buses"] == 3
+    cap = np.asarray(ds["p_nom_max"].values, dtype=float)
+    assert float(out["p_nom_max"].sum()) == pytest.approx(cap[0] + cap[2])
+
+
+# ---------------------------------------------------------------------------
+# A cluster on one side only is a row-set difference, not a distributional one.
+# ---------------------------------------------------------------------------
+
+
+def test_cluster_sets_names_a_one_sided_cluster_with_its_mw():
+    master = make_profile(n_bus=2, n_time=6, seed=60)
+    master = master.assign_coords(bus=["c0", "c1"])
+    develop = make_profile(n_bus=3, n_time=6, seed=60)
+    develop = develop.assign_coords(bus=["c0", "c1", "p87 0"])
+    develop["p_nom_max"][:] = np.array([1000.0, 3000.0, 2158.0])
+
+    info = metrics.cluster_sets(master, develop)
+    assert info["equal"] is False
+    assert info["n_master"] == 2
+    assert info["n_develop"] == 3
+    assert info["n_common"] == 2
+    assert info["only_master"] == {}
+    assert info["only_develop"] == {"p87 0": pytest.approx(2158.0)}
+    assert info["only_develop_mw"] == pytest.approx(2158.0)
+
+
+def test_common_cluster_subset_takes_the_one_sided_cluster_out_of_the_pool():
+    """The develop-only cluster must not move a single quantile row.
+
+    On the western smoke leg ``p87 0`` alone moved the onwind quantile deltas
+    from -0.09/+0.51/0.00 % to -7.98/-2.73/+1.33 %: the pooled statistic read a
+    missing cluster as a capacity-factor difference.
+    """
+    master = make_profile(n_bus=2, n_time=24, seed=61)
+    master = master.assign_coords(bus=["c0", "c1"])
+    develop = master.copy(deep=True)
+    extra = make_profile(n_bus=1, n_time=24, seed=62, cf_scale=0.2)
+    extra = extra.assign_coords(bus=["p87 0"])
+    develop = xr.concat([develop, extra], dim="bus")
+
+    naive = metrics.p_max_pu_quantiles(master, develop)
+    assert not np.allclose(naive["delta"].dropna().to_numpy(), 0.0)
+
+    m, d, info = metrics.common_cluster_subset(master, develop)
+    assert list(m.indexes["bus"]) == list(d.indexes["bus"]) == ["c0", "c1"]
+    assert info["only_develop"] and not info["only_master"]
+    out = metrics.p_max_pu_quantiles(m, d)
+    assert np.allclose(out["delta"].dropna().to_numpy(), 0.0)
+
+
+def test_common_cluster_subset_stamps_the_attrs_on_both_sides():
+    master = make_profile(n_bus=2, n_time=4, seed=63).assign_coords(bus=["c0", "c1"])
+    develop = make_profile(n_bus=3, n_time=4, seed=63).assign_coords(bus=["c0", "c1", "p87 0"])
+    m, d, _ = metrics.common_cluster_subset(master, develop)
+    for side in (m, d):
+        for attr in metrics.CLUSTER_SET_ATTRS:
+            assert attr in side.attrs, attr
+        assert side.attrs["eq_only_develop_clusters"] == ["p87 0"]
+        assert side.attrs["eq_common_clusters"] == 2
+
+
+def test_common_cluster_subset_is_a_no_op_when_the_sets_agree(tiny_profiles):
+    m, d = tiny_profiles
+    ms, ds_, info = metrics.common_cluster_subset(m, d)
+    assert info["equal"] is True
+    assert list(ms.indexes["bus"]) == list(m.indexes["bus"])
+    assert list(ds_.indexes["bus"]) == list(d.indexes["bus"])
+
+
+def test_one_sided_cluster_also_leaves_the_zone_metrics_alone():
+    """The zone-keyed metrics are computed over the common set too."""
+    zone = pd.Series({"c0": "p1", "c1": "p1", "p87 0": "p8"})
+    master = make_profile(n_bus=2, n_time=6, seed=64).assign_coords(bus=["c0", "c1"])
+    develop = xr.concat(
+        [master.copy(deep=True), make_profile(n_bus=1, n_time=6, seed=65).assign_coords(bus=["p87 0"])],
+        dim="bus",
+    )
+    m, d, _ = metrics.common_cluster_subset(master, develop)
+    pot = metrics.p_nom_max_by_zone(m, d, zone, zone)
+    assert list(pot.index) == ["p1"]
+    assert (pot["delta"] == 0.0).all()
+
+
+def test_aggregate_sums_extensive_and_weights_intensive_variables():
+    """p_nom_max/potential/weight sum; average_distance is capacity-weighted."""
+    import xarray as xr
+
+    ds = make_profile(n_bus=2, n_time=4, seed=55)
+    ds = ds.assign(
+        potential=("bus", np.array([10.0, 30.0])),
+        weight=("bus", np.array([2.0, 4.0])),
+        average_distance=("bus", np.array([5.0, 15.0])),
+    )
+    assert isinstance(ds, xr.Dataset)
+    out = metrics.aggregate_profile_to_clusters(ds, _busmap({"b0": "c0", "b1": "c0"}))
+
+    cap = np.asarray(ds["p_nom_max"].values, dtype=float)
+    assert float(out["potential"].sel(bus="c0")) == pytest.approx(40.0)
+    assert float(out["weight"].sel(bus="c0")) == pytest.approx(6.0)
+    assert float(out["average_distance"].sel(bus="c0")) == pytest.approx(
+        (5.0 * cap[0] + 15.0 * cap[1]) / cap.sum(),
+    )
+
+
+def test_aggregated_master_matches_develop_when_the_pipelines_agree():
+    """The end-to-end claim: same physics + same caps -> quantiles equal.
+
+    Before the rollup this comparison could not come out equal even in
+    principle — master's 3 nodal buses and develop's 2 clusters give different
+    ``(time, bus)`` pools. This is the regression test for the invalid
+    ``p_max_pu_quantiles_*`` rows of smoke run smoke-western-20260915-1141.
+    """
+    master = make_profile(n_bus=3, n_time=24, seed=56)
+    busmap = _busmap({"b0": "c0", "b1": "c0", "b2": "c1"})
+    develop = metrics.aggregate_profile_to_clusters(master, busmap)
+
+    out = metrics.p_max_pu_quantiles(
+        metrics.aggregate_profile_to_clusters(master, busmap),
+        develop,
+    )
+    assert np.allclose(out["delta"].dropna().to_numpy(), 0.0)
+
+    naive = metrics.p_max_pu_quantiles(master, develop)
+    assert not np.allclose(naive.loc[0.95, "delta"], 0.0)

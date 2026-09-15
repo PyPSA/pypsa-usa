@@ -159,13 +159,13 @@ def test_waiver_scoped_to_another_run_does_not_explain():
 @pytest.mark.parametrize(
     ("scope", "explains"),
     [
-        ({}, True),                                        # unscoped: any run
-        ({"interconnect": "*", "prong": "*"}, True),        # explicit wildcards
-        ({"interconnect": "usa"}, True),                    # matches
-        ({"prong": 2}, True),                               # matches
-        ({"interconnect": "western"}, False),               # wrong footprint
-        ({"prong": 1}, False),                              # wrong prong
-        ({"interconnect": "usa", "prong": 1}, False),       # one field wrong is enough
+        ({}, True),  # unscoped: any run
+        ({"interconnect": "*", "prong": "*"}, True),  # explicit wildcards
+        ({"interconnect": "usa"}, True),  # matches
+        ({"prong": 2}, True),  # matches
+        ({"interconnect": "western"}, False),  # wrong footprint
+        ({"prong": 1}, False),  # wrong prong
+        ({"interconnect": "usa", "prong": 1}, False),  # one field wrong is enough
     ],
 )
 def test_waiver_scope_fields(scope, explains):
@@ -412,10 +412,7 @@ def test_metric_name_expect_glob_only_names_a_candidate():
 
 def test_candidates_are_sorted_numerically():
     frames = {"dispatch_by_carrier": _metric_frame({"CCGT": 100.0}, {"CCGT": 180.0})}
-    hotfixes = {
-        f"HF-{i}": {"id": f"HF-{i}", "ported": False, "expect": ["dispatch_by_carrier/*"]}
-        for i in (2, 13, 7)
-    }
+    hotfixes = {f"HF-{i}": {"id": f"HF-{i}", "ported": False, "expect": ["dispatch_by_carrier/*"]} for i in (2, 13, 7)}
     out = tables.comparison_table(frames, hotfixes)
     assert out.iloc[0]["candidates"] == "HF-2,HF-7,HF-13"
 
@@ -518,7 +515,10 @@ def test_tolerance_abs_is_reported():
 
 def test_nan_on_both_sides_is_undefined_not_equivalent():
     df = metrics.frame(
-        pd.Series({"coal": np.nan}), pd.Series({"coal": np.nan}), name="carrier", fill=None,
+        pd.Series({"coal": np.nan}),
+        pd.Series({"coal": np.nan}),
+        name="carrier",
+        fill=None,
     )
     out = tables.comparison_table({"capacity_factor_by_carrier": df}, {})
     assert out.iloc[0]["verdict"] == "undefined"
@@ -526,7 +526,10 @@ def test_nan_on_both_sides_is_undefined_not_equivalent():
 
 def test_one_sided_nan_is_flagged_not_minus_one_hundred_percent():
     df = metrics.frame(
-        pd.Series({"coal": np.nan}), pd.Series({"coal": 0.4}), name="carrier", fill=None,
+        pd.Series({"coal": np.nan}),
+        pd.Series({"coal": 0.4}),
+        name="carrier",
+        fill=None,
     )
     out = tables.comparison_table({"capacity_factor_by_carrier": df}, {})
     assert out.iloc[0]["verdict"] == "one-sided"
@@ -535,8 +538,10 @@ def test_one_sided_nan_is_flagged_not_minus_one_hundred_percent():
 
 def test_one_sided_and_undefined_do_not_fail_the_run():
     df = metrics.frame(
-        pd.Series({"a": np.nan, "b": np.nan}), pd.Series({"a": 0.4, "b": np.nan}),
-        name="carrier", fill=None,
+        pd.Series({"a": np.nan, "b": np.nan}),
+        pd.Series({"a": 0.4, "b": np.nan}),
+        name="carrier",
+        fill=None,
     )
     out = tables.comparison_table({"capacity_factor_by_carrier": df}, {})
     assert tables.n_failing(out) == 0
@@ -623,11 +628,7 @@ def test_no_ported_id_is_ever_credited_as_an_explanation():
 
     reg = tables.load_hotfixes()
     ported = set(hf.ported_ids(reg))
-    frames = {
-        m: _metric_frame({"solar": 100.0}, {"solar": 180.0})
-        for m in tables.KNOWN_METRICS
-        if m != "objective"
-    }
+    frames = {m: _metric_frame({"solar": 100.0}, {"solar": 180.0}) for m in tables.KNOWN_METRICS if m != "objective"}
     out = tables.comparison_table(frames, reg)
     credited = {
         hid
@@ -645,13 +646,23 @@ def test_real_waivers_hotfix_tags_stay_out_of_the_table():
     Those entries key on stage/component/column/kind. If the table treated their
     absent metric/key as wildcards, HF-12 — the pypsa stack migration, which is
     not ported — would mark rows 'explained' that nothing in the registry claims.
-    The property asserted is exact: passing the real waivers changes no verdict.
+    The property asserted is exact: passing the real waivers changes no verdict
+    on metrics they do not name.
+
+    ``waivers.yaml`` also holds genuine TABLE waivers (HF-24's
+    ``p_nom_max_by_zone_*`` rows). Those are legitimate and are checked here for
+    the two things that make them safe: they name a metric the table can
+    actually produce, and they are scoped to the leg they were measured on, so
+    they cannot reach forward to sign off a run nobody looked at.
     """
     tagged = [w for w in _real_waivers() if w.get("hotfix")]
     assert tagged, "T4 added hotfix: tags to waivers.yaml"
-    assert all(
-        all(w.get(k) is None for k in ("metric", "key", "family")) for w in tagged
-    ), "a waiver that names a metric/key/family is a table waiver and must be reviewed here"
+    cell = [w for w in tagged if all(w.get(k) is None for k in ("metric", "key", "family"))]
+    table_waivers = [w for w in tagged if w not in cell]
+    assert cell, "the HF-12 cell waivers must still be cell waivers"
+    for w in table_waivers:
+        assert w.get("metric") in tables.KNOWN_METRICS, w
+        assert w.get("interconnect") and w.get("prong"), f"unscoped table waiver: {w}"
     frames = {
         "capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0}),
         "dispatch_by_carrier": _metric_frame({"CCGT": 100.0}, {"CCGT": 180.0}),
@@ -681,8 +692,13 @@ def test_known_metrics_covers_what_collect_metrics_produces():
 
     master, develop = make_network(), make_network()
     art = plots.Artifacts(
-        prong=2, develop_root=Path("/nonexistent"), master_root=Path("/nonexistent"),
-        n_master=master, n_develop=develop, solved_master=master, solved_develop=develop,
+        prong=2,
+        develop_root=Path("/nonexistent"),
+        master_root=Path("/nonexistent"),
+        n_master=master,
+        n_develop=develop,
+        solved_master=master,
+        solved_develop=develop,
     )
     produced = set(plots.collect_metrics(art, []))
     assert produced <= set(tables.KNOWN_METRICS), sorted(produced - set(tables.KNOWN_METRICS))
@@ -745,3 +761,122 @@ def test_export_all_writes_the_run_directory_tables(tmp_path, monkeypatch):
     assert (tmp_path / "tables" / "comparison.md").exists()
     assert (tmp_path / "tables" / "capacity_existing_by_carrier.csv").exists()
     assert tables.verdict_counts(comparison)["equivalent"] == 1
+
+
+def test_hf24_table_waiver_explains_only_its_own_leg():
+    """The shipped HF-24 waivers turn UNEXPLAINED into explained — on western p2.
+
+    And nowhere else: the same row on the usa leg, or on prong 1, stays
+    UNEXPLAINED, because that measurement has not been made.
+    """
+    frames = {"p_nom_max_by_zone_onwind": _metric_frame({"p8": 33348.0}, {"p8": 33444.0})}
+    reg = tables.load_hotfixes()
+    waivers = _real_waivers()
+
+    western = tables.comparison_table(frames, reg, waivers, interconnect="western", prong=2)
+    assert western.iloc[0]["verdict"] == "explained"
+    assert western.iloc[0]["hotfix"] == "HF-24"
+
+    for ic, prong in (("usa", 2), ("western", 1)):
+        out = tables.comparison_table(frames, reg, waivers, interconnect=ic, prong=prong)
+        assert out.iloc[0]["verdict"] == "UNEXPLAINED", (ic, prong)
+
+
+# ---------------------------------------------------------------------------
+# A table waiver is bounded in sign and magnitude, or it is a blank cheque.
+# ---------------------------------------------------------------------------
+
+
+def _bounded_waiver(**extra) -> list[dict]:
+    return [
+        {
+            "metric": "p_nom_max_by_zone_solar",
+            "key": "p8",
+            "ledger": "DL-18",
+            "hotfix": "HF-24",
+            "expect_sign": "+",
+            "max_abs_pct": 5,
+            **extra,
+        },
+    ]
+
+
+def _solar_p8(master: float, develop: float) -> dict[str, pd.DataFrame]:
+    return {"p_nom_max_by_zone_solar": _metric_frame({"p8": master}, {"p8": develop})}
+
+
+def test_bounded_waiver_explains_a_row_inside_its_bounds():
+    reg = {"HF-24": {"id": "HF-24", "ported": False, "usa_noop": False}}
+    out = tables.comparison_table(_solar_p8(188425.0, 190583.0), reg, _bounded_waiver())
+    assert out.iloc[0]["verdict"] == "explained"
+    assert out.iloc[0]["hotfix"] == "HF-24"
+
+
+def test_bounded_waiver_refuses_the_wrong_sign():
+    """HF-24 RAISES develop's potential; a -50 % row is not that difference."""
+    reg = {"HF-24": {"id": "HF-24", "ported": False, "usa_noop": False}}
+    out = tables.comparison_table(_solar_p8(188425.0, 94212.5), reg, _bounded_waiver())
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert out.iloc[0]["hotfix"] == "waiver HF-24 bounds violated (sign)"
+
+
+def test_bounded_waiver_refuses_an_out_of_scale_magnitude():
+    reg = {"HF-24": {"id": "HF-24", "ported": False, "usa_noop": False}}
+    out = tables.comparison_table(_solar_p8(188425.0, 1.88425e9), reg, _bounded_waiver())
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert out.iloc[0]["hotfix"] == "waiver HF-24 bounds violated (magnitude)"
+
+
+def test_bounded_waiver_refuses_an_undefined_delta_pct():
+    """Master 0, develop non-zero: |delta %| is undefined, so the bound fails."""
+    reg = {"HF-24": {"id": "HF-24", "ported": False, "usa_noop": False}}
+    out = tables.comparison_table(_solar_p8(0.0, 2158.0), reg, _bounded_waiver())
+    assert np.isnan(out.iloc[0]["delta_pct"])
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert out.iloc[0]["hotfix"] == "waiver HF-24 bounds violated (magnitude)"
+
+
+def test_an_unbounded_waiver_still_explains_whatever_it_names():
+    """Bounds are optional; the pre-existing unbounded form is unchanged."""
+    reg = {"HF-24": {"id": "HF-24", "ported": False, "usa_noop": False}}
+    waivers = [{"metric": "p_nom_max_by_zone_solar", "key": "p8", "ledger": "DL-18", "hotfix": "HF-24"}]
+    out = tables.comparison_table(_solar_p8(188425.0, 94212.5), reg, waivers)
+    assert out.iloc[0]["verdict"] == "explained"
+
+
+def test_each_bound_can_be_given_on_its_own():
+    reg = {"HF-24": {"id": "HF-24", "ported": False, "usa_noop": False}}
+    sign_only = _bounded_waiver()
+    sign_only[0].pop("max_abs_pct")
+    out = tables.comparison_table(_solar_p8(188425.0, 1.88425e9), reg, sign_only)
+    assert out.iloc[0]["verdict"] == "explained", "magnitude is unbounded here"
+
+    cap_only = _bounded_waiver()
+    cap_only[0].pop("expect_sign")
+    out = tables.comparison_table(_solar_p8(188425.0, 94212.5), reg, cap_only)
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert out.iloc[0]["hotfix"] == "waiver HF-24 bounds violated (magnitude)"
+
+
+def test_the_shipped_hf24_waivers_are_bounded():
+    """Every shipped HF-24 table waiver says which direction it explains."""
+    bounded = [w for w in _real_waivers() if w.get("hotfix") == "HF-24" and w.get("metric")]
+    assert bounded, "the HF-24 table waivers are gone"
+    for w in bounded:
+        assert w["expect_sign"] == "+", w
+        assert float(w["max_abs_pct"]) > 0, w
+
+
+def test_the_shipped_hf24_waiver_refuses_a_sign_flip():
+    """End to end on the real files: a drop in develop's potential is not HF-24."""
+    reg = tables.load_hotfixes()
+    waivers = _real_waivers()
+    flipped = tables.comparison_table(
+        _solar_p8(188425.0, 94212.5),
+        reg,
+        waivers,
+        interconnect="western",
+        prong=2,
+    )
+    assert flipped.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert "bounds violated (sign)" in flipped.iloc[0]["hotfix"]

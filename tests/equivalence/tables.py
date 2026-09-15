@@ -14,7 +14,10 @@ A row of the comparison table is one ``(metric, key)`` pair with a verdict:
 ``explained``
     Over tolerance, and a **waiver names this row** and carries a ``hotfix:``
     tag that resolves in ``hotfixes.yaml``, is not ``ported`` and is not a
-    ``usa_noop``. Nothing else grants it — see "expect is advisory" below.
+    ``usa_noop``. Nothing else grants it — see "expect is advisory" below. A
+    waiver may also BOUND what it explains (:data:`WAIVER_BOUND_KEYS`:
+    ``expect_sign``, ``max_abs_pct``); a row outside those bounds is not the
+    difference that was signed off and stays ``UNEXPLAINED``.
 ``UNEXPLAINED``
     Over tolerance with nothing valid to point at. This is what the benchmark is
     for; the run fails while any of these remain.
@@ -145,8 +148,12 @@ KNOWN_METRICS: tuple[str, ...] = (
 
 #: Waiver fields that can attach a waiver to a comparison-table row. A waiver
 #: naming none of them is a ``compare.py`` cell waiver (stage/component/column/
-#: kind) and has nothing to say about this table.
-_WAIVER_MATCH_KEYS = ("metric", "key", "family")
+#: kind) and has nothing to say about this table. The converse matters just as
+#: much and is enforced by ``compare.is_waived``: a waiver that DOES name one of
+#: these is a table-row waiver, and must not be read as a cell waiver whose four
+#: absent fields wildcard onto every finding in the run.
+WAIVER_MATCH_KEYS = ("metric", "key", "family")
+_WAIVER_MATCH_KEYS = WAIVER_MATCH_KEYS
 
 #: Fields that SCOPE a waiver to a particular run rather than selecting a row.
 #: ``compare.is_waived`` honours both; so must this table, or a waiver written
@@ -268,14 +275,54 @@ def _waiver_in_scope(waiver: dict, run: dict) -> bool:
     return True
 
 
-def _waiver_hotfix(
+#: Optional BOUNDS a table waiver can put on the row it explains.
+#:
+#: A waiver used to be matched on ``metric``/``key`` alone, which made it a
+#: blank cheque: the HF-24 waiver on ``p_nom_max_by_zone_solar/p8`` was written
+#: for "+2,158 MW of potential master silently dropped" (+1.1 %), and it would
+#: equally have explained a -50 % row or a 10,000x row — the opposite of the
+#: fix's known direction, or a magnitude nothing in the hot-fix could produce.
+#: The two bounds say what the waiver was measured on, so a row that walks out
+#: of that range comes back as UNEXPLAINED instead of inheriting the signature.
+#:
+#: ``expect_sign``  '+' or '-': the sign of ``develop - master``.
+#: ``max_abs_pct``  upper bound on ``|delta %|``.
+WAIVER_BOUND_KEYS = ("expect_sign", "max_abs_pct")
+
+
+def _bounds_violation(waiver: dict, delta: float, pct: float) -> str | None:
+    """Which bound this waiver puts on the row is broken, or ``None``.
+
+    Returns ``'sign'`` or ``'magnitude'``; a waiver carrying neither bound can
+    never violate one. An undefined ``delta_pct`` (master is 0, develop is not —
+    the appear-from-nothing case) counts as a magnitude violation whenever
+    ``max_abs_pct`` is set: the bound cannot be shown to hold, and a waiver is a
+    claim that has to be checkable.
+    """
+    want = waiver.get("expect_sign")
+    if want in ("+", "-"):
+        sign = "+" if delta > 0 else "-" if delta < 0 else "0"
+        if sign != want:
+            return "sign"
+    cap = waiver.get("max_abs_pct")
+    if cap is not None:
+        try:
+            cap = float(cap)
+        except (TypeError, ValueError):
+            return "magnitude"
+        if not np.isfinite(pct) or abs(pct) > cap:
+            return "magnitude"
+    return None
+
+
+def _matching_waivers(
     waivers: list[dict],
     metric: str,
     family: str,
     key: str,
     run: dict | None = None,
-) -> str | None:
-    """The ``hotfix:`` id of the first in-scope waiver that NAMES this row.
+) -> list[dict]:
+    """The in-scope, ``hotfix:``-tagged waivers that NAME this row, in file order.
 
     A waiver must name at least one of ``metric``/``key``/``family``, and every
     field it does name must match. ``waivers.yaml`` entries carry
@@ -290,6 +337,7 @@ def _waiver_hotfix(
     whose scope cannot be checked has not been shown to apply here.
     """
     row = {"metric": metric, "key": key, "family": family}
+    out = []
     for w in waivers:
         if not w.get("hotfix"):
             continue
@@ -299,8 +347,25 @@ def _waiver_hotfix(
         if not _waiver_in_scope(w, run or {}):
             continue
         if all(w[k] == row[k] for k in named):
-            return str(w["hotfix"])
-    return None
+            out.append(w)
+    return out
+
+
+def _waiver_hotfix(
+    waivers: list[dict],
+    metric: str,
+    family: str,
+    key: str,
+    run: dict | None = None,
+) -> str | None:
+    """The ``hotfix:`` id of the first in-scope waiver that NAMES this row.
+
+    Bounds-unaware; kept for callers that only need to know whether a row is
+    claimed at all. :func:`_explanation` uses :func:`_matching_waivers` so it
+    can check the bounds too.
+    """
+    matches = _matching_waivers(waivers, metric, family, key, run)
+    return str(matches[0]["hotfix"]) if matches else None
 
 
 def _hotfix_sort_key(hid: str) -> tuple[int, str]:
@@ -329,6 +394,8 @@ def _explanation(
     hotfixes: dict[str, dict],
     waivers: list[dict],
     run: dict | None = None,
+    delta: float = float("nan"),
+    pct: float = float("nan"),
 ) -> tuple[str, bool]:
     """(hotfix cell, is_valid_explanation) for an over-tolerance row.
 
@@ -337,15 +404,32 @@ def _explanation(
     on both sides, so it cannot be why they differ) and is not a ``usa_noop``.
     A rejected tag is reported verbatim and the row stays UNEXPLAINED.
 
+    A waiver that carries :data:`WAIVER_BOUND_KEYS` must also cover THIS row's
+    sign and magnitude. Out of bounds it is reported as
+    ``waiver HF-n bounds violated (sign|magnitude)`` and the row stays
+    UNEXPLAINED — the measurement the waiver signed off is not the one in front
+    of us. Several waivers may name the same row; the first one that both
+    resolves and holds explains it.
+
     An ``expect`` glob does NOT explain anything; it only populates the advisory
     ``candidates`` column. Between them the registry's globs cover every known
     metric, so honouring them here made UNEXPLAINED unreachable.
     """
-    waived = _waiver_hotfix(waivers, metric, family, key, run)
-    if not waived:
+    matches = _matching_waivers(waivers, metric, family, key, run)
+    if not matches:
         return "", False
-    ok, reason = explains(waived, hotfixes)
-    return (waived if ok else f"{waived}: {reason}"), ok
+    rejected = ""
+    for w in matches:
+        hid = str(w["hotfix"])
+        ok, reason = explains(hid, hotfixes)
+        if not ok:
+            rejected = rejected or f"{hid}: {reason}"
+            continue
+        broken = _bounds_violation(w, delta, pct)
+        if broken is None:
+            return hid, True
+        rejected = rejected or f"waiver {hid} bounds violated ({broken})"
+    return rejected, False
 
 
 def _as_frame(obj) -> pd.DataFrame:
@@ -390,7 +474,7 @@ def _row_verdict(
         return "one-sided", "develop only" if m_na else "master only"
     if abs(delta) <= tol.atol or (np.isfinite(pct) and abs(pct) <= tol.rtol * 100.0):
         return "equivalent", ""
-    cell, ok = _explanation(metric, family, key, hotfixes, waivers, run)
+    cell, ok = _explanation(metric, family, key, hotfixes, waivers, run, delta=delta, pct=pct)
     return ("explained" if ok else "UNEXPLAINED"), cell
 
 
@@ -442,7 +526,17 @@ def comparison_table(
             master, develop = _f(r["master"]), _f(r["develop"])
             delta, pct = _f(r["delta"]), _f(r["delta_pct"])
             verdict, cell = _row_verdict(
-                metric, family, label, master, develop, delta, pct, tol, hotfixes, waivers, run,
+                metric,
+                family,
+                label,
+                master,
+                develop,
+                delta,
+                pct,
+                tol,
+                hotfixes,
+                waivers,
+                run,
             )
             rows.append(
                 {

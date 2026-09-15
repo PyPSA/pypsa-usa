@@ -13,6 +13,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -117,7 +118,13 @@ def test_choropleth_handles_missing_zone(tmp_path):
 
 def test_choropleth_empty_input(tmp_path):
     png, _ = plots.choropleth_triptych(
-        _point_zones(), pd.Series(dtype=float), pd.Series(dtype=float), "potential", "GW", "z", tmp_path,
+        _point_zones(),
+        pd.Series(dtype=float),
+        pd.Series(dtype=float),
+        "potential",
+        "GW",
+        "z",
+        tmp_path,
     )
     assert png.exists()
 
@@ -143,7 +150,10 @@ def test_duration_curve(tmp_path):
     png, csv = plots.duration_curve(
         pd.Series(metrics.profile_values(ds_m)),
         pd.Series(metrics.profile_values(ds_d)),
-        "solar capacity factor", "-", "p_max_pu_duration_solar", tmp_path,
+        "solar capacity factor",
+        "-",
+        "p_max_pu_duration_solar",
+        tmp_path,
     )
     assert png.exists()
     data = pd.read_csv(csv, index_col=0)
@@ -207,7 +217,9 @@ def test_every_figure_has_a_csv(tmp_path):
         "demand_by_zone": metrics.demand_by_zone(master, develop),
     }
     plots.objective_figure(
-        metrics.objective_row(make_objective(100.0, 10.0), make_objective(110.0, 0.0)), "objective", tmp_path,
+        metrics.objective_row(make_objective(100.0, 10.0), make_objective(110.0, 0.0)),
+        "objective",
+        tmp_path,
     )
     for name, title, unit in (
         ("capacity_existing_by_carrier", "existing capacity", "MW"),
@@ -221,30 +233,61 @@ def test_every_figure_has_a_csv(tmp_path):
     for carrier in ("solar", "CCGT"):
         sub = zc.xs(carrier, level="carrier")
         plots.choropleth_triptych(
-            zones, sub["master"], sub["develop"], f"{carrier} existing capacity", "MW",
-            f"p_nom_existing_zones_{carrier}", tmp_path,
+            zones,
+            sub["master"],
+            sub["develop"],
+            f"{carrier} existing capacity",
+            "MW",
+            f"p_nom_existing_zones_{carrier}",
+            tmp_path,
         )
     ds_m, ds_d = make_profile(seed=20), make_profile(seed=21)
     for tech in ("solar", "onwind"):
         pot = metrics.p_nom_max_by_zone(
-            ds_m, ds_d, pd.Series({"b0": "p1", "b1": "p1", "b2": "p2"}), pd.Series({"b0": "p1", "b1": "p1", "b2": "p2"}),
+            ds_m,
+            ds_d,
+            pd.Series({"b0": "p1", "b1": "p1", "b2": "p2"}),
+            pd.Series({"b0": "p1", "b1": "p1", "b2": "p2"}),
         )
         plots.choropleth_triptych(
-            zones, pot["master"], pot["develop"], f"{tech} potential", "GW", f"{tech}_potential_zones", tmp_path,
+            zones,
+            pot["master"],
+            pot["develop"],
+            f"{tech} potential",
+            "GW",
+            f"{tech}_potential_zones",
+            tmp_path,
         )
         cf = metrics.mean_cf_by_zone(
-            ds_m, ds_d, pd.Series({"b0": "p1", "b1": "p1", "b2": "p2"}), pd.Series({"b0": "p1", "b1": "p1", "b2": "p2"}),
+            ds_m,
+            ds_d,
+            pd.Series({"b0": "p1", "b1": "p1", "b2": "p2"}),
+            pd.Series({"b0": "p1", "b1": "p1", "b2": "p2"}),
         )
         plots.choropleth_triptych(
-            zones, cf["master"], cf["develop"], f"{tech} mean CF", "-", f"{tech}_meancf_zones", tmp_path,
+            zones,
+            cf["master"],
+            cf["develop"],
+            f"{tech} mean CF",
+            "-",
+            f"{tech}_meancf_zones",
+            tmp_path,
         )
         plots.duration_curve(
-            pd.Series(metrics.profile_values(ds_m)), pd.Series(metrics.profile_values(ds_d)),
-            f"{tech} capacity factor", "-", f"p_max_pu_duration_{tech}", tmp_path,
+            pd.Series(metrics.profile_values(ds_m)),
+            pd.Series(metrics.profile_values(ds_d)),
+            f"{tech} capacity factor",
+            "-",
+            f"p_max_pu_duration_{tech}",
+            tmp_path,
         )
         plots.timeseries_pair(
-            metrics.available_power(ds_m), metrics.available_power(ds_d),
-            f"{tech} available power", "MW", f"{tech}_national_available_power", tmp_path,
+            metrics.available_power(ds_m),
+            metrics.available_power(ds_d),
+            f"{tech} available power",
+            "MW",
+            f"{tech}_national_available_power",
+            tmp_path,
         )
     plots.findings_by_stage([{"stage": "demand", "waived": False}], "findings_by_stage", tmp_path)
 
@@ -306,8 +349,11 @@ def test_missing_reeds_zone_is_recorded_not_skipped():
     for n in (master, develop):
         n.buses.drop(columns=["reeds_zone"], inplace=True)
     art = plots.Artifacts(
-        prong=2, develop_root=Path("/nonexistent/dev"), master_root=Path("/nonexistent/mas"),
-        n_master=master, n_develop=develop,
+        prong=2,
+        develop_root=Path("/nonexistent/dev"),
+        master_root=Path("/nonexistent/mas"),
+        n_master=master,
+        n_develop=develop,
     )
     missing = []
     frames = plots.collect_metrics(art, missing)
@@ -325,8 +371,11 @@ def test_missing_reeds_zone_is_recorded_not_skipped():
 
 def test_collect_metrics_records_nothing_when_all_is_well():
     art = plots.Artifacts(
-        prong=2, develop_root=Path("/nonexistent/dev"), master_root=Path("/nonexistent/mas"),
-        n_master=make_network(), n_develop=make_network(),
+        prong=2,
+        develop_root=Path("/nonexistent/dev"),
+        master_root=Path("/nonexistent/mas"),
+        n_master=make_network(),
+        n_develop=make_network(),
     )
     missing = []
     frames = plots.collect_metrics(art, missing)
@@ -384,3 +433,98 @@ def test_export_all_accepts_the_two_arg_form_run_py_uses():
     assert params[:2] == ["run_dir", "ctx"]
     for name, param in list(inspect.signature(plots.export_all).parameters.items())[2:]:
         assert param.default is not inspect.Parameter.empty, name
+
+
+# ---------------------------------------------------------------------------
+# Prong 2: master's nodal profile is rolled up before any profile metric.
+# ---------------------------------------------------------------------------
+
+
+def test_collect_metrics_aggregates_master_at_prong_2(tmp_path, monkeypatch):
+    """Without the rollup the quantile rows differ by construction.
+
+    Master here is the 6-bus nodal file; develop is exactly its 2-cluster
+    aggregate, i.e. the two pipelines agree perfectly. The comparison must then
+    read as zero delta — which it can only do if master is aggregated first.
+    """
+    busmap = pd.Series({f"b{i}": ("c0" if i < 3 else "c1") for i in range(6)}, dtype=object)
+    master = make_profile(n_bus=6, n_time=24, seed=70)
+    develop = metrics.aggregate_profile_to_clusters(master, busmap)
+
+    dev_dir, mas_dir = tmp_path / "dev", tmp_path / "mas"
+    art = plots.Artifacts(prong=2, develop_root=dev_dir, master_root=mas_dir, busmap=busmap)
+    zone = pd.Series({"c0": "p1", "c1": "p2"}, dtype=object)
+    art.zone_develop, art.zone_master = zone, pd.Series({f"b{i}": "p1" for i in range(6)}, dtype=object)
+
+    pairs = art.profile_pairs
+    assert pairs, "prong 2 has no profile pairs to exercise"
+    pair = pairs[0]
+    tech = pair.stage.replace("profile_", "")
+    dp, mp = dev_dir / pair.develop, mas_dir / pair.master
+    dp.parent.mkdir(parents=True, exist_ok=True)
+    mp.parent.mkdir(parents=True, exist_ok=True)
+    develop.to_netcdf(dp)
+    master.to_netcdf(mp)
+    monkeypatch.setattr(plots.Artifacts, "profile_pairs", property(lambda self: [pair]))
+
+    missing: list[dict] = []
+    frames = plots.collect_metrics(art, missing)
+    assert missing == []
+    q = frames[f"p_max_pu_quantiles_{tech}"]
+    assert np.allclose(q["delta"].dropna().to_numpy(), 0.0, atol=1e-6)
+    pot = frames[f"p_nom_max_by_zone_{tech}"]
+    # Master now carries cluster ids, so it must have been joined through the
+    # DEVELOP zone map; the substation map would have put everything in p1.
+    assert set(pot.index) == {"p1", "p2"}
+    assert np.allclose(pot["delta"].to_numpy(), 0.0, atol=1e-3)
+    # Same cluster set on both sides: nothing to report and nothing removed.
+    assert art.cluster_sets[tech]["equal"] is True
+
+
+def test_a_develop_only_cluster_is_kept_out_of_the_pooled_metrics(tmp_path, monkeypatch):
+    """The HF-24 case: develop has a cluster master never built.
+
+    Pooled in, its 24 hours of low capacity factor move every quantile row and
+    its 2,158 MW move its zone's potential, so a row-set difference reads as a
+    distributional one. The metrics must be computed over the common clusters,
+    with the one-sided cluster recorded instead.
+    """
+    busmap = pd.Series({f"b{i}": ("c0" if i < 3 else "c1") for i in range(6)}, dtype=object)
+    master = make_profile(n_bus=6, n_time=24, seed=71)
+    develop = metrics.aggregate_profile_to_clusters(master, busmap)
+    extra = make_profile(n_bus=1, n_time=24, seed=72, cf_scale=0.2).assign_coords(bus=["p87 0"])
+    extra["p_nom_max"][:] = np.array([2158.0])
+    develop = xr.concat([develop, extra], dim="bus")
+
+    dev_dir, mas_dir = tmp_path / "dev", tmp_path / "mas"
+    art = plots.Artifacts(prong=2, develop_root=dev_dir, master_root=mas_dir, busmap=busmap)
+    art.zone_develop = pd.Series({"c0": "p1", "c1": "p2", "p87 0": "p8"}, dtype=object)
+    art.zone_master = pd.Series({f"b{i}": "p1" for i in range(6)}, dtype=object)
+
+    pair = art.profile_pairs[0]
+    tech = pair.stage.replace("profile_", "")
+    dp, mp = dev_dir / pair.develop, mas_dir / pair.master
+    dp.parent.mkdir(parents=True, exist_ok=True)
+    mp.parent.mkdir(parents=True, exist_ok=True)
+    develop.to_netcdf(dp)
+    master.to_netcdf(mp)
+    monkeypatch.setattr(plots.Artifacts, "profile_pairs", property(lambda self: [pair]))
+
+    missing: list[dict] = []
+    frames = plots.collect_metrics(art, missing)
+    assert missing == []
+
+    info = art.cluster_sets[tech]
+    assert info["only_develop"] == {"p87 0": pytest.approx(2158.0)}
+    assert info["only_develop_mw"] == pytest.approx(2158.0)
+    assert info["n_common"] == 2
+
+    # The two pipelines agree on the clusters they share, so every pooled row
+    # is zero — the one-sided cluster is reported, never averaged in.
+    q = frames[f"p_max_pu_quantiles_{tech}"]
+    assert np.allclose(q["delta"].dropna().to_numpy(), 0.0, atol=1e-6)
+    pot = frames[f"p_nom_max_by_zone_{tech}"]
+    assert set(pot.index) == {"p1", "p2"}, "zone p8 is the develop-only cluster's zone"
+    assert np.allclose(pot["delta"].to_numpy(), 0.0, atol=1e-3)
+    cf = frames[f"mean_cf_by_zone_{tech}"]
+    assert np.allclose(cf["delta"].dropna().to_numpy(), 0.0, atol=1e-9)

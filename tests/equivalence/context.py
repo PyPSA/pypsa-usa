@@ -71,6 +71,22 @@ class RunContext:
     develop_dirty: bool
     develop_commits_ahead_of_master: int
     config_sha256: str
+    #: What master's renewable-profile file WAS when the profile metrics read
+    #: it. Master builds at substation resolution and develop at s{simpl}, so at
+    #: prong 2 the harness rolls master up onto develop's cluster bus space
+    #: before any distributional statistic is taken
+    #: (``metrics.aggregate_profile_to_clusters``). Recorded because a CF
+    #: quantile is meaningless without the bus population it was taken over.
+    #: ``build_context`` can only say what is PLANNED (it runs before either
+    #: side builds); ``compare.run_comparison`` rewrites this field in the
+    #: written record with what the comparison actually did.
+    master_profile_stage: str = "nodal"
+    #: One entry per prong-2 profile pair: whether the rollup ran and how the
+    #: two cluster sets compared (``metrics.cluster_sets``). A cluster on one
+    #: side only is reported here and as a ``cluster_set`` row_set finding, and
+    #: is excluded from the pooled profile metrics. Filled in after the
+    #: comparison, by the same ``update_run_meta`` pass.
+    profile_cluster_sets: list[dict] = field(default_factory=list)
     env_master: dict[str, str] = field(default_factory=dict)
     env_develop: dict[str, str] = field(default_factory=dict)
     # 'pending' until the gate has run, then 'passed' / 'failed' / 'skipped'.
@@ -98,6 +114,35 @@ def _git(*args: str, cwd: Path | None = None) -> str:
 def _count(rev_range: str) -> int:
     out = _git("rev-list", "--count", rev_range)
     return int(out) if out.isdigit() else -1
+
+
+def master_profile_stage(prong: int, rolled_up: bool | None = None) -> str:
+    """Bus resolution master's profile file was compared AT, for ``run_meta.json``.
+
+    Prong 1 compares the two nodal files bus-for-bus. Prong 2 cannot: master
+    builds ``profile_{tech}.nc`` at substation resolution and develop builds
+    ``profile_{tech}_s{simpl}.nc`` at cluster resolution, and a capacity-factor
+    quantile is a property of its bus population as much as of the weather. So
+    master is rolled up first, and the record says which object the numbers came
+    from.
+
+    ``rolled_up`` is the OBSERVED outcome, not the intention:
+
+    - ``None`` — nothing has run yet (``build_context`` mints the record before
+      either side builds), so the field says the rollup is planned.
+    - ``True`` / ``False`` — what ``compare.compare_profiles`` and
+      ``plots.collect_metrics`` actually did. The rollup needs develop's
+      ``busmap_s{simpl}.csv``; without it the two sides were compared at
+      different resolutions, and a reader must not have to infer that from the
+      prong number. ``compare.run_comparison`` rewrites the field with this.
+    """
+    if prong == 1:
+        return "nodal"
+    if rolled_up is None:
+        return f"nodal; rollup to s{paths.SIMPL2} planned, not yet run"
+    if rolled_up:
+        return f"nodal->s{paths.SIMPL2} (p_nom_max-weighted)"
+    return f"nodal (rollup did NOT run: no busmap_s{paths.SIMPL2} or no bus dimension)"
 
 
 def build_context(prong: int, probe_env: bool = True) -> RunContext:
@@ -147,6 +192,7 @@ def build_context(prong: int, probe_env: bool = True) -> RunContext:
         develop_dirty=bool(build.checkout_dirt(REPO)),
         develop_commits_ahead_of_master=_count(f"master..{develop_sha}") if master_sha else -1,
         config_sha256=config_sha256,
+        master_profile_stage=master_profile_stage(prong),
         env_master=env_master,
         env_develop=env_develop,
         config_gate="pending",
@@ -182,6 +228,30 @@ def write_run_meta(ctx: RunContext) -> Path:
     ctx.run_dir.mkdir(parents=True, exist_ok=True)
     out = ctx.run_dir / "run_meta.json"
     out.write_text(json.dumps(dataclasses.asdict(ctx), indent=1, default=str, sort_keys=True))
+    return out
+
+
+def update_run_meta(*, run_dir: Path | None = None, **fields: object) -> Path:
+    """Merge ``fields`` into the run's ``run_meta.json`` and rewrite it.
+
+    Provenance that is only knowable AFTER the comparison —
+    ``master_profile_stage``, ``profile_cluster_sets`` — has to reach the same
+    file as the shas, or a reader has two records to reconcile. The file is
+    created if it does not exist yet, so a comparison run standalone (no
+    ``run.py``) still leaves the facts behind rather than dropping them.
+    """
+    out = Path(run_dir or paths.run_dir()) / "run_meta.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    current: dict = {}
+    if out.exists():
+        try:
+            loaded = json.loads(out.read_text())
+            if isinstance(loaded, dict):
+                current = loaded
+        except (OSError, ValueError):
+            current = {}
+    current.update(fields)
+    out.write_text(json.dumps(current, indent=1, default=str, sort_keys=True))
     return out
 
 
@@ -225,7 +295,7 @@ _SHIM_NAME = ".eq_dump_config.smk"
 # its own user overlays and (on develop) its own schema validation all apply;
 # --configfile is applied last by snakemake, exactly as in a real build. The
 # dump rule has no inputs, so nothing of the DAG is built to reach it.
-_SHIM_SOURCE = '''# Generated by tests/equivalence/context.py; deleted again after the dump.
+_SHIM_SOURCE = """# Generated by tests/equivalence/context.py; deleted again after the dump.
 
 
 include: "Snakefile"
@@ -241,7 +311,7 @@ rule eq_dump_config:
         p = Path(output[0])
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(config, indent=1, sort_keys=True, default=str))
-'''
+"""
 
 
 def merged_config(side: str) -> dict:
@@ -474,8 +544,7 @@ CONFIG_DIFF_ALLOWLIST: tuple[tuple[str, str], ...] = (
     ),
     (
         "run.benchmark_cpuc_horizons",
-        "read only when run.benchmark_cpuc is true, which is itself develop-only and false "
-        "(HF-21)",
+        "read only when run.benchmark_cpuc is true, which is itself develop-only and false " "(HF-21)",
     ),
     # --- values that match the other side's inline fallback ------------------
     (

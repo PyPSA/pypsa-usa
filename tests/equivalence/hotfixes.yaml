@@ -382,3 +382,69 @@
     numeric path. Master has no godeeep_cf_registry.py, so only the constants.py
     line was ported — exactly what the retired apply_infra_patches injected.
     Needed for a bare-master baseline to run at all from a cold cache.
+
+- id: HF-24
+  commit: ff2093f
+  pr: null
+  title: build_renewable_profiles keeps NREL caps capacity for substations with zero GODEEEP availability or no intersecting cell, instead of silently dropping it
+  confidence: high
+  ported: false
+  usa_noop: false
+  expect: [p_nom_max_by_zone_*, mean_cf_by_zone_*, p_max_pu_quantiles_*]
+  master: substations whose GODEEEP availability is zero, or whose region intersects no CF cell, are dropped from the profile file and their NREL caps potential disappears
+  develop: those substations are retained, their MW re-weighted onto the cluster's availability-weighted CF (so the capacity enters at the cluster's mean CF, not at zero), and the NREL caps potential survives into p_nom_max
+  notes: >-
+    A master data-quality bug that develop fixes, diagnosed on smoke run
+    smoke-western-20260915-1141 (2026-09-15). Western measurement: 7 onwind
+    buses / 546 MW and 4 solar buses / 2,566 MW of NREL caps potential are
+    present on develop and absent on master; bus 37808 is the whole of cluster
+    p87's solar. Mechanism on develop:
+    capacity_weighted_bus_aggregation folds a zero-availability substation's MW
+    onto the cluster's plain availability-weighted CF (algebraically, it adds
+    P_bad / A_cluster to every row weight in that cluster), so the retained
+    capacity is dispatched at the cluster's mean capacity factor rather than at
+    zero. That shifts mean_cf_by_zone_* and p_max_pu_quantiles_* slightly as
+    well as p_nom_max_by_zone_*. A cluster that exists only on develop (western:
+    `p87 0`, bus 37808) is a cluster_set difference at the profile stage; the
+    harness reports it as a finding waived under this id. The residual shows up
+    as small POSITIVE p_nom_max deltas in zones p8/p9/p10 and in the two
+    system_potential_mw findings, and is waived against this row in
+    waivers.yaml. The commit named is the harness-branch tip the diagnosis was
+    made on, not a single isolated fix commit; the prose home is
+    memory/plans/hotfix-ledger.md in the project brain.
+
+- id: HF-25
+  commit: ff2093f
+  pr: null
+  title: "renewable.godeeep_cf_weighting: develop weights substation capacity factors up to the s{simpl} cluster by INSTALLABLE capacity (NREL caps p_nom_max); master weights them by EXISTING p_nom and falls back to an unweighted mean where a cluster has none"
+  confidence: high
+  ported: false
+  usa_noop: false
+  expect: [objective, dispatch_by_carrier/*, capacity_factor_by_carrier/*, capacity_opt_by_carrier/*]
+  master: simplify_network hands p_max_pu to pypsa 0.30.2 clustering/spatial.py:aggregateoneport, which capacity-weighted-averages the substation profiles with weight = existing p_nom and, via normed_or_uniform, degenerates to a plain arithmetic mean over the cluster's substations whenever their p_nom sums to zero
+  develop: build_renewable_profiles aggregates in one pass — availability-weighted within each substation, then p_nom_max-weighted across the cluster's substations (renewable.godeeep_cf_weighting = capacity)
+  notes: >-
+    A develop improvement over a master defect, NOT a parity port: the code and
+    its config key stay, the earlier claim that "capacity" reproduces master's
+    math was wrong and has been removed from every docstring, comment and test
+    name (decision, orchestrator 2026-09-15). Deltas ledger DL-19.
+    Verification against master's own outputs (western, reproducer
+    $SCRATCH/eq_verify/check_master_weights.py, 2026-09-15): reconstructing
+    master's elec_s20 p_max_pu from its nodal elec_base_network_l_pp.pkl,
+    existing-p_nom weighting with the uniform fallback matches every cluster to
+    |Δ| 0.00000, while p_nom_max weighting is off by mean |Δ| 0.0966 (onwind)
+    and 0.0132 (solar). 12 of 20 western onwind clusters carry zero existing
+    p_nom, so master's cluster CF there is the unweighted mean of its
+    substations' CFs — a 1 MW polygon counts as much as a 10 GW one. Develop
+    keeps p_nom_max because it is the physically right weight for an extendable
+    resource generator.
+    NOT VISIBLE AT PRONG 2: the harness compares the PROFILE files, and
+    metrics.aggregate_profile_to_clusters rolls master's nodal file up to
+    develop's cluster bus space with p_nom_max weights — the same weights
+    develop uses — so p_max_pu_quantiles_*, mean_cf_by_zone_* and
+    p_nom_max_by_zone_* cannot see this row. It bites only at the network stages
+    (clustered p_max_pu, and the dispatch/capacity/objective that follow), which
+    prong 2 does not yet compare — a clustered-network p_max_pu comparison is
+    owed and belongs in the project backlog. Nothing is waived against this id, because
+    there is as yet no finding to waive. The commit named is the harness-branch
+    tip the diagnosis was made on, not an isolated fix commit.
