@@ -23,6 +23,9 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=160GB
 #SBATCH --signal=B:TERM@180
+# Mail on end or failure so completion reaches a human without polling. Slurm
+# uses the submitting account's address when --mail-user is unset.
+#SBATCH --mail-type=END,FAIL
 #
 # Slurm's own capture goes to a RELATIVE path, i.e. into the directory you
 # submitted from, which by construction exists and is writable. An absolute

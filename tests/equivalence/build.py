@@ -290,8 +290,10 @@ def assert_clean_checkout(side: str, root: Path) -> list[str]:
     listing = "\n".join(dirt[:20])
     more = f"\n... and {len(dirt) - 20} more" if len(dirt) > 20 else ""
     if os.environ.get("EQ_ALLOW_DIRTY") == "1":
-        log(f"WARNING: {side} checkout {root} has uncommitted changes to tracked files; "
-            f"building anyway because EQ_ALLOW_DIRTY=1:\n{listing}{more}")
+        log(
+            f"WARNING: {side} checkout {root} has uncommitted changes to tracked files; "
+            f"building anyway because EQ_ALLOW_DIRTY=1:\n{listing}{more}"
+        )
         return dirt
     raise RuntimeError(
         f"{side} checkout {root} has uncommitted changes to tracked files, so the sha "
@@ -372,6 +374,48 @@ def snakemake_cmd(
     ]
 
 
+def mirror_godeeep_cf_for_master(data_dir: Path) -> list[Path]:
+    """Give master the GODEEEP CF files develop retrieved, as hard links.
+
+    develop's ``retrieve_godeeep_cf`` places CF files under
+    ``data/godeeep/<scenario>/``; master's ``build_renewable_profiles`` calls
+    its own ``ZenodoScenarioDownloader``, which looks under
+    ``data/zenodo/<scenario>/`` and, when the file is absent, fetches it from
+    Zenodo — or returns ``None`` on any metadata miss, which xarray then reports
+    as "did not find a match in any of xarray's currently installed IO
+    backends" (smoke job 43580538, 2026-09-15). Both directories live in the
+    shared cache; the historical files were hand-linked on 2026-09-01, which
+    is why the USA leg never hit this.
+
+    Linking every file develop retrieved does three things at once: master
+    reads byte-identical inputs, master never touches the network inside the
+    benchmark, and a scenario the cache has never seen works on the first
+    run. Hard link first (same filesystem, no duplication); symlink if the
+    link crosses filesystems. Existing regular files are left alone.
+    Returns the paths created.
+    """
+    src_root = data_dir / "godeeep"
+    dst_root = data_dir / "zenodo"
+    created: list[Path] = []
+    if not src_root.is_dir():
+        return created
+    for src in sorted(src_root.glob("*/*.nc")):
+        if not src.is_file():
+            continue
+        dst = dst_root / src.parent.name / src.name
+        if dst.exists() or dst.is_symlink():
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(src.resolve(), dst)
+        except OSError:
+            dst.symlink_to(src.resolve())
+        created.append(dst)
+    if created:
+        log(f"master: mirrored {len(created)} GODEEEP CF file(s) from data/godeeep/ into data/zenodo/")
+    return created
+
+
 def build_side(side: str, target: str, jobs: int = 4, timeout: int = 10800) -> dict:
     """Run snakemake for one side; returns manifest dict (also written)."""
     if side not in SIDES:
@@ -379,6 +423,8 @@ def build_side(side: str, target: str, jobs: int = 4, timeout: int = 10800) -> d
     wt = side_root(side)
     assert_clean_checkout(side, wt)
     wf = wt / "workflow"
+    if side == "master":
+        mirror_godeeep_cf_for_master(wf / "data")
     cmd = snakemake_cmd(target, jobs, side_configfile(side))
     t0 = time.time()
     cp = run(cmd, cwd=wf, timeout=timeout)

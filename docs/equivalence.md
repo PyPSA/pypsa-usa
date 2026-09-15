@@ -491,3 +491,28 @@ frame, every column. It is noisy by design and most of it is waived in
 where one applies, the `HF-<n>` that causes it. The comparison table is the
 coarse, decision-grade view. A run passes only when **both** are clean: zero
 unwaived findings and zero `UNEXPLAINED` or `MISSING` rows.
+
+## 6. One press: `submit_benchmark.sh`
+
+A harness change is not done until a job is in `squeue --me`. The queue wait
+is the review window, not something to earn by reviewing first. To make the
+launch one decidable action:
+
+```bash
+tests/equivalence/submit_benchmark.sh              # smoke, then full USA run chained afterok
+tests/equivalence/submit_benchmark.sh --smoke-only
+tests/equivalence/submit_benchmark.sh --full-only  # when the smoke has already passed
+tests/equivalence/submit_benchmark.sh --dry-run
+```
+
+Stage 1 builds `western` on both sides, prong 2, `EQ_UNTIL=assembled`, on
+8 CPUs / 64 GB / 3 h. Stage 2 is the driver with its defaults (whole USA),
+released by Slurm only if stage 1 exits 0 (`--dependency=afterok`). Both
+jobs carry `--mail-type=END,FAIL`. The script prints `key=value` facts
+(job ids, shas, run directories, Slurm log paths) that the brain's `/benchmark`
+skill turns into a run-card stub. Every knob is an `EQ_SMOKE_*` / `EQ_FULL_*`
+env var; see the header.
+
+Waiting: check `squeue --me` every 20 minutes at most, or let Slurm mail you.
+Never end a session with "shall I launch?" when submission is already
+permitted: launch, then review while it queues.
