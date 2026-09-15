@@ -353,7 +353,7 @@ manifest_master.json   baseline build: sha, config hash, per-rule wall time and 
 manifest_develop.json  develop build, same shape
 findings_<prong>.json  every stage-by-stage difference, each marked waived or live
 config_merged/         the two fully merged configs the gate compared
-tables/comparison.csv  one row per (metric, key) with a verdict
+tables/comparison.csv  one row per (metric, key) with a verdict and its candidates
 tables/comparison.md   the same, capped, for reading
 figures/*.png          every figure...
 figures/*.csv          ...each with the exact values it plots
@@ -384,19 +384,65 @@ sets and the comparison would be meaningless.
 ### Reading `comparison.md`
 
 One row per (metric, key), with `master`, `develop`, `delta`, `delta_pct`, the
-tolerance, a verdict and a hot-fix id. Three verdicts:
+tolerance, a verdict, a `hotfix` cell and a `candidates` cell:
 
-- **`equivalent`** — `|delta_pct|` is within tolerance. Nothing to do.
-- **`explained`** — over tolerance, and a live hot-fix id accounts for it. The
-  id is in the row; look it up in the ledger.
-- **`UNEXPLAINED`** — over tolerance with no hot-fix that accounts for it.
-  **This is the only verdict that matters.** Rows are sorted `UNEXPLAINED`
-  first, then by `|delta_pct|` descending. A run exits non-zero if there is even
-  one, and a refactor change is accepted only when there are none or when each
-  one traces to a named, un-ported hot-fix.
+- **`equivalent`** — within the relative tolerance or under the absolute floor.
+  Nothing to do.
+- **`explained`** — over tolerance, and a **waiver names this row** with a
+  `hotfix:` tag that holds up. The id is in the `hotfix` cell; look it up in the
+  ledger.
+- **`UNEXPLAINED`** — over tolerance with no such waiver. **This is the verdict
+  that matters.** Rows sort `UNEXPLAINED` first, then by `|delta_pct|`
+  descending.
+- **`MISSING`** — the metric could not be computed at all. A criterion vanishing
+  from the table is worse than a difference, so it fails the run too.
+- **`one-sided` / `undefined`** — a ratio metric defined on one side or neither.
+  Reported, not failed; the additive metric beside it carries the substance.
 
-A hot-fix marked `ported: true` is **not** accepted as an explanation, for the
-reason in §1.
+A run exits non-zero while any `UNEXPLAINED` or `MISSING` row remains.
+
+### How to attribute a difference
+
+Only a waiver can turn `UNEXPLAINED` into `explained`. That is deliberate, and
+it is a change from how this started. The registry's `expect` globs used to
+grant the verdict directly — but in the metric-name vocabulary they cover **all
+13 known metrics** between them, so every over-tolerance row found some claimant
+and `UNEXPLAINED` became unreachable. A safety net that catches everything is
+not a safety net.
+
+So `expect` is now **advisory**. It fills the `candidates` column: the hot-fix
+ids that *claim* they could move this row, offered as a starting point. The
+column is unfiltered on purpose — a `ported` or `usa_noop` id appearing there is
+worth seeing, because it means the port, or the no-op claim, is the thing to go
+and check.
+
+Attributing a difference is therefore a decision with a name on it:
+
+1. Read the row. Note its `candidates`.
+2. Work out which change actually produced it — in the ledger, in the diff, by
+   rebuilding one stage.
+3. Record the answer as a waiver in `tests/equivalence/waivers.yaml` naming the
+   row and carrying the id:
+
+   ```yaml
+   - metric: dispatch_by_carrier      # and/or key:, and/or family:
+     key: CCGT
+     ledger: DL-15
+     hotfix: HF-14
+     reason: <one line, and the evidence>
+   ```
+
+   A waiver must name at least one of `metric` / `key` / `family`; a waiver that
+   names none is a `compare.py` cell waiver and has nothing to say here.
+
+The tag has to hold up: the id must resolve in `hotfixes.yaml`, must not be
+`ported: true` (a fix on `master-benchmark` runs on both sides, so it cannot be
+why they differ — see §1) and must not be `usa_noop: true` (it did nothing on
+this run at all). A rejected tag is reported verbatim in the `hotfix` cell and
+the row stays `UNEXPLAINED`.
+
+`expect` is still linted: a pattern that could never name a row this harness
+produces is dead configuration and fails the registry test.
 
 One row deserves a direct look every time: the objective. `master` runs pypsa
 0.30, which reports `Network.objective` as the solver objective only and carries
@@ -426,4 +472,4 @@ frame, every column. It is noisy by design and most of it is waived in
 `waivers.yaml`, each waiver naming a `DL-<n>` row in the deltas ledger and,
 where one applies, the `HF-<n>` that causes it. The comparison table is the
 coarse, decision-grade view. A run passes only when **both** are clean: zero
-unwaived findings and zero `UNEXPLAINED` rows.
+unwaived findings and zero `UNEXPLAINED` or `MISSING` rows.

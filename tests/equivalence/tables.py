@@ -12,10 +12,9 @@ A row of the comparison table is one ``(metric, key)`` pair with a verdict:
 ``equivalent``
     ``|delta| <= atol`` **or** ``|delta_pct| <= rtol``. The two branches agree.
 ``explained``
-    Over tolerance, and a hot-fix id resolves for it: an id that is present in
-    ``hotfixes.yaml`` and is **not** marked ``ported``. The id comes either from
-    a waiver that names this metric/key/family, or from an ``expect`` glob on
-    the hot-fix itself.
+    Over tolerance, and a **waiver names this row** and carries a ``hotfix:``
+    tag that resolves in ``hotfixes.yaml``, is not ``ported`` and is not a
+    ``usa_noop``. Nothing else grants it — see "expect is advisory" below.
 ``UNEXPLAINED``
     Over tolerance with nothing valid to point at. This is what the benchmark is
     for; the run fails while any of these remain.
@@ -29,11 +28,28 @@ A row of the comparison table is one ``(metric, key)`` pair with a verdict:
 
 Whether an id is an admissible explanation is decided by
 :func:`hotfixes.explains`, not here: an id that has no row in ``hotfixes.yaml``
-is rejected, and so is one marked ``ported: true`` — once a fix is a commit on
-``master-benchmark`` it runs on BOTH sides, so a difference tracing to it means
-the port is broken, not that the difference is explained. Rejections are
-reported verbatim in the ``hotfix`` column and the row stays ``UNEXPLAINED``;
-when the registry is empty, nothing can be explained.
+is rejected, and so is one marked ``ported: true`` (a fix on
+``master-benchmark`` runs on BOTH sides, so a difference tracing to it means the
+port is broken) or ``usa_noop: true`` (it did nothing on this run at all).
+Rejections are reported verbatim in the ``hotfix`` column and the row stays
+``UNEXPLAINED``; when the registry is empty, nothing can be explained.
+
+**``expect`` is advisory, and never grants a verdict.**
+
+The registry's ``expect`` globs were once consulted directly: a row was
+``explained`` if any unported hot-fix claimed it could move that metric. In the
+metric-name vocabulary that turned out to cover **every one of the 13
+:data:`KNOWN_METRICS`** between them, so ``UNEXPLAINED`` became unreachable and
+the failing verdict could never fire. A safety net that catches everything is
+not a safety net.
+
+So ``expect`` now feeds one advisory column, ``candidates``: the hot-fix ids
+that *claim* they could move this row, offered to the human doing the
+attribution. It is unfiltered on purpose — a ported or no-op id showing up there
+is itself worth knowing, because it says the port or the no-op claim is the
+thing to check. The verdict is granted only by a waiver someone wrote against
+this row, which is a decision with a name on it rather than a glob that happened
+to match.
 """
 
 from __future__ import annotations
@@ -94,6 +110,7 @@ COMPARISON_COLUMNS = [
     "tolerance_abs",
     "verdict",
     "hotfix",
+    "candidates",
 ]
 
 #: Verdicts that make a run fail.
@@ -178,11 +195,33 @@ def _hotfix_matches(entry: dict, metric: str, key: str) -> bool:
     return any(fnmatch(c, str(p)) for p in patterns for c in candidates)
 
 
+#: ``expect`` patterns that match everything and therefore say nothing. They are
+#: treated as invalid rather than satisfiable: the whole point of the registry
+#: lint is to catch a pattern that makes a claim it cannot support, and "this
+#: hot-fix can move any metric at all" is the emptiest claim there is.
+_VACUOUS_PATTERNS = frozenset({"*", "**", "*/*", "*/**", "**/*"})
+
+
 def pattern_is_satisfiable(pattern: str) -> bool:
-    """Can this ``expect`` glob ever match a metric this harness produces."""
-    return any(
-        fnmatch(m, pattern) or fnmatch(f"{m}/key", pattern) for m in KNOWN_METRICS
-    )
+    """Can this ``expect`` glob ever name a row this harness produces.
+
+    A row is addressed as ``metric`` or ``metric/key``. The key half is
+    open-ended — carrier names, zone ids, quantiles — so a pattern is
+    satisfiable when its metric half can match a real metric, whatever it says
+    about the key: ``objective/total_system_cost`` and
+    ``dispatch_by_carrier/CCGT`` both name rows that exist, and neither is a
+    glob at all. What is NOT satisfiable is the old family vocabulary
+    (``capacity/*``, whose head matches no metric) or a bare wildcard.
+    """
+    p = str(pattern).strip()
+    if not p or p in _VACUOUS_PATTERNS:
+        return False
+    if any(fnmatch(m, p) for m in KNOWN_METRICS):
+        return True
+    head, sep, tail = p.partition("/")
+    if not sep or not tail or head in _VACUOUS_PATTERNS:
+        return False
+    return any(fnmatch(m, head) for m in KNOWN_METRICS)
 
 
 def unmatched_expect_patterns(registry: dict[str, dict]) -> dict[str, list[str]]:
@@ -225,6 +264,25 @@ def _waiver_hotfix(waivers: list[dict], metric: str, family: str, key: str) -> s
     return None
 
 
+def _hotfix_sort_key(hid: str) -> tuple[int, str]:
+    head, _, num = str(hid).partition("-")
+    return (int(num), head) if num.isdigit() else (1 << 30, str(hid))
+
+
+def candidate_hotfixes(metric: str, key: str, hotfixes: dict[str, dict]) -> list[str]:
+    """Ids whose ``expect`` claims this row — ADVISORY, never a verdict.
+
+    Unfiltered by design: a ported or no-op id appearing here is worth seeing,
+    because it says the port or the no-op claim is what to check. Use it to
+    start an attribution, then record the answer as a waiver with a ``hotfix:``
+    tag, which is what actually moves the verdict.
+    """
+    return sorted(
+        (hid for hid, e in hotfixes.items() if isinstance(e, dict) and _hotfix_matches(e, metric, key)),
+        key=_hotfix_sort_key,
+    )
+
+
 def _explanation(
     metric: str,
     family: str,
@@ -234,27 +292,20 @@ def _explanation(
 ) -> tuple[str, bool]:
     """(hotfix cell, is_valid_explanation) for an over-tolerance row.
 
-    An id explains the row only if it **resolves in the registry** and is not
-    marked ``ported`` (a ported fix is on both sides, so it cannot be why they
-    differ). Unresolvable and ported ids are reported with the reason attached
-    and the row stays UNEXPLAINED.
+    ONLY a waiver that names this row can explain it, and only when its
+    ``hotfix:`` tag resolves in the registry, is not ``ported`` (a ported fix is
+    on both sides, so it cannot be why they differ) and is not a ``usa_noop``.
+    A rejected tag is reported verbatim and the row stays UNEXPLAINED.
+
+    An ``expect`` glob does NOT explain anything; it only populates the advisory
+    ``candidates`` column. Between them the registry's globs cover every known
+    metric, so honouring them here made UNEXPLAINED unreachable.
     """
-    ids: list[str] = []
     waived = _waiver_hotfix(waivers, metric, family, key)
-    if waived:
-        ids.append(waived)
-    ids += [
-        hid
-        for hid, e in sorted(hotfixes.items())
-        if isinstance(e, dict) and _hotfix_matches(e, metric, key) and hid not in ids
-    ]
-    if not ids:
+    if not waived:
         return "", False
-    verdicts = {h: explains(h, hotfixes) for h in ids}
-    usable = [h for h, (ok, _) in verdicts.items() if ok]
-    if usable:
-        return ",".join(usable), True
-    return "; ".join(reason for _, reason in verdicts.values()), False
+    ok, reason = explains(waived, hotfixes)
+    return (waived if ok else f"{waived}: {reason}"), ok
 
 
 def _as_frame(obj) -> pd.DataFrame:
@@ -315,7 +366,10 @@ def comparison_table(
     accepted too and appears as the single key ``total_system_cost``.
 
     ``hotfixes`` is the ``hotfixes.yaml`` registry as ``{id: entry}``; pass
-    ``{}`` before that file exists, in which case nothing can be explained.
+    ``{}`` before that file exists, in which case nothing can be explained. It
+    is used for two separate things: to VALIDATE the ``hotfix:`` tag on a waiver
+    (the only thing that can grant ``explained``), and to fill the advisory
+    ``candidates`` column from the hot-fixes whose ``expect`` claims the row.
     ``waivers`` is optional and only its ``hotfix:`` field is consulted, and only
     on waivers that name a metric/key/family. ``missing`` is the list of metrics
     that could not be computed (``plots.collect_metrics`` fills it); each becomes
@@ -354,6 +408,7 @@ def comparison_table(
                     "tolerance_abs": tol.atol,
                     "verdict": verdict,
                     "hotfix": cell,
+                    "candidates": ",".join(candidate_hotfixes(metric, label, hotfixes)),
                 },
             )
     rows += _missing_rows(missing or [])
@@ -389,6 +444,7 @@ def _missing_rows(missing: list[dict]) -> list[dict]:
                 "tolerance_abs": tol_abs,
                 "verdict": "MISSING",
                 "hotfix": str(entry.get("reason", "")),
+                "candidates": "",
             },
         )
     return rows

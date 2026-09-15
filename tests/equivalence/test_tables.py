@@ -64,7 +64,8 @@ def test_comparison_table_verdicts():
     hotfixes = {
         "HF-8": {"id": "HF-8", "ported": False, "expect": ["capacity_existing_by_carrier/onwind"]},
     }
-    out = tables.comparison_table(frames, hotfixes)
+    waivers = [{"metric": "capacity_existing_by_carrier", "key": "onwind", "hotfix": "HF-8"}]
+    out = tables.comparison_table(frames, hotfixes, waivers)
     assert list(out.columns) == tables.COMPARISON_COLUMNS
     verdicts = dict(zip(out["key"], out["verdict"]))
     assert verdicts["solar"] == "equivalent"
@@ -74,6 +75,8 @@ def test_comparison_table_verdicts():
     assert out.iloc[0]["verdict"] == "UNEXPLAINED"
     assert out.iloc[0]["key"] == "CCGT"
     assert dict(zip(out["key"], out["hotfix"]))["onwind"] == "HF-8"
+    # expect is advisory: it names candidates, it does not grant the verdict.
+    assert dict(zip(out["key"], out["candidates"]))["onwind"] == "HF-8"
     assert (out["tolerance_pct"] == tables.TOLERANCES["capacity"].rtol * 100.0).all()
     assert (out["tolerance_abs"] == tables.TOLERANCES["capacity"].atol).all()
 
@@ -82,21 +85,37 @@ def test_ported_hotfix_is_not_an_explanation():
     """A fix on ``master-benchmark`` is on BOTH sides, so it explains nothing."""
     frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0})}
     hotfixes = {"HF-8": {"id": "HF-8", "ported": True, "expect": ["capacity_existing_by_carrier/*"]}}
-    out = tables.comparison_table(frames, hotfixes)
+    waivers = [{"metric": "capacity_existing_by_carrier", "key": "solar", "hotfix": "HF-8"}]
+    out = tables.comparison_table(frames, hotfixes, waivers)
     assert out.iloc[0]["verdict"] == "UNEXPLAINED"
     assert "ported" in out.iloc[0]["hotfix"]
     assert "HF-8" in out.iloc[0]["hotfix"]
 
 
-def test_unported_hotfix_wins_over_a_ported_one():
+def test_usa_noop_hotfix_is_not_an_explanation():
+    """HF-12 is inert on the standing USA config, so it explains nothing there."""
+    frames = {"dispatch_by_carrier": _metric_frame({"CCGT": 100.0}, {"CCGT": 180.0})}
+    hotfixes = {"HF-12": {"id": "HF-12", "ported": False, "usa_noop": True}}
+    waivers = [{"metric": "dispatch_by_carrier", "key": "CCGT", "hotfix": "HF-12"}]
+    out = tables.comparison_table(frames, hotfixes, waivers)
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert "no-op" in out.iloc[0]["hotfix"]
+
+
+def test_the_waiver_decides_which_hotfix_explains(monkeypatch):
+    """Two candidates, one waiver: the waiver's id is the one that counts."""
     frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0})}
     hotfixes = {
         "HF-8": {"id": "HF-8", "ported": True, "expect": ["capacity_existing_by_carrier/*"]},
         "HF-16": {"id": "HF-16", "ported": False, "expect": ["capacity_existing_by_carrier/*"]},
     }
-    out = tables.comparison_table(frames, hotfixes)
+    waivers = [{"metric": "capacity_existing_by_carrier", "key": "solar", "hotfix": "HF-16"}]
+    out = tables.comparison_table(frames, hotfixes, waivers)
     assert out.iloc[0]["verdict"] == "explained"
     assert out.iloc[0]["hotfix"] == "HF-16"
+    # Both still show up as candidates, ported one included: if the difference
+    # really is HF-8's, the port is what to check.
+    assert out.iloc[0]["candidates"] == "HF-8,HF-16"
 
 
 def test_waiver_hotfix_explains_a_row():
@@ -164,11 +183,15 @@ def test_write_tables_roundtrip(tmp_path):
     written = tables.write_tables({**frames, "comparison": comparison}, tmp_path)
     names = {p.name for p in written}
     assert names == {"capacity_existing_by_carrier.csv", "comparison.csv", "comparison.md"}
-    # An empty ``hotfix`` cell round-trips through CSV as NaN; that is the
-    # only representational difference, and it is restored here so the rest of
-    # the frame is compared strictly.
-    reloaded = pd.read_csv(tmp_path / "tables" / "comparison.csv", dtype={"hotfix": str})
-    reloaded["hotfix"] = reloaded["hotfix"].fillna("")
+    # An empty ``hotfix`` or ``candidates`` cell round-trips through CSV as NaN;
+    # that is the only representational difference, and it is restored here so
+    # the rest of the frame is compared strictly.
+    reloaded = pd.read_csv(
+        tmp_path / "tables" / "comparison.csv",
+        dtype={"hotfix": str, "candidates": str},
+    )
+    for col in ("hotfix", "candidates"):
+        reloaded[col] = reloaded[col].fillna("")
     pd.testing.assert_frame_equal(reloaded, comparison, check_dtype=False)
     md = (tmp_path / "tables" / "comparison.md").read_text()
     assert "UNEXPLAINED" in md
@@ -308,14 +331,72 @@ def test_bare_family_expect_glob_does_not_match():
     hotfixes = {"HF-8": {"id": "HF-8", "ported": False, "expect": ["capacity"]}}
     out = tables.comparison_table(frames, hotfixes)
     assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert out.iloc[0]["candidates"] == ""
 
 
-def test_metric_name_expect_glob_matches():
+def test_metric_name_expect_glob_only_names_a_candidate():
+    """A matching expect glob fills `candidates`, and changes nothing else."""
     frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0})}
     hotfixes = {"HF-8": {"id": "HF-8", "ported": False, "expect": ["capacity_*"]}}
     out = tables.comparison_table(frames, hotfixes)
-    assert out.iloc[0]["verdict"] == "explained"
-    assert out.iloc[0]["hotfix"] == "HF-8"
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert out.iloc[0]["hotfix"] == ""
+    assert out.iloc[0]["candidates"] == "HF-8"
+
+
+def test_candidates_are_sorted_numerically():
+    frames = {"dispatch_by_carrier": _metric_frame({"CCGT": 100.0}, {"CCGT": 180.0})}
+    hotfixes = {
+        f"HF-{i}": {"id": f"HF-{i}", "ported": False, "expect": ["dispatch_by_carrier/*"]}
+        for i in (2, 13, 7)
+    }
+    out = tables.comparison_table(frames, hotfixes)
+    assert out.iloc[0]["candidates"] == "HF-2,HF-7,HF-13"
+
+
+def test_the_shipped_registry_cannot_explain_anything_on_its_own():
+    """THE regression guard for the expect-is-advisory decision.
+
+    In the metric-name vocabulary the shipped `expect` globs cover every one of
+    KNOWN_METRICS between them. While `expect` granted verdicts, that made
+    UNEXPLAINED unreachable and the failing verdict could never fire — a safety
+    net that catches everything is not a safety net. A +50 % row in every family
+    must come back UNEXPLAINED against the real registry and the real waivers.
+    """
+    from tests.equivalence.compare import load_waivers
+
+    registry = tables.load_hotfixes()
+    waivers = load_waivers()
+    frames = {
+        metric: _metric_frame({"probe": 100.0}, {"probe": 150.0})
+        for metric in tables.KNOWN_METRICS
+        if metric != "objective"
+    }
+    out = tables.comparison_table(frames, registry, waivers)
+    assert not out.empty
+    assert set(out["verdict"]) == {"UNEXPLAINED"}, dict(zip(out["metric"], out["verdict"]))
+    # ...and the advisory column is doing its job, so the information is not lost.
+    assert out["candidates"].str.len().gt(0).any()
+
+
+def test_a_waiver_with_a_hotfix_flips_exactly_one_row():
+    """The other half of the same guard: attribution still works, per row."""
+    from tests.equivalence.compare import load_waivers
+
+    registry = tables.load_hotfixes()
+    frames = {
+        metric: _metric_frame({"probe": 100.0}, {"probe": 150.0})
+        for metric in ("capacity_existing_by_carrier", "dispatch_by_carrier")
+    }
+    # HF-5 is unported and not a USA no-op in the shipped registry.
+    waivers = [
+        *load_waivers(),
+        {"metric": "capacity_existing_by_carrier", "key": "probe", "ledger": "DL-1", "hotfix": "HF-5"},
+    ]
+    out = tables.comparison_table(frames, registry, waivers).set_index("metric")
+    assert out.loc["capacity_existing_by_carrier", "verdict"] == "explained"
+    assert out.loc["capacity_existing_by_carrier", "hotfix"] == "HF-5"
+    assert out.loc["dispatch_by_carrier", "verdict"] == "UNEXPLAINED"
 
 
 # ---------------------------------------------------------------------------
@@ -546,6 +627,44 @@ def test_family_glob_in_the_old_vocabulary_is_rejected():
     assert not tables.pattern_is_satisfiable("capacity")
     assert tables.pattern_is_satisfiable("capacity_existing_by_carrier/*")
     assert tables.pattern_is_satisfiable("objective")
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        "objective/total_system_cost",
+        "dispatch_by_carrier/CCGT",
+        "p_max_pu_quantiles_solar/0.5",
+        "mean_cf_by_zone_*",
+        "*_by_carrier",
+    ],
+)
+def test_literal_metric_slash_key_patterns_are_satisfiable(pattern):
+    """A row is addressed as ``metric`` or ``metric/key``; keys are open-ended.
+
+    ``objective/total_system_cost`` is not a glob at all, and neither is
+    ``dispatch_by_carrier/CCGT`` — both name rows this harness really produces,
+    so the lint must not call them dead.
+    """
+    assert tables.pattern_is_satisfiable(pattern)
+
+
+@pytest.mark.parametrize("pattern", ["*", "**", "*/*", "*/**", "**/*", "", "   "])
+def test_vacuous_patterns_are_rejected(pattern):
+    """A pattern that matches everything makes the emptiest claim there is.
+
+    Accepting "this hot-fix can move any metric at all" would let bare-family
+    looseness back in through the wildcard door, with the lint reporting
+    nothing.
+    """
+    assert not tables.pattern_is_satisfiable(pattern)
+
+
+@pytest.mark.parametrize("metric", tables.KNOWN_METRICS)
+def test_every_known_metric_is_addressable(metric):
+    """Each metric is nameable both bare and with a key."""
+    assert tables.pattern_is_satisfiable(metric)
+    assert tables.pattern_is_satisfiable(f"{metric}/some_key")
 
 
 def test_export_all_writes_the_run_directory_tables(tmp_path, monkeypatch):
