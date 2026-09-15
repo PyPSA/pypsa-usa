@@ -114,6 +114,24 @@ def test_context_carries_three_distinct_shas(harness):
     assert ctx.develop_ref == "feat/harness"
 
 
+def test_context_records_which_stage_the_run_stopped_at(harness, monkeypatch):
+    """``EQ_UNTIL`` decides WHICH artifacts were compared, so it is provenance.
+
+    A smoke run with ``EQ_UNTIL=assembled`` compares the profile and demand
+    pairs; the same command without it compares the solved network too. Every
+    sha in ``run_meta.json`` is identical either way, so without this field two
+    runs that compared different files are indistinguishable in the record.
+    """
+    monkeypatch.setattr(paths, "UNTIL", "assembled")
+    ctx = context.build_context(2, probe_env=False)
+    assert ctx.until == "assembled"
+    meta = json.loads(context.write_run_meta(ctx).read_text())
+    assert meta["until"] == "assembled"
+
+    monkeypatch.setattr(paths, "UNTIL", "")
+    assert context.build_context(2, probe_env=False).until == ""
+
+
 def test_context_records_the_translated_clusters(harness):
     """Both dialects are recorded, because the two sides ran different literals."""
     ctx = context.build_context(2, probe_env=False)

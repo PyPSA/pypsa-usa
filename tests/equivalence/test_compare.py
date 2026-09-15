@@ -86,6 +86,10 @@ def test_a_develop_only_cluster_is_a_finding_with_its_mw(tmp_path):
     assert f["detail"]["n_master"] == 2
     assert f["detail"]["n_develop"] == 3
     assert f["detail"]["n_common"] == 2
+    # master's p_nom_max over the shared clusters: what ``max_one_sided_pct``
+    # measures the one-sided MW against.
+    common_mw = float(master["p_nom_max"].sum())
+    assert f["detail"]["common_total_mw"] == pytest.approx(common_mw)
 
     assert notes == [
         {
@@ -99,6 +103,7 @@ def test_a_develop_only_cluster_is_a_finding_with_its_mw(tmp_path):
             "only_develop": {"p87 0": pytest.approx(2158.0)},
             "only_master_mw": 0.0,
             "only_develop_mw": pytest.approx(2158.0),
+            "common_total_mw": pytest.approx(common_mw),
             "equal": False,
         },
     ]
@@ -123,7 +128,12 @@ def test_matching_cluster_sets_emit_no_cluster_finding(tmp_path):
 
 
 def test_the_cluster_set_finding_is_waived_by_the_shipped_hf24_waiver():
-    """The shipped DL-18 / HF-24 waiver covers exactly this finding, on western p2."""
+    """The shipped DL-18 / HF-24 waiver covers exactly this finding, on western p2.
+
+    "Exactly" now includes the SIZE and the SIDE: the waiver carries
+    ``expect_side: develop`` and ``max_one_sided_mw``, so it covers the measured
+    2,158 MW develop-only cluster and not a finding that merely looks like it.
+    """
     finding = {
         "stage": "profile_solar",
         "component": "cluster_set",
@@ -131,12 +141,25 @@ def test_the_cluster_set_finding_is_waived_by_the_shipped_hf24_waiver():
         "kind": "row_set",
         "prong": 2,
         "interconnect": "western",
+        "detail": {
+            "n_master": 19,
+            "n_develop": 20,
+            "n_common": 19,
+            "only_develop": {"p87 0": 2158.0},
+            "only_master": {},
+            "common_total_mw": 1_800_000.0,
+        },
     }
     shipped = compare.load_waivers()
     assert compare.is_waived(finding, shipped) is True
     # ... and nowhere else: the usa leg has not been measured.
     assert compare.is_waived(dict(finding, interconnect="usa"), shipped) is False
     assert compare.is_waived(dict(finding, prong=1), shipped) is False
+    # A finding carrying no cluster lists cannot be shown to be inside the
+    # bounds, so it stays live and says why.
+    waived, note = compare.waiver_status(dict(finding, detail={}), shipped)
+    assert waived is False
+    assert "unmeasurable" in note, note
 
 
 def test_prong_1_does_not_roll_up_or_compare_cluster_sets(tmp_path):

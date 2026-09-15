@@ -264,6 +264,173 @@ def test_write_tables_roundtrip(tmp_path):
     assert "| metric | key |" in md
 
 
+#: One prong-2 run whose only difference is a develop-only cluster, plus a
+#: live available-power finding whose waiver's bounds broke. The cluster is the
+#: case this whole section exists for: master is rolled up to the common set, so
+#: `p_nom_max_by_zone_solar p8` reads EQUIVALENT while 2,158 MW sits on one side.
+_DISCLOSURE_RESULT = {
+    "prong": 2,
+    "profile_cluster_sets": [
+        {
+            "kind": "profile_rollup",
+            "stage": "profile_solar",
+            "rolled_up": True,
+            "n_master": 19,
+            "n_develop": 20,
+            "n_common": 19,
+            "only_master": {},
+            "only_develop": {"p87 0": 2158.0},
+            "only_master_mw": 0.0,
+            "only_develop_mw": 2158.0,
+            "common_total_mw": 1_800_000.0,
+            "equal": False,
+        },
+    ],
+    "findings": [
+        {
+            "stage": "profile_solar",
+            "component": "cluster_set",
+            "column": "<index>",
+            "kind": "row_set",
+            "waived": True,
+            "waiver": "HF-24",
+            "detail": {
+                "n_master": 19,
+                "n_develop": 20,
+                "n_common": 19,
+                "only_develop": {"p87 0": 2158.0},
+                "only_master": {},
+                "common_total_mw": 1_800_000.0,
+            },
+        },
+        {
+            "stage": "profile_solar",
+            "component": "system_potential_mw",
+            "column": "sum(p_nom_max)",
+            "kind": "value",
+            "waived": True,
+            "waiver": "HF-24",
+            "detail": {"develop": 1_802_566.0, "master": 1_800_000.0, "rel_pct": 0.1426},
+        },
+        {
+            "stage": "profile_onwind",
+            "component": "system_available_mw",
+            "column": "sum_bus(profile*p_nom_max)",
+            "kind": "value",
+            "waived": False,
+            "waiver_note": "waiver HF-24 bounds violated (max_total_pct)",
+            "waiver_bound_failed": "max_total_pct",
+            "detail": {
+                "develop_total_mwh": 310_000_000.0,
+                "master_total_mwh": 620_823_223.0,
+                "total_rel_pct": -50.07,
+                "energy_weighted_mean_rel_pct": 50.07,
+                "hours_mismatched": 8371,
+                "hours_compared": 8760,
+            },
+        },
+    ],
+}
+
+
+def _disclosure_md(tmp_path, result) -> str:
+    frames = {"capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 100.0})}
+    comparison = tables.comparison_table(frames, {})
+    written = tables.write_tables({**frames, "comparison": comparison}, tmp_path, result=result)
+    assert "findings.csv" in {p.name for p in written}
+    return (tmp_path / "tables" / "comparison.md").read_text()
+
+
+def test_comparison_md_discloses_a_develop_only_cluster(tmp_path):
+    """The 2,158 MW cluster is named, with its MW, in comparison.md itself.
+
+    It moves no comparison-table row — master was rolled up to the common
+    clusters — so before the Findings section it existed only in
+    findings_2.json and run_meta.json, neither of which a human reads.
+    """
+    md = _disclosure_md(tmp_path, _DISCLOSURE_RESULT)
+    assert "## Findings" in md
+    assert "p87 0 (2,158 MW)" in md
+    assert (
+        "Profile metrics use the 19 common clusters (profile_solar); "
+        "one-sided clusters: develop-only p87 0 (2,158 MW) (see Findings)." in md
+    )
+    # The verdict per finding, including WHICH waiver covered it.
+    assert "waived HF-24" in md
+    assert "LIVE (bounds violated: max_total_pct)" in md
+    # The potential finding reports both totals and the relative move.
+    assert "develop 1,802,566 MW vs master 1,800,000 MW (+0.1426 %)" in md
+
+
+def test_findings_csv_is_the_markdown_sections_twin(tmp_path):
+    _disclosure_md(tmp_path, _DISCLOSURE_RESULT)
+    fcsv = pd.read_csv(tmp_path / "tables" / "findings.csv")
+    assert list(fcsv.columns) == list(tables.FINDINGS_COLUMNS)
+    assert len(fcsv) == len(_DISCLOSURE_RESULT["findings"])
+    assert sorted(fcsv["verdict"]) == sorted(
+        ["LIVE (bounds violated: max_total_pct)", "waived HF-24", "waived HF-24"],
+    )
+    assert "p87 0 (2,158 MW)" in fcsv.loc[fcsv["component"] == "cluster_set", "detail"].iloc[0]
+
+
+def test_findings_section_is_present_even_when_there_are_none(tmp_path):
+    """An empty Findings section is a statement the run makes, not a section that vanished."""
+    md = _disclosure_md(tmp_path, {"prong": 2, "findings": [], "profile_cluster_sets": []})
+    assert "## Findings" in md
+    assert "No stage-by-stage findings were recorded" in md
+    assert "one-sided clusters" not in md
+    assert pd.read_csv(tmp_path / "tables" / "findings.csv").empty
+
+
+def test_a_matching_cluster_set_says_so(tmp_path):
+    """A rollup that found no one-sided cluster still says which population it used."""
+    result = {
+        "prong": 2,
+        "findings": [],
+        "profile_cluster_sets": [
+            {
+                "kind": "profile_rollup",
+                "stage": "profile_onwind",
+                "rolled_up": True,
+                "n_master": 18,
+                "n_develop": 18,
+                "n_common": 18,
+                "only_master": {},
+                "only_develop": {},
+                "equal": True,
+            },
+        ],
+    }
+    md = _disclosure_md(tmp_path, result)
+    assert "Profile metrics use the 18 common clusters (profile_onwind); one-sided clusters: none" in md
+
+
+def test_the_note_falls_back_to_the_cluster_set_findings():
+    """An older findings JSON has no ``profile_cluster_sets``; the note still renders."""
+    result = {"findings": [_DISCLOSURE_RESULT["findings"][0]]}
+    assert tables.cluster_note_lines(result) == [
+        "Profile metrics use the 19 common clusters (profile_solar); "
+        "one-sided clusters: develop-only p87 0 (2,158 MW) (see Findings).",
+    ]
+
+
+def test_findings_markdown_cannot_be_broken_by_a_pipe_or_swallowed_as_html():
+    """``|`` must not split the row, and ``<index>`` must not render as nothing."""
+    rows = tables.findings_markdown(
+        {
+            "findings": [
+                {"stage": "s|1", "component": "Bus", "column": "<index>", "kind": "value", "detail": "a|b"},
+            ],
+        },
+    )
+    row = next(line for line in rows if line.startswith("| s\\|1 "))
+    assert "\\|" in row
+    assert row.replace("\\|", "").count("|") == len(tables.FINDINGS_COLUMNS) + 1
+    assert "&lt;index&gt;" in row
+    # The CSV twin keeps the raw value: it is data, not markdown.
+    assert tables.findings_rows({"findings": [{"column": "<index>"}]})[0]["column"] == "<index>"
+
+
 def test_write_tables_markdown_is_capped(tmp_path):
     n = tables.MD_ROW_CAP + 7
     frames = {

@@ -354,7 +354,8 @@ manifest_develop.json  develop build, same shape
 findings_<prong>.json  every stage-by-stage difference, each marked waived or live
 config_merged/         the two fully merged configs the gate compared
 tables/comparison.csv  one row per (metric, key) with a verdict and its candidates
-tables/comparison.md   the same, capped, for reading
+tables/comparison.md   the same, capped, for reading, plus the Findings section
+tables/findings.csv    one row per stage-by-stage finding with its verdict
 figures/*.png          every figure...
 figures/*.csv          ...each with the exact values it plots
 logs/driver-<job>.log  what the driver did
@@ -530,9 +531,36 @@ lifting develop above master in every producing hour, which is exactly the flat
 `+0.15…+0.3 %` band the `{onwind,solar}_national_available_power` figures show
 all year, with no crossing.
 
+Which bounds a cell waiver may carry depends on the finding's **component**,
+because each component's `detail` holds different fields
+(`compare.CELL_BOUND_SPECS`):
+
+| component | what it measures | bounds |
+|---|---|---|
+| `system_available_mw` | `sum_bus(profile * p_nom_max)` per hour | `expect_sign`, `max_total_pct`, `max_mean_rel_pct` |
+| `system_potential_mw` | `sum(p_nom_max)` | `expect_sign`, `max_abs_pct` |
+| `cluster_set` | which clusters each side has, and their MW | `expect_side`, `max_one_sided_mw`, `max_one_sided_pct` |
+
 `test_waiver_bounds_are_well_formed` refuses a bound on the wrong kind of waiver
-(`max_abs_pct` on a cell waiver, `max_total_pct` on a table waiver): nothing
-would enforce it, and a limit nobody reads is worse than no limit at all.
+(`max_total_pct` on a table waiver) and a bound the finding's component cannot
+read (`max_total_pct` on a `cluster_set`, whose detail has no annual totals):
+nothing would enforce it, and a limit nobody reads is worse than no limit at
+all. `test_every_prong2_cell_waiver_is_bounded` requires every waiver on those
+three components to carry its bounds.
+
+### Reading the Findings section
+
+`comparison.md` opens with the verdict summary, then the cluster note and a
+**Findings** table — one row per stage-by-stage finding, with a one-line detail
+and a verdict of `waived <HF-id>`, `LIVE`, or `LIVE (bounds violated: <bound>)`.
+`tables/findings.csv` is its machine-readable twin.
+
+The section exists because the comparison table cannot show everything. At
+prong 2 master is rolled up onto develop's cluster bus space and both sides are
+then restricted to the clusters they **share**, so a cluster only develop has
+moves no table row at all: `p_nom_max_by_zone_solar p8` reads `equivalent`
+while 2,158 MW sits on one side. The cluster note says which population the
+profile metrics used and names every one-sided cluster with its MW.
 
 ### Reading `comparison.md`
 

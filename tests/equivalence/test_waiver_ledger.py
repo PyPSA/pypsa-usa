@@ -205,13 +205,23 @@ WAIVER_SCOPE_FIELDS = ("interconnect", "prong")
 TABLE_BOUND_FIELDS = tuple(tables.WAIVER_BOUND_KEYS)
 CELL_BOUND_FIELDS = tuple(compare.CELL_BOUND_KEYS)
 WAIVER_BOUND_FIELDS = tuple(dict.fromkeys(TABLE_BOUND_FIELDS + CELL_BOUND_FIELDS))
-#: Bounds that belong to exactly one kind. ``expect_sign`` is shared: on a table
-#: waiver it is the sign of the row's delta, on a cell waiver the sign of the
-#: finding's annual-total delta.
+#: Bounds that belong to exactly one kind. ``expect_sign`` and ``max_abs_pct``
+#: are shared: on a table waiver they are the sign and size of the row's delta,
+#: on a cell waiver the sign and size of whatever that component measures.
 TABLE_ONLY_BOUNDS = tuple(k for k in TABLE_BOUND_FIELDS if k not in CELL_BOUND_FIELDS)
 CELL_ONLY_BOUNDS = tuple(k for k in CELL_BOUND_FIELDS if k not in TABLE_BOUND_FIELDS)
+#: Bounds whose value is a direction, not a magnitude.
+DIRECTION_BOUNDS = ("expect_sign", "expect_side")
 #: Numeric bounds, which must parse and be strictly positive.
-NUMERIC_BOUNDS = tuple(k for k in WAIVER_BOUND_FIELDS if k != "expect_sign")
+NUMERIC_BOUNDS = tuple(k for k in WAIVER_BOUND_FIELDS if k not in DIRECTION_BOUNDS)
+#: The bounds a cell waiver on each bounded component MUST carry. Anything a
+#: component's registry entry allows but this map omits is optional
+#: (``max_one_sided_pct``: a relative cap on top of the absolute MW one).
+REQUIRED_CELL_BOUNDS = {
+    "system_available_mw": ("expect_sign", "max_total_pct", "max_mean_rel_pct"),
+    "system_potential_mw": ("expect_sign", "max_abs_pct"),
+    "cluster_set": ("expect_side", "max_one_sided_mw"),
+}
 WAIVER_PROVENANCE_FIELDS = ("ledger", "hotfix", "reason", "justification")
 WAIVER_FIELDS = frozenset(
     WAIVER_SELECT_FIELDS + WAIVER_SCOPE_FIELDS + WAIVER_BOUND_FIELDS + WAIVER_PROVENANCE_FIELDS,
@@ -234,12 +244,18 @@ def test_every_waiver_selects_something(waivers):
 
 
 def test_waiver_bounds_are_well_formed(waivers):
-    """Every bound must be usable, and must belong to the kind that carries it.
+    """Every bound must be usable, and must belong to what carries it.
 
     A bound the matcher cannot parse is worse than none, because it reads as a
     limit while enforcing nothing. A bound on the wrong KIND of waiver is the
-    same failure by another route: ``max_abs_pct`` on a cell waiver and
-    ``max_total_pct`` on a table waiver are both read by nobody.
+    same failure by another route: ``max_total_pct`` on a table waiver is read
+    by nobody.
+
+    For a cell waiver "the right kind" is per COMPONENT, because each component's
+    finding carries different fields: ``max_total_pct`` reads
+    ``develop_total_mwh``, which only ``system_available_mw`` has. A bound named
+    on a component that cannot read it is rejected HERE rather than silently
+    evaluating to "unmeasurable" during a 20-hour run.
     """
     bad: list[str] = []
     for w in waivers:
@@ -248,14 +264,30 @@ def test_waiver_bounds_are_well_formed(waivers):
             continue
         table = _is_table_waiver(w)
         label = f"{w.get('metric')}/{w.get('key')}" if table else f"{w.get('stage')}.{w.get('component')}"
-        wrong = [k for k in (CELL_ONLY_BOUNDS if table else TABLE_ONLY_BOUNDS) if k in w]
-        if wrong:
-            kind, other = ("table", "cell") if table else ("cell", "table")
-            bad.append(f"{label}: {wrong} is a {other} bound on a {kind} waiver; nothing enforces it")
+        if table:
+            wrong = [k for k in CELL_ONLY_BOUNDS if k in w]
+            if wrong:
+                bad.append(f"{label}: {wrong} is a cell bound on a table waiver; nothing enforces it")
+        else:
+            readable = compare.cell_bound_keys_for(w.get("component"))
+            wrong = [k for k in bounds if k not in readable]
+            if wrong:
+                bad.append(
+                    f"{label}: {wrong} cannot be read from a {w.get('component')!r} finding "
+                    f"(readable: {list(readable) or 'none'}); nothing enforces it",
+                )
         if "expect_sign" in w and w["expect_sign"] not in ("+", "-"):
             bad.append(f"{label}: expect_sign={w['expect_sign']!r}, expected '+' or '-'")
+        if "expect_side" in w and w["expect_side"] not in compare.CLUSTER_SIDES:
+            bad.append(f"{label}: expect_side={w['expect_side']!r}, expected one of {compare.CLUSTER_SIDES}")
         for key in NUMERIC_BOUNDS:
             if key not in w:
+                continue
+            # `max_total_pct: true` floats to 1.0 and reads as a real cap. A
+            # bound that means something other than what it says is the failure
+            # mode this whole test exists for.
+            if isinstance(w[key], bool):
+                bad.append(f"{label}: {key}={w[key]!r} is a boolean, not a number")
                 continue
             try:
                 cap = float(w[key])
@@ -281,24 +313,78 @@ def test_every_table_waiver_is_bounded(waivers):
     assert not unbounded, f"table waivers with no {'/'.join(TABLE_BOUND_FIELDS)}: {unbounded}"
 
 
-def test_every_system_available_mw_waiver_is_bounded(waivers):
-    """A waiver on the hourly available power says how far it reaches.
+def test_every_bounded_component_is_decided_here():
+    """Adding a component to the bound registry forces a decision in this file.
 
-    ``system_available_mw`` is the finding that would catch a real
-    capacity-factor construction difference — it is ``sum_bus(profile *
-    p_nom_max)``, exactly invariant under the prong-2 rollup, so nothing but
-    physics moves it. Waiving it unbounded hollows out prong 2: whatever the
-    delta became, the HF-24 signature would go on explaining it. Every one of
-    these must carry all three cell bounds.
+    Otherwise a new component arrives with a checker, nothing requires its
+    waivers to use it, and the next blank cheque is written by default.
+    """
+    assert set(REQUIRED_CELL_BOUNDS) == set(compare.BOUNDED_COMPONENTS)
+    for component, required in REQUIRED_CELL_BOUNDS.items():
+        readable = compare.cell_bound_keys_for(component)
+        assert set(required) <= set(readable), f"{component}: {required} not all readable from {readable}"
+
+
+def test_every_prong2_cell_waiver_is_bounded(waivers):
+    """A waiver on a prong-2 profile finding says how far it reaches.
+
+    All three of these are findings that would catch a real construction
+    difference, and each was a blank cheque until it could be bounded:
+
+    - ``system_available_mw`` is ``sum_bus(profile * p_nom_max)``, exactly
+      invariant under the prong-2 rollup, so nothing but physics moves it;
+    - ``system_potential_mw`` is ``sum(p_nom_max)`` — the capacity the model may
+      build;
+    - ``cluster_set`` is the ONLY report of a cluster one side does not have.
+      Since master is rolled up to the common set, a develop-only cluster moves
+      no comparison-table row at all: unbounded, this waiver hides capacity
+      appearing or vanishing at any scale.
+
+    ``system_potential_mw`` and ``cluster_set`` carried bound keys that were
+    only ever evaluated against a ``system_available_mw`` detail, so before the
+    per-component registry they could not be bounded even in principle.
     """
     bad = [
-        f"{w.get('stage')}.{w.get('component')}: missing {sorted(set(CELL_BOUND_FIELDS) - set(w))}"
+        f"{w.get('stage')}.{w.get('component')}: missing {sorted(set(REQUIRED_CELL_BOUNDS[w['component']]) - set(w))}"
         for w in waivers
         if not _is_table_waiver(w)
-        and w.get("component") == "system_available_mw"
-        and not set(CELL_BOUND_FIELDS) <= set(w)
+        and w.get("component") in REQUIRED_CELL_BOUNDS
+        and not set(REQUIRED_CELL_BOUNDS[w["component"]]) <= set(w)
     ]
-    assert not bad, "under-bounded system_available_mw waivers:\n" + "\n".join(bad)
+    assert not bad, "under-bounded cell waivers:\n" + "\n".join(bad)
+
+
+def test_a_bound_the_component_cannot_read_is_malformed():
+    """The registry is what makes ``max_total_pct`` on a cluster_set a typo."""
+    assert compare.cell_bound_keys_for("cluster_set") == (
+        "expect_side",
+        "max_one_sided_mw",
+        "max_one_sided_pct",
+    )
+    assert compare.cell_bound_keys_for("system_potential_mw") == ("expect_sign", "max_abs_pct")
+    assert compare.cell_bound_keys_for("Bus") == ()
+    assert compare.cell_bound_keys_for(None) == ()
+
+    unreadable = [
+        {
+            "stage": "profile_solar",
+            "component": "cluster_set",
+            "column": "<index>",
+            "kind": "row_set",
+            "ledger": "DL-18",
+            "max_total_pct": 0.5,
+        },
+    ]
+    finding = {
+        "stage": "profile_solar",
+        "component": "cluster_set",
+        "column": "<index>",
+        "kind": "row_set",
+        "detail": {"only_develop": {}, "only_master": {}},
+    }
+    waived, note = compare.waiver_status(finding, unreadable)
+    assert waived is False
+    assert "unreadable bound" in note and "max_total_pct" in note
 
 
 # --- the two waiver kinds must not be confused for each other ----------------
@@ -408,14 +494,160 @@ def test_the_shipped_waivers_bound_system_available_mw():
         # A dawn/dusk worst case is NOT a bound: 100 % of a few MW is noise.
         assert compare.is_waived(_available_mw_finding(tech, worst_rel_pct=100.0), shipped) is True, tech
 
-        # ... and the unbounded potential waiver is untouched.
-        potential = dict(
-            _available_mw_finding(tech),
-            component="system_potential_mw",
-            column="sum(p_nom_max)",
-            detail={},
-        )
-        assert compare.is_waived(potential, shipped) is True, tech
+
+#: What the two ``system_potential_mw`` findings measured on the same run:
+#: develop's retained NREL caps capacity, a fifth of a percent of the total.
+SHIPPED_POTENTIAL_MW = {
+    "onwind": {"develop": 287_546.0, "master": 287_000.0, "rel_pct": 0.1902},
+    "solar": {"develop": 1_802_566.0, "master": 1_800_000.0, "rel_pct": 0.1426},
+}
+#: And what the two ``cluster_set`` findings measured: one develop-only cluster.
+SHIPPED_CLUSTER_SET = {
+    "onwind": {"n_master": 18, "n_develop": 19, "n_common": 18, "only_develop": {"p87 0": 96.0}},
+    "solar": {"n_master": 19, "n_develop": 20, "n_common": 19, "only_develop": {"p87 0": 2158.0}},
+}
+
+
+def _potential_finding(tech: str, **detail) -> dict:
+    return {
+        "stage": f"profile_{tech}",
+        "component": "system_potential_mw",
+        "column": "sum(p_nom_max)",
+        "kind": "value",
+        "prong": 2,
+        "interconnect": "western",
+        "detail": {**SHIPPED_POTENTIAL_MW[tech], **detail},
+    }
+
+
+def _cluster_set_finding(tech: str, **detail) -> dict:
+    base = {"only_master": {}, "common_total_mw": 1_000_000.0, **SHIPPED_CLUSTER_SET[tech]}
+    return {
+        "stage": f"profile_{tech}",
+        "component": "cluster_set",
+        "column": "<index>",
+        "kind": "row_set",
+        "prong": 2,
+        "interconnect": "western",
+        "detail": {**base, **detail},
+    }
+
+
+def test_the_shipped_waivers_bound_system_potential_mw():
+    """HF-24 only ever ADDS potential, and by a fraction of a percent.
+
+    The finding carries ``develop``/``master``/``rel_pct`` and no annual totals,
+    so before the per-component registry these two entries could not be bounded
+    at all: a -44 % potential delta — capacity develop LOST — was waived by the
+    entry written for +0.19 %.
+    """
+    shipped = compare.load_waivers()
+    for tech in SHIPPED_POTENTIAL_MW:
+        assert compare.is_waived(_potential_finding(tech), shipped) is True, tech
+
+        master = _potential_finding(tech)["detail"]["master"]
+        flipped = _potential_finding(tech, develop=master * 0.56, rel_pct=44.0)
+        waived, note = compare.waiver_status(flipped, shipped)
+        assert waived is False, tech
+        assert "expect_sign" in note, note
+
+        big = _potential_finding(tech, develop=master * 1.03, rel_pct=3.0)
+        waived, note = compare.waiver_status(big, shipped)
+        assert waived is False, tech
+        assert "max_abs_pct" in note, note
+
+        blind = _potential_finding(tech)
+        blind["detail"] = {"note": "no totals recorded"}
+        waived, note = compare.waiver_status(blind, shipped)
+        assert waived is False, tech
+        assert "unmeasurable" in note, note
+
+
+def test_the_shipped_waivers_bound_the_cluster_set():
+    """A develop-only cluster is waived; a master-only one, or a huge one, is not.
+
+    The rollup restricts master to the common cluster set, so a one-sided
+    cluster moves NO comparison-table row. This finding is the only place its
+    MW is reported, which is exactly why waiving it unbounded was a blank
+    cheque.
+    """
+    shipped = compare.load_waivers()
+    for tech in SHIPPED_CLUSTER_SET:
+        assert compare.is_waived(_cluster_set_finding(tech), shipped) is True, tech
+
+        # Capacity on MASTER alone is the opposite phenomenon: develop lost it.
+        wrong_side = _cluster_set_finding(tech, only_master={"p1 0": 30_000.0})
+        waived, note = compare.waiver_status(wrong_side, shipped)
+        assert waived is False, tech
+        assert "expect_side" in note, note
+
+        # Right side, 50 GW of it.
+        huge = _cluster_set_finding(tech, only_develop={"p99 0": 50_000.0})
+        waived, note = compare.waiver_status(huge, shipped)
+        assert waived is False, tech
+        assert "max_one_sided_mw" in note, note
+
+        # A one-sided cluster whose MW nobody recorded is not a small one.
+        unknown = _cluster_set_finding(tech, only_develop={"p99 0": float("nan")})
+        waived, note = compare.waiver_status(unknown, shipped)
+        assert waived is False, tech
+        assert "unmeasurable" in note, note
+
+        # And a detail with no cluster lists at all cannot be measured either.
+        blind = _cluster_set_finding(tech)
+        blind["detail"] = {"n_common": 18}
+        waived, note = compare.waiver_status(blind, shipped)
+        assert waived is False, tech
+        assert "unmeasurable" in note, note
+
+
+def test_max_one_sided_pct_is_measured_against_the_common_total():
+    """The optional relative cap, and what it does without ``common_total_mw``."""
+    waiver = [
+        {
+            "stage": "profile_solar",
+            "component": "cluster_set",
+            "column": "<index>",
+            "kind": "row_set",
+            "ledger": "DL-18",
+            "expect_side": "develop",
+            "max_one_sided_pct": 1.0,
+        },
+    ]
+    # 2,158 MW of a 1,000,000 MW common set is 0.22 %: inside the cap.
+    assert compare.is_waived(_cluster_set_finding("solar"), waiver) is True
+
+    over = _cluster_set_finding("solar", common_total_mw=100_000.0)
+    waived, note = compare.waiver_status(over, waiver)
+    assert waived is False
+    assert "max_one_sided_pct" in note, note
+
+    blind = _cluster_set_finding("solar", common_total_mw=None)
+    waived, note = compare.waiver_status(blind, waiver)
+    assert waived is False
+    assert "unmeasurable" in note, note
+
+
+def test_expect_side_either_still_bounds_the_magnitude():
+    """``either`` waives a side, never a size."""
+    waiver = [
+        {
+            "stage": "profile_solar",
+            "component": "cluster_set",
+            "column": "<index>",
+            "kind": "row_set",
+            "ledger": "DL-18",
+            "expect_side": "either",
+            "max_one_sided_mw": 3000,
+        },
+    ]
+    assert compare.is_waived(_cluster_set_finding("solar", only_master={"p1 0": 100.0}), waiver) is True
+    waived, note = compare.waiver_status(
+        _cluster_set_finding("solar", only_master={"p1 0": 30_000.0}),
+        waiver,
+    )
+    assert waived is False
+    assert "max_one_sided_mw" in note, note
 
 
 def test_a_bounded_waiver_refuses_a_finding_it_cannot_measure():

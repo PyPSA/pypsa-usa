@@ -527,14 +527,21 @@ def cluster_sets(ds_master, ds_develop) -> dict:
     capacity-factor difference the refactor caused.
 
     Returns ``{n_master, n_develop, n_common, only_master, only_develop,
-    only_master_mw, only_develop_mw, equal}``, where the two ``only_*`` entries
-    map cluster id -> its ``p_nom_max`` in MW. JSON-serialisable throughout, so
-    it goes straight into a finding's ``detail`` and into ``run_meta.json``.
+    only_master_mw, only_develop_mw, common_total_mw, equal}``, where the two
+    ``only_*`` entries map cluster id -> its ``p_nom_max`` in MW.
+    ``common_total_mw`` is MASTER's ``p_nom_max`` summed over the clusters both
+    sides share — the baseline the one-sided MW is a fraction OF, so a waiver
+    can bound "how much capacity may sit on one side only" in relative terms.
+    It is ``None`` when master carries no ``p_nom_max`` at all, because then the
+    fraction is not measurable rather than zero. JSON-serialisable throughout,
+    so it goes straight into a finding's ``detail`` and into ``run_meta.json``.
     """
     bm, bd = set(_bus_labels(ds_master)), set(_bus_labels(ds_develop))
     pm, pd_ = _p_nom_max_by_bus(ds_master), _p_nom_max_by_bus(ds_develop)
     only_master = {b: float(pm.get(b, float("nan"))) for b in sorted(bm - bd)}
     only_develop = {b: float(pd_.get(b, float("nan"))) for b in sorted(bd - bm)}
+    common = sorted(bm & bd)
+    common_total_mw = float(np.nansum([pm.get(b, float("nan")) for b in common])) if common and not pm.empty else None
     return {
         "n_master": len(bm),
         "n_develop": len(bd),
@@ -543,6 +550,7 @@ def cluster_sets(ds_master, ds_develop) -> dict:
         "only_develop": only_develop,
         "only_master_mw": float(np.nansum(list(only_master.values()))) if only_master else 0.0,
         "only_develop_mw": float(np.nansum(list(only_develop.values()))) if only_develop else 0.0,
+        "common_total_mw": common_total_mw,
         "equal": bm == bd,
     }
 

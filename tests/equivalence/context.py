@@ -71,6 +71,13 @@ class RunContext:
     develop_dirty: bool
     develop_commits_ahead_of_master: int
     config_sha256: str
+    #: ``EQ_UNTIL``: ``'assembled'`` stops the compared pairs (and the built
+    #: targets) at the assembled stage, ``''`` runs the whole chain. It decides
+    #: WHICH artifacts were compared, so a re-run without it compares a
+    #: different set of files while every sha in this record is identical —
+    #: which is exactly the kind of silent difference run_meta.json exists to
+    #: make impossible.
+    until: str = ""
     #: What master's renewable-profile file WAS when the profile metrics read
     #: it. Master builds at substation resolution and develop at s{simpl}, so at
     #: prong 2 the harness rolls master up onto develop's cluster bus space
@@ -192,6 +199,7 @@ def build_context(prong: int, probe_env: bool = True) -> RunContext:
         develop_dirty=bool(build.checkout_dirt(REPO)),
         develop_commits_ahead_of_master=_count(f"master..{develop_sha}") if master_sha else -1,
         config_sha256=config_sha256,
+        until=paths.UNTIL,
         master_profile_stage=master_profile_stage(prong),
         env_master=env_master,
         env_develop=env_develop,

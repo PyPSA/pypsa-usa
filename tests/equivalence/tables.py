@@ -616,8 +616,210 @@ def _fmt(x) -> str:
     return f"{x:,.4f}".rstrip("0").rstrip(".")
 
 
-def to_markdown(table: pd.DataFrame, cap: int = MD_ROW_CAP) -> str:
-    """Render the comparison table as markdown, capped at ``cap`` rows."""
+def _big(x) -> str:
+    """One large quantity, thousands-separated and unrounded, for a detail line.
+
+    ``_fmt`` switches to ``%.4g`` above 1e5, which turns 620,823,223 MWh into
+    ``6.208e+08``; a reader comparing two annual totals needs the digits.
+    """
+    v = _f(x)
+    return "n/a" if not np.isfinite(v) else f"{v:,.0f}"
+
+
+def _mw(x) -> str:
+    """One capacity in MW, thousands-separated, for a one-line detail."""
+    return f"{_big(x)} MW"
+
+
+def _cluster_list(d: object) -> str:
+    """``{cluster: MW}`` as ``p87 0 (2,158 MW), ...``; ``none`` when empty."""
+    if not isinstance(d, dict) or not d:
+        return "none"
+    return ", ".join(f"{k} ({_mw(v)})" for k, v in sorted(d.items()))
+
+
+def _signed_pct(delta: float, pct: float) -> str:
+    """``pct`` carrying the sign of ``delta``; findings report it unsigned."""
+    if not np.isfinite(pct):
+        return "n/a %"
+    sign = "-" if delta < 0 else "+"
+    return f"{sign}{abs(pct):.4g} %"
+
+
+def _generic_detail(detail: object, keys: int = 4) -> str:
+    """Any other finding's detail, condensed: the first few ``k=v`` pairs."""
+    if isinstance(detail, dict):
+        if not detail:
+            return "-"
+        shown = [f"{k}={detail[k]}" for k in list(detail)[:keys]]
+        more = len(detail) - len(shown)
+        return ", ".join(shown) + (f", +{more} more" if more > 0 else "")
+    text = str(detail)
+    return text if len(text) <= 160 else text[:157] + "..."
+
+
+def finding_detail(f: dict) -> str:
+    """One finding's ``detail`` as a single human-readable line.
+
+    The components a reader has to be able to judge from ``comparison.md``
+    alone get a purpose-written line; everything else is condensed generically.
+    ``cluster_set`` is the one this function exists for: after the prong-2
+    rollup master is restricted to the common clusters, so a develop-only
+    cluster makes no comparison-table row move at all and used to appear
+    nowhere but ``findings_<prong>.json``.
+    """
+    detail = f.get("detail")
+    d = detail if isinstance(detail, dict) else {}
+    component = f.get("component")
+    if component == "cluster_set" and d:
+        return (
+            f"{d.get('n_common')} common clusters (master {d.get('n_master')}, "
+            f"develop {d.get('n_develop')}); develop-only: {_cluster_list(d.get('only_develop'))}; "
+            f"master-only: {_cluster_list(d.get('only_master'))}"
+        )
+    if component == "system_potential_mw" and d:
+        dev, mas = _f(d.get("develop")), _f(d.get("master"))
+        return f"develop {_mw(dev)} vs master {_mw(mas)} ({_signed_pct(dev - mas, _f(d.get('rel_pct')))})"
+    if component == "system_available_mw" and d:
+        dev, mas = _f(d.get("develop_total_mwh")), _f(d.get("master_total_mwh"))
+        ew = _f(d.get("energy_weighted_mean_rel_pct"))
+        return (
+            f"develop {_big(dev)} vs master {_big(mas)} MWh/y "
+            f"(total {_signed_pct(dev - mas, abs(_f(d.get('total_rel_pct'))))}), "
+            f"energy-weighted mean hourly {_fmt(ew)} %, "
+            f"{d.get('hours_mismatched')}/{d.get('hours_compared')} h mismatched"
+        )
+    return _generic_detail(detail)
+
+
+def finding_verdict(f: dict) -> str:
+    """``waived <HF-id>`` / ``LIVE`` / ``LIVE (bounds violated: <bound>)``."""
+    if f.get("waived"):
+        who = f.get("waiver")
+        return f"waived {who}" if who else "waived"
+    failed = f.get("waiver_bound_failed")
+    return f"LIVE (bounds violated: {failed})" if failed else "LIVE"
+
+
+#: Columns of ``tables/findings.csv`` and of the markdown Findings section.
+FINDINGS_COLUMNS = ("stage", "component", "column", "kind", "detail", "verdict")
+
+
+def findings_rows(result: object) -> list[dict]:
+    """One row per cell finding, in the order ``compare`` emitted them."""
+    findings = result.get("findings") if isinstance(result, dict) else None
+    return [
+        {
+            "stage": f.get("stage"),
+            "component": f.get("component"),
+            "column": f.get("column"),
+            "kind": f.get("kind"),
+            "detail": finding_detail(f),
+            "verdict": finding_verdict(f),
+        }
+        for f in (findings or [])
+        if isinstance(f, dict)
+    ]
+
+
+def findings_frame(result: object) -> pd.DataFrame:
+    """``findings.csv``: the stage-by-stage findings with their verdicts."""
+    return pd.DataFrame(findings_rows(result), columns=list(FINDINGS_COLUMNS))
+
+
+def _cluster_notes(result: object) -> list[dict]:
+    """The per-stage prong-2 rollup facts, from ``run_meta`` notes or findings.
+
+    ``compare.run_comparison`` puts them in ``profile_cluster_sets`` whether or
+    not the two cluster sets differed; a result carrying only findings (a
+    hand-assembled one, or an older ``findings_<prong>.json``) falls back to the
+    ``cluster_set`` findings, which carry the same fields.
+    """
+    if not isinstance(result, dict):
+        return []
+    notes = [n for n in (result.get("profile_cluster_sets") or []) if isinstance(n, dict) and n.get("rolled_up")]
+    if notes:
+        return notes
+    return [
+        {"stage": f.get("stage"), **f["detail"]}
+        for f in (result.get("findings") or [])
+        if isinstance(f, dict) and f.get("component") == "cluster_set" and isinstance(f.get("detail"), dict)
+    ]
+
+
+def cluster_note_lines(result: object) -> list[str]:
+    """One line per rolled-up profile stage naming the population it used.
+
+    A capacity-factor quantile taken over 18 clusters and one taken over 19 are
+    not the same number, and the cluster the 19th stands for carries real MW.
+    Since the rollup restricts master to the common set, that MW moves no row in
+    the comparison table — so it has to be said in words, here.
+    """
+    out: list[str] = []
+    for n in _cluster_notes(result):
+        if n.get("n_common") is None:
+            continue
+        parts = []
+        if n.get("only_develop"):
+            parts.append(f"develop-only {_cluster_list(n['only_develop'])}")
+        if n.get("only_master"):
+            parts.append(f"master-only {_cluster_list(n['only_master'])}")
+        out.append(
+            f"Profile metrics use the {n['n_common']} common clusters ({n.get('stage')}); "
+            f"one-sided clusters: {'; '.join(parts) if parts else 'none'} (see Findings).",
+        )
+    return out
+
+
+def _md_cell(text: object) -> str:
+    """Escape a value so it survives a markdown table cell intact.
+
+    ``|`` would end the cell, and ``<index>`` — the column label every row-set
+    finding carries — renders as an unknown HTML tag, i.e. as nothing at all.
+    A disclosure section that silently drops the word it is disclosing is worse
+    than no section.
+    """
+    out = str("-" if text is None else text)
+    for a, b in (("|", "\\|"), ("<", "&lt;"), (">", "&gt;"), ("\n", " ")):
+        out = out.replace(a, b)
+    return out
+
+
+def findings_markdown(result: object, cap: int = MD_ROW_CAP) -> list[str]:
+    """The **Findings** section: every cell finding and why it is or is not live.
+
+    ``comparison.md`` is the human-facing artifact, and until this section
+    existed a finding that moved no comparison-table row — a develop-only
+    cluster, a potential-MW delta — was visible only in ``findings_<prong>.json``
+    and ``run_meta.json``. The section is written even when empty, so "nothing
+    here" is a statement the run made rather than a section that failed to
+    render.
+    """
+    lines = ["## Findings", ""]
+    rows = findings_rows(result)
+    if not rows:
+        return [*lines, "_No stage-by-stage findings were recorded for this run._", ""]
+    lines += [
+        "Stage-by-stage artifact differences, independent of the comparison table above. "
+        "`waived <HF-id>` cites the waiver that covers it; `LIVE` is unexplained.",
+        "",
+        "| " + " | ".join(FINDINGS_COLUMNS) + " |",
+        "|" + "---|" * len(FINDINGS_COLUMNS),
+    ]
+    for r in rows[:cap]:
+        lines.append("| " + " | ".join(_md_cell(r[c]) for c in FINDINGS_COLUMNS) + " |")
+    if len(rows) > cap:
+        lines += ["", f"_{len(rows) - cap} more findings in findings.csv_"]
+    return [*lines, ""]
+
+
+def to_markdown(table: pd.DataFrame, cap: int = MD_ROW_CAP, result: object = None) -> str:
+    """Render the comparison table as markdown, capped at ``cap`` rows.
+
+    ``result`` is ``compare.run_comparison``'s dict; when given, the verdict
+    summary is followed by the cluster note and the **Findings** section, so a
+    reader of this one file sees the differences the table cannot show.
+    """
     c = verdict_counts(table)
     head = [
         "# Comparison: master-benchmark (baseline) vs develop",
@@ -625,6 +827,15 @@ def to_markdown(table: pd.DataFrame, cap: int = MD_ROW_CAP) -> str:
         f"`delta` is **develop minus master**. Verdicts: {c['equivalent']} equivalent, "
         f"{c['explained']} explained, {c['one-sided']} one-sided, {c['undefined']} undefined, "
         f"**{c['UNEXPLAINED']} UNEXPLAINED**, **{c['MISSING']} MISSING**.",
+        "",
+    ]
+    notes = cluster_note_lines(result)
+    if notes:
+        head += [*(f"_{line}_" for line in notes), ""]
+    if result is not None:
+        head += findings_markdown(result, cap)
+    head += [
+        "## Comparison table",
         "",
         "A row is equivalent when `|delta|` is within the absolute floor (`tol abs`) "
         "OR `|delta %|` is within the relative tolerance (`tol %`).",
@@ -648,12 +859,17 @@ def to_markdown(table: pd.DataFrame, cap: int = MD_ROW_CAP) -> str:
     return "\n".join([*head, ""])
 
 
-def write_tables(tables: dict[str, pd.DataFrame], outdir: Path) -> list[Path]:
+def write_tables(tables: dict[str, pd.DataFrame], outdir: Path, result: object = None) -> list[Path]:
     """Write ``<outdir>/tables/<name>.csv`` per frame, plus ``comparison.md``.
 
     ``tables`` must contain a ``comparison`` frame for the markdown to be
     written; every other entry is dumped as CSV beside it so that every number
     quoted anywhere has a machine-readable home.
+
+    ``result`` is ``compare.run_comparison``'s dict. Given one, the findings get
+    a machine-readable home of their own (``findings.csv``) and a human-readable
+    one in ``comparison.md``'s **Findings** section — the two views of the same
+    rows, written from the same function so they cannot disagree.
     """
     tdir = Path(outdir) / "tables"
     tdir.mkdir(parents=True, exist_ok=True)
@@ -667,9 +883,13 @@ def write_tables(tables: dict[str, pd.DataFrame], outdir: Path) -> list[Path]:
         # table carries it in a column and has a meaningless RangeIndex.
         frame.to_csv(p, index=not isinstance(frame.index, pd.RangeIndex))
         written.append(p)
+    if result is not None:
+        fc = tdir / "findings.csv"
+        findings_frame(result).to_csv(fc, index=False)
+        written.append(fc)
     if "comparison" in tables and tables["comparison"] is not None:
         md = tdir / "comparison.md"
-        md.write_text(to_markdown(tables["comparison"]))
+        md.write_text(to_markdown(tables["comparison"], result=result))
         written.append(md)
     return written
 
@@ -681,8 +901,9 @@ def export_all(run_dir: Path, ctx: object | None = None, result: dict | None = N
     :func:`plots.run_metrics`, which memoises them for the process, so the table
     and the figures are drawn from the same numbers and the networks are read
     once. ``result`` is the findings dict from ``compare.run_comparison``; it is
-    accepted so this hook has the whole run in hand, and is not needed to build
-    the table. Returns the comparison frame.
+    not needed to build the table, but it is what the **Findings** section of
+    ``comparison.md`` and ``findings.csv`` are written from. Returns the
+    comparison frame.
 
     The run's interconnect and prong come off ``ctx`` and scope the waivers, so
     a waiver written for the deferred western prong-1 leg cannot sign off a
@@ -703,6 +924,6 @@ def export_all(run_dir: Path, ctx: object | None = None, result: dict | None = N
         interconnect=interconnect,
         prong=prong,
     )
-    written = write_tables({**frames, "comparison": comparison}, run_dir)
+    written = write_tables({**frames, "comparison": comparison}, run_dir, result=result)
     print(f"[equivalence] tables: {len(written)} file(s) under {Path(run_dir) / 'tables'}")
     return comparison
