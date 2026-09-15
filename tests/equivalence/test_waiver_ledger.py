@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.equivalence import compare, tables
 from tests.equivalence import hotfixes as hf
 
 pytestmark = pytest.mark.fast
@@ -195,13 +196,30 @@ def test_missing_registry_file_yields_empty(tmp_path):
 #: Every field a waiver entry may carry. Selection: which row or cell it is
 #: about. Scope: which run it was measured on. Bounds: how far the explanation
 #: reaches. Provenance: where the sign-off is written down.
+#:
+#: The two bound sets are taken from the code that ENFORCES them, never
+#: restated here: a bound this file allows but nothing checks is the exact
+#: failure mode these tests exist to prevent.
 WAIVER_SELECT_FIELDS = ("stage", "component", "column", "kind", "metric", "key", "family")
 WAIVER_SCOPE_FIELDS = ("interconnect", "prong")
-WAIVER_BOUND_FIELDS = ("expect_sign", "max_abs_pct")
+TABLE_BOUND_FIELDS = tuple(tables.WAIVER_BOUND_KEYS)
+CELL_BOUND_FIELDS = tuple(compare.CELL_BOUND_KEYS)
+WAIVER_BOUND_FIELDS = tuple(dict.fromkeys(TABLE_BOUND_FIELDS + CELL_BOUND_FIELDS))
+#: Bounds that belong to exactly one kind. ``expect_sign`` is shared: on a table
+#: waiver it is the sign of the row's delta, on a cell waiver the sign of the
+#: finding's annual-total delta.
+TABLE_ONLY_BOUNDS = tuple(k for k in TABLE_BOUND_FIELDS if k not in CELL_BOUND_FIELDS)
+CELL_ONLY_BOUNDS = tuple(k for k in CELL_BOUND_FIELDS if k not in TABLE_BOUND_FIELDS)
+#: Numeric bounds, which must parse and be strictly positive.
+NUMERIC_BOUNDS = tuple(k for k in WAIVER_BOUND_FIELDS if k != "expect_sign")
 WAIVER_PROVENANCE_FIELDS = ("ledger", "hotfix", "reason", "justification")
 WAIVER_FIELDS = frozenset(
     WAIVER_SELECT_FIELDS + WAIVER_SCOPE_FIELDS + WAIVER_BOUND_FIELDS + WAIVER_PROVENANCE_FIELDS,
 )
+
+
+def _is_table_waiver(w: dict) -> bool:
+    return any(w.get(k) is not None for k in ("metric", "key", "family"))
 
 
 def test_no_waiver_carries_an_unknown_field(waivers):
@@ -216,30 +234,36 @@ def test_every_waiver_selects_something(waivers):
 
 
 def test_waiver_bounds_are_well_formed(waivers):
-    """``expect_sign``/``max_abs_pct`` must be usable, and only on table waivers.
+    """Every bound must be usable, and must belong to the kind that carries it.
 
-    A bound on a CELL waiver would be dead configuration: ``compare.is_waived``
-    has no delta to check it against. A bound the matcher cannot parse is worse
-    than none, because it reads as a limit while enforcing nothing.
+    A bound the matcher cannot parse is worse than none, because it reads as a
+    limit while enforcing nothing. A bound on the wrong KIND of waiver is the
+    same failure by another route: ``max_abs_pct`` on a cell waiver and
+    ``max_total_pct`` on a table waiver are both read by nobody.
     """
     bad: list[str] = []
     for w in waivers:
         bounds = [k for k in WAIVER_BOUND_FIELDS if k in w]
         if not bounds:
             continue
-        label = f"{w.get('metric')}/{w.get('key')}"
-        if not any(w.get(k) is not None for k in ("metric", "key", "family")):
-            bad.append(f"{label}: {bounds} on a cell waiver, which has no delta to bound")
+        table = _is_table_waiver(w)
+        label = f"{w.get('metric')}/{w.get('key')}" if table else f"{w.get('stage')}.{w.get('component')}"
+        wrong = [k for k in (CELL_ONLY_BOUNDS if table else TABLE_ONLY_BOUNDS) if k in w]
+        if wrong:
+            kind, other = ("table", "cell") if table else ("cell", "table")
+            bad.append(f"{label}: {wrong} is a {other} bound on a {kind} waiver; nothing enforces it")
         if "expect_sign" in w and w["expect_sign"] not in ("+", "-"):
             bad.append(f"{label}: expect_sign={w['expect_sign']!r}, expected '+' or '-'")
-        if "max_abs_pct" in w:
+        for key in NUMERIC_BOUNDS:
+            if key not in w:
+                continue
             try:
-                cap = float(w["max_abs_pct"])
+                cap = float(w[key])
             except (TypeError, ValueError):
-                bad.append(f"{label}: max_abs_pct={w['max_abs_pct']!r} is not a number")
+                bad.append(f"{label}: {key}={w[key]!r} is not a number")
             else:
                 if not cap > 0:
-                    bad.append(f"{label}: max_abs_pct={cap} must be > 0")
+                    bad.append(f"{label}: {key}={cap} must be > 0")
     assert not bad, "malformed waiver bounds:\n" + "\n".join(bad)
 
 
@@ -252,10 +276,29 @@ def test_every_table_waiver_is_bounded(waivers):
     unbounded = [
         f"{w.get('metric')}/{w.get('key')}"
         for w in waivers
-        if any(w.get(k) is not None for k in ("metric", "key", "family"))
-        and not any(k in w for k in WAIVER_BOUND_FIELDS)
+        if _is_table_waiver(w) and not any(k in w for k in TABLE_BOUND_FIELDS)
     ]
-    assert not unbounded, f"table waivers with no expect_sign/max_abs_pct: {unbounded}"
+    assert not unbounded, f"table waivers with no {'/'.join(TABLE_BOUND_FIELDS)}: {unbounded}"
+
+
+def test_every_system_available_mw_waiver_is_bounded(waivers):
+    """A waiver on the hourly available power says how far it reaches.
+
+    ``system_available_mw`` is the finding that would catch a real
+    capacity-factor construction difference — it is ``sum_bus(profile *
+    p_nom_max)``, exactly invariant under the prong-2 rollup, so nothing but
+    physics moves it. Waiving it unbounded hollows out prong 2: whatever the
+    delta became, the HF-24 signature would go on explaining it. Every one of
+    these must carry all three cell bounds.
+    """
+    bad = [
+        f"{w.get('stage')}.{w.get('component')}: missing {sorted(set(CELL_BOUND_FIELDS) - set(w))}"
+        for w in waivers
+        if not _is_table_waiver(w)
+        and w.get("component") == "system_available_mw"
+        and not set(CELL_BOUND_FIELDS) <= set(w)
+    ]
+    assert not bad, "under-bounded system_available_mw waivers:\n" + "\n".join(bad)
 
 
 # --- the two waiver kinds must not be confused for each other ----------------
@@ -309,27 +352,88 @@ def test_a_table_waiver_never_silences_a_finding(named):
     assert compare.is_waived(finding, table_waiver) is False
 
 
-def test_the_shipped_waivers_leave_system_available_mw_live():
-    """The HF-24 waivers cover potential, never the CF-weighted available power.
+#: The two findings the HF-24 available-power waivers were measured against
+#: (western-p2-3h-20260915-1429, 2026-09-15). Develop is above master by a
+#: quarter of a percent of annual energy, from the capacity master drops.
+SHIPPED_AVAILABLE_MW = {
+    "onwind": {"develop_total_mwh": 622_371_840.0, "master_total_mwh": 620_823_223.0, "mean_rel_pct": 0.386},
+    "solar": {"develop_total_mwh": 4_513_095_168.0, "master_total_mwh": 4_506_760_381.0, "mean_rel_pct": 0.984},
+}
+
+
+def _available_mw_finding(tech: str, **detail) -> dict:
+    return {
+        "stage": f"profile_{tech}",
+        "component": "system_available_mw",
+        "column": "sum_bus(profile*p_nom_max)",
+        "kind": "value",
+        "prong": 2,
+        "interconnect": "western",
+        "detail": {**SHIPPED_AVAILABLE_MW[tech], **detail},
+    }
+
+
+def test_the_shipped_waivers_bound_system_available_mw():
+    """HF-24 waives the measured available-power delta, and only that.
 
     ``system_available_mw`` is the metric that would catch a real capacity-factor
-    construction difference; waiving it would hollow out prong 2.
+    construction difference, so waiving it unbounded would hollow out prong 2.
+    Bounded, it is waived at the measured +0.25 % / +0.14 % and comes straight
+    back the moment the delta changes sign or grows.
     """
-    from tests.equivalence import compare
-
     shipped = compare.load_waivers()
-    for tech in ("onwind", "solar"):
-        live = {
-            "stage": f"profile_{tech}",
-            "component": "system_available_mw",
-            "column": "sum_bus(profile*p_nom_max)",
-            "kind": "value",
-            "prong": 2,
-            "interconnect": "western",
-        }
-        assert compare.is_waived(live, shipped) is False, tech
-        waived = dict(live, component="system_potential_mw", column="sum(p_nom_max)")
-        assert compare.is_waived(waived, shipped) is True, tech
+    for tech in SHIPPED_AVAILABLE_MW:
+        as_measured = _available_mw_finding(tech)
+        assert compare.is_waived(as_measured, shipped) is True, tech
+
+        master = as_measured["detail"]["master_total_mwh"]
+        # Develop BELOW master: the opposite of HF-24's direction.
+        flipped = _available_mw_finding(tech, develop_total_mwh=master * 0.9975)
+        waived, note = compare.waiver_status(flipped, shipped)
+        assert waived is False, tech
+        assert "expect_sign" in note, note
+
+        # Right direction, ten times the measured size.
+        big = _available_mw_finding(tech, develop_total_mwh=master * 1.03)
+        waived, note = compare.waiver_status(big, shipped)
+        assert waived is False, tech
+        assert "max_total_pct" in note, note
+
+        # The per-hour mean error blowing up while the annual total does not.
+        noisy = _available_mw_finding(tech, mean_rel_pct=9.0)
+        waived, note = compare.waiver_status(noisy, shipped)
+        assert waived is False, tech
+        assert "max_mean_rel_pct" in note, note
+
+        # A dawn/dusk worst case is NOT a bound: 100 % of a few MW is noise.
+        assert compare.is_waived(_available_mw_finding(tech, worst_rel_pct=100.0), shipped) is True, tech
+
+        # ... and the unbounded potential waiver is untouched.
+        potential = dict(
+            _available_mw_finding(tech),
+            component="system_potential_mw",
+            column="sum(p_nom_max)",
+            detail={},
+        )
+        assert compare.is_waived(potential, shipped) is True, tech
+
+
+def test_a_bounded_waiver_refuses_a_finding_it_cannot_measure():
+    """No totals in the detail means the bound cannot be shown to hold."""
+    shipped = compare.load_waivers()
+    blind = _available_mw_finding("onwind")
+    blind["detail"] = {"hours_mismatched": 8371}
+    waived, note = compare.waiver_status(blind, shipped)
+    assert waived is False
+    assert "unmeasurable" in note
+
+
+def test_an_unbounded_cell_waiver_still_waives_as_before():
+    """Bounds are opt-in; every pre-existing entry keeps its old meaning."""
+    unbounded = [{"stage": "*", "component": "Bus", "column": "control", "kind": "value", "ledger": "DL-4"}]
+    finding = {"stage": "assembled_substation_network", "component": "Bus", "column": "control", "kind": "value"}
+    assert compare.is_waived(finding, unbounded) is True
+    assert compare.waiver_status(finding, unbounded) == (True, None)
 
 
 def test_hf24_is_a_live_explanation(registry):

@@ -42,12 +42,23 @@ the substation->zone chain above. Clusters only one side carries are then
 removed by ``metrics.common_cluster_subset`` — the pooled statistics are over
 the shared population, and the one-sided clusters are reported as their own
 ``cluster_set`` finding rather than smeared across every quantile row.
+
+**The figures take that same object.** :func:`prepare_profiles` is the ONE place
+the rollup, the common-cluster subset and the master zone-map switch happen;
+:func:`collect_metrics` calls it, caches the result on
+:attr:`Artifacts.profiles`, and :func:`export_all` draws every profile figure
+from the cache. Reading the raw master file again for a figure is how
+``p_max_pu_duration_onwind`` came to plot 544 pooled substations against 19
+clusters while the ``p_max_pu_quantiles_onwind`` table rows beside it were
+equivalent — one run, two answers, and the picture was the wrong one. Figures
+whose master side was rolled up say so, in the legend and under the title.
 """
 
 from __future__ import annotations
 
 import json
 import zlib
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -316,11 +327,18 @@ def duration_curve(
     outdir: Path,
     points: int = 201,
     color: str = "#a03030",
+    master_label: str | None = None,
+    subtitle: str = "",
 ) -> tuple[Path, Path]:
     """Sorted-descending distribution of two value sets on a common percentile axis.
 
     Sampling both sides at the same percentiles is what makes them comparable
     when their bus spaces differ, which they do at prong 2.
+
+    ``master_label`` and ``subtitle`` carry the provenance of the master series
+    onto the figure — at prong 2 it is not the file master wrote but that file
+    rolled up to ``s{simpl}``, and a reader comparing two curves has to be told
+    which object the blue one is.
     """
     vm = np.asarray(pd.Series(s_master, dtype=float).dropna().to_numpy())
     vd = np.asarray(pd.Series(s_develop, dtype=float).dropna().to_numpy())
@@ -334,10 +352,10 @@ def duration_curve(
         index=pd.Index(q, name="percent_of_time_at_or_above"),
     )
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 5.6), sharex=True, height_ratios=[3, 1])
-    ax1.plot(q, ym, color=SIDE_COLORS["master"], lw=2.0, label=LABELS["master"])
+    ax1.plot(q, ym, color=SIDE_COLORS["master"], lw=2.0, label=master_label or LABELS["master"])
     ax1.plot(q, yd, color=SIDE_COLORS["develop"], lw=2.0, ls="--", label=LABELS["develop"])
     ax1.legend(fontsize=8, frameon=False)
-    ax1.set_title(title, fontsize=11)
+    ax1.set_title(title + (f"\n{subtitle}" if subtitle else ""), fontsize=11)
     _style(ax1, ylabel=f"{title} [{unit}]")
     ax2.axhline(0, color="#999999", lw=0.8)
     ax2.plot(q, yd - ym, color=color, lw=1.6)
@@ -353,12 +371,17 @@ def timeseries_pair(
     unit: str,
     name: str,
     outdir: Path,
+    master_label: str | None = None,
+    subtitle: str = "",
 ) -> tuple[Path, Path]:
     """Two time series plus their relative difference.
 
     A full benchmark year is resampled to daily means to stay legible; a short
     series (fewer than three days, as in the unit tests) is drawn at its native
     resolution, since a one-point daily mean plots nothing at all.
+
+    ``master_label`` / ``subtitle`` name the object the master series came from;
+    see :func:`duration_curve`.
     """
     if s_master is None or s_develop is None or len(s_master) == 0 or len(s_develop) == 0:
         return _empty_figure(title, name, outdir, note="no profile data")
@@ -378,10 +401,10 @@ def timeseries_pair(
     data = pd.DataFrame({"master": ym, "develop": yd, "delta": yd - ym, "delta_pct": rel}, index=idx)
     marker = "o" if n <= 40 else None
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 5.5), sharex=True, height_ratios=[3, 1])
-    ax1.plot(idx, ym, color=SIDE_COLORS["master"], lw=1.6, marker=marker, ms=4, label=LABELS["master"])
+    ax1.plot(idx, ym, color=SIDE_COLORS["master"], lw=1.6, marker=marker, ms=4, label=master_label or LABELS["master"])
     ax1.plot(idx, yd, color=SIDE_COLORS["develop"], lw=1.6, ls="--", marker=marker, ms=4, label=LABELS["develop"])
     ax1.legend(fontsize=8, frameon=False)
-    ax1.set_title(title, fontsize=11)
+    ax1.set_title(title + (f"\n{subtitle}" if subtitle else ""), fontsize=11)
     _style(ax1, ylabel=f"{title}\n[{unit}{', daily mean' if resampled else ''}]")
     ax2.axhline(0, color="#999999", lw=0.8)
     ax2.plot(idx, rel, color="#a03030", lw=1.2, marker=marker, ms=3)
@@ -432,6 +455,40 @@ def findings_by_stage(findings: list[dict], name: str, outdir: Path) -> tuple[Pa
 
 
 @dataclass
+class PreparedProfile:
+    """One tech's two profile Datasets, put on ONE bus space, plus how.
+
+    This is the object every prong-2 profile number — table row and figure
+    alike — is taken from. ``master`` is the rolled-up master when
+    :attr:`rolled_up`, and the raw file otherwise; ``zone_master`` is the bus
+    -> ``reeds_zone`` map that addresses whichever it is.
+    """
+
+    master: object
+    develop: object
+    zone_master: pd.Series | None = None
+    rolled_up: bool = False
+    #: What :func:`metrics.cluster_sets` reported, or ``None`` at prong 1.
+    info: dict | None = None
+
+    @property
+    def master_label(self) -> str:
+        """Legend text for the master series, naming the rollup when there was one."""
+        if not self.rolled_up:
+            return LABELS["master"]
+        return f"{LABELS['master']}, rolled up to s{SIMPL2}"
+
+    @property
+    def subtitle(self) -> str:
+        """One line under the title saying which object the master side is."""
+        if not self.rolled_up:
+            return ""
+        n = (self.info or {}).get("n_common")
+        common = f"; {n} common clusters" if n is not None else ""
+        return f"master rolled up to s{SIMPL2} (p_nom_max-weighted){common}"
+
+
+@dataclass
 class Artifacts:
     """Loaded objects for one prong, with ``None`` for anything not built yet."""
 
@@ -454,6 +511,11 @@ class Artifacts:
     #: computed over the common clusters only, so this is the record of what
     #: they left out.
     cluster_sets: dict[str, dict] = field(default_factory=dict)
+    #: ``{tech: PreparedProfile}`` — the datasets the profile metrics were taken
+    #: from, cached by :func:`prepare_profiles` at prong 2 so ``export_all``
+    #: draws its figures from the same object instead of reopening the raw
+    #: master file. Cluster-resolution, so keeping it costs almost nothing.
+    profiles: dict[str, PreparedProfile] = field(default_factory=dict)
 
     @property
     def profile_pairs(self) -> list:
@@ -533,6 +595,70 @@ def _safe(metric: str, missing: list[dict], fn, *a, **kw):
         return None
 
 
+def prepare_profiles(
+    art: Artifacts,
+    tech: str,
+    ds_develop,
+    ds_master_raw,
+    missing: list[dict],
+) -> PreparedProfile | None:
+    """Put one tech's two profile Datasets on a single bus space. The only place.
+
+    At prong 2 master's file is NODAL (substation buses) and develop's is at
+    s{simpl}. Every profile statistic is resolution-sensitive — pooled
+    ``(time, bus)`` quantiles over 544 sites and over the 19 clusters they roll
+    up into are different numbers no matter what the refactor did — so master is
+    aggregated onto develop's bus space first, and the clusters only one side
+    carries are then removed (they are a row-set difference, reported once as
+    the ``cluster_set`` finding, not smeared over every quantile row).
+
+    Master's buses are cluster ids afterwards, so the returned
+    ``zone_master`` is develop's cluster->zone map rather than the
+    substation->zone chain that addressed the nodal file.
+
+    Returns ``None`` only when the rollup itself failed; ``_safe`` has then
+    recorded a ``MISSING`` row, which is the honest outcome — computing the
+    metrics at mismatched resolutions would publish numbers that mean nothing.
+    Prong 1 (and a prong-2 run with no busmap) passes both sides through
+    untouched, with ``rolled_up=False``.
+
+    The result is cached on ``art.profiles[tech]`` when it was rolled up, and
+    the two Datasets are then in memory, so ``export_all`` can draw from it
+    after the files are closed. A prong-1 pass-through is NOT cached: those
+    Datasets are the nodal files themselves, and holding a whole-USA one open
+    for the length of a run costs hundreds of MB for no gain.
+    """
+    if not (art.prong == 2 and art.busmap is not None and "bus" in getattr(ds_master_raw, "dims", ())):
+        return PreparedProfile(
+            master=ds_master_raw,
+            develop=ds_develop,
+            zone_master=art.zone_master,
+            rolled_up=False,
+        )
+    agg = _safe(
+        f"aggregate_master_profile_{tech}",
+        missing,
+        metrics.aggregate_profile_to_clusters,
+        ds_master_raw,
+        art.busmap,
+    )
+    if agg is None:
+        return None
+    dsm, dsd_cmp, info = metrics.common_cluster_subset(agg, ds_develop)
+    prep = PreparedProfile(
+        # ``load()``: ``dsd_cmp`` is a view on a file-backed Dataset, and the
+        # cache outlives the ``open_dataset`` context it was built in.
+        master=dsm,
+        develop=dsd_cmp.load(),
+        zone_master=art.zone_develop,
+        rolled_up=True,
+        info=info,
+    )
+    art.cluster_sets[tech] = info
+    art.profiles[tech] = prep
+    return prep
+
+
 def collect_metrics(art: Artifacts, missing: list[dict] | None = None) -> dict[str, object]:
     """Every metric frame the comparison table and the figures need.
 
@@ -584,42 +710,11 @@ def collect_metrics(art: Artifacts, missing: list[dict] | None = None) -> dict[s
         if not (dp.exists() and mp.exists()):
             continue
         with xr.open_dataset(dp) as dsd, xr.open_dataset(mp) as dsm_raw:
-            # Prong 2: master's file is NODAL (substation buses), develop's is
-            # at s{simpl}. Every metric below is resolution-sensitive —
-            # p_max_pu_quantiles pools (time, bus) values, so 544 sites and the
-            # 19 clusters they roll up into give different distributions no
-            # matter what the refactor did — so master is aggregated onto
-            # develop's bus space FIRST. The zone-keyed metrics are
-            # aggregation-invariant but take the same input, so the table and
-            # the figures describe one object rather than two.
-            dsm, dsd_cmp = dsm_raw, dsd
-            zone_m = art.zone_master
-            if art.prong == 2 and art.busmap is not None and "bus" in dsm_raw.dims:
-                agg = _safe(
-                    f"aggregate_master_profile_{tech}",
-                    miss,
-                    metrics.aggregate_profile_to_clusters,
-                    dsm_raw,
-                    art.busmap,
-                )
-                if agg is None:
-                    # The rollup is the precondition of all three metrics
-                    # below; computing them on mismatched resolutions would
-                    # publish numbers that mean nothing. The MISSING row
-                    # ``_safe`` just recorded is the honest outcome.
-                    continue
-                # Same resolution is not the same population. A cluster only
-                # one side has (western: develop's ``p87 0``, 96 MW onwind /
-                # 2,158 MW solar) puts a whole 8,760-hour column into one pool
-                # and nothing into the other, which smears a row-set difference
-                # across every quantile row. It is taken out here and reported
-                # once, as the ``cluster_set`` finding compare.py emits.
-                dsm, dsd_cmp, info = metrics.common_cluster_subset(agg, dsd)
-                art.cluster_sets[tech] = info
-                # Master is now keyed by cluster bus, so its zone map is
-                # develop's cluster->zone map, NOT the substation->zone chain
-                # that addressed the nodal file.
-                zone_m = art.zone_develop
+            # One preparation, shared with the figures (see prepare_profiles).
+            prep = prepare_profiles(art, tech, dsd, dsm_raw, miss)
+            if prep is None:
+                continue
+            dsm, dsd_cmp, zone_m = prep.master, prep.develop, prep.zone_master
             out[f"p_max_pu_quantiles_{tech}"] = _safe(
                 f"p_max_pu_quantiles_{tech}",
                 miss,
@@ -770,11 +865,24 @@ def export_all(
 
     for pair in artifacts.profile_pairs:
         tech = pair.stage.replace("profile_", "")
-        dp, mp = artifacts.develop_root / pair.develop, artifacts.master_root / pair.master
-        if not (dp.exists() and mp.exists()):
-            print(f"[plots] skipping {tech}: artifact missing")
-            continue
-        with xr.open_dataset(dp) as dsd, xr.open_dataset(mp) as dsm:
+        # The prepared pair the TABLE metrics were taken from. Reopening the raw
+        # master file here is what made p_max_pu_duration_onwind plot 544 pooled
+        # substations against 19 clusters while the quantile rows beside it were
+        # equivalent; the figure and its row must be one object.
+        prep = artifacts.profiles.get(tech)
+        with ExitStack() as stack:
+            if prep is None:
+                dp, mp = artifacts.develop_root / pair.develop, artifacts.master_root / pair.master
+                if not (dp.exists() and mp.exists()):
+                    print(f"[plots] skipping {tech}: artifact missing")
+                    continue
+                dsd = stack.enter_context(xr.open_dataset(dp))
+                dsm_raw = stack.enter_context(xr.open_dataset(mp))
+                prep = prepare_profiles(artifacts, tech, dsd, dsm_raw, missing)
+                if prep is None:
+                    print(f"[plots] skipping {tech}: master profile could not be rolled up")
+                    continue
+            dsm, dsd = prep.master, prep.develop
             pot = m.get(f"p_nom_max_by_zone_{tech}")
             cf = m.get(f"mean_cf_by_zone_{tech}")
             if pot is not None:
@@ -805,6 +913,8 @@ def export_all(
                 f"p_max_pu_duration_{tech}",
                 run_dir,
                 color=carrier_color(tech),
+                master_label=prep.master_label,
+                subtitle=prep.subtitle,
             )
             timeseries_pair(
                 metrics.available_power(dsm) / 1e3,
@@ -813,7 +923,14 @@ def export_all(
                 "GW",
                 f"{tech}_national_available_power",
                 run_dir,
+                master_label=prep.master_label,
+                subtitle=prep.subtitle,
             )
+
+    # Rewritten: a rollup that failed inside the loop above (only possible when
+    # the caller did not go through collect_metrics first) is a criterion lost,
+    # and the file written before the loop would not name it.
+    (run_dir / "missing_metrics.json").write_text(json.dumps(missing, indent=1))
 
     if findings is None:
         findings = _read_findings(run_dir, artifacts.prong)

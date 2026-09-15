@@ -439,6 +439,30 @@ planned; the comparison rewrites the field with `nodal->s{simpl}
 (p_nom_max-weighted)` when the rollup ran, and `nodal (rollup did NOT run: ...)`
 when there was no busmap to run it with.
 
+#### The figures take the rolled-up master too
+
+`plots.prepare_profiles` is the only place the rollup, the common-cluster subset
+and the master zone-map switch happen. `collect_metrics` calls it, caches the
+result on `Artifacts.profiles`, and `export_all` draws **every** profile figure
+from that cache — `p_max_pu_duration_{tech}`, `{tech}_national_available_power`,
+`{tech}_potential_zones`, `{tech}_meancf_zones`. Reopening master's raw nodal
+file for a figure is how `p_max_pu_duration_onwind` came to plot 544 pooled
+substations against 19 clusters — the old flat-versus-steep pair of curves —
+while the `p_max_pu_quantiles_onwind` rows in the table beside it were
+equivalent. One run must not give two answers, and the picture was the wrong one.
+
+Because the figures use the prepared pair, they are also over the **common**
+clusters: develop's one-sided `p87 0` is not in
+`solar_national_available_power`, while the `system_available_mw` finding (which
+compares everything each side built) does include it. The two are answering
+different questions on purpose; the cluster-set finding is where the one-sided
+capacity is accounted for.
+
+A figure whose master side was rolled up says so, in the legend
+(`master-benchmark (baseline), rolled up to s{simpl}`) and under the title
+(`master rolled up to s{simpl} (p_nom_max-weighted); N common clusters`). The
+CSV twin carries exactly the plotted numbers, as always.
+
 ### A waiver is bounded in sign and magnitude
 
 A TABLE waiver in `tests/equivalence/waivers.yaml` may carry two optional
@@ -460,11 +484,55 @@ bound cannot be shown to hold. The shipped HF-24 waivers carry
 `expect_sign: '+'` and `max_abs_pct: 5`, against measured rows of +0.19 % to
 +1.15 %.
 
-Bounds belong on table waivers only — a cell waiver has no delta to bound, and
-`test_waiver_bounds_are_well_formed` fails one that carries them. A waiver that
-names `metric`, `key` or `family` **at all**, wildcard included, is a table
-waiver and is never read as a cell waiver: `{metric: '*', key: '*', prong: 2}`
-names no cell field, so read as one it would waive every finding in the run.
+A waiver that names `metric`, `key` or `family` **at all**, wildcard included, is
+a table waiver and is never read as a cell waiver: `{metric: '*', key: '*',
+prong: 2}` names no cell field, so read as one it would waive every finding in
+the run.
+
+#### A cell waiver on a system aggregate is bounded too
+
+The same argument applies to the stage-by-stage findings, and hardest to the one
+that carries the most: `system_available_mw` is `sum_bus(profile * p_nom_max)`,
+exactly invariant under the prong-2 rollup, so nothing but the physics of the
+two builds moves it. It is the finding that would catch a real capacity-factor
+construction difference. Waiving it needs bounds a bug of that kind would break,
+so a CELL waiver may carry three:
+
+| field | meaning |
+|---|---|
+| `expect_sign` | `'+'` or `'-'`: the sign of `develop_total_mwh − master_total_mwh` |
+| `max_total_pct` | upper bound on that annual-total delta as a % of master |
+| `max_mean_rel_pct` | upper bound on the finding's `mean_rel_pct` |
+
+`compare._cell_bounds_violation` enforces them. A finding outside the bounds
+stays **live** and gains a `waiver_note` — `waiver HF-24 bounds violated
+(max_total_pct)` — so the reason it was not waived is on the record. A finding
+whose `detail` does not carry the totals a bound needs is `unmeasurable` and
+also stays live: a bound that cannot be evaluated has not been shown to hold.
+Bounds are opt-in, so every unbounded entry in `waivers.yaml` behaves exactly as
+it did.
+
+**`worst_rel_pct` is deliberately not boundable.** At dawn and dusk master's
+available power is a few MW, so a fraction of a MW is a 100 % relative error;
+the western solar finding's `worst_rel_pct` is 100.0 and says nothing about the
+energy that differs. The finding detail therefore also reports
+`energy_weighted_mean_rel_pct` — `sum|Δ| / sum(master)`, the same per-hour error
+weighted by the energy each hour carries — and `total_rel_pct`, the signed
+annual-total delta the `max_total_pct` bound is checked against. Those are the
+two numbers to read.
+
+The shipped HF-24 cell waivers cover the two western prong-2 `system_available_mw`
+findings with `expect_sign: '+'`, `max_total_pct: 0.5` and
+`max_mean_rel_pct: 1.5`, against measured annual deltas of +0.25 % (onwind) and
++0.14 % (solar) and mean hourly errors of 0.39 % and 0.98 %. The cause is HF-24's
+retained capacity — 450 MW of onwind and 2,566 MW of solar that master drops —
+lifting develop above master in every producing hour, which is exactly the flat
+`+0.15…+0.3 %` band the `{onwind,solar}_national_available_power` figures show
+all year, with no crossing.
+
+`test_waiver_bounds_are_well_formed` refuses a bound on the wrong kind of waiver
+(`max_abs_pct` on a cell waiver, `max_total_pct` on a table waiver): nothing
+would enforce it, and a limit nobody reads is worse than no limit at all.
 
 ### Reading `comparison.md`
 

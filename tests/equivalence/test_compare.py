@@ -152,6 +152,65 @@ def test_prong_1_does_not_roll_up_or_compare_cluster_sets(tmp_path):
     assert notes == []
 
 
+def test_available_power_finding_reports_the_energy_weighted_error(tmp_path):
+    """``worst_rel_pct`` is dawn/dusk noise; the energy-weighted mean is the number.
+
+    Master is scaled down by 1 % in every hour, so sum|delta| / sum(master) and
+    the annual-total delta are both exactly 1 %. A bounded waiver checks the
+    annual total, and a reader of the table needs the per-hour error weighted by
+    the energy it carries — not the ratio at the hour master was nearly zero.
+    """
+    master = _nodal_master(seed=85, n_time=12)
+    develop = master.copy(deep=True)
+    develop["profile"] = develop["profile"] * 1.01
+
+    dp, mp = _write(tmp_path, master, develop)
+    findings: list[dict] = []
+    compare.compare_profiles(_pair(), dp, mp, findings, prong=1)
+
+    avail = [f for f in findings if f["component"] == "system_available_mw"]
+    assert len(avail) == 1, findings
+    d = avail[0]["detail"]
+    assert d["energy_weighted_mean_rel_pct"] == pytest.approx(1.0, abs=1e-3)
+    assert d["total_rel_pct"] == pytest.approx(1.0, abs=1e-3)
+    assert d["develop_total_mwh"] > d["master_total_mwh"]
+    assert set(d) >= {"worst_rel_pct", "mean_rel_pct", "energy_weighted_mean_rel_pct", "total_rel_pct"}
+
+
+def test_run_comparison_style_bounds_keep_an_out_of_bound_finding_live():
+    """The bound is enforced where the finding is judged, not only in the schema."""
+    waivers = [
+        {
+            "stage": "profile_onwind",
+            "component": "system_available_mw",
+            "column": "sum_bus(profile*p_nom_max)",
+            "kind": "value",
+            "prong": 2,
+            "interconnect": "western",
+            "ledger": "DL-18",
+            "hotfix": "HF-24",
+            "expect_sign": "+",
+            "max_total_pct": 0.5,
+            "max_mean_rel_pct": 1.5,
+        },
+    ]
+    base = {
+        "stage": "profile_onwind",
+        "component": "system_available_mw",
+        "column": "sum_bus(profile*p_nom_max)",
+        "kind": "value",
+        "prong": 2,
+        "interconnect": "western",
+    }
+    inside = dict(base, detail={"develop_total_mwh": 100.25, "master_total_mwh": 100.0, "mean_rel_pct": 0.4})
+    assert compare.waiver_status(inside, waivers) == (True, None)
+
+    outside = dict(base, detail={"develop_total_mwh": 105.0, "master_total_mwh": 100.0, "mean_rel_pct": 0.4})
+    waived, note = compare.waiver_status(outside, waivers)
+    assert waived is False
+    assert note == "waiver HF-24 bounds violated (max_total_pct)"
+
+
 def test_prong_2_without_a_busmap_records_that_nothing_was_rolled_up(tmp_path):
     master = _nodal_master(seed=84)
     develop = master.copy(deep=True)

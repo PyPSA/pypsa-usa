@@ -20,17 +20,34 @@
 # set must match the run, so a waiver measured on one leg cannot sign off
 # another.
 #
-# A TABLE waiver may also BOUND the difference it explains:
+# EITHER kind may also BOUND the difference it explains. A bound is a claim
+# about a measured quantity, so a waiver that carries one only holds while the
+# difference stays inside it.
 #
-#   expect_sign   '+' or '-', the sign of (develop - master).
-#   max_abs_pct   upper bound on |delta %|.
+#   TABLE waivers (checked by tables._bounds_violation, against the row's delta)
+#     expect_sign        '+' or '-', the sign of (develop - master).
+#     max_abs_pct        upper bound on |delta %|.
 #
-# Without them a waiver is unbounded in sign and magnitude: the HF-24 entry
+#   CELL waivers (checked by compare._cell_bounds_violation, against the
+#   finding's `detail`; for system_available_mw-style findings)
+#     expect_sign        '+' or '-', the sign of the ANNUAL TOTAL delta
+#                        (develop_total_mwh - master_total_mwh).
+#     max_total_pct      upper bound on |annual total delta| as % of master.
+#     max_mean_rel_pct   upper bound on the finding's mean_rel_pct.
+#
+# `worst_rel_pct` is deliberately not boundable: at dawn and dusk master's
+# available power is a few MW, so a fraction of a MW is a 100 % relative error.
+# The energy-weighted mean relative error (sum|delta| / sum master) is recorded
+# in the finding detail instead.
+#
+# Without bounds a waiver is unbounded in sign and magnitude: the HF-24 entry
 # written for "+2,158 MW of potential master silently dropped" (+1.1 %) would
 # equally explain a -50 % row or a 10,000x one. A row outside the bounds is
 # reported as `waiver HF-n bounds violated (sign|magnitude)` and stays
-# UNEXPLAINED. `max_abs_pct` also refuses an undefined delta % (master 0,
-# develop non-zero): the bound cannot be shown to hold.
+# UNEXPLAINED; a finding outside them stays LIVE with a `waiver_note` naming
+# the bound that failed. `max_abs_pct` also refuses an undefined delta %
+# (master 0, develop non-zero), and a cell bound refuses a finding that does
+# not carry the totals it needs: the bound cannot be shown to hold.
 #
 # `hotfix: HF-<n>` names the row in tests/equivalence/hotfixes.yaml — the
 # machine-readable extract of memory/plans/hotfix-ledger.md — that CAUSES the
@@ -357,3 +374,46 @@
   ledger: DL-18
   hotfix: HF-24
   reason: develop-only cluster p87 0 (2,158 MW solar) is HF-24's retained NREL caps capacity at bus 37808; master has no such cluster
+# The hourly national available power, sum_bus(profile * p_nom_max). HF-24's
+# retained capacity (450 MW onwind, 2,566 MW solar at the clusters' own CF)
+# lifts develop above master in EVERY hour the resource is producing, which is
+# what the {onwind,solar}_national_available_power figures show: a flat
+# +0.15...+0.3 % band all year, never a crossing. Measured on
+# western-p2-3h-20260915-1429 (2026-09-15):
+#   onwind  8371/8760 h mismatched, mean_rel 0.386 %, annual +0.25 %
+#           (622,371,840 vs 620,823,223 MWh)
+#   solar   4208/8760 h mismatched, mean_rel 0.984 %, annual +0.14 %
+#           (4,513,095,168 vs 4,506,760,381 MWh)
+# Bounded, because this is the finding that would CATCH a real capacity-factor
+# construction difference: the annual total must move in HF-24's direction
+# (expect_sign '+') and by no more than 0.5 %, and the per-hour mean relative
+# error by no more than 1.5 %. `worst_rel_pct` (32 % onwind, 100 % solar) is
+# NOT bounded: at dawn and dusk master's available power is a few MW, so a
+# fraction of a MW is a 100 % relative error and the number means nothing. The
+# energy-weighted mean relative error is recorded in the finding's detail
+# instead. A sign flip, a bigger annual move, or a mean relative error over
+# 1.5 % takes the finding straight back to live.
+- interconnect: western
+  prong: 2
+  stage: profile_onwind
+  component: system_available_mw
+  column: sum_bus(profile*p_nom_max)
+  kind: value
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_total_pct: 0.5
+  max_mean_rel_pct: 1.5
+  reason: HF-24's retained onwind capacity (450 MW) raises develop's available power in every producing hour; annual +0.25 %, mean hourly 0.39 %
+- interconnect: western
+  prong: 2
+  stage: profile_solar
+  component: system_available_mw
+  column: sum_bus(profile*p_nom_max)
+  kind: value
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_total_pct: 0.5
+  max_mean_rel_pct: 1.5
+  reason: HF-24's retained solar capacity (2,566 MW) raises develop's available power in every daylight hour; annual +0.14 %, mean hourly 0.98 %

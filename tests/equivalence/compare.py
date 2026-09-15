@@ -15,9 +15,12 @@ Tolerance policy (spec D2/D7):
 - per-frame findings are capped at ``MAX_FINDINGS_PER_FRAME`` with a single
   'suppressed' finding so fan-out cannot drown the signal
 - waivers (tests/equivalence/waivers.yaml) suppress exactly the signed-off
-  deltas; each waiver must reference a deltas-ledger entry.
+  deltas; each waiver must reference a deltas-ledger entry. A cell waiver may
+  BOUND what it explains (``CELL_BOUND_KEYS``); a finding outside those bounds
+  stays live and carries a ``waiver_note`` naming the bound that failed.
 
-Findings are dicts: {stage, component, column, kind, detail, waived}.
+Findings are dicts: {stage, component, column, kind, detail, waived}, plus
+``waiver_note`` when a matching waiver's bounds were broken.
 """
 
 from __future__ import annotations
@@ -114,8 +117,82 @@ def load_busmap(develop_root: Path, simpl: str = SIMPL2) -> pd.Series | None:
     return bm.astype(str)
 
 
-def is_waived(finding: dict, waivers: list[dict]) -> bool:
-    """Does any CELL waiver cover this finding.
+#: Optional BOUNDS a CELL waiver may put on the finding it explains.
+#:
+#: A cell waiver used to be matched on stage/component/column/kind alone, which
+#: made it a blank cheque exactly as an unbounded table waiver was: the HF-24
+#: entry for the two ``system_available_mw`` findings was written for "+0.25 %
+#: of annual energy, from 450 MW of onwind and 2,566 MW of solar master drops"
+#: - and unbounded it would equally explain a -30 % row, which is what a real
+#: capacity-factor construction bug looks like. ``system_available_mw`` is the
+#: finding that would CATCH such a bug, so waiving it at all is only defensible
+#: with bounds that a bug of that kind would break.
+#:
+#: ``expect_sign``        '+' or '-': the sign of the ANNUAL TOTAL delta,
+#:                        ``develop_total_mwh - master_total_mwh``.
+#: ``max_total_pct``      upper bound on ``abs(annual total delta) / master``, %.
+#: ``max_mean_rel_pct``   upper bound on the finding's ``mean_rel_pct``.
+#:
+#: ``worst_rel_pct`` is deliberately NOT boundable: at dawn and dusk master's
+#: available power is a few MW, so a fraction of a MW is a 100 % relative error
+#: and the statistic says nothing about the energy that differs.
+CELL_BOUND_KEYS = ("expect_sign", "max_total_pct", "max_mean_rel_pct")
+
+#: Finding fields a cell bound is evaluated against, in ``detail``.
+_TOTAL_KEYS = ("develop_total_mwh", "master_total_mwh")
+
+
+def _cell_bounds_violation(waiver: dict, finding: dict) -> str | None:
+    """Which bound this waiver puts on the finding is broken, or ``None``.
+
+    Returns the name of the failed bound (``'expect_sign'``,
+    ``'max_total_pct'``, ``'max_mean_rel_pct'``), or ``'unmeasurable'`` when the
+    finding carries no annual totals for a bound that needs them. A waiver
+    carrying no bound at all can never violate one, so every pre-existing entry
+    in ``waivers.yaml`` keeps behaving exactly as before.
+
+    A bound that cannot be evaluated is a violation, not a pass: a waiver is a
+    claim about a measured quantity, and a claim that cannot be checked has not
+    been shown to hold here.
+    """
+    named = [k for k in CELL_BOUND_KEYS if k in waiver]
+    if not named:
+        return None
+    detail = finding.get("detail")
+    detail = detail if isinstance(detail, dict) else {}
+
+    def _num(x) -> float:
+        try:
+            return float(x)
+        except (TypeError, ValueError):
+            return float("nan")
+
+    dev, mas = (_num(detail.get(k)) for k in _TOTAL_KEYS)
+    needs_total = {"expect_sign", "max_total_pct"} & set(named)
+    if needs_total and not (np.isfinite(dev) and np.isfinite(mas)):
+        return "unmeasurable"
+    if "expect_sign" in waiver:
+        delta = dev - mas
+        sign = "+" if delta > 0 else "-" if delta < 0 else "0"
+        if sign != waiver["expect_sign"]:
+            return "expect_sign"
+    if "max_total_pct" in waiver:
+        cap = _num(waiver["max_total_pct"])
+        pct = abs(dev - mas) / abs(mas) * 100.0 if mas else float("inf")
+        if not np.isfinite(cap) or not np.isfinite(pct) or pct > cap:
+            return "max_total_pct"
+    if "max_mean_rel_pct" in waiver:
+        cap = _num(waiver["max_mean_rel_pct"])
+        mean_rel = _num(detail.get("mean_rel_pct"))
+        if not np.isfinite(mean_rel):
+            return "unmeasurable"
+        if not np.isfinite(cap) or mean_rel > cap:
+            return "max_mean_rel_pct"
+    return None
+
+
+def waiver_status(finding: dict, waivers: list[dict]) -> tuple[bool, str | None]:
+    """``(waived, note)`` for one finding under the CELL waivers.
 
     A waiver that names a comparison-table row (``metric``/``key``/``family``,
     :data:`tables.WAIVER_MATCH_KEYS`) is skipped outright. Its four cell fields
@@ -130,16 +207,33 @@ def is_waived(finding: dict, waivers: list[dict]) -> bool:
     western prong-2 finding — including ``system_available_mw``, the one that
     would catch a real capacity-factor difference. A waiver that names a metric
     is about the comparison table, even when the metric it names is "any".
+
+    A matching waiver that carries :data:`CELL_BOUND_KEYS` waives the finding
+    only while the finding stays inside those bounds. Outside them the finding
+    stays LIVE and ``note`` names the bound that failed, so the reason it was
+    not waived is on the record instead of being inferred from a silence.
     """
+    note = None
     for w in waivers:
         if any(k in w for k in WAIVER_MATCH_KEYS):
             continue
-        if all(
+        if not all(
             w.get(k) in (None, "*", finding.get(k))
             for k in ("stage", "component", "column", "kind", "prong", "interconnect")
         ):
-            return True
-    return False
+            continue
+        bad = _cell_bounds_violation(w, finding)
+        if bad is None:
+            return True, None
+        if note is None:
+            who = w.get("hotfix") or w.get("ledger") or "waiver"
+            note = f"waiver {who} bounds violated ({bad})"
+    return False, note
+
+
+def is_waived(finding: dict, waivers: list[dict]) -> bool:
+    """Does any in-bounds CELL waiver cover this finding. See :func:`waiver_status`."""
+    return waiver_status(finding, waivers)[0]
 
 
 def _numeric(s: pd.Series) -> bool:
@@ -567,6 +661,7 @@ def compare_profiles(
                 if len(sc) != len(sa) or bad.any():
                     denom = np.maximum(np.abs(va), 1e-9)
                     rel = np.abs(vc - va) / denom
+                    master_energy = float(np.abs(va).sum())
                     findings.append(
                         {
                             "stage": pair.stage,
@@ -578,10 +673,29 @@ def compare_profiles(
                                 "hours_mismatched": int(bad.sum()),
                                 "len_develop": int(len(sc)),
                                 "len_master": int(len(sa)),
+                                # Per-hour relative errors. ``worst_rel_pct`` is
+                                # dominated by dawn/dusk hours where master is a
+                                # few MW, so a fraction of a MW reads as 100 %;
+                                # it is reported, never bounded by a waiver.
                                 "worst_rel_pct": round(float(rel.max()) * 100.0, 4),
                                 "mean_rel_pct": round(float(rel.mean()) * 100.0, 4),
+                                # sum|delta| / sum(master): the same error
+                                # weighted by the energy each hour carries, so
+                                # the near-zero hours stop dominating. This is
+                                # the per-hour number worth reading beside the
+                                # annual totals below.
+                                "energy_weighted_mean_rel_pct": (
+                                    round(float(np.abs(vc - va).sum()) / master_energy * 100.0, 4)
+                                    if master_energy
+                                    else None
+                                ),
                                 "develop_total_mwh": float(vc.sum()),
                                 "master_total_mwh": float(va.sum()),
+                                "total_rel_pct": (
+                                    round((float(vc.sum()) - float(va.sum())) / abs(float(va.sum())) * 100.0, 4)
+                                    if va.sum()
+                                    else None
+                                ),
                             },
                         },
                     )
@@ -746,7 +860,11 @@ def run_comparison(prong: int, develop_root: Path, master_root: Path) -> dict:
     for f in all_findings:
         f["prong"] = prong
         f["interconnect"] = INTERCONNECT
-        f["waived"] = is_waived(f, waivers)
+        # ``note`` is set only when a waiver MATCHED this finding and its bounds
+        # did not hold: the finding stays live, and why is on the record.
+        f["waived"], note = waiver_status(f, waivers)
+        if note:
+            f["waiver_note"] = note
     live = [f for f in all_findings if not f["waived"]]
     cluster_note = [n for n in notes if n.get("kind") == "profile_rollup"]
     result = {

@@ -528,3 +528,98 @@ def test_a_develop_only_cluster_is_kept_out_of_the_pooled_metrics(tmp_path, monk
     assert np.allclose(pot["delta"].to_numpy(), 0.0, atol=1e-3)
     cf = frames[f"mean_cf_by_zone_{tech}"]
     assert np.allclose(cf["delta"].dropna().to_numpy(), 0.0, atol=1e-9)
+
+
+def _prong2_profile_fixture(tmp_path, monkeypatch, seed: int = 73):
+    """A prong-2 Artifacts whose two sides AGREE once master is rolled up.
+
+    Master is a 6-bus nodal file; develop is exactly its 2-cluster aggregate, so
+    every number the harness reports must be zero-delta. Returns
+    ``(art, tech, master, develop)``.
+    """
+    busmap = pd.Series({f"b{i}": ("c0" if i < 3 else "c1") for i in range(6)}, dtype=object)
+    master = make_profile(n_bus=6, n_time=24, seed=seed)
+    develop = metrics.aggregate_profile_to_clusters(master, busmap)
+
+    dev_dir, mas_dir = tmp_path / "dev", tmp_path / "mas"
+    art = plots.Artifacts(prong=2, develop_root=dev_dir, master_root=mas_dir, busmap=busmap)
+    art.zone_develop = pd.Series({"c0": "p1", "c1": "p2"}, dtype=object)
+    art.zone_master = pd.Series({f"b{i}": "p1" for i in range(6)}, dtype=object)
+
+    pair = art.profile_pairs[0]
+    tech = pair.stage.replace("profile_", "")
+    dp, mp = dev_dir / pair.develop, mas_dir / pair.master
+    dp.parent.mkdir(parents=True, exist_ok=True)
+    mp.parent.mkdir(parents=True, exist_ok=True)
+    develop.to_netcdf(dp)
+    master.to_netcdf(mp)
+    monkeypatch.setattr(plots.Artifacts, "profile_pairs", property(lambda self: [pair]))
+    return art, tech, master, develop
+
+
+def test_the_duration_curve_plots_the_rolled_up_master_at_prong_2(tmp_path, monkeypatch):
+    """The figure and its table row must be the same object.
+
+    ``p_max_pu_duration_onwind`` used to reopen master's RAW nodal file while
+    ``p_max_pu_quantiles_onwind`` beside it used the rolled-up one, so the PNG
+    showed a flat-versus-steep pair of curves for a run whose quantile rows were
+    equivalent. Here master rolls up to exactly develop, so every percentile of
+    the figure's CSV twin must match — and the old code path provably would not.
+    """
+    art, tech, master, develop = _prong2_profile_fixture(tmp_path, monkeypatch)
+    missing: list[dict] = []
+    frames = plots.collect_metrics(art, missing)
+    assert missing == []
+    plots.export_all(tmp_path, artifacts=art, metric_frames=frames, findings=[], missing=missing)
+
+    data = pd.read_csv(tmp_path / "figures" / f"p_max_pu_duration_{tech}.csv", index_col=0)
+    assert np.allclose(data["master"].to_numpy(), data["develop"].to_numpy(), atol=1e-12)
+    assert np.allclose(data["delta"].to_numpy(), 0.0, atol=1e-12)
+    # The figure agrees with the comparison-table row it belongs to.
+    q = frames[f"p_max_pu_quantiles_{tech}"]
+    assert np.allclose(q["delta"].dropna().to_numpy(), 0.0, atol=1e-12)
+
+    # The old path: master's RAW nodal values against develop's clusters.
+    # Cluster averaging cuts the tails, so this is a different distribution --
+    # which is what the figure was showing.
+    pct = data.index.to_numpy(dtype=float)
+    raw = np.percentile(metrics.profile_values(master), 100.0 - pct)
+    stale = "the nodal and clustered distributions coincide; the fixture no longer separates the two code paths"
+    assert not np.allclose(raw, data["develop"].to_numpy(), atol=1e-3), stale
+
+
+def test_the_available_power_figure_uses_the_prepared_pair(tmp_path, monkeypatch):
+    """The national available-power figure takes the same prepared datasets."""
+    art, tech, _master, _develop = _prong2_profile_fixture(tmp_path, monkeypatch, seed=74)
+    missing: list[dict] = []
+    frames = plots.collect_metrics(art, missing)
+    plots.export_all(tmp_path, artifacts=art, metric_frames=frames, findings=[], missing=missing)
+
+    data = pd.read_csv(tmp_path / "figures" / f"{tech}_national_available_power.csv", index_col=0)
+    assert np.allclose(data["master"].to_numpy(), data["develop"].to_numpy(), rtol=1e-9)
+
+
+def test_the_rolled_up_master_is_labelled_on_the_figure(tmp_path, monkeypatch):
+    """A reader must be told the blue curve is not the file master wrote."""
+    art, tech, _master, _develop = _prong2_profile_fixture(tmp_path, monkeypatch, seed=75)
+    missing: list[dict] = []
+    plots.collect_metrics(art, missing)
+    prep = art.profiles[tech]
+    assert prep.rolled_up is True
+    assert f"rolled up to s{plots.SIMPL2}" in prep.master_label
+    assert f"master rolled up to s{plots.SIMPL2}" in prep.subtitle
+    assert f"{prep.info['n_common']} common clusters" in prep.subtitle
+
+    plain = plots.PreparedProfile(master=None, develop=None)
+    assert plain.master_label == plots.LABELS["master"]
+    assert plain.subtitle == ""
+
+
+def test_prong_1_passes_both_sides_through_unaggregated(tmp_path):
+    """No busmap, no rollup — and nothing cached, so a nodal file is not held."""
+    art = plots.Artifacts(prong=1, develop_root=tmp_path / "d", master_root=tmp_path / "m")
+    master, develop = make_profile(n_bus=4, seed=76), make_profile(n_bus=4, seed=77)
+    prep = plots.prepare_profiles(art, "onwind", develop, master, [])
+    assert prep.rolled_up is False
+    assert prep.master is master and prep.develop is develop
+    assert art.profiles == {}
