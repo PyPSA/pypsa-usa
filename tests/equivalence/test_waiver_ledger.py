@@ -149,11 +149,27 @@ def test_ported_hotfix_is_not_an_explanation(registry):
         assert not ok, f"{hid} is ported to master-benchmark but was accepted as an explanation"
         assert "ported" in reason and "both sides" in reason.lower(), reason
 
-    live = sorted(set(registry) - ported)
-    assert live, "every row is ported; nothing is left as a candidate explanation"
+    live = sorted(hid for hid in set(registry) - ported if not registry[hid]["usa_noop"])
+    assert live, "every row is ported or a no-op; nothing is left as a candidate explanation"
     for hid in live:
         ok, reason = hf.explains(hid, registry)
         assert ok, f"{hid} is live on develop but was rejected: {reason}"
+
+
+def test_usa_noop_hotfix_is_not_an_explanation(registry):
+    """A row that does nothing under the standing config explains nothing.
+
+    HF-12 is the pypsa 0.30 -> 1.3 stack move: result-bearing only when
+    ``conventional.unit_commitment`` is true, which the USA config leaves false.
+    The ledger's instruction is not to chase these whatever their confidence, so
+    the registry must not offer one as an explanation either.
+    """
+    noops = [hid for hid, row in registry.items() if row.get("usa_noop") and not row.get("ported")]
+    assert "HF-12" in noops, "HF-12 should be an unported USA no-op in the shipped registry"
+    for hid in noops:
+        ok, reason = hf.explains(hid, registry)
+        assert not ok, f"{hid} is a USA no-op but was accepted as an explanation"
+        assert "no-op" in reason, reason
 
 
 def test_unknown_hotfix_is_not_an_explanation(registry):

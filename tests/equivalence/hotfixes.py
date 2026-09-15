@@ -67,6 +67,12 @@ def explains(hotfix_id: str, registry: dict[str, dict] | None = None) -> tuple[b
             "a difference tracing to it means the port is broken, not that the "
             "difference is explained"
         )
+    if row.get("usa_noop"):
+        return False, (
+            f"{hotfix_id} is a no-op under the standing whole-USA config, so it cannot "
+            "have moved anything here; the ledger says not to chase it whatever its "
+            "confidence"
+        )
     return True, ""
 
 
