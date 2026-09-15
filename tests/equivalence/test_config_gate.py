@@ -315,6 +315,45 @@ def test_disabled_block_guard_rejects_an_enabled_block():
     assert context.allowlist_reason(key, on) is None
 
 
+def test_guard_reads_develop_when_master_is_an_empty_mapping(monkeypatch):
+    """Master ``{}`` vs develop ``{enable: true}`` must be FATAL.
+
+    The guard used to take master's value whenever it was not ``None``, so an
+    empty mapping on master handed ``_disabled_block`` a ``{}`` that duly
+    reported "shipped enable: false" — and let an ENABLED develop-only block
+    through under a reason that described the wrong side.
+    """
+    master = {**BASE, "dac": {}}
+    develop = {**BASE, "dac": {"enable": True, "cost": 5}}
+    _patch(monkeypatch, master, develop)
+
+    with pytest.raises(RuntimeError) as exc:
+        context.assert_config_equivalent()
+    msg = str(exc.value)
+    assert "dac [value]" in msg
+    assert "'enable': True" in msg
+
+    # ...and the disabled twin still passes, so this is not just "always fatal".
+    _patch(monkeypatch, master, {**BASE, "dac": {"enable": False, "cost": 5}})
+    allowed = context.assert_config_equivalent()
+    assert [d["key"] for d in allowed] == ["dac"]
+
+
+def test_guard_must_hold_for_every_side_that_has_a_value():
+    """Both sides populated: one bad side is enough to withdraw the allowance."""
+    key = "electricity.imports"
+    both_off = {"key": key, "kind": "value", "master": {"enable": False}, "develop": {"enable": False}}
+    one_on = {**both_off, "master": {"enable": True}}
+    assert context.allowlist_reason(key, both_off) is not None
+    assert context.allowlist_reason(key, one_on) is None
+
+
+def test_guard_with_no_present_value_does_not_allow():
+    key = "electricity.imports"
+    empty = {"key": key, "kind": "value", "master": None, "develop": {}}
+    assert context.allowlist_reason(key, empty) is None
+
+
 def test_walltime_guard_rejects_a_block_with_anything_else_in_it():
     key = "cluster_network"
     ok = {"key": key, "kind": "default_only", "master": {"walltime": "09:00:00"}, "develop": None}

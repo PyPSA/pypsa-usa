@@ -310,39 +310,51 @@ def _is_time(v: object) -> bool:
     return isinstance(v, str) and bool(re.fullmatch(r"\d+:\d{2}:\d{2}", v))
 
 
-def _present_value(diff: dict) -> object:
-    """The value from whichever side actually carries the key."""
-    return diff["develop"] if diff["master"] is None else diff["master"]
+def _present_values(diff: dict) -> list:
+    """Every side that actually carries a value.
+
+    Both sides, not one: a ``value`` difference has a real value on each side,
+    and a ``default_only`` difference has one on exactly one of them. Reading
+    only ``master`` when it happens to be non-``None`` was a live bug — master
+    ``{}`` against develop ``{enable: true, ...}`` handed the guard the empty
+    mapping, which duly reported "shipped enable: false" and allowed an ENABLED
+    block through. A guard holds only if it holds for everything present.
+    """
+    return [v for v in (diff.get("master"), diff.get("develop")) if not _is_empty(v)]
 
 
-def _rule_walltime_block(diff: dict) -> bool:
-    v = _present_value(diff)
-    return isinstance(v, dict) and set(v) == {"walltime"} and _is_time(v["walltime"])
+def _every_present(predicate):
+    """Lift a value predicate into a guard over both sides of a difference."""
+
+    def guard(diff: dict) -> bool:
+        values = _present_values(diff)
+        return bool(values) and all(predicate(v) for v in values)
+
+    return guard
 
 
-def _walltime_map(diff: dict) -> bool:
-    v = _present_value(diff)
-    return isinstance(v, dict) and bool(v) and all(_is_time(x) for x in v.values())
-
-
-def _time_scalar(diff: dict) -> bool:
-    return _is_time(_present_value(diff))
+_rule_walltime_block = _every_present(
+    lambda v: isinstance(v, dict) and set(v) == {"walltime"} and _is_time(v["walltime"]),
+)
+_walltime_map = _every_present(
+    lambda v: isinstance(v, dict) and bool(v) and all(_is_time(x) for x in v.values()),
+)
+_time_scalar = _every_present(_is_time)
 
 
 def _not_population(diff: dict) -> bool:
     return "population" not in (diff["master"], diff["develop"])
 
 
-def _atb_equals_inline_fallback(diff: dict) -> bool:
-    """Develop's ATB defaults must equal master's hard-coded fallback.
+def _is_inline_atb_fallback(v: object) -> bool:
+    """Does this ATB block equal the fallback both branches hard-code.
 
-    Both branches read it the same way — ``(costs_config or {}).get("atb") or
-    {}`` in ``_helpers``, with inline defaults ``scenario="Moderate"``,
+    Both read it the same way — ``(costs_config or {}).get("atb") or {}`` in
+    ``_helpers``, with inline defaults ``scenario="Moderate"``,
     ``model_case="Market"``, ``overrides={}``. Develop's default layer supplies
-    exactly those values, so the key being absent on master changes nothing.
-    Change any of them and it does.
+    exactly those, so the key being absent on master changes nothing. Change any
+    of them and it does.
     """
-    v = _present_value(diff)
     return (
         isinstance(v, dict)
         and v.get("scenario") == "Moderate"
@@ -351,10 +363,13 @@ def _atb_equals_inline_fallback(diff: dict) -> bool:
     )
 
 
-def _disabled_block(diff: dict) -> bool:
+def _is_disabled_block(v: object) -> bool:
     """A capability block whose own on-switch is off."""
-    v = _present_value(diff)
     return isinstance(v, dict) and not v.get("enable", False) and not v.get("activate", False)
+
+
+_atb_equals_inline_fallback = _every_present(_is_inline_atb_fallback)
+_disabled_block = _every_present(_is_disabled_block)
 
 
 CONFIG_DIFF_ALLOWLIST: tuple[tuple[str, str], ...] = (
