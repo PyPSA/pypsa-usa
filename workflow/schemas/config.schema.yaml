@@ -149,6 +149,11 @@ properties:
     required: [dataset]
     properties:
       dataset: {enum: [atlite, godeeep]}
+      # capacity = availability-weighted per substation, then p_nom_max-weighted
+      # across the cluster's substations (default). NOT master's weighting, which
+      # uses existing p_nom with a plain-mean fallback — see hot-fix HF-25.
+      # availability = one availability-weighted mean per s{simpl} cluster.
+      godeeep_cf_weighting: {enum: [capacity, availability]}
 
   renewable_land_access:
     description: >

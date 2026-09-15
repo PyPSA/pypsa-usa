@@ -86,6 +86,18 @@ snapshots:
 # branches (build_renewable_profiles raises otherwise).
 renewable_land_access: reference
 
+# Pinned on BOTH sides so the config-equivalence gate sees no default_only
+# difference. Master has no code reading this key at all: its cluster CF comes
+# out of simplify_network, which weights substation p_max_pu by EXISTING p_nom
+# and falls back to a plain mean where a cluster carries no existing capacity.
+# "capacity" is develop's deliberate departure from that — availability-weighted
+# per substation, then p_nom_max-weighted across the cluster (hot-fix HF-25,
+# deltas ledger DL-19). Master's Snakefile does not schema-validate, so the extra
+# key is inert there.
+# Deep-merges into master's config/config.common.yaml renewable block.
+renewable:
+  godeeep_cf_weighting: capacity           # capacity | availability
+
 # Develop-only: pin GODEEEP CF retrieval to the published Zenodo records so
 # both sides read byte-identical inputs. Develop's default registry
 # (config.common.yaml) prefers the local Oak mirror, whose 2012 files are NOT

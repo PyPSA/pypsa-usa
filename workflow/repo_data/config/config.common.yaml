@@ -54,6 +54,15 @@ renewable:
   # `enable.build_cutout: false` needs it defined here.
   dataset: godeeep                         # atlite | godeeep
 
+  # How GODEEEP cells are weighted up to the s{simpl} cluster bus.
+  #   capacity     = availability-weighted per substation, then p_nom_max-weighted
+  #                  (installable capacity) across the cluster's substations
+  #   availability = one availability-weighted mean over the whole cluster
+  # Neither reproduces master, which weights substation p_max_pu by EXISTING p_nom
+  # in simplify_network and falls back to a plain mean where a cluster carries no
+  # existing capacity; develop uses installable capacity on purpose (hot-fix HF-25).
+  godeeep_cf_weighting: capacity           # capacity | availability
+
   # ---------- Enhanced Geothermal Systems ----------
   # docs : EGS
   EGS:
