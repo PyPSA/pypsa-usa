@@ -26,7 +26,7 @@ def fake_sbatch(tmp_path: Path) -> Path:
         "#!/bin/bash\n"
         f"n=$(( $(grep -c '^ARGS' '{log}' 2>/dev/null || echo 0) + 1 ))\n"
         f"echo \"ARGS $*\" >> '{log}'\n"
-        f"echo \"ENV EQ_INTERCONNECT=$EQ_INTERCONNECT EQ_UNTIL=$EQ_UNTIL EQ_RUN_ID=$EQ_RUN_ID\" >> '{log}'\n"
+        f"echo \"ENV EQ_INTERCONNECT=$EQ_INTERCONNECT EQ_UNTIL=$EQ_UNTIL EQ_RUN_ID=$EQ_RUN_ID EXTRA=$EQ_EXTRA_ARGS\" >> '{log}'\n"
         'echo "1000$n"\n'
     )
     shim.chmod(shim.stat().st_mode | stat.S_IEXEC)
@@ -48,7 +48,9 @@ def test_default_chains_full_after_smoke(tmp_path: Path, fake_sbatch: Path) -> N
     assert "--dependency=afterok:10001" in log
     assert log.count("--mail-type=END,FAIL") == 2
     assert "ENV EQ_INTERCONNECT=western EQ_UNTIL=assembled" in log
+    assert "EXTRA=--verdict-exit report" in log  # smoke verdict must not cancel the full run
     assert "ENV EQ_INTERCONNECT=usa EQ_UNTIL= " in log
+    assert log.count("--verdict-exit") == 1  # only the smoke; the full run keeps the fatal verdict
     assert facts["run_id"].startswith("eq-usa-") and len(facts["run_id"]) == len("eq-usa-") + 12
     assert facts["develop_sha"] and facts["config_sha12"] != "missing"
 

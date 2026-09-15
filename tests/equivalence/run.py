@@ -47,6 +47,11 @@ from tests.equivalence.paths import (  # noqa: E402
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--prong", type=int, choices=(1, 2), required=True)
+    # A smoke run proves the build, the gate and the compare pipeline; its
+    # comparison verdict on a small leg must not cancel the chained full run
+    # (smoke 43585155 did exactly that, 2026-09-15). "report" still prints
+    # PASS/FAIL and writes every table, but exits 0 once the pipeline ran.
+    ap.add_argument("--verdict-exit", choices=("fail", "report"), default="fail")
     ap.add_argument("--skip-solve", action="store_true")
     ap.add_argument(
         "--side",
@@ -124,6 +129,9 @@ def main() -> int:
     print(f"[equivalence] table          : {comparison_md if comparison_md.exists() else '(not written)'}")
     print(f"[equivalence] figures        : {figures_dir}")
     print(f"[equivalence] prong {args.prong}: {'PASS' if ok else 'FAIL'}")
+    if args.verdict_exit == "report" and not ok:
+        print("[equivalence] --verdict-exit report: pipeline completed, exiting 0 despite FAIL")
+        return 0
     return 0 if ok else 1
 
 

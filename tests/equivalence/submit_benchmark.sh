@@ -100,6 +100,7 @@ if [ "$do_smoke" = 1 ]; then
     smoke_job="$(EQ_INTERCONNECT="$SMOKE_INTERCONNECT" EQ_SIMPL="$SMOKE_SIMPL" \
         EQ_CLUSTERS="$SMOKE_CLUSTERS" EQ_PRONG="$SMOKE_PRONG" EQ_UNTIL="$SMOKE_UNTIL" \
         EQ_RUN_ID="smoke-${SMOKE_INTERCONNECT}-${STAMP}" \
+        EQ_EXTRA_ARGS="${EQ_SMOKE_EXTRA_ARGS:---verdict-exit report}" \
         _submit -J "eq-smoke-${SMOKE_INTERCONNECT}" -p "$PARTITION" \
             --time="$SMOKE_TIME" --cpus-per-task="$SMOKE_CPUS" --mem="$SMOKE_MEM" \
             --mail-type=END,FAIL "$DRIVER")"

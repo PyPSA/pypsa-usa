@@ -506,7 +506,9 @@ tests/equivalence/submit_benchmark.sh --dry-run
 ```
 
 Stage 1 builds `western` on both sides, prong 2, `EQ_UNTIL=assembled`, on
-8 CPUs / 64 GB / 3 h. Stage 2 is the driver with its defaults (whole USA),
+8 CPUs / 64 GB / 3 h, with `--verdict-exit report`: its comparison verdict is
+printed and tabulated but does not fail the job, so a known western difference
+cannot cancel the chained run. Stage 2 is the driver with its defaults (whole USA),
 released by Slurm only if stage 1 exits 0 (`--dependency=afterok`). Both
 jobs carry `--mail-type=END,FAIL`. The script prints `key=value` facts
 (job ids, shas, run directories, Slurm log paths) that the brain's `/benchmark`
