@@ -148,6 +148,13 @@ KNOWN_METRICS: tuple[str, ...] = (
 #: kind) and has nothing to say about this table.
 _WAIVER_MATCH_KEYS = ("metric", "key", "family")
 
+#: Fields that SCOPE a waiver to a particular run rather than selecting a row.
+#: ``compare.is_waived`` honours both; so must this table, or a waiver written
+#: for the western prong-1 leg silently explains a USA prong-2 difference. An
+#: absent field means "any run", which is why they are checked separately from
+#: _WAIVER_MATCH_KEYS: a waiver must NAME a row, but it need not name a run.
+_WAIVER_SCOPE_KEYS = ("interconnect", "prong")
+
 
 def tolerance_family(metric: str) -> str:
     """Resolve a metric name to its tolerance family.
@@ -242,8 +249,33 @@ def unmatched_expect_patterns(registry: dict[str, dict]) -> dict[str, list[str]]
     return out
 
 
-def _waiver_hotfix(waivers: list[dict], metric: str, family: str, key: str) -> str | None:
-    """The ``hotfix:`` id of the first waiver that NAMES this row, if any.
+def _waiver_in_scope(waiver: dict, run: dict) -> bool:
+    """Does this waiver apply to THIS run's interconnect and prong.
+
+    An absent or ``'*'`` field on the WAIVER means "any run"; a field that is
+    set must equal the run's, and is refused when the run does not say.
+    ``compare.is_waived`` has always scoped cell waivers this way and the table
+    did not, so a waiver written ``{interconnect: western, prong: 1}`` explained
+    a whole-USA prong-2 row — the deferred western leg reaching forward to sign
+    off a difference it never saw.
+    """
+    for k in _WAIVER_SCOPE_KEYS:
+        want = waiver.get(k)
+        if want in (None, "*"):
+            continue
+        if run.get(k) is None or str(want) != str(run[k]):
+            return False
+    return True
+
+
+def _waiver_hotfix(
+    waivers: list[dict],
+    metric: str,
+    family: str,
+    key: str,
+    run: dict | None = None,
+) -> str | None:
+    """The ``hotfix:`` id of the first in-scope waiver that NAMES this row.
 
     A waiver must name at least one of ``metric``/``key``/``family``, and every
     field it does name must match. ``waivers.yaml`` entries carry
@@ -251,6 +283,11 @@ def _waiver_hotfix(waivers: list[dict], metric: str, family: str, key: str) -> s
     for ``compare.py`` and are ignored here. Treating their absent fields as
     wildcards would let one ``hotfix:``-tagged cell waiver explain every
     over-tolerance row in every family.
+
+    ``run`` carries this run's ``interconnect`` and ``prong``. A waiver that
+    names either must agree with it, and a waiver that names one the caller
+    could not supply is refused rather than assumed to match: a scoped waiver
+    whose scope cannot be checked has not been shown to apply here.
     """
     row = {"metric": metric, "key": key, "family": family}
     for w in waivers:
@@ -258,6 +295,8 @@ def _waiver_hotfix(waivers: list[dict], metric: str, family: str, key: str) -> s
             continue
         named = [k for k in _WAIVER_MATCH_KEYS if w.get(k) not in (None, "*")]
         if not named:
+            continue
+        if not _waiver_in_scope(w, run or {}):
             continue
         if all(w[k] == row[k] for k in named):
             return str(w["hotfix"])
@@ -289,6 +328,7 @@ def _explanation(
     key: str,
     hotfixes: dict[str, dict],
     waivers: list[dict],
+    run: dict | None = None,
 ) -> tuple[str, bool]:
     """(hotfix cell, is_valid_explanation) for an over-tolerance row.
 
@@ -301,7 +341,7 @@ def _explanation(
     ``candidates`` column. Between them the registry's globs cover every known
     metric, so honouring them here made UNEXPLAINED unreachable.
     """
-    waived = _waiver_hotfix(waivers, metric, family, key)
+    waived = _waiver_hotfix(waivers, metric, family, key, run)
     if not waived:
         return "", False
     ok, reason = explains(waived, hotfixes)
@@ -340,6 +380,7 @@ def _row_verdict(
     tol: Tolerance,
     hotfixes: dict[str, dict],
     waivers: list[dict],
+    run: dict | None = None,
 ) -> tuple[str, str]:
     """(verdict, hotfix cell) for one comparison row."""
     m_na, d_na = np.isnan(master), np.isnan(develop)
@@ -349,7 +390,7 @@ def _row_verdict(
         return "one-sided", "develop only" if m_na else "master only"
     if abs(delta) <= tol.atol or (np.isfinite(pct) and abs(pct) <= tol.rtol * 100.0):
         return "equivalent", ""
-    cell, ok = _explanation(metric, family, key, hotfixes, waivers)
+    cell, ok = _explanation(metric, family, key, hotfixes, waivers, run)
     return ("explained" if ok else "UNEXPLAINED"), cell
 
 
@@ -358,6 +399,8 @@ def comparison_table(
     hotfixes: dict[str, dict],
     waivers: list[dict] | None = None,
     missing: list[dict] | None = None,
+    interconnect: str | None = None,
+    prong: int | None = None,
 ) -> pd.DataFrame:
     """One row per ``(metric, key)`` with a verdict.
 
@@ -371,7 +414,11 @@ def comparison_table(
     (the only thing that can grant ``explained``), and to fill the advisory
     ``candidates`` column from the hot-fixes whose ``expect`` claims the row.
     ``waivers`` is optional and only its ``hotfix:`` field is consulted, and only
-    on waivers that name a metric/key/family. ``missing`` is the list of metrics
+    on waivers that name a metric/key/family. ``interconnect`` and ``prong``
+    scope them to this run: a waiver naming either must agree, exactly as
+    ``compare.is_waived`` scopes cell waivers. Leave them ``None`` and an
+    unscoped waiver still applies, while a scoped one is refused — its scope
+    cannot be checked, so it has not been shown to apply. ``missing`` is the list of metrics
     that could not be computed (``plots.collect_metrics`` fills it); each becomes
     a ``MISSING`` row so that a criterion cannot vanish from the table silently.
 
@@ -382,6 +429,7 @@ def comparison_table(
     Rows are sorted by :data:`VERDICT_ORDER`, then ``|delta_pct|`` descending.
     """
     waivers = waivers or []
+    run = {"interconnect": interconnect, "prong": prong}
     rows = []
     for metric, obj in metrics.items():
         df = _as_frame(obj)
@@ -394,7 +442,7 @@ def comparison_table(
             master, develop = _f(r["master"]), _f(r["develop"])
             delta, pct = _f(r["delta"]), _f(r["delta_pct"])
             verdict, cell = _row_verdict(
-                metric, family, label, master, develop, delta, pct, tol, hotfixes, waivers,
+                metric, family, label, master, develop, delta, pct, tol, hotfixes, waivers, run,
             )
             rows.append(
                 {
@@ -541,13 +589,26 @@ def export_all(run_dir: Path, ctx: object | None = None, result: dict | None = N
     once. ``result`` is the findings dict from ``compare.run_comparison``; it is
     accepted so this hook has the whole run in hand, and is not needed to build
     the table. Returns the comparison frame.
+
+    The run's interconnect and prong come off ``ctx`` and scope the waivers, so
+    a waiver written for the deferred western prong-1 leg cannot sign off a
+    whole-USA prong-2 difference.
     """
     from . import plots
     from .compare import load_waivers
+    from .paths import INTERCONNECT
 
     prong = int(getattr(ctx, "prong", 2))
+    interconnect = str(getattr(ctx, "interconnect", None) or INTERCONNECT)
     _artifacts, frames, missing = plots.run_metrics(prong)
-    comparison = comparison_table(frames, load_hotfixes(), load_waivers(), missing)
+    comparison = comparison_table(
+        frames,
+        load_hotfixes(),
+        load_waivers(),
+        missing,
+        interconnect=interconnect,
+        prong=prong,
+    )
     written = write_tables({**frames, "comparison": comparison}, run_dir)
     print(f"[equivalence] tables: {len(written)} file(s) under {Path(run_dir) / 'tables'}")
     return comparison

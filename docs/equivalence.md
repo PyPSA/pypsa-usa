@@ -425,15 +425,33 @@ Attributing a difference is therefore a decision with a name on it:
    row and carrying the id:
 
    ```yaml
-   - metric: dispatch_by_carrier      # and/or key:, and/or family:
+   - interconnect: usa        # optional; omit for "any run"
+     prong: 2                 # optional; omit for "any run"
+     metric: dispatch_by_carrier
      key: CCGT
      ledger: DL-15
      hotfix: HF-14
      reason: <one line, and the evidence>
    ```
 
-   A waiver must name at least one of `metric` / `key` / `family`; a waiver that
-   names none is a `compare.py` cell waiver and has nothing to say here.
+   **Naming the row.** Prefer `metric:` + `key:` — one row, one decision. A
+   waiver must name at least one of `metric` / `key` / `family`; one that names
+   none is a `compare.py` cell waiver and has nothing to say here.
+
+   `family:` on its own is a **blanket exception over a whole tolerance family**
+   — every carrier, every zone, every quantile in it at once — not an ordinary
+   way to write a waiver. Reach for it only when the cause genuinely acts on the
+   family as a whole (a unit convention, a stack-wide reporting change), say so
+   in `reason:`, and expect to be asked why the narrower form would not do. A
+   `family:` waiver will keep explaining rows that appear long after it was
+   written, including ones nobody has looked at.
+
+   **Scoping the run.** `interconnect:` and `prong:` are optional and mean "any
+   run" when absent, but a waiver that names either only applies when it
+   matches. That is what keeps a waiver written for the deferred western prong-1
+   leg from signing off a whole-USA prong-2 difference it never saw. Scope
+   anything whose justification is footprint- or granularity-specific — HF-9 and
+   HF-10, for instance, are active on the western leg and inert on USA.
 
 The tag has to hold up: the id must resolve in `hotfixes.yaml`, must not be
 `ported: true` (a fix on `master-benchmark` runs on both sides, so it cannot be

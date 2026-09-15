@@ -128,6 +128,72 @@ def test_waiver_hotfix_explains_a_row():
     assert out.iloc[0]["hotfix"] == "HF-14"
 
 
+def test_waiver_scoped_to_another_run_does_not_explain():
+    """A western prong-1 waiver must not sign off a USA prong-2 difference.
+
+    ``compare.is_waived`` has always scoped cell waivers by ``interconnect`` and
+    ``prong``; the table did not, so a waiver written for the deferred western
+    leg reached forward and explained a whole-USA row it never saw.
+    """
+    frames = {"dispatch_by_carrier": _metric_frame({"CCGT": 100.0}, {"CCGT": 140.0})}
+    hotfixes = {"HF-5": {"id": "HF-5", "ported": False}}
+    waivers = [
+        {
+            "interconnect": "western",
+            "prong": 1,
+            "metric": "dispatch_by_carrier",
+            "key": "CCGT",
+            "ledger": "DL-1",
+            "hotfix": "HF-5",
+        },
+    ]
+    out = tables.comparison_table(frames, hotfixes, waivers, interconnect="usa", prong=2)
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+
+    # The run it WAS written for still gets it.
+    same = tables.comparison_table(frames, hotfixes, waivers, interconnect="western", prong=1)
+    assert same.iloc[0]["verdict"] == "explained"
+    assert same.iloc[0]["hotfix"] == "HF-5"
+
+
+@pytest.mark.parametrize(
+    ("scope", "explains"),
+    [
+        ({}, True),                                        # unscoped: any run
+        ({"interconnect": "*", "prong": "*"}, True),        # explicit wildcards
+        ({"interconnect": "usa"}, True),                    # matches
+        ({"prong": 2}, True),                               # matches
+        ({"interconnect": "western"}, False),               # wrong footprint
+        ({"prong": 1}, False),                              # wrong prong
+        ({"interconnect": "usa", "prong": 1}, False),       # one field wrong is enough
+    ],
+)
+def test_waiver_scope_fields(scope, explains):
+    frames = {"dispatch_by_carrier": _metric_frame({"CCGT": 100.0}, {"CCGT": 140.0})}
+    hotfixes = {"HF-5": {"id": "HF-5", "ported": False}}
+    waivers = [{**scope, "metric": "dispatch_by_carrier", "key": "CCGT", "hotfix": "HF-5"}]
+    out = tables.comparison_table(frames, hotfixes, waivers, interconnect="usa", prong=2)
+    assert (out.iloc[0]["verdict"] == "explained") is explains
+
+
+def test_scoped_waiver_is_refused_when_the_run_is_unknown():
+    """A scope that cannot be checked has not been shown to apply.
+
+    ``comparison_table`` without ``interconnect``/``prong`` does not know what
+    run it is describing, so a waiver that demands a particular one is refused
+    rather than assumed to match. An UNSCOPED waiver still applies.
+    """
+    frames = {"dispatch_by_carrier": _metric_frame({"CCGT": 100.0}, {"CCGT": 140.0})}
+    hotfixes = {"HF-5": {"id": "HF-5", "ported": False}}
+    scoped = [
+        {"interconnect": "western", "prong": 1, "metric": "dispatch_by_carrier", "hotfix": "HF-5"},
+    ]
+    assert tables.comparison_table(frames, hotfixes, scoped).iloc[0]["verdict"] == "UNEXPLAINED"
+
+    unscoped = [{"metric": "dispatch_by_carrier", "hotfix": "HF-5"}]
+    assert tables.comparison_table(frames, hotfixes, unscoped).iloc[0]["verdict"] == "explained"
+
+
 def test_waiver_without_a_hotfix_does_not_explain():
     frames = {"dispatch_by_carrier": _metric_frame({"CCGT": 100.0}, {"CCGT": 140.0})}
     waivers = [{"metric": "dispatch_by_carrier", "key": "CCGT", "ledger": "DL-15"}]
