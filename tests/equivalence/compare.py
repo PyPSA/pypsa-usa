@@ -45,9 +45,14 @@ RTOL = TOLERANCES["p_max_pu"].rtol
 OBJECTIVE_RTOL = TOLERANCES["objective"].rtol
 CAPACITY_RTOL = TOLERANCES["capacity"].rtol
 CAPACITY_ATOL = TOLERANCES["capacity"].atol
-# National available power (profile x p_nom_max, MW) summed over buses. The
-# p_max_pu family's own declared floor, not a literal invented at the call site.
-PROFILE_ATOL = TOLERANCES["p_max_pu"].atol
+# The two system aggregates below are both in MW, not per-unit: sum(p_nom_max)
+# is installable potential and sum(profile x p_nom_max) is national available
+# power. So they take the 1 MW capacity floor, NOT the p_max_pu family's 1e-3,
+# which is a floor on a capacity FACTOR and would be a thousandth of a watt
+# here. Without a floor at all — which is how sum(p_nom_max) was checked — a
+# carrier neither side built reads as a 100 % difference on solver noise.
+POTENTIAL_ATOL = TOLERANCES["p_nom_max"].atol
+PROFILE_ATOL = TOLERANCES["capacity"].atol
 # Float-equality epsilon for cell comparison. Not a physical floor — the
 # per-family physical floors are ``tables.TOLERANCES[...].atol``.
 ATOL = 1e-8
@@ -443,7 +448,7 @@ def compare_profiles(pair: ArtifactPair, pc: Path, pa: Path, findings: list[dict
         if "p_nom_max" in dc and "p_nom_max" in da:
             tc = float(dc["p_nom_max"].sum())
             ta = float(da["p_nom_max"].sum())
-            if not np.isclose(tc, ta, rtol=RTOL):
+            if not np.isclose(tc, ta, rtol=RTOL, atol=POTENTIAL_ATOL):
                 findings.append(
                     {
                         "stage": pair.stage,
