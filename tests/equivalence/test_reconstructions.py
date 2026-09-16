@@ -493,7 +493,7 @@ def test_reconstruction_csv_and_json_are_written(tmp_path):
     rows = _rows(FIVE_PLANTS, PROFILED_S1_S2, {("pA", "onwind"): (350.0, 350.0), **zone_values})
     table = _table(zone_values, rows)
     written = tables.write_tables({"comparison": table}, tmp_path, reconstructions=_registry(rows))
-    csv = tmp_path / "tables" / "hf26_reconstruction.csv"
+    csv = tmp_path / "tables" / "reconstructions.csv"
     assert csv in written
     frame = pd.read_csv(csv)
     assert set(frame["zone"]) == {"pA", "pB"}
@@ -765,3 +765,300 @@ def test_assign_to_master_substations_tolerates_an_empty_fleet():
     assert out.empty
     assert {"sub_id", "zone"} <= set(out.columns)
     assert reconstructions.reconstruct_drop(out, {}).empty
+
+
+# ---------------------------------------------------------------------------
+# HF-24: the NREL caps p_nom_max master drops with a zero-availability bus.
+#
+# Same shape as HF-26 -- master drops, develop keeps, delta >= 0 -- but the
+# mechanism is one level earlier: `build_renewable_profiles` filters on
+# `profile.mean("time") > min_p_max_pu`, a substation with zero summed GODEEEP
+# availability has a NaN CF, `NaN > 0` is False, and the bus leaves the file
+# taking its caps `p_nom_max` with it. Develop sums the caps per cluster BEFORE
+# that filter, so the MW survives.
+
+
+#: Five substations over two clusters in two zones. ``s5`` is outside the
+#: busmap (out of footprint); ``s3``/``s4`` are the ones master drops.
+CAPS = pd.Series(
+    {"1.0": 100.0, "2.0": 50.0, "3.0": 200.0, "4.0": 25.0, "5.0": 999.0},
+    name="p_nom_max",
+)
+BUSMAP = pd.Series({"1": "cA", "2": "cA", "3": "cB", "4": "cB"})
+ZONE_BY_CLUSTER = pd.Series({"cA": "pA", "cB": "pB", "cC": "pC"})
+COMMON = ["cA", "cB"]
+
+
+def test_caps_drop_is_the_caps_at_unprofiled_substations():
+    out = reconstructions.reconstruct_caps_drop(CAPS, BUSMAP, {"1.0", "2.0"}, ZONE_BY_CLUSTER, COMMON)
+    assert out.loc["pA", "caps_mw"] == pytest.approx(150.0)
+    assert out.loc["pA", "covered_mw"] == pytest.approx(150.0)
+    assert out.loc["pA", "dropped_mw"] == pytest.approx(0.0)
+    assert out.loc["pB", "caps_mw"] == pytest.approx(225.0)
+    assert out.loc["pB", "covered_mw"] == pytest.approx(0.0)
+    assert out.loc["pB", "dropped_mw"] == pytest.approx(225.0)
+    assert int(out.loc["pB", "n_subs_dropped"]) == 2
+
+
+def test_nothing_is_dropped_when_master_profiles_every_substation():
+    out = reconstructions.reconstruct_caps_drop(
+        CAPS,
+        BUSMAP,
+        {"1.0", "2.0", "3.0", "4.0"},
+        ZONE_BY_CLUSTER,
+        COMMON,
+    )
+    assert out["dropped_mw"].abs().max() == pytest.approx(0.0)
+    assert out["caps_mw"].sum() == pytest.approx(375.0)
+
+
+def test_substations_outside_the_busmap_enter_neither_term():
+    """The caps file is national; a footprint-scoped run must not count ``s5``.
+
+    Counting it in ``caps_mw`` would fail gate G2 against a develop column that
+    never contained it -- a harness artefact reported as a model difference.
+    """
+    out = reconstructions.reconstruct_caps_drop(CAPS, BUSMAP, {"1.0", "2.0"}, ZONE_BY_CLUSTER, COMMON)
+    assert out["caps_mw"].sum() == pytest.approx(375.0)  # 999 MW of s5 excluded
+    assert "pC" not in out.index
+
+
+def test_clusters_outside_the_common_set_are_excluded():
+    """A develop-only cluster must not inflate ``caps_mw``.
+
+    ``metrics.common_cluster_subset`` removes it from BOTH sides of the metric
+    before either is summed, so a reconstruction that kept it would be predicting
+    a develop column that does not exist.
+    """
+    out = reconstructions.reconstruct_caps_drop(CAPS, BUSMAP, {"1.0", "2.0"}, ZONE_BY_CLUSTER, ["cA"])
+    assert list(out.index) == ["pA"]
+    assert out["caps_mw"].sum() == pytest.approx(150.0)
+
+
+def test_caps_substation_ids_reconcile_across_formats():
+    """Caps keys are ``'35827.0'``, busmap keys ``'35827'``, profile ``'35827.0'``."""
+    caps = pd.Series({"35827.0": 10.0, "35828.0": 20.0})
+    busmap = pd.Series({"35827": "cA", "35828": "cA"})
+    zone = pd.Series({"cA": "pA"})
+    out = reconstructions.reconstruct_caps_drop(caps, busmap, {"35827.0"}, zone, ["cA"])
+    assert out.loc["pA", "caps_mw"] == pytest.approx(30.0)
+    assert out.loc["pA", "covered_mw"] == pytest.approx(10.0)
+    assert out.loc["pA", "dropped_mw"] == pytest.approx(20.0)
+
+
+POTENTIAL_TOL = tables.tolerance_for("p_nom_max_by_zone_onwind")
+
+
+def _caps_rows(zone_values, profiled=("1.0", "2.0"), common=COMMON):
+    """``{(metric, zone): ReconRow}`` for the onwind potential metric."""
+    recon = reconstructions.reconstruct_caps_drop(CAPS, BUSMAP, set(profiled), ZONE_BY_CLUSTER, common)
+    rows = {}
+    for zone, (master, develop) in zone_values.items():
+        caps = float(recon["caps_mw"].get(zone, 0.0))
+        covered = float(recon["covered_mw"].get(zone, 0.0))
+        row = reconstructions._make_row(
+            "p_nom_max_by_zone_onwind",
+            zone,
+            "onwind",
+            caps,
+            covered,
+            master,
+            develop,
+            POTENTIAL_TOL,
+            key=zone,
+        )
+        rows[("p_nom_max_by_zone_onwind", row.key)] = row
+    return rows
+
+
+def test_caps_residual_is_zero_and_row_is_ok_when_both_gates_hold():
+    rows = _caps_rows({"pB": (0.0, 225.0)})
+    row = rows[("p_nom_max_by_zone_onwind", "pB")]
+    assert row.key == "pB", "the potential metric is keyed by the bare zone"
+    assert row.ok, row.note
+    assert row.dropped_mw == pytest.approx(225.0)
+    assert row.residual_mw == pytest.approx(0.0)
+
+
+def test_caps_gate_g1_fails_when_the_master_column_disagrees():
+    rows = _caps_rows({"pA": (140.0, 150.0)})
+    row = rows[("p_nom_max_by_zone_onwind", "pA")]
+    assert not row.ok and "master gate" in row.note
+    assert row.master_recon_err == pytest.approx(10.0)
+
+
+def test_caps_gate_g2_fails_when_the_develop_column_disagrees():
+    rows = _caps_rows({"pB": (0.0, 200.0)})
+    row = rows[("p_nom_max_by_zone_onwind", "pB")]
+    assert not row.ok and "develop gate" in row.note
+    assert row.develop_recon_err == pytest.approx(25.0)
+
+
+CAPS_WAIVER = {
+    "metric": "p_nom_max_by_zone_onwind",
+    "reconstruction": "hf24_nrel_caps_drop",
+    "hotfix": "HF-24",
+    "expect_sign": "+",
+}
+CAPS_REGISTRY_HOTFIX = {"HF-24": {"id": "HF-24", "ported": False, "usa_noop": False}}
+
+
+def _caps_table(zone_values, rows):
+    master = pd.Series({z: v[0] for z, v in zone_values.items()})
+    develop = pd.Series({z: v[1] for z, v in zone_values.items()})
+    frames = {"p_nom_max_by_zone_onwind": metrics.frame(master, develop, name="zone")}
+    registry = {
+        "hf24_nrel_caps_drop": reconstructions.Reconstruction(
+            name="hf24_nrel_caps_drop",
+            frame=reconstructions.rows_frame(rows),
+            rows=rows,
+        ),
+    }
+    return tables.comparison_table(frames, CAPS_REGISTRY_HOTFIX, [CAPS_WAIVER], reconstructions=registry)
+
+
+def test_reconstruction_waiver_explains_a_matching_p_nom_max_row():
+    zone_values = {"pB": (0.0, 225.0)}
+    out = _caps_table(zone_values, _caps_rows(zone_values))
+    row = out[out["key"] == "pB"].iloc[0]
+    assert row["verdict"] == "explained"
+    assert row["hotfix"] == "HF-24"
+
+
+def test_reconstruction_waiver_refuses_a_p_nom_max_row_with_a_residual():
+    zone_values = {"pB": (0.0, 200.0)}
+    out = _caps_table(zone_values, _caps_rows(zone_values))
+    row = out[out["key"] == "pB"].iloc[0]
+    assert row["verdict"] == "UNEXPLAINED"
+    assert "reconstruction" in row["hotfix"]
+
+
+@pytest.mark.parametrize(
+    ("config", "want"),
+    [
+        ({"renewable_land_access": "reference"}, "caps_onwind_reference.nc"),
+        ({"renewable_land_access": "open"}, "caps_onwind_open.nc"),
+        (
+            {"renewable_land_access": "reference", "apply_cec_basescreen": True},
+            "caps_onwind_reference_cec.nc",
+        ),
+        (
+            {"renewable_land_access": "reference", "apply_boem_osw": True},
+            "caps_onwind_reference.nc",  # boem is offwind-only
+        ),
+    ],
+)
+def test_nrel_caps_path_matches_the_snakemake_input_function(tmp_path, config, want):
+    """Mirrors ``build_electricity.smk::nrel_exclusion_artifact(kind='caps')``.
+
+    A path this function gets wrong does not raise: it either misses (error, so
+    nothing is explained) or, worse, finds a DIFFERENT access scenario's file and
+    reconstructs rows from land rules the run never used.
+    """
+    path = reconstructions.nrel_caps_path(tmp_path, "onwind", config)
+    assert path.name == want
+    assert path.parent == tmp_path / "data" / "nrel_exclusion" / "derived"
+
+
+def test_nrel_caps_path_offwind_honours_boem_and_not_cec(tmp_path):
+    cfg = {"renewable_land_access": "reference", "apply_cec_basescreen": True, "apply_boem_osw": True}
+    assert reconstructions.nrel_caps_path(tmp_path, "offwind_floating", cfg).name == (
+        "caps_offwind_floating_reference_boem.nc"
+    )
+
+
+def test_nrel_caps_path_raises_when_land_access_is_unset(tmp_path):
+    """The atlite path has no caps file, so the mechanism must not hold there."""
+    with pytest.raises(RuntimeError, match="renewable_land_access"):
+        reconstructions.nrel_caps_path(tmp_path, "onwind", {})
+
+
+def test_hf24_without_the_common_cluster_set_is_an_error_not_a_guess():
+    """``art.profiles`` is only filled by ``collect_metrics`` at prong 2."""
+    art = SimpleNamespace(
+        prong=2,
+        develop_root=Path("/nonexistent/develop/workflow"),
+        master_root=Path("/nonexistent/master/workflow"),
+        profiles={},
+        zone_develop=ZONE_BY_CLUSTER,
+    )
+    recon = reconstructions.hf24_nrel_caps_drop(art, {"p_nom_max_by_zone_onwind": pd.DataFrame()})
+    assert recon.error
+    assert recon.lookup("p_nom_max_by_zone_onwind", "pA") is None
+
+
+def test_both_providers_are_registered():
+    assert set(reconstructions.RECONSTRUCTIONS) == {
+        "hf26_existing_renewable_drop",
+        "hf24_nrel_caps_drop",
+    }
+
+
+def test_rows_frame_keeps_every_zoned_row_whatever_the_metric():
+    """One frame, one CSV, one set of figures, for both providers."""
+    caps_rows = _caps_rows({"pA": (150.0, 150.0), "pB": (0.0, 225.0)})
+    frame = reconstructions.rows_frame(caps_rows)
+    assert set(frame["zone"]) == {"pA", "pB"}
+    assert set(frame["metric"]) == {"p_nom_max_by_zone_onwind"}
+    # HF-26's national rows carry no zone and stay out of the map data.
+    mixed = _rows(FIVE_PLANTS, PROFILED_S1_S2, {("pA", "onwind"): (350.0, 350.0)}, {"onwind": (350.0, 675.0)})
+    assert all(z is not None for z in reconstructions.rows_frame(mixed)["zone"])
+    assert ("capacity_existing_by_carrier", "onwind") in mixed
+
+
+def test_reconstruction_totals_sum_the_zone_rows_for_either_provider():
+    """The summary line must not read "0 MW" for a provider with no national row.
+
+    HF-26 carries national rows off ``capacity_existing_by_carrier``; HF-24's
+    metric is already per tech and has none. Summing the national rows made the
+    HF-24 summary read 0 MW beside 50 explained rows.
+    """
+    hf26 = _rows(
+        FIVE_PLANTS,
+        PROFILED_S1_S2,
+        {("pA", "onwind"): (350.0, 350.0), ("pB", "onwind"): (0.0, 325.0)},
+        {"onwind": (350.0, 675.0)},
+    )
+    r26 = reconstructions.Reconstruction("hf26", reconstructions.rows_frame(hf26), hf26)
+    assert r26.totals()["fleet_mw"] == pytest.approx(675.0)
+    assert r26.totals()["dropped_mw"] == pytest.approx(325.0)
+    # ...and it agrees with the national row it also has.
+    assert r26.totals()["fleet_mw"] == pytest.approx(r26.national()["onwind"]["fleet_mw"])
+
+    hf24 = _caps_rows({"pA": (150.0, 150.0), "pB": (0.0, 225.0)})
+    r24 = reconstructions.Reconstruction("hf24", reconstructions.rows_frame(hf24), hf24)
+    assert r24.national() == {}, "the potential metric has no national row"
+    assert r24.totals()["fleet_mw"] == pytest.approx(375.0)
+    assert r24.totals()["dropped_mw"] == pytest.approx(225.0)
+    assert r24.max_abs_residual() == pytest.approx(0.0)
+
+
+def test_the_reconstructions_summary_reports_both_providers(tmp_path):
+    """One `reconstructions.csv` and one markdown section cover every provider."""
+    hf26 = _rows(FIVE_PLANTS, PROFILED_S1_S2, {("pB", "onwind"): (0.0, 325.0)})
+    hf24 = _caps_rows({"pB": (0.0, 225.0)})
+    registry = {
+        "hf26_existing_renewable_drop": reconstructions.Reconstruction(
+            "hf26_existing_renewable_drop",
+            reconstructions.rows_frame(hf26),
+            hf26,
+        ),
+        "hf24_nrel_caps_drop": reconstructions.Reconstruction(
+            "hf24_nrel_caps_drop",
+            reconstructions.rows_frame(hf24),
+            hf24,
+        ),
+    }
+    summary = tables.reconstructions_summary(registry)
+    assert {s["name"] for s in summary} == set(registry)
+    assert all(s["ok"] for s in summary)
+    by_name = {s["name"]: s for s in summary}
+    assert by_name["hf24_nrel_caps_drop"]["totals"]["dropped_mw"] == pytest.approx(225.0)
+
+    frame = tables.reconstruction_frame(registry)
+    assert set(frame["reconstruction"]) == set(registry)
+    assert set(frame["metric"]) == {"p_nom_existing_by_zone_carrier", "p_nom_max_by_zone_onwind"}
+
+    tables.write_tables({"comparison": pd.DataFrame()}, tmp_path, reconstructions=registry)
+    csv = pd.read_csv(tmp_path / "tables" / "reconstructions.csv")
+    assert set(csv["reconstruction"]) == set(registry)

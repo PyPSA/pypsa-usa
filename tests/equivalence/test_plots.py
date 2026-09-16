@@ -865,3 +865,26 @@ def test_hf26_map_figure_is_skipped_without_zones(tmp_path):
     png, csv = plots.hf26_dropped_map_figure(None, _recon(rows), "hf26_map_none", tmp_path)
     assert png.exists() and csv.exists()
     assert pd.read_csv(csv).empty
+
+
+def test_hf26_figure_states_what_it_did_not_draw(tmp_path):
+    """The capped remainder is accounted for in words, not as a pooled bar.
+
+    A pooled bar worked at four zones and destroyed the figure at 134: on the
+    HF-24 metric it was 7.9 million MW against individual zones of 2e5, so every
+    bar the figure exists to show collapsed to a hairline, and its "gate
+    tolerance" band was the sum of 109 unrelated gates.
+    """
+    rows = {(f"p{i}", "onwind"): (100.0 + i, 50.0, 50.0, 100.0 + i) for i in range(8)}
+    shown, note = plots._recon_plot_rows(plots._recon_frame(_recon(rows))[0], cap=3)
+    assert len(shown) == 3
+    assert "top 3 of 8 zones" in note
+    assert "5 hold" in note
+    assert "max |residual|" in note
+    # No synthetic pooled row is drawn.
+    assert not any(str(z).startswith("other") for z in shown["zone"])
+
+    # Under the cap there is nothing to say.
+    shown, note = plots._recon_plot_rows(plots._recon_frame(_recon(rows))[0], cap=25)
+    assert len(shown) == 8
+    assert note == ""

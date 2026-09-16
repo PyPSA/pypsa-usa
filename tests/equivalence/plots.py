@@ -446,24 +446,51 @@ def _residual_ratio(df: pd.DataFrame) -> pd.Series:
     return pd.Series(ratio, index=df.index)
 
 
-def _recon_plot_rows(sub: pd.DataFrame, cap: int) -> pd.DataFrame:
-    """Top ``cap`` zones by ``|dropped_mw|``, with the remainder pooled.
+def _recon_plot_rows(sub: pd.DataFrame, cap: int) -> tuple[pd.DataFrame, str]:
+    """``(top ``cap`` zones by |dropped_mw|, a note accounting for the rest)``.
 
-    Pooling rather than truncating: a figure that silently stops at 25 of 134
-    zones invites the reader to add up what is drawn and get a different national
-    total than the title states.
+    The remainder is stated IN WORDS, not drawn as a pooled bar. A figure that
+    silently stops at 25 of 134 zones invites the reader to add up what is drawn
+    and get a different total than the title states — but on the HF-24 metric the
+    pooled bar was 7.9 million MW against individual zones of 2e5, so every bar
+    the figure exists to show collapsed to a hairline, and the pooled row's
+    "gate tolerance" was the sum of 109 unrelated gates. The note keeps the
+    reconciliation and gives the axis back its range.
     """
     ordered = sub.assign(_o=sub["dropped_mw"].abs()).sort_values("_o", ascending=False).drop(columns="_o")
     if len(ordered) <= cap:
-        return ordered
+        return ordered, ""
     head, tail = ordered.iloc[:cap], ordered.iloc[cap:]
-    pooled = {c: float(tail[c].sum()) for c in _RECON_NUMERIC}
-    pooled.update(zone=f"other ({len(tail)} zones)", carrier=str(head["carrier"].iloc[0]))
-    return pd.concat([head, pd.DataFrame([pooled])], ignore_index=True)
+    worst = float(tail["residual_mw"].abs().max())
+    note = (
+        f"top {cap} of {len(ordered)} zones shown; the other {len(tail)} hold "
+        f"{tail['master_mw'].sum():,.0f} MW master, {tail['dropped_mw'].sum():,.0f} MW dropped, "
+        f"max |residual| {worst:,.3f} MW"
+    )
+    return head, note
 
 
-def _recon_title(df: pd.DataFrame) -> str:
-    """National fleet / master / develop / dropped per carrier, and max |residual|."""
+#: Headline for each provider's figures, keyed by its ``Reconstruction.name``.
+#: A figure that does not say which mechanism it is drawing is a picture of some
+#: numbers.
+RECON_HEADLINES = {
+    "hf26_existing_renewable_drop": (
+        "HF-26 reconstruction: existing renewable MW master drops at substations its profile file does not cover"
+    ),
+    "hf24_nrel_caps_drop": (
+        "HF-24 reconstruction: NREL caps p_nom_max master drops with substations of zero GODEEEP land availability"
+    ),
+}
+_RECON_DEFAULT_HEADLINE = "Reconstruction: MW master drops and develop keeps"
+
+
+def _recon_headline(recon) -> str:
+    """The title line for this provider's figures."""
+    return RECON_HEADLINES.get(str(getattr(recon, "name", "")), _RECON_DEFAULT_HEADLINE)
+
+
+def _recon_title(df: pd.DataFrame, headline: str = _RECON_DEFAULT_HEADLINE) -> str:
+    """Totals per carrier and max |residual|, under ``headline``."""
     parts = []
     for carrier, g in df.groupby("carrier", sort=True):
         parts.append(
@@ -472,9 +499,10 @@ def _recon_title(df: pd.DataFrame) -> str:
         )
     worst = float(df["residual_mw"].abs().max()) if len(df) else 0.0
     return (
-        "HF-26 reconstruction: existing renewable MW master drops at substations its profile file does not cover\n"
+        headline
+        + "\n"
         + "; ".join(parts)
-        + f"\nmax |residual| {worst:,.1f} MW (residual = (develop - master) - dropped)"
+        + f"\nmax |residual| {worst:,.3f} MW (residual = (develop - master) - dropped)"
     )
 
 
@@ -498,10 +526,10 @@ def hf26_dropped_zone_figure(
     """
     df, note = _recon_frame(recon)
     if df is None:
-        return _empty_figure("HF-26 reconstruction", name, outdir, note=note)
+        return _empty_figure(_recon_headline(recon), name, outdir, note=note)
     carriers = sorted(df["carrier"].unique())
     rows = [_recon_plot_rows(df[df["carrier"] == c], cap) for c in carriers]
-    height = sum(max(2.6, 0.30 * len(r) + 1.6) for r in rows)
+    height = sum(max(2.6, 0.30 * len(r) + 1.8) for r, _n in rows)
     fig, axes = plt.subplots(
         len(carriers),
         2,
@@ -509,7 +537,7 @@ def hf26_dropped_zone_figure(
         width_ratios=[2.4, 1],
         squeeze=False,
     )
-    for (ax1, ax2), carrier, plot_df in zip(axes, carriers, rows):
+    for (ax1, ax2), carrier, (plot_df, more) in zip(axes, carriers, rows):
         y = np.arange(len(plot_df))
         h = 0.26
         ax1.barh(y + h, plot_df["master_mw"], height=h, color=SIDE_COLORS["master"], label=LABELS["master"])
@@ -531,7 +559,10 @@ def hf26_dropped_zone_figure(
         ax1.invert_yaxis()
         _style(ax1, xlabel="existing capacity [MW]")
         ax1.legend(fontsize=7, frameon=False)
-        ax1.set_title(f"{carrier}: master + dropped should meet develop", fontsize=10)
+        ax1.set_title(
+            f"{carrier}: master + dropped should meet develop" + (f"\n{more}" if more else ""),
+            fontsize=10,
+        )
 
         tol = plot_df["gate_tol_mw"].to_numpy(dtype=float)
         res = plot_df["residual_mw"].to_numpy(dtype=float)
@@ -548,7 +579,7 @@ def hf26_dropped_zone_figure(
         _style(ax2, xlabel="residual [MW]")
         ax2.legend(fontsize=7, frameon=False)
         ax2.set_title("(develop - master) - dropped", fontsize=10)
-    fig.suptitle(_recon_title(df), fontsize=9)
+    fig.suptitle(_recon_title(df, _recon_headline(recon)), fontsize=9)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     return save_figure(fig, df, name, outdir)
 
@@ -587,9 +618,9 @@ def hf26_dropped_map_figure(
     """
     df, note = _recon_frame(recon)
     if df is None:
-        return _empty_figure("HF-26 dropped capacity by zone", name, outdir, note=note)
+        return _empty_figure(_recon_headline(recon), name, outdir, note=note)
     if zones is None or len(zones) == 0:
-        return _empty_figure("HF-26 dropped capacity by zone", name, outdir, note="no zone data")
+        return _empty_figure(_recon_headline(recon), name, outdir, note="no zone data")
     df = df.copy()
     df["residual_over_gate"] = _residual_ratio(df)
     df["ok"] = df["ok"].astype(bool)
@@ -626,7 +657,7 @@ def hf26_dropped_map_figure(
             cbar_label=f"residual / gate tolerance (+/-1 = band edge, scale +/-{rmax:g})",
             outline=~sub["ok"],
         )
-    fig.suptitle(_recon_title(df), fontsize=9)
+    fig.suptitle(_recon_title(df, _recon_headline(recon)), fontsize=9)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     data = df[
         [
@@ -1154,20 +1185,28 @@ def _record_cluster_sets(art: Artifacts) -> None:
         print(f"[plots] could not update run_meta.json: {exc}")
 
 
-def _hf26_reconstruction(artifacts, frames, reconstructions=None):
-    """The HF-26 reconstruction for this run, or ``None``.
+#: ``(reconstruction name, figure stem, the metric it needs)`` for each provider
+#: that gets a pair of figures. A provider whose metric the run did not compute
+#: draws a labelled placeholder rather than vanishing from ``figures/``.
+RECON_FIGURES = (
+    ("hf26_existing_renewable_drop", "hf26_dropped_mw", "p_nom_existing_by_zone_carrier"),
+    ("hf24_nrel_caps_drop", "hf24_caps_drop", "p_nom_max_by_zone_onwind"),
+)
 
-    ``None`` when the run has no existing-capacity criterion to reconstruct (a
-    solve-only export), or when ``EQ_RECONSTRUCTIONS=0`` emptied the registry.
-    Both cases draw a labelled placeholder rather than skipping the figure, so a
-    missing reconstruction is visible in ``figures/`` instead of absent from it.
+
+def _reconstruction(artifacts, frames, name: str, metric: str, reconstructions=None):
+    """One provider's reconstruction for this run, or ``None``.
+
+    ``None`` when the run did not compute ``metric`` (a solve-only export has no
+    existing-capacity criterion; a pre-profile one has no potential criterion),
+    or when ``EQ_RECONSTRUCTIONS=0`` emptied the registry.
     """
-    if (frames or {}).get("p_nom_existing_by_zone_carrier") is None:
+    if (frames or {}).get(metric) is None:
         return None
     from . import reconstructions as recon_mod
 
     reg = recon_mod.registry(artifacts, frames) if reconstructions is None else reconstructions
-    return reg.get("hf26_existing_renewable_drop") if reg else None
+    return reg.get(name) if reg else None
 
 
 def _carrier_zone_slice(df: pd.DataFrame, carrier: str) -> tuple[pd.Series, pd.Series]:
@@ -1227,13 +1266,14 @@ def export_all(
     )
     paired_bar(m.get("demand_by_zone"), "demand by zone", "MW", "demand_zones", run_dir)
 
-    # HF-26's computed explanation, drawn whatever the verdicts were. The table
+    # Every computed explanation, drawn whatever the verdicts were. The table
     # only resolves a reconstruction when a row needs it; the figures are a
     # deliverable in their own right (PROJECT.md 3.2), so they ask for it
     # explicitly and the memoised registry keeps that to one computation.
-    recon = _hf26_reconstruction(artifacts, m, reconstructions)
-    hf26_dropped_zone_figure(recon, "hf26_dropped_mw_by_zone", run_dir)
-    hf26_dropped_map_figure(artifacts.zones, recon, "hf26_dropped_mw_map", run_dir)
+    for recon_name, stem, metric in RECON_FIGURES:
+        recon = _reconstruction(artifacts, m, recon_name, metric, reconstructions)
+        hf26_dropped_zone_figure(recon, f"{stem}_by_zone", run_dir)
+        hf26_dropped_map_figure(artifacts.zones, recon, f"{stem}_map", run_dir)
 
     zc = m.get("p_nom_existing_by_zone_carrier")
     if zc is not None and not zc.empty:

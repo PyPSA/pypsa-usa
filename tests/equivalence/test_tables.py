@@ -514,10 +514,17 @@ def _stub_reconstruction(
     """
     from tests.equivalence import reconstructions as recon_mod
 
-    tol = tol or tables.tolerance_for("capacity_existing_by_carrier")
     made: dict[tuple[str, str], object] = {}
     for (metric, key), v in rows.items():
-        zone, carrier = key.split(" | ", 1) if " | " in key else (None, key)
+        # HF-26 keys a zone row "p10 | onwind" and a national row "onwind";
+        # HF-24's potential metric is already per tech, so its key is the bare
+        # zone. A row may say which it is rather than be guessed at.
+        if "zone" in v or "carrier" in v:
+            zone, carrier = v.get("zone"), v.get("carrier", "")
+        elif " | " in key:
+            zone, carrier = key.split(" | ", 1)
+        else:
+            zone, carrier = None, key
         row = recon_mod._make_row(
             metric,
             zone,
@@ -526,7 +533,8 @@ def _stub_reconstruction(
             v["profiled_mw"],
             v["master_mw"],
             v["develop_mw"],
-            tol,
+            tol or tables.tolerance_for(metric),
+            key=key,
         )
         made[(metric, row.key)] = row
     return {name: recon_mod.Reconstruction(name=name, frame=recon_mod.rows_frame(made), rows=made)}
@@ -978,23 +986,54 @@ def test_export_all_writes_the_run_directory_tables(tmp_path, monkeypatch):
     assert tables.verdict_counts(comparison)["equivalent"] == 1
 
 
-def test_hf24_table_waiver_explains_only_its_own_leg():
-    """The shipped HF-24 waivers turn UNEXPLAINED into explained — on western p2.
+def _hf24_recon(master: float, develop: float, zone: str = "p8", tech: str = "onwind"):
+    """A reconstruction that accounts for exactly ``develop - master`` in ``zone``."""
+    return _stub_reconstruction(
+        {
+            (f"p_nom_max_by_zone_{tech}", zone): dict(
+                fleet_mw=develop,
+                profiled_mw=master,
+                master_mw=master,
+                develop_mw=develop,
+                zone=zone,
+                carrier=tech,
+            ),
+        },
+        name="hf24_nrel_caps_drop",
+    )
 
-    And nowhere else: the same row on the usa leg, or on prong 1, stays
-    UNEXPLAINED, because that measurement has not been made.
+
+def test_hf24_table_waiver_explains_any_leg_the_reconstruction_covers():
+    """The HF-24 waivers are unscoped now: the RECONSTRUCTION is the scope.
+
+    They used to be ``interconnect: western, prong: 2`` with ``max_abs_pct: 5``,
+    so the identical row on the usa leg stayed UNEXPLAINED — which is what left
+    the whole-USA run with 46 onwind + 4 solar unexplained potential rows. The
+    bound is now recomputed per row from the caps artifact, so the same waiver
+    holds on any leg where the arithmetic holds, and on none where it does not.
     """
     frames = {"p_nom_max_by_zone_onwind": _metric_frame({"p8": 33348.0}, {"p8": 33444.0})}
     reg = tables.load_hotfixes()
     waivers = _real_waivers()
+    recon = _hf24_recon(33348.0, 33444.0)
 
-    western = tables.comparison_table(frames, reg, waivers, interconnect="western", prong=2)
-    assert western.iloc[0]["verdict"] == "explained"
-    assert western.iloc[0]["hotfix"] == "HF-24"
+    for ic, prong in (("western", 2), ("usa", 2), ("western", 1)):
+        out = tables.comparison_table(
+            frames,
+            reg,
+            waivers,
+            interconnect=ic,
+            prong=prong,
+            reconstructions=recon,
+        )
+        assert out.iloc[0]["verdict"] == "explained", (ic, prong)
+        assert out.iloc[0]["hotfix"] == "HF-24"
 
-    for ic, prong in (("usa", 2), ("western", 1)):
+    # And on no leg at all without the reconstruction that bounds it.
+    for ic, prong in (("western", 2), ("usa", 2)):
         out = tables.comparison_table(frames, reg, waivers, interconnect=ic, prong=prong)
         assert out.iloc[0]["verdict"] == "UNEXPLAINED", (ic, prong)
+        assert "reconstruction unavailable" in out.iloc[0]["hotfix"]
 
 
 # ---------------------------------------------------------------------------
@@ -1074,16 +1113,48 @@ def test_each_bound_can_be_given_on_its_own():
 
 
 def test_the_shipped_hf24_waivers_are_bounded():
-    """Every shipped HF-24 table waiver says which direction it explains."""
+    """Every shipped HF-24 table waiver says which direction it explains.
+
+    Two rows now, one per tech, bounded by a COMPUTED reconstruction instead of
+    the four hand-measured ``max_abs_pct: 5`` rows that were scoped to western.
+    The HF-24 CELL waivers (``system_potential_mw``, ``system_available_mw``,
+    ``cluster_set``) are a different thing entirely and are not counted here.
+    """
     bounded = [w for w in _real_waivers() if w.get("hotfix") == "HF-24" and w.get("metric")]
     assert bounded, "the HF-24 table waivers are gone"
+    assert len(bounded) == 2, f"expected one waiver per tech, got {len(bounded)}"
+    assert {w["metric"] for w in bounded} == {"p_nom_max_by_zone_onwind", "p_nom_max_by_zone_solar"}
     for w in bounded:
         assert w["expect_sign"] == "+", w
-        assert float(w["max_abs_pct"]) > 0, w
+        assert w["reconstruction"] == "hf24_nrel_caps_drop", w
+        assert w["ledger"] == "DL-18", w
+        assert w.get("interconnect") is None and w.get("prong") is None, f"scoped by hand: {w}"
+        assert w.get("key") is None, f"a key would defeat the point of a computed bound: {w}"
+        assert "max_abs_pct" not in w, f"a hand bound beside the reconstruction downgrades it: {w}"
+
+
+def test_the_shipped_hf24_cell_waivers_are_untouched():
+    """The three bounded HF-24 COMPONENT waivers are not table rows.
+
+    ``system_potential_mw``, ``system_available_mw`` and ``cluster_set`` are
+    ``compare.py`` findings; the reconstruction has nothing to say about them and
+    must not have taken them with it.
+    """
+    cells = [w for w in _real_waivers() if w.get("hotfix") == "HF-24" and not w.get("metric")]
+    assert {w.get("component") for w in cells} == {
+        "system_potential_mw",
+        "system_available_mw",
+        "cluster_set",
+    }
 
 
 def test_the_shipped_hf24_waiver_refuses_a_sign_flip():
-    """End to end on the real files: a drop in develop's potential is not HF-24."""
+    """End to end on the real files: a drop in develop's potential is not HF-24.
+
+    The reconstruction here reproduces both sides exactly, so the gates hold and
+    the residual is 0 — only ``expect_sign`` stands between this row and a
+    verdict it must not get.
+    """
     reg = tables.load_hotfixes()
     waivers = _real_waivers()
     flipped = tables.comparison_table(
@@ -1092,6 +1163,7 @@ def test_the_shipped_hf24_waiver_refuses_a_sign_flip():
         waivers,
         interconnect="western",
         prong=2,
+        reconstructions=_hf24_recon(188425.0, 94212.5, zone="p8", tech="solar"),
     )
     assert flipped.iloc[0]["verdict"] == "UNEXPLAINED"
     assert "bounds violated (sign)" in flipped.iloc[0]["hotfix"]

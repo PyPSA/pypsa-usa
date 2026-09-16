@@ -53,7 +53,7 @@ import numpy as np
 import pandas as pd
 
 from . import metrics, tables
-from .paths import CONFIGFILE, EQ, INTERCONNECT, REPO, baseline_assembled_target, prong_pairs
+from .paths import CONFIGFILE, EQ, INTERCONNECT, REPO, SIMPL2, baseline_assembled_target, prong_pairs
 
 #: The two comparison-table metrics this module has anything to say about.
 ZONE_METRIC = "p_nom_existing_by_zone_carrier"
@@ -134,6 +134,25 @@ class Reconstruction:
     def ok(self) -> bool:
         """Was this reconstruction computed at all (no :attr:`error`)."""
         return self.error is None
+
+    def totals(self) -> dict[str, float]:
+        """``{fleet_mw, profiled_mw, dropped_mw, master_mw, develop_mw}`` over the ZONE rows.
+
+        Summed over the rows that name a zone, which is the one thing both
+        providers have: HF-26 also carries national rows (and
+        ``test_national_row_is_the_zone_sum`` pins that they agree with this),
+        while HF-24's metric is already per tech and has none. Reporting
+        :meth:`national` in the summary made the HF-24 line read "0 MW" beside
+        50 explained rows.
+        """
+        keys = ("fleet_mw", "profiled_mw", "dropped_mw", "master_mw", "develop_mw")
+        zoned = [r for r in self.rows.values() if r.zone is not None]
+        return {k: float(sum(getattr(r, k) for r in zoned)) for k in keys}
+
+    def max_abs_residual(self) -> float:
+        """The largest ``|residual_mw|`` over every row, or 0.0 when there are none."""
+        finite = [abs(float(r.residual_mw)) for r in self.rows.values() if np.isfinite(r.residual_mw)]
+        return max(finite) if finite else 0.0
 
     def national(self) -> dict[str, dict[str, float]]:
         """``{carrier: {fleet_mw, profiled_mw, dropped_mw, master_mw, ...}}``."""
@@ -319,8 +338,21 @@ def _make_row(
     master_mw: float,
     develop_mw: float,
     tol: tables.Tolerance,
+    key: str | None = None,
 ) -> ReconRow:
-    """One :class:`ReconRow`, gates evaluated."""
+    """One :class:`ReconRow`, gates evaluated.
+
+    ``key`` overrides the comparison-table key. HF-26's rows are keyed
+    ``"p10 | onwind"`` because its metric is indexed by (zone, carrier); HF-24's
+    metric is already per tech (``p_nom_max_by_zone_onwind``) and is keyed by
+    the bare zone. Both still carry ``zone`` and ``carrier`` as fields, so the
+    frame and the figures read the same either way.
+
+    ``fleet_mw`` and ``profiled_mw`` are named for HF-26 but mean the same thing
+    for any provider: ``fleet_mw`` is what the mechanism predicts for DEVELOP,
+    ``profiled_mw`` what it predicts for MASTER, and ``dropped_mw`` the
+    difference, which must equal the row's delta.
+    """
     fleet_mw, profiled_mw = _f(fleet_mw), _f(profiled_mw)
     master_mw, develop_mw = _f(master_mw), _f(develop_mw)
     dropped_mw = fleet_mw - profiled_mw
@@ -344,7 +376,7 @@ def _make_row(
             )
     return ReconRow(
         metric=metric,
-        key=row_key(zone, carrier),
+        key=row_key(zone, carrier) if key is None else str(key),
         zone=zone,
         carrier=str(carrier),
         fleet_mw=fleet_mw,
@@ -438,8 +470,15 @@ def build_rows(
 
 
 def rows_frame(rows: Mapping[tuple[str, str], ReconRow]) -> pd.DataFrame:
-    """The per-(zone, carrier) frame behind ``rows``, for the CSV and the figures."""
-    records = [asdict(r) for (metric, _k), r in sorted(rows.items()) if metric == ZONE_METRIC]
+    """The per-(zone, carrier) frame behind ``rows``, for the CSV and the figures.
+
+    Every row that NAMES A ZONE, whatever its metric: HF-26's
+    ``p_nom_existing_by_zone_carrier`` and HF-24's ``p_nom_max_by_zone_{tech}``
+    are both per-zone, and both want the same frame, the same CSV and the same
+    figures. National rows (``zone is None``) are the running totals, not map
+    data, and stay out.
+    """
+    records = [asdict(r) for _key, r in sorted(rows.items()) if r.zone is not None]
     if not records:
         return empty_recon_frame()
     out = pd.DataFrame.from_records(records)
@@ -816,7 +855,244 @@ def hf26_existing_renewable_drop(art, frames) -> Reconstruction:
         )
 
 
-RECONSTRUCTIONS = {"hf26_existing_renewable_drop": hf26_existing_renewable_drop}
+# ---- HF-24: the NREL caps master drops with a zero-availability substation ---
+
+
+def nrel_caps_path(develop_root: Path, tech: str, config: Mapping) -> Path:
+    """The NREL caps artifact for ``tech``, named exactly as the workflow names it.
+
+    Mirrors ``build_electricity.smk::nrel_exclusion_artifact`` for
+    ``kind='caps'``::
+
+        data/nrel_exclusion/derived/caps_{tech}_{access}{_cec}{_boem}.nc
+
+    with ``access = config['renewable_land_access']``, ``_cec`` when
+    ``apply_cec_basescreen`` and the tech is onwind or solar, ``_boem`` when
+    ``apply_boem_osw`` and the tech is an offwind.
+
+    An unset ``renewable_land_access`` RAISES. That is the atlite path, which
+    has no caps file at all, so the mechanism does not exist there and the
+    reconstruction must not hold — silently picking a default file would explain
+    rows with numbers from a run nobody made.
+    """
+    access = (config or {}).get("renewable_land_access")
+    if not access:
+        raise RuntimeError(
+            "renewable_land_access is unset: this run has no NREL caps artifact "
+            "(the atlite path), so the HF-24 mechanism does not apply",
+        )
+    tech = str(tech)
+    cec = "_cec" if (config.get("apply_cec_basescreen") and tech in ("onwind", "solar")) else ""
+    boem = "_boem" if (config.get("apply_boem_osw") and tech.startswith("offwind")) else ""
+    return Path(develop_root) / "data" / "nrel_exclusion" / "derived" / f"caps_{tech}_{access}{cec}{boem}.nc"
+
+
+def load_nrel_caps(path: Path) -> pd.Series:
+    """``substation id -> p_nom_max`` MW from a caps artifact (1.4-1.6 MB)."""
+    import xarray as xr
+
+    with xr.open_dataset(path) as ds:
+        if "p_nom_max" not in ds:
+            raise KeyError(f"{path} has no p_nom_max variable")
+        caps = ds["p_nom_max"].to_pandas()
+    caps.index = pd.Index([str(b) for b in caps.index])
+    return caps.astype(float)
+
+
+#: Columns of :func:`reconstruct_caps_drop`'s output.
+CAPS_DROP_COLUMNS: tuple[str, ...] = (
+    "caps_mw",
+    "covered_mw",
+    "dropped_mw",
+    "n_subs",
+    "n_subs_dropped",
+)
+
+
+def reconstruct_caps_drop(
+    caps_pnom: pd.Series,
+    busmap: pd.Series,
+    master_profiled_subs: set[str],
+    zone_by_cluster: pd.Series,
+    common_clusters: Sequence[str],
+) -> pd.DataFrame:
+    """Index zone -> caps_mw, covered_mw, dropped_mw, n_subs, n_subs_dropped.
+
+    ``caps_mw``    caps of every substation whose busmap cluster is in
+                   ``common_clusters``           (predicts DEVELOP)
+    ``covered_mw`` the part of that at substations in ``master_profiled_subs``
+                                                 (predicts MASTER)
+    ``dropped_mw`` ``caps_mw - covered_mw``      (predicts the DELTA)
+
+    Substations absent from ``busmap`` are excluded from BOTH terms, not just
+    from one: the caps file is rolled up against the national substation
+    tessellation, so in a footprint-scoped run most of its entries are outside
+    the model and belong in neither column. (On the USA leg that set is empty.)
+
+    Restricting to ``common_clusters`` mirrors ``metrics.common_cluster_subset``,
+    which the metric itself applies before either side is summed. A develop-only
+    cluster left in would inflate ``caps_mw`` against a develop column that never
+    contained it, and gate G2 would fail for a reason that is the harness's, not
+    the model's.
+
+    Ids are normalised once with :func:`canonical_sub_id`: caps keys are
+    ``'35827.0'``, busmap keys ``'35827'``, master profile labels ``'35827.0'``.
+    """
+    if caps_pnom is None or len(caps_pnom) == 0 or busmap is None or len(busmap) == 0:
+        return pd.DataFrame({c: pd.Series(dtype=float) for c in CAPS_DROP_COLUMNS}, index=pd.Index([], name="zone"))
+
+    cluster_of = pd.Series(
+        busmap.to_numpy(),
+        index=pd.Index([canonical_sub_id(s) for s in busmap.index], name="sub_id"),
+    )
+    cluster_of = cluster_of[~cluster_of.index.isna() & ~cluster_of.index.duplicated()]
+
+    df = pd.DataFrame(
+        {
+            "sub_id": [canonical_sub_id(b) for b in caps_pnom.index],
+            "caps_mw": pd.to_numeric(pd.Series(caps_pnom.to_numpy()), errors="coerce").fillna(0.0).to_numpy(),
+        },
+    )
+    df["cluster"] = df["sub_id"].map(cluster_of)
+    df = df[df["cluster"].notna()]
+    if common_clusters is not None:
+        keep = {str(c) for c in common_clusters}
+        df = df[df["cluster"].astype(str).isin(keep)]
+    if df.empty:
+        return pd.DataFrame({c: pd.Series(dtype=float) for c in CAPS_DROP_COLUMNS}, index=pd.Index([], name="zone"))
+
+    zone = normalize_bus_ids_series(df["cluster"].astype(str), zone_by_cluster)
+    df["zone"] = zone.fillna("<unmapped>").to_numpy()
+
+    covered = {s for s in (canonical_sub_id(v) for v in (master_profiled_subs or set())) if s is not None}
+    df["covered"] = df["sub_id"].isin(covered)
+    df["covered_mw"] = df["caps_mw"].where(df["covered"], 0.0)
+
+    grouped = df.groupby("zone", sort=True)
+    out = grouped.agg(caps_mw=("caps_mw", "sum"), covered_mw=("covered_mw", "sum"), n_subs=("sub_id", "nunique"))
+    dropped_subs = df[~df["covered"]].groupby("zone", sort=True)["sub_id"].nunique()
+    out["n_subs_dropped"] = dropped_subs.reindex(out.index).fillna(0).astype(int)
+    out["dropped_mw"] = out["caps_mw"] - out["covered_mw"]
+    out.index.name = "zone"
+    return out[list(CAPS_DROP_COLUMNS)]
+
+
+def normalize_bus_ids_series(labels: pd.Series, mapper: pd.Series) -> pd.Series:
+    """:func:`metrics.normalize_bus_ids` over a Series, keeping the caller's index.
+
+    ``normalize_bus_ids`` returns a Series indexed by the stringified LABELS,
+    which collapses duplicates — and cluster ids repeat once per substation
+    here. Mapping the unique labels and reindexing keeps one row per substation.
+    """
+    uniq = pd.Index(pd.unique(labels.astype(str)))
+    mapped = metrics.normalize_bus_ids(uniq, mapper)
+    return labels.astype(str).map(mapped)
+
+
+def _common_clusters(art, tech: str) -> list[str] | None:
+    """The cluster set both sides' profiles share, off ``art.profiles[tech]``.
+
+    ``plots.prepare_profiles`` rolls master's nodal profile onto develop's
+    cluster bus space and then drops the clusters only one side has; the master
+    object it caches is therefore already restricted to the common set, and its
+    ``bus`` index IS that set. Taking it from anywhere else would risk comparing
+    a reconstruction over one population against a table row over another.
+    """
+    prep = (getattr(art, "profiles", None) or {}).get(tech)
+    master = getattr(prep, "master", None)
+    if master is None:
+        return None
+    try:
+        return [str(b) for b in master.indexes["bus"]]
+    except (KeyError, AttributeError):
+        return None
+
+
+def hf24_nrel_caps_drop(art, frames) -> Reconstruction:
+    """HF-24: the NREL caps ``p_nom_max`` master drops with a zero-availability bus.
+
+    ``aggregate_godeeep_weighted.weighted_bus_aggregation`` gives a substation
+    whose summed GODEEEP land availability is zero a CF of ``NaN``, and
+    ``build_renewable_profiles`` then filters with ``ds["profile"].mean("time")
+    > min_p_max_pu``. ``NaN > 0`` is ``False``, so the whole bus leaves the
+    file — **taking its NREL caps ``p_nom_max`` with it, which was never zero.**
+    Develop sums the caps per ``s{simpl}`` cluster BEFORE that filter
+    (``remap_caps_to_cluster``), so the MW survives on a cluster whose CF is
+    defined.
+
+    Same shape as HF-26 — master drops, develop keeps, delta >= 0 — but the
+    inputs are three small files and the residual is exactly 0. ``fleet_mw``
+    here is the caps of every in-footprint substation of the common clusters
+    (gate G2, develop); ``profiled_mw`` is the part master kept (gate G1).
+    """
+    name = "hf24_nrel_caps_drop"
+    try:
+        from .compare import load_busmap
+
+        frames = frames or {}
+        develop_root = Path(art.develop_root)
+        master_root = Path(art.master_root)
+        prong = int(getattr(art, "prong", 2))
+        cfg = _harness_config()
+
+        busmap = load_busmap(develop_root)
+        if busmap is None or len(busmap) == 0:
+            return Reconstruction(
+                name=name,
+                frame=empty_recon_frame(),
+                error=f"no busmap_s{SIMPL2} under {develop_root}; the caps cannot be placed on clusters",
+            )
+        zone_by_cluster = getattr(art, "zone_develop", None)
+        if zone_by_cluster is None or len(zone_by_cluster) == 0:
+            return Reconstruction(name=name, frame=empty_recon_frame(), error="no develop cluster->zone map")
+        profiled = master_profiled_subs(master_root, prong)
+
+        rows: dict[tuple[str, str], ReconRow] = {}
+        techs = sorted(getattr(art, "profiles", None) or {})
+        if not techs:
+            return Reconstruction(
+                name=name,
+                frame=empty_recon_frame(),
+                error="art.profiles is empty; the common cluster set is only built by collect_metrics at prong 2",
+            )
+        for tech in techs:
+            metric = f"p_nom_max_by_zone_{tech}"
+            table = frames.get(metric)
+            if table is None or len(table) == 0:
+                continue
+            common = _common_clusters(art, tech)
+            if common is None:
+                continue
+            recon = reconstruct_caps_drop(
+                load_nrel_caps(nrel_caps_path(develop_root, tech, cfg)),
+                busmap,
+                profiled.get(tech, set()),
+                zone_by_cluster,
+                common,
+            )
+            tol = tables.tolerance_for(metric)
+            values = _carrier_values(table)  # the frame is keyed by zone alone
+            for zone in sorted(set(recon.index.astype(str)) | set(values)):
+                caps = _f(recon["caps_mw"].get(zone, 0.0))
+                covered = _f(recon["covered_mw"].get(zone, 0.0))
+                master, develop = values.get(zone, (0.0, 0.0))
+                row = _make_row(metric, zone, tech, caps, covered, master, develop, tol, key=zone)
+                rows[(metric, row.key)] = row
+        if not rows:
+            return Reconstruction(
+                name=name,
+                frame=empty_recon_frame(),
+                error="no p_nom_max_by_zone_* metric frames in this run",
+            )
+        return Reconstruction(name=name, frame=rows_frame(rows), rows=rows)
+    except Exception as exc:  # deliberately broad: failing closed is the whole point
+        return Reconstruction(name=name, frame=empty_recon_frame(), error=f"{type(exc).__name__}: {exc}")
+
+
+RECONSTRUCTIONS = {
+    "hf26_existing_renewable_drop": hf26_existing_renewable_drop,
+    "hf24_nrel_caps_drop": hf24_nrel_caps_drop,
+}
 
 
 class LazyRegistry(Mapping):

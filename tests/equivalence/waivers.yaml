@@ -293,51 +293,49 @@
     the column carries the master's legacy Breakthrough Pd weighting. Demand
     itself stays guarded by the UNWAIVED Load / Load_t.p_set comparisons; this
     waives only the presence of the column, not its content
-# DL-18 / HF-24 - master silently drops NREL caps capacity for substations with
-# zero GODEEEP availability or no intersecting CF cell; develop retains them.
-# Measured on the western leg (smoke-western-20260915-1141, 2026-09-15): 7
-# onwind buses / 546 MW and 4 solar buses / 2,566 MW, bus 37808 being the whole
-# of cluster p87's solar. Develop's potential is therefore HIGHER, which is the
-# sign of the fix (expect_sign: '+'), and the measured rows are +0.19 % to
-# +1.15 %, an order of magnitude inside max_abs_pct: 5. Scoped to western prong
-# 2 and to the four zone keys that actually move; the usa leg must be measured
-# before it is waived there.
-- interconnect: western
-  prong: 2
-  metric: p_nom_max_by_zone_onwind
-  key: p8
+# --- DL-18 / HF-24: the NREL caps p_nom_max master drops with the substation.
+#
+# The bound is COMPUTED per row by tests/equivalence/reconstructions.py
+# (hf24_nrel_caps_drop), not measured by hand. Master's build_renewable_profiles
+# filters on `ds["profile"].mean("time") > min_p_max_pu`, and a substation whose
+# summed GODEEEP land availability is zero has a NaN CF, so `NaN > 0` is False
+# and the whole bus leaves the file -- taking its NREL caps `p_nom_max` with it,
+# which was never zero. Develop sums the caps per s{simpl} cluster BEFORE that
+# filter (remap_caps_to_cluster), so the MW survives on a cluster whose CF is
+# defined. Per (zone, tech) the reconstruction rebuilds the caps of every
+# in-footprint substation of the common clusters (predicting develop) and the
+# part master kept (predicting master), and requires their difference to equal
+# develop - master within the row's own tolerance.
+#
+# This REPLACES four hand-measured `max_abs_pct: 5` rows scoped
+# `interconnect: western, prong: 2` (p_nom_max_by_zone_onwind p8/p9/p10 and
+# p_nom_max_by_zone_solar p8). They are deleted rather than kept beside the
+# reconstruction: keeping both would let the weaker percentage bound explain a
+# row exactly when the reconstruction refuses it. They also did not scale --
+# the whole-USA leg has 46 onwind + 4 solar rows over tolerance, and `p128 |
+# onwind` moves 126 -> 174 MW (+38 %) on one substation's 48 MW, which no
+# percentage bound written for western would have covered.
+#
+# Unscoped by interconnect on purpose: the reconstruction is the scope. Neither
+# entry names a `key`, so each covers every zone of its metric -- safe, because
+# a zone the reconstruction has no row for resolves to `lookup() is None` and
+# stays UNEXPLAINED.
+#
+# The HF-24 CELL waivers below (system_potential_mw, system_available_mw,
+# cluster_set) are untouched: they are compare.py findings, not table rows, and
+# this reconstruction has nothing to say about them.
+- metric: p_nom_max_by_zone_onwind
+  reconstruction: hf24_nrel_caps_drop
   ledger: DL-18
   hotfix: HF-24
   expect_sign: '+'
-  max_abs_pct: 5
-  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
-- interconnect: western
-  prong: 2
-  metric: p_nom_max_by_zone_onwind
-  key: p9
+  reason: master drops the NREL caps p_nom_max of substations with zero GODEEEP land availability; the dropped MW is reconstructed per zone and must equal develop - master
+- metric: p_nom_max_by_zone_solar
+  reconstruction: hf24_nrel_caps_drop
   ledger: DL-18
   hotfix: HF-24
   expect_sign: '+'
-  max_abs_pct: 5
-  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
-- interconnect: western
-  prong: 2
-  metric: p_nom_max_by_zone_onwind
-  key: p10
-  ledger: DL-18
-  hotfix: HF-24
-  expect_sign: '+'
-  max_abs_pct: 5
-  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
-- interconnect: western
-  prong: 2
-  metric: p_nom_max_by_zone_solar
-  key: p8
-  ledger: DL-18
-  hotfix: HF-24
-  expect_sign: '+'
-  max_abs_pct: 5
-  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
+  reason: as above, for solar
 # The system potential itself, sum(p_nom_max). The finding's detail carries
 # `develop`, `master` and `rel_pct`, so the bounds that read it are
 # `expect_sign` (the sign of develop - master) and `max_abs_pct` (|rel_pct|) —

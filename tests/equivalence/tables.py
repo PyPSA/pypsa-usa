@@ -955,7 +955,7 @@ RECONSTRUCTION_ROW_COLUMNS = (
 def reconstruction_frame(reconstructions) -> pd.DataFrame:
     """Every computed reconstruction's per-(zone, carrier) frame, concatenated.
 
-    This is ``tables/hf26_reconstruction.csv``: complete and uncapped, so the
+    This is ``tables/reconstructions.csv``: complete and uncapped, so the
     figure's top-25 cap and the markdown's row cap never hide a zone.
     """
     from . import reconstructions as recon_mod
@@ -983,14 +983,14 @@ def reconstructions_summary(reconstructions) -> list[dict]:
     out = []
     for name, recon in recon_mod.resolved(reconstructions).items():
         rows = getattr(recon, "rows", {}) or {}
-        residuals = [abs(float(r.residual_mw)) for r in rows.values() if np.isfinite(r.residual_mw)]
         out.append(
             {
                 "name": name,
                 "ok": bool(getattr(recon, "error", None) is None),
                 "error": getattr(recon, "error", None),
                 "n_rows": len(rows),
-                "max_abs_residual_mw": max(residuals) if residuals else None,
+                "max_abs_residual_mw": recon.max_abs_residual() if hasattr(recon, "max_abs_residual") else None,
+                "totals": recon.totals() if hasattr(recon, "totals") else {},
                 "national": recon.national() if hasattr(recon, "national") else {},
             },
         )
@@ -998,18 +998,27 @@ def reconstructions_summary(reconstructions) -> list[dict]:
 
 
 def _reconstruction_summary_row(name: str, recon) -> list[str]:
-    """One line of the Reconstructions summary table."""
-    nat = recon.national() if hasattr(recon, "national") else {}
+    """One line of the Reconstructions summary table.
+
+    Totals come from :meth:`reconstructions.Reconstruction.totals`, which sums
+    the ZONE rows. Summing the NATIONAL rows instead made the HF-24 line read
+    "0 MW" beside 50 explained rows, because its metric is already per tech and
+    has no national row at all.
+
+    The residual is printed to three decimals, not thousands-rounded: the whole
+    point of the column is to distinguish 0.000 from 0.118 from 100.
+    """
+    totals = recon.totals() if hasattr(recon, "totals") else {}
     rows = getattr(recon, "rows", {}) or {}
-    residuals = [abs(float(r.residual_mw)) for r in rows.values() if np.isfinite(r.residual_mw)]
+    worst = recon.max_abs_residual() if hasattr(recon, "max_abs_residual") else float("nan")
     error = getattr(recon, "error", None)
     return [
         _md_cell(name),
         str(len(rows)),
-        _mw(sum(v.get("fleet_mw", 0.0) for v in nat.values())),
-        _mw(sum(v.get("master_mw", 0.0) for v in nat.values())),
-        _mw(sum(v.get("dropped_mw", 0.0) for v in nat.values())),
-        _mw(max(residuals) if residuals else 0.0),
+        _mw(totals.get("fleet_mw", 0.0)),
+        _mw(totals.get("master_mw", 0.0)),
+        _mw(totals.get("dropped_mw", 0.0)),
+        "n/a" if not np.isfinite(worst) else f"{worst:,.3f} MW",
         _md_cell(f"ERROR: {error}") if error else "computed",
     ]
 
@@ -1025,7 +1034,7 @@ def reconstructions_markdown(table: pd.DataFrame, reconstructions, cap: int = MD
     The second table lists the non-equivalent comparison rows each
     reconstruction covers, with its prediction beside the observed delta. A
     reader who wants every zone, equivalent ones included, has
-    ``tables/hf26_reconstruction.csv``.
+    ``tables/reconstructions.csv``.
     """
     from . import reconstructions as recon_mod
 
@@ -1076,7 +1085,7 @@ def reconstructions_markdown(table: pd.DataFrame, reconstructions, cap: int = MD
     for row in detail[:cap]:
         lines.append("| " + " | ".join(row) + " |")
     if len(detail) > cap:
-        lines += ["", f"_{len(detail) - cap} more reconstruction rows in hf26_reconstruction.csv_"]
+        lines += ["", f"_{len(detail) - cap} more reconstruction rows in reconstructions.csv_"]
     return [*lines, ""]
 
 
@@ -1158,7 +1167,7 @@ def write_tables(
     rows, written from the same function so they cannot disagree.
 
     ``reconstructions`` does the same for the computed explanations:
-    ``hf26_reconstruction.csv`` (complete, every zone) and the
+    ``reconstructions.csv`` (complete, every zone) and the
     **Reconstructions** section of ``comparison.md`` (the non-equivalent rows).
     """
     tdir = Path(outdir) / "tables"
@@ -1178,7 +1187,7 @@ def write_tables(
         findings_frame(result).to_csv(fc, index=False)
         written.append(fc)
     if reconstructions is not None:
-        rc = tdir / "hf26_reconstruction.csv"
+        rc = tdir / "reconstructions.csv"
         reconstruction_frame(reconstructions).to_csv(rc, index=False)
         written.append(rc)
     if "comparison" in tables and tables["comparison"] is not None:
