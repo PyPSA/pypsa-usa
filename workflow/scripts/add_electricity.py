@@ -315,10 +315,74 @@ def match_nearest_bus(plants_subset, buses_subset):
     return plants_subset
 
 
-def match_plant_to_bus(n, plants):
+def _sub_id_strings(values: pd.Series) -> pd.Series:
+    """Substation ids as plain integer-strings ("35827", never "35827.0")."""
+    return values.astype(str).str.replace(r"\.0$", "", regex=True)
+
+
+def _match_plants_through_busmap(plants_matched, bus_locations, busmap):
+    """Match plants to SUBSTATIONS, then map the substation to its cluster bus.
+
+    This is the geometry master matches on. Master runs ``match_plant_to_bus``
+    against the nodal network (one bus per substation, ~4.2k in western), so a
+    plant lands on the substation nearest to it — median 1.0 km, and 100 % of
+    existing MW stays inside the plant's own ReEDS zone. After the
+    simplify-early refactor develop runs the same function against the
+    ``{simpl}`` CLUSTER CENTROIDS (20 in western), so the nearest point can be
+    a centroid in a neighbouring zone: median 37 km, and 6.1 % of existing MW
+    landed in the wrong ReEDS zone (33 western plants / 1,320 MW, e.g. Helms
+    PHS 1,053 MW moved p9 -> p10). With ``clusters: 134`` — one bus per zone —
+    that misassignment is permanent.
+
+    So: nearest substation first, ``busmap_s{simpl}`` second. ``distance_nearest``
+    keeps its meaning, the distance to the matched point, which is now the
+    substation rather than the cluster centroid.
+
+    The nearest-neighbour search stays Euclidean over RAW DEGREES (the existing
+    :func:`match_nearest_bus` code path), not haversine: equivalence with master
+    depends on reproducing master's metric exactly, degree distortion included.
+    """
+    subs = bus_locations.copy()
+    subs["sub_id"] = _sub_id_strings(subs["sub_id"])
+    subs = subs.dropna(subset=["x", "y"]).set_index("sub_id")
+
+    sub_to_cluster = busmap.assign(
+        sub_id=_sub_id_strings(busmap["sub_id"]),
+        cluster_bus=_sub_id_strings(busmap["cluster_bus"]),
+    ).set_index("sub_id")["cluster_bus"]
+    sub_to_cluster = sub_to_cluster[~sub_to_cluster.index.duplicated()]
+
+    plants_matched = match_nearest_bus(plants_matched, subs)
+    if plants_matched.empty or subs.empty:
+        return plants_matched
+
+    plants_matched["bus_assignment"] = plants_matched["bus_assignment"].map(sub_to_cluster)
+
+    unmapped = plants_matched["bus_assignment"].isnull()
+    if unmapped.any():
+        lost = plants_matched.loc[unmapped]
+        lost_mw = (
+            float(pd.to_numeric(lost["p_nom"], errors="coerce").fillna(0.0).sum()) if "p_nom" in lost.columns else 0.0
+        )
+        logger.warning(
+            f"Dropped {int(unmapped.sum())} of {len(plants_matched)} plants ({lost_mw:,.1f} MW): "
+            "their nearest substation has no row in busmap_s{simpl}.",
+        )
+        plants_matched = plants_matched[~unmapped]
+
+    return plants_matched
+
+
+def match_plant_to_bus(n, plants, bus_locations=None, busmap=None):
     """
     Matches each plant to it's corresponding bus in the network enfocing a
     match to the correct State.
+
+    ``bus_locations`` (``bus2sub.csv``: one row per raw bus, with ``sub_id``,
+    ``x`` and ``y``) and ``busmap`` (``busmap_s{simpl}.csv``: ``sub_id`` ->
+    ``cluster_bus``) switch on the substation-first match documented in
+    :func:`_match_plants_through_busmap`. When either is ``None`` the legacy
+    two-pass match against ``n.buses`` runs unchanged.
 
     Efficient matching taken from:
     https://stackoverflow.com/questions/58893719/find-nearest-point-in-other-dataframe-with-a-lot-of-data
@@ -326,6 +390,23 @@ def match_plant_to_bus(n, plants):
     plants_matched = plants.copy()
     plants_matched["bus_assignment"] = None
     plants_matched["distance_nearest"] = None
+
+    if "country" in plants_matched.columns and "reeds_zone" in n.buses.columns:
+        # The zone-constrained first pass below keys plants["country"] against
+        # buses["reeds_zone"]. Since the regions layers started carrying COUNTY
+        # codes ("p06029") while buses carry ReEDS ZONE codes ("p10"), the two
+        # vocabularies do not intersect and the pass matches nothing — every
+        # plant falls through to the unconstrained match. Say so out loud
+        # rather than letting a dead code path look like a live constraint.
+        if not set(plants_matched["country"].dropna()) & set(n.buses["reeds_zone"].dropna()):
+            logger.warning(
+                "Zone-constrained plant match is inert: no value of plants['country'] "
+                "appears in n.buses['reeds_zone'] (county codes vs ReEDS zone codes). "
+                "Every plant is placed by the unconstrained nearest-point match.",
+            )
+
+    if bus_locations is not None and busmap is not None:
+        return _match_plants_through_busmap(plants_matched, bus_locations, busmap)
 
     # Get a copy of buses and create a geometry column with GPS coordinates
     buses = n.buses.copy()
@@ -1847,7 +1928,17 @@ def main(snakemake):
         reeds_memberships,
         footprint_scoped=bool(include_filter),
     )
-    plants = match_plant_to_bus(n, plants)
+    # Match plants to SUBSTATIONS (bus2sub carries master's own bus set, every
+    # row, un-deduplicated) and map the result through busmap_s{simpl}, instead
+    # of matching to this network's {simpl} cluster CENTROIDS — see
+    # _match_plants_through_busmap for why the centroid match crosses ReEDS
+    # zone boundaries.
+    plants = match_plant_to_bus(
+        n,
+        plants,
+        bus_locations=pd.read_csv(snakemake.input.bus2sub),
+        busmap=pd.read_csv(snakemake.input.busmap_s, dtype=str),
+    )
 
     attach_egs(
         n,

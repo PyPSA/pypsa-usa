@@ -495,36 +495,47 @@
     fig5_mw_accounting.png
 
 - id: HF-27
-  commit: a437a4e
+  commit: f78d923
   pr: null
-  title: "plant -> bus assignment: master's zone-constrained first pass is inert (it compares p06023-style plant codes against p9-style bus reeds_zone), so every plant falls through to an unconstrained nearest-bus match that can cross a ReEDS zone boundary; develop assigns by cluster region"
-  confidence: medium
+  title: "plant -> bus assignment: a DEVELOP REGRESSION, now FIXED — after simplify-early develop matched plants to the {simpl} cluster CENTROIDS (median 37 km) instead of to substations (median 1.0 km, master's own bus set), putting 6.1 % of existing MW in the wrong ReEDS zone; develop now matches substations and maps through busmap_s{simpl}"
+  confidence: high
   ported: false
-  usa_noop: false
-  expect:
-    - p_nom_existing_by_zone_carrier/*
+  usa_noop: true
+  expect: []
   master: >-
-    the zone-constrained match keys `plants["country"]` (values like `p06023`)
-    against `buses.reeds_zone` (values like `p9`); the two vocabularies never
-    intersect, so the constraint matches nothing and every plant is placed by
-    the unconstrained nearest-bus fallback, which may sit in another zone
+    `match_plant_to_bus` runs on the NODAL network (4,248 western buses, one per
+    substation): the nearest point is the plant's own substation, median 1.0 km
+    away, and 100.00 % of existing MW lands in the ReEDS polygon the plant's
+    lat/lon actually falls in. The zone-constrained first pass is inert on BOTH
+    branches — it keys `plants["country"]` (county codes like `p06029`) against
+    `buses.reeds_zone` (`p10`) — but on master the unconstrained fallback is
+    already right
   develop: >-
-    plants are assigned to the cluster whose REGION contains them, so a plant
-    cannot leave the zone it stands in
+    the same function, but after simplify-early it saw only the 20 `{simpl}`
+    cluster centroids: median plant -> bus 37 km, 93.89 % of existing MW in the
+    right zone. FIXED on this branch: plants are matched against `bus2sub.csv`
+    (all rows — exactly master's bus set) and the matched substation is mapped
+    through `busmap_s{simpl}.csv`, reproducing master's zone for 841 of 841
+    western plants (100.00 % of MW)
   notes: >-
-    A relocation, not a creation: net zero system-wide, visible only per zone.
-    Western measurement (assembled elec_s20, 2026-09-15): 101.2 MW of onwind
-    moves p9 -> p8 and ~166.6 MW of solar leaves p11 (solar p11 master 189.4 ->
-    develop 73.3 MW, -61.3 %). The same mechanism moves conventional and storage
-    capacity between zones on the same run — PHS 1,053 MW p9 -> p10, geothermal
-    84.4 MW p10 -> p9, biomass 97.0 MW p9 -> p8, CCGT/OCGT/battery/oil tens of
-    MW each — all netting to zero by carrier. Those conventional rows are NOT
-    waived: they were not part of the signed-off measurement, and they are
-    reported so the zone reassignment is judged on its own evidence.
-    Confidence is medium, not high, because the inert first pass is read from
-    the code and the per-zone MW is measured, but the two have not been tied
-    together plant by plant. Deltas ledger DL-21. The commit named is the
-    harness-branch tip the diagnosis was made on, not a single isolated fix
-    commit.
-    figures: experiments/runs/eq-western-db47198d8592/diagnosis/fig6_by_reeds_zone.png,
-    fig5_mw_accounting.png
+    THE EARLIER TEXT OF THIS ROW WAS WRONG. It claimed a master defect and that
+    "develop assigns by cluster region"; develop does nothing of the kind — it
+    runs the identical code on a coarser bus set. Diagnosis (architect,
+    2026-09-15; figures below, scripts $SCRATCH/eq_zones/): on western 33 plants
+    / 1,320 MW landed in the wrong zone on develop and master was right for 32
+    of them (Helms PHS 1,053 MW p9 -> p10, geothermal 84.4 MW p10 -> p9, biomass
+    97.0 MW p9 -> p8, onwind 101.2 MW p9 -> p8, ~166.6 MW of solar out of p11,
+    and tens of MW each of CCGT/OCGT/battery/oil — all netting to zero by
+    carrier, a relocation rather than a creation). USA is worse by construction
+    (s300 over 134 zones, 2.24 clusters per zone), and `clusters: 134` — one bus
+    per zone — makes the misassignment permanent.
+    EXPECTED EFFECT AFTER THE FIX: NONE. The reconstruction leaves 0 of the 11
+    non-equivalent `p_nom_existing_by_zone_carrier` rows, so this row explains
+    nothing any more and is marked `usa_noop: true` for exactly that reason: if a
+    zone row still differs, HF-27 must NOT be accepted as the story. Every HF-27
+    waiver was removed from waivers.yaml with the fix. Deltas ledger DL-21. The
+    commit named is the branch point (`wip/hf26-waivers` tip) that the corrected
+    diagnosis was written against; the fix itself is the first commit of
+    `wip/plant-match` on top of it.
+    figures: experiments/runs/eq-western-db47198d8592/diagnosis/fig8..fig11*,
+    fig6_by_reeds_zone.png, fig5_mw_accounting.png

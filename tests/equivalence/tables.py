@@ -291,11 +291,13 @@ def _waiver_in_scope(waiver: dict, run: dict) -> bool:
 #:
 #: ``max_abs_delta_mw`` exists because ``max_abs_pct`` is unusable on a row
 #: whose master side is 0 — the appear-from-nothing case, where ``delta_pct`` is
-#: NaN and the percent bound therefore always reads as violated. Zone ``p8``
-#: carries 0 MW of existing onwind on master and 101 MW on develop (HF-27):
-#: there is a real, bounded, signed-off magnitude there, and it can only be
-#: stated in MW. It bounds ``|delta|``, so it is the honest bound whenever the
-#: denominator is not the quantity anyone measured.
+#: NaN and the percent bound therefore always reads as violated. The row it was
+#: written for was zone ``p8``, 0 MW of existing onwind on master against 101 MW
+#: on develop (HF-27): a real magnitude that could only be stated in MW. That
+#: particular row turned out to be a develop bug and was fixed rather than
+#: waived, so nothing ships with this bound today — it stays because the
+#: appear-from-nothing shape recurs, and because it bounds ``|delta|``, which is
+#: the honest bound whenever the denominator is not what anyone measured.
 WAIVER_BOUND_KEYS = ("expect_sign", "max_abs_pct", "max_abs_delta_mw")
 
 

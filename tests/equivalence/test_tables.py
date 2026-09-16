@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from tests.equivalence import compare, metrics, tables
+from tests.equivalence import compare, hotfixes, metrics, tables
 
 from .conftest import make_network
 
@@ -1122,22 +1122,37 @@ def test_max_abs_delta_mw_is_a_table_bound_the_ledger_test_can_see():
     assert "max_abs_delta_mw" not in compare.CELL_BOUND_KEYS
 
 
-def test_the_shipped_hf26_and_hf27_waivers_are_bounded():
-    """Every shipped HF-26/HF-27 table waiver states what it measured."""
+def test_the_shipped_hf26_waivers_are_bounded():
+    """Every shipped HF-26 table waiver states what it measured.
+
+    HF-27 used to contribute three more rows here (``p11 | solar``,
+    ``p8 | onwind``, ``p8 | solar``, the absolute-bound ones). They were removed
+    when the zone misassignment turned out to be a DEVELOP regression and was
+    fixed — see :func:`test_no_shipped_waiver_still_cites_hf27`. The expected
+    count is therefore 6, all of them percent-bounded and signed.
+    """
     rows = [w for w in _real_waivers() if w.get("hotfix") in ("HF-26", "HF-27") and w.get("metric")]
-    assert len(rows) == 9, f"expected the 9 shipped existing-capacity waivers, got {len(rows)}"
+    assert len(rows) == 6, f"expected the 6 shipped existing-capacity waivers, got {len(rows)}"
     for w in rows:
         assert w["interconnect"] == "western" and w["prong"] == 2, w
-        assert w["ledger"] in ("DL-20", "DL-21"), w
+        assert w["ledger"] == "DL-20", w
         bounds = [k for k in tables.WAIVER_BOUND_KEYS if k in w]
         assert bounds, f"unbounded waiver: {w}"
-        if "max_abs_pct" in w:
-            assert float(w["max_abs_pct"]) > 0, w
-            assert w["expect_sign"] in ("+", "-"), w
-        else:
-            # The p8 rows, where master is 0 or ~10 MW: absolute bound only.
-            assert w["key"].startswith("p8 |"), w
-            assert float(w["max_abs_delta_mw"]) == 200, w
+        assert float(w["max_abs_pct"]) > 0, w
+        assert w["expect_sign"] in ("+", "-"), w
+
+
+def test_no_shipped_waiver_still_cites_hf27():
+    """The fix removes the need for them; a leftover would sign off a real bug.
+
+    HF-27's per-zone deltas were develop matching plants to ``{simpl}`` cluster
+    centroids instead of to substations. ``add_electricity`` now matches
+    substations and maps through ``busmap_s{simpl}``, which reproduces master's
+    zone for 841 of 841 western plants, so those rows must come back
+    ``equivalent``. A waiver left behind would instead explain them away.
+    """
+    assert [w for w in _real_waivers() if w.get("hotfix") == "HF-26"], "HF-26 waivers vanished with HF-27's"
+    assert not [w for w in _real_waivers() if w.get("hotfix") == "HF-27"]
 
 
 def test_the_shipped_hf26_waiver_holds_at_the_measured_western_delta():
@@ -1155,7 +1170,16 @@ def test_the_shipped_hf26_waiver_holds_at_the_measured_western_delta():
     assert "bounds violated (sign)" in out.iloc[0]["hotfix"]
 
 
-def test_the_shipped_hf27_p8_waiver_holds_at_the_measured_western_delta():
+def test_the_western_p8_zone_row_is_no_longer_explained_by_hf27():
+    """The row HF-27 used to waive now has to come back equivalent.
+
+    0 -> 101.2 MW of onwind in p8 was develop matching those plants to a cluster
+    centroid in the next zone. With the substation-first match it should not
+    reappear at all; if it does, the shipped files must call it UNEXPLAINED
+    rather than hand it HF-27's old signature. Both halves of that are checked:
+    no waiver names the row, and HF-27 would be refused even if one did
+    (``usa_noop: true``).
+    """
     reg = tables.load_hotfixes()
     out = tables.comparison_table(
         _zone_carrier_frame(0.0, 101.2),
@@ -1164,19 +1188,11 @@ def test_the_shipped_hf27_p8_waiver_holds_at_the_measured_western_delta():
         interconnect="western",
         prong=2,
     )
-    assert out.iloc[0]["verdict"] == "explained"
-    assert out.iloc[0]["hotfix"] == "HF-27"
-
-    # 5 GW appearing in p8 is not the 101 MW anyone signed off.
-    out = tables.comparison_table(
-        _zone_carrier_frame(0.0, 5_000.0),
-        reg,
-        _real_waivers(),
-        interconnect="western",
-        prong=2,
-    )
     assert out.iloc[0]["verdict"] == "UNEXPLAINED"
-    assert "bounds violated (magnitude)" in out.iloc[0]["hotfix"]
+    assert out.iloc[0]["hotfix"] == ""
+
+    ok, reason = hotfixes.explains("HF-27", reg)
+    assert not ok and "no-op" in reason, reason
 
 
 def test_a_zone_carrier_key_does_not_break_the_markdown_row():
