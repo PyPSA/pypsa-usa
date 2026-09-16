@@ -623,3 +623,114 @@ def test_prong_1_passes_both_sides_through_unaggregated(tmp_path):
     assert prep.rolled_up is False
     assert prep.master is master and prep.develop is develop
     assert art.profiles == {}
+
+
+# ---------------------------------------------------------------------------
+# Existing capacity at the assembled stage (HF-26 / HF-27).
+#
+# `EQ_UNTIL=assembled` stops the run before cluster_network, so there is no
+# clustered network and, until these metrics fell back to the assembled pair,
+# no existing-capacity comparison at all: the western leg's 3.5 GW onwind
+# difference was not a row in the table, it was nothing.
+# ---------------------------------------------------------------------------
+
+
+def _assembled_only(master, develop) -> plots.Artifacts:
+    return plots.Artifacts(
+        prong=2,
+        develop_root=Path("/nonexistent/dev"),
+        master_root=Path("/nonexistent/mas"),
+        assembled_master=master,
+        assembled_develop=develop,
+    )
+
+
+def test_existing_capacity_falls_back_to_the_assembled_networks():
+    art = _assembled_only(make_network(), make_network(scale=2.0))
+    missing: list[dict] = []
+    frames = plots.collect_metrics(art, missing)
+
+    assert missing == []
+    assert "capacity_existing_by_carrier" in frames
+    assert "p_nom_existing_by_zone_carrier" in frames
+    # No clustered network, so the demand metric stays absent rather than
+    # being computed off a different stage.
+    assert "demand_by_zone" not in frames
+
+    solar = frames["capacity_existing_by_carrier"].loc["solar"]
+    assert solar["master"] == pytest.approx(100.0)
+    assert solar["develop"] == pytest.approx(200.0)
+    assert solar["delta_pct"] == pytest.approx(100.0)
+
+
+def test_the_clustered_network_still_wins_when_both_stages_are_loaded():
+    """A full run must keep comparing existing capacity at the clustered stage.
+
+    Existing capacity is conserved by clustering, so either stage answers the
+    question — but silently swapping which one a shipped number comes from is
+    exactly the kind of change that makes two runs incomparable.
+    """
+    art = plots.Artifacts(
+        prong=2,
+        develop_root=Path("/nonexistent/dev"),
+        master_root=Path("/nonexistent/mas"),
+        n_master=make_network(),
+        n_develop=make_network(scale=3.0),
+        assembled_master=make_network(),
+        assembled_develop=make_network(scale=2.0),
+    )
+    frames = plots.collect_metrics(art, [])
+    solar = frames["capacity_existing_by_carrier"].loc["solar"]
+    assert solar["develop"] == pytest.approx(300.0), "the clustered pair should have been used"
+
+
+def test_no_assembled_and_no_clustered_network_means_no_capacity_rows():
+    """Absent artifacts are absent, not MISSING: a profile-only run is legitimate."""
+    art = plots.Artifacts(
+        prong=2,
+        develop_root=Path("/nonexistent/dev"),
+        master_root=Path("/nonexistent/mas"),
+    )
+    missing: list[dict] = []
+    frames = plots.collect_metrics(art, missing)
+    assert "capacity_existing_by_carrier" not in frames
+    assert missing == []
+
+
+def test_a_broken_zone_map_on_the_assembled_pair_is_recorded_not_skipped():
+    """The geographic-assignment criterion must not vanish at the assembled stage either."""
+    master, develop = make_network(), make_network()
+    for n in (master, develop):
+        n.buses.drop(columns=["reeds_zone"], inplace=True)
+    missing: list[dict] = []
+    frames = plots.collect_metrics(_assembled_only(master, develop), missing)
+    assert "p_nom_existing_by_zone_carrier" not in frames
+    assert any(e["metric"] == "p_nom_existing_by_zone_carrier" for e in missing)
+
+
+def test_load_artifacts_reads_the_assembled_pair(tmp_path, monkeypatch):
+    """``load_artifacts`` pairs develop's assembled pkl with master's .nc."""
+    from tests.equivalence import paths
+
+    dev_root, mas_root = tmp_path / "dev", tmp_path / "mas"
+    dp = dev_root / paths.assembled_target(2)
+    mp = mas_root / paths.baseline_assembled_target(2)
+    for p in (dp, mp):
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"")
+
+    loaded: list[Path] = []
+
+    def fake_load_network(path):
+        loaded.append(Path(path))
+        return make_network()
+
+    monkeypatch.setattr("tests.equivalence.compare.load_network", fake_load_network)
+    monkeypatch.setattr(plots, "_zone_maps", lambda root: (pd.Series(dtype=object), pd.Series(dtype=object), None))
+    monkeypatch.setattr("tests.equivalence.compare.load_busmap", lambda root, *a, **k: None)
+
+    art = plots.load_artifacts(2, dev_root, mas_root)
+    assert art.assembled_develop is not None
+    assert art.assembled_master is not None
+    assert set(loaded) == {dp, mp}
+    assert dp.suffix == ".pkl" and mp.suffix == ".nc"

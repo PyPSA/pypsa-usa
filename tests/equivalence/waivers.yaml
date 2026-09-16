@@ -27,6 +27,11 @@
 #   TABLE waivers (checked by tables._bounds_violation, against the row's delta)
 #     expect_sign        '+' or '-', the sign of (develop - master).
 #     max_abs_pct        upper bound on |delta %|.
+#     max_abs_delta_mw   upper bound on |delta| in the metric's own unit. Use it
+#                        instead of max_abs_pct when master's side of the row is
+#                        0 (or so small the percentage is noise): |delta %| is
+#                        then undefined and max_abs_pct always fires, while the
+#                        MW that was actually measured is still a real bound.
 #
 #   CELL waivers (checked by compare._cell_bounds_violation, against the
 #   finding's `detail`; for system_available_mw-style findings)
@@ -443,3 +448,105 @@
   max_total_pct: 0.5
   max_mean_rel_pct: 1.5
   reason: HF-24's retained solar capacity (2,566 MW) raises develop's available power in every daylight hour; annual +0.14 %, mean hourly 0.98 %
+# --- HF-26 / HF-27: existing capacity at the assembled stage (western prong 2)
+#
+# Two different phenomena, measured on the assembled networks of
+# western-p2-3h-20260915-1449 (develop elec_s20_l_pp.pkl vs master elec_s20.nc):
+#
+#   HF-26 (DL-20) CREATES capacity on develop. Master's nodal
+#     attach_renewable_capacities_to_atlite drops every existing renewable plant
+#     at a substation its profile file does not cover; develop, running the same
+#     function at cluster granularity, keeps them. Always positive, and bounded
+#     just above the measured size: onwind +111.60 % system / +121.63 % p10 /
+#     +99.71 % p9, solar +16.27 % system / +18.85 % p10 / +12.75 % p9.
+#
+#   HF-27 (DL-21) MOVES capacity between zones and nets to zero system-wide, so
+#     it is waived per zone only and never on the by-carrier totals.
+#
+# The `p8` rows take `max_abs_delta_mw` instead of `max_abs_pct`: master carries
+# 0.0 MW of onwind and 10.1 MW of solar there, so |delta %| is undefined or
+# meaningless as a bound while |delta| (101.2 MW and 3.0 MW) is exactly the
+# quantity that was signed off. 200 MW is the cap; `max_abs_pct` on those rows
+# would read as a limit and always fire (tables._bounds_violation refuses a
+# non-finite delta %). No `expect_sign` on them either: p8 GAINS onwind from
+# HF-27 and p8 solar also comes out 3 MW up, so a sign claim would be a claim
+# the measurement does not make.
+- interconnect: western
+  prong: 2
+  metric: capacity_existing_by_carrier
+  key: onwind
+  ledger: DL-20
+  hotfix: HF-26
+  expect_sign: '+'
+  max_abs_pct: 120
+  reason: master drops existing onwind plants at substations with no profile generator (3,097.6 vs 6,554.5 MW, +111.60 %); develop attaches them at cluster granularity (HF-26)
+- interconnect: western
+  prong: 2
+  metric: capacity_existing_by_carrier
+  key: solar
+  ledger: DL-20
+  hotfix: HF-26
+  expect_sign: '+'
+  max_abs_pct: 20
+  reason: master drops existing solar plants at substations with no profile generator (26,822.8 vs 31,188.0 MW, +16.27 %); develop attaches them at cluster granularity (HF-26)
+- interconnect: western
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p10 | onwind
+  ledger: DL-20
+  hotfix: HF-26
+  expect_sign: '+'
+  max_abs_pct: 130
+  reason: HF-26's dropped onwind plants, by zone — p10 2,100.4 vs 4,655.2 MW (+121.63 %)
+- interconnect: western
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p9 | onwind
+  ledger: DL-20
+  hotfix: HF-26
+  expect_sign: '+'
+  max_abs_pct: 130
+  reason: HF-26's dropped onwind plants, by zone — p9 803.2 vs 1,604.1 MW (+99.71 %)
+- interconnect: western
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p10 | solar
+  ledger: DL-20
+  hotfix: HF-26
+  expect_sign: '+'
+  max_abs_pct: 20
+  reason: HF-26's dropped solar plants, by zone — p10 17,770.9 vs 21,120.9 MW (+18.85 %)
+- interconnect: western
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p9 | solar
+  ledger: DL-20
+  hotfix: HF-26
+  expect_sign: '+'
+  max_abs_pct: 20
+  reason: HF-26's dropped solar plants, by zone — p9 8,852.4 vs 9,980.7 MW (+12.75 %)
+- interconnect: western
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p11 | solar
+  ledger: DL-21
+  hotfix: HF-27
+  expect_sign: '-'
+  max_abs_pct: 65
+  reason: master's inert zone-constrained plant match lets ~166.6 MW of solar be placed outside p11 by nearest bus; develop assigns by cluster region — 189.4 vs 73.3 MW (-61.30 %) (HF-27)
+- interconnect: western
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p8 | onwind
+  ledger: DL-21
+  hotfix: HF-27
+  max_abs_delta_mw: 200
+  reason: 101.2 MW of onwind moves p9 -> p8 under develop's region-based assignment; master carries 0.0 MW in p8, so the bound is absolute (HF-27)
+- interconnect: western
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p8 | solar
+  ledger: DL-21
+  hotfix: HF-27
+  max_abs_delta_mw: 200
+  reason: p8 solar 10.1 vs 13.1 MW (+3.0 MW) under develop's region-based assignment; master's p8 base is ~10 MW, so the bound is absolute (HF-27)

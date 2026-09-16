@@ -72,7 +72,15 @@ import xarray as xr
 from matplotlib.ticker import MaxNLocator
 
 from . import metrics
-from .paths import EQ, INTERCONNECT, REPO, SIMPL2, prong_pairs
+from .paths import (
+    EQ,
+    INTERCONNECT,
+    REPO,
+    SIMPL2,
+    assembled_target,
+    baseline_assembled_target,
+    prong_pairs,
+)
 
 DPI = 150
 
@@ -499,6 +507,16 @@ class Artifacts:
     n_develop: object | None = None
     solved_master: object | None = None
     solved_develop: object | None = None
+    #: The ASSEMBLED networks — develop's ``elec_s{simpl}_l_pp.pkl`` (dill) and
+    #: master's ``elec_s{simpl}.nc``. They are the earliest stage at which the
+    #: existing fleet is attached, so they are where existing capacity is
+    #: compared when the run stops before ``cluster_network``
+    #: (``EQ_UNTIL=assembled``) and no clustered network exists. They are NOT
+    #: compared cell by cell: at prong 2 the two sides' simpl-stage kmeans
+    #: differ by design, so only aggregate, clustering-invariant sums are taken
+    #: from them (total MW by carrier, and MW by reeds_zone x carrier).
+    assembled_master: object | None = None
+    assembled_develop: object | None = None
     zone_master: pd.Series | None = None
     zone_develop: pd.Series | None = None
     zones: object | None = None
@@ -565,6 +583,17 @@ def load_artifacts(prong: int, develop_root: Path, master_root: Path) -> Artifac
             art.solved_develop, art.solved_master = load_network(dp), load_network(mp)
         elif pair.stage == "clustered_network":
             art.n_develop, art.n_master = load_network(dp), load_network(mp)
+    ad = art.develop_root / assembled_target(prong)
+    am = art.master_root / baseline_assembled_target(prong)
+    if ad.exists() and am.exists():
+        # The assembled pair is not in prong_pairs at prong 2 (the two sides'
+        # simpl-stage kmeans differ, so a cell-by-cell comparison is
+        # meaningless), but the existing fleet it carries is a sum, and a sum
+        # over a different partition of the same buses is the same number.
+        # Without this, `EQ_UNTIL=assembled` produced no existing-capacity
+        # comparison at all and a 3.5 GW onwind difference (HF-26) was invisible
+        # to the table.
+        art.assembled_develop, art.assembled_master = load_network(ad), load_network(am)
     art.zone_develop, art.zone_master, art.zones = _zone_maps(art.develop_root)
     if prong == 2:
         from .compare import load_busmap
@@ -672,21 +701,28 @@ def collect_metrics(art: Artifacts, missing: list[dict] | None = None) -> dict[s
     miss = missing if missing is not None else []
     pre = (art.n_master, art.n_develop)
     solved = (art.solved_master, art.solved_develop)
-    if all(x is not None for x in pre):
+    # Existing capacity is attached at the assembled stage and is conserved by
+    # clustering, so either stage answers the question. The clustered networks
+    # are preferred when they exist (unchanged behaviour for a full run); the
+    # assembled ones are what an `EQ_UNTIL=assembled` run has, and without them
+    # the geographic-assignment criterion is simply absent from the table.
+    existing = pre if all(x is not None for x in pre) else (art.assembled_master, art.assembled_develop)
+    if all(x is not None for x in existing):
         out["capacity_existing_by_carrier"] = _safe(
             "capacity_existing_by_carrier",
             miss,
             metrics.capacity_by_carrier,
-            *pre,
+            *existing,
             attr="p_nom",
         )
         out["p_nom_existing_by_zone_carrier"] = _safe(
             "p_nom_existing_by_zone_carrier",
             miss,
             metrics.capacity_by_zone_carrier,
-            *pre,
+            *existing,
             attr="p_nom",
         )
+    if all(x is not None for x in pre):
         out["demand_by_zone"] = _safe("demand_by_zone", miss, metrics.demand_by_zone, *pre)
     if all(x is not None for x in solved):
         out["objective"] = _safe("objective", miss, metrics.objective_row, *solved)

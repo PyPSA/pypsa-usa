@@ -448,3 +448,83 @@
     owed and belongs in the project backlog. Nothing is waived against this id, because
     there is as yet no finding to waive. The commit named is the harness-branch
     tip the diagnosis was made on, not an isolated fix commit.
+
+- id: HF-26
+  commit: a437a4e
+  pr: null
+  title: "attach_renewable_capacities_to_atlite runs at CLUSTER granularity on develop, so existing renewable plants at substations with no profile generator keep their MW; on master the same function runs nodally and drops them"
+  confidence: high
+  ported: false
+  usa_noop: false
+  expect:
+    - capacity_existing_by_carrier/*
+    - p_nom_existing_by_zone_carrier/*
+    - objective
+    - capacity_opt_by_carrier/*
+    - dispatch_by_carrier/*
+  master: >-
+    the assembled network is nodal, so `mapped_values =
+    generators_tech.sub_assignment.map(caps_per_bus).dropna()` in
+    workflow/scripts/add_electricity.py can only land a plant's MW on a
+    substation that carries a profile-derived generator of that carrier; every
+    plant at a substation the profile file does not cover is dropped, which
+    master's own log prints as "N GW of <tech> plants that are not in the
+    network. See git issue #16"
+  develop: >-
+    simplify-early puts the same function on the s{simpl} CLUSTER bus space
+    before the fleet is attached, and a cluster carries a profile generator when
+    ANY of its substations does, so the plants master drops are attached to
+    their cluster and nothing is lost
+  notes: >-
+    The function is IDENTICAL on both branches (workflow/scripts/add_electricity.py
+    ::attach_renewable_capacities_to_atlite); what differs is the bus space it
+    runs on. Master's western profile files cover 544 of 1,972 onwind and 808 of
+    1,972 solar substations, so most of the fleet has nowhere to land.
+    Western measurement (assembled elec_s20, 2026-09-15): onwind master 3,097.6
+    vs develop 6,554.5 MW (-3,456.9 MW, 52.7 % of develop's total, across 32 of
+    61 substations); solar master 26,822.8 vs develop 31,188.0 MW (-4,365.2 MW,
+    14.0 %, 190 of 445). By ReEDS zone (develop - master): onwind p10 +121.6 %,
+    p9 +99.7 %, p8 0 -> 101.2 MW; solar p10 +18.9 %, p9 +12.7 %.
+    Same mechanism as deltas-ledger DL-9. Expected downstream effect: develop
+    starts with more existing renewable capacity, so LOWER objective, LOWER
+    extendable solar/onwind p_nom_opt, and more renewable / less gas dispatch.
+    Deltas ledger DL-20. The commit named is the harness-branch tip the
+    diagnosis was made on, not a single isolated fix commit; the prose home is
+    memory/plans/hotfix-ledger.md in the project brain.
+    figures: experiments/runs/eq-western-db47198d8592/diagnosis/fig6_by_reeds_zone.png,
+    fig5_mw_accounting.png
+
+- id: HF-27
+  commit: a437a4e
+  pr: null
+  title: "plant -> bus assignment: master's zone-constrained first pass is inert (it compares p06023-style plant codes against p9-style bus reeds_zone), so every plant falls through to an unconstrained nearest-bus match that can cross a ReEDS zone boundary; develop assigns by cluster region"
+  confidence: medium
+  ported: false
+  usa_noop: false
+  expect:
+    - p_nom_existing_by_zone_carrier/*
+  master: >-
+    the zone-constrained match keys `plants["country"]` (values like `p06023`)
+    against `buses.reeds_zone` (values like `p9`); the two vocabularies never
+    intersect, so the constraint matches nothing and every plant is placed by
+    the unconstrained nearest-bus fallback, which may sit in another zone
+  develop: >-
+    plants are assigned to the cluster whose REGION contains them, so a plant
+    cannot leave the zone it stands in
+  notes: >-
+    A relocation, not a creation: net zero system-wide, visible only per zone.
+    Western measurement (assembled elec_s20, 2026-09-15): 101.2 MW of onwind
+    moves p9 -> p8 and ~166.6 MW of solar leaves p11 (solar p11 master 189.4 ->
+    develop 73.3 MW, -61.3 %). The same mechanism moves conventional and storage
+    capacity between zones on the same run — PHS 1,053 MW p9 -> p10, geothermal
+    84.4 MW p10 -> p9, biomass 97.0 MW p9 -> p8, CCGT/OCGT/battery/oil tens of
+    MW each — all netting to zero by carrier. Those conventional rows are NOT
+    waived: they were not part of the signed-off measurement, and they are
+    reported so the zone reassignment is judged on its own evidence.
+    Confidence is medium, not high, because the inert first pass is read from
+    the code and the per-zone MW is measured, but the two have not been tied
+    together plant by plant. Deltas ledger DL-21. The commit named is the
+    harness-branch tip the diagnosis was made on, not a single isolated fix
+    commit.
+    figures: experiments/runs/eq-western-db47198d8592/diagnosis/fig6_by_reeds_zone.png,
+    fig5_mw_accounting.png

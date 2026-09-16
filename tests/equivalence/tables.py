@@ -285,19 +285,31 @@ def _waiver_in_scope(waiver: dict, run: dict) -> bool:
 #: The two bounds say what the waiver was measured on, so a row that walks out
 #: of that range comes back as UNEXPLAINED instead of inheriting the signature.
 #:
-#: ``expect_sign``  '+' or '-': the sign of ``develop - master``.
-#: ``max_abs_pct``  upper bound on ``|delta %|``.
-WAIVER_BOUND_KEYS = ("expect_sign", "max_abs_pct")
+#: ``expect_sign``      '+' or '-': the sign of ``develop - master``.
+#: ``max_abs_pct``      upper bound on ``|delta %|``.
+#: ``max_abs_delta_mw`` upper bound on ``|delta|`` in the metric's own unit.
+#:
+#: ``max_abs_delta_mw`` exists because ``max_abs_pct`` is unusable on a row
+#: whose master side is 0 — the appear-from-nothing case, where ``delta_pct`` is
+#: NaN and the percent bound therefore always reads as violated. Zone ``p8``
+#: carries 0 MW of existing onwind on master and 101 MW on develop (HF-27):
+#: there is a real, bounded, signed-off magnitude there, and it can only be
+#: stated in MW. It bounds ``|delta|``, so it is the honest bound whenever the
+#: denominator is not the quantity anyone measured.
+WAIVER_BOUND_KEYS = ("expect_sign", "max_abs_pct", "max_abs_delta_mw")
 
 
 def _bounds_violation(waiver: dict, delta: float, pct: float) -> str | None:
     """Which bound this waiver puts on the row is broken, or ``None``.
 
-    Returns ``'sign'`` or ``'magnitude'``; a waiver carrying neither bound can
+    Returns ``'sign'`` or ``'magnitude'``; a waiver carrying no bound at all can
     never violate one. An undefined ``delta_pct`` (master is 0, develop is not —
     the appear-from-nothing case) counts as a magnitude violation whenever
     ``max_abs_pct`` is set: the bound cannot be shown to hold, and a waiver is a
-    claim that has to be checkable.
+    claim that has to be checkable. ``max_abs_delta_mw`` is the bound to reach
+    for on exactly those rows, since ``|delta|`` stays measurable when the
+    percentage does not; a non-finite ``delta`` violates it for the same reason.
+    Both magnitude bounds are checked when both are given.
     """
     want = waiver.get("expect_sign")
     if want in ("+", "-"):
@@ -311,6 +323,14 @@ def _bounds_violation(waiver: dict, delta: float, pct: float) -> str | None:
         except (TypeError, ValueError):
             return "magnitude"
         if not np.isfinite(pct) or abs(pct) > cap:
+            return "magnitude"
+    cap_abs = waiver.get("max_abs_delta_mw")
+    if cap_abs is not None:
+        try:
+            cap_abs = float(cap_abs)
+        except (TypeError, ValueError):
+            return "magnitude"
+        if not np.isfinite(delta) or abs(delta) > cap_abs:
             return "magnitude"
     return None
 
@@ -849,10 +869,15 @@ def to_markdown(table: pd.DataFrame, cap: int = MD_ROW_CAP, result: object = Non
         "|---|---|---:|---:|---:|---:|---:|---:|---|---|",
     ]
     for _, r in shown.iterrows():
+        # _md_cell on the text columns: a (zone, carrier) key flattens to
+        # "p8 | oil", and an unescaped pipe there ENDS THE CELL — the row then
+        # renders with every number one column to the right of its heading, so
+        # 15 MW of oil reads as a tolerance. The hot-fix cell can carry a
+        # rejection message with punctuation for the same reason.
         head.append(
-            f"| {r['metric']} | {r['key']} | {_fmt(r['master'])} | {_fmt(r['develop'])} | "
+            f"| {_md_cell(r['metric'])} | {_md_cell(r['key'])} | {_fmt(r['master'])} | {_fmt(r['develop'])} | "
             f"{_fmt(r['delta'])} | {_fmt(r['delta_pct'])} | {_fmt(r['tolerance_pct'])} | "
-            f"{_fmt(r['tolerance_abs'])} | {r['verdict']} | {r['hotfix'] or '-'} |",
+            f"{_fmt(r['tolerance_abs'])} | {_md_cell(r['verdict'])} | {_md_cell(r['hotfix'] or '-')} |",
         )
     if len(table) > cap:
         head += ["", f"_{len(table) - cap} more rows in comparison.csv_"]

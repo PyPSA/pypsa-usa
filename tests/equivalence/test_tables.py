@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import numpy as np
@@ -1047,3 +1048,150 @@ def test_the_shipped_hf24_waiver_refuses_a_sign_flip():
     )
     assert flipped.iloc[0]["verdict"] == "UNEXPLAINED"
     assert "bounds violated (sign)" in flipped.iloc[0]["hotfix"]
+
+
+# ---------------------------------------------------------------------------
+# max_abs_delta_mw: the bound for a row whose master side is 0.
+# ---------------------------------------------------------------------------
+
+
+def _zone_carrier_frame(master: float, develop: float, key: str = "p8 | onwind") -> dict[str, pd.DataFrame]:
+    return {"p_nom_existing_by_zone_carrier": _metric_frame({key: master}, {key: develop})}
+
+
+def _abs_bounded_waiver(**extra) -> list[dict]:
+    return [
+        {
+            "metric": "p_nom_existing_by_zone_carrier",
+            "key": "p8 | onwind",
+            "ledger": "DL-21",
+            "hotfix": "HF-27",
+            "max_abs_delta_mw": 200,
+            **extra,
+        },
+    ]
+
+
+def test_max_abs_delta_mw_explains_an_appear_from_nothing_row():
+    """0 -> 101 MW: |delta %| is undefined, but 101 MW is inside the bound.
+
+    This is the row ``max_abs_pct`` cannot express. Before the absolute bound,
+    HF-27's p8 onwind delta could only be waived unbounded (a blank cheque) or
+    not at all.
+    """
+    reg = {"HF-27": {"id": "HF-27", "ported": False, "usa_noop": False}}
+    out = tables.comparison_table(_zone_carrier_frame(0.0, 101.2), reg, _abs_bounded_waiver())
+    assert np.isnan(out.iloc[0]["delta_pct"])
+    assert out.iloc[0]["verdict"] == "explained"
+    assert out.iloc[0]["hotfix"] == "HF-27"
+
+
+def test_max_abs_delta_mw_refuses_an_out_of_scale_delta():
+    reg = {"HF-27": {"id": "HF-27", "ported": False, "usa_noop": False}}
+    out = tables.comparison_table(_zone_carrier_frame(0.0, 5_000.0), reg, _abs_bounded_waiver())
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert out.iloc[0]["hotfix"] == "waiver HF-27 bounds violated (magnitude)"
+
+
+def test_max_abs_delta_mw_bounds_the_magnitude_in_both_directions():
+    """It bounds ``|delta|``; the direction is ``expect_sign``'s job, if given."""
+    reg = {"HF-27": {"id": "HF-27", "ported": False, "usa_noop": False}}
+    assert (
+        tables.comparison_table(_zone_carrier_frame(500.0, 400.0), reg, _abs_bounded_waiver()).iloc[0]["verdict"]
+        == "explained"
+    )
+    signed = _abs_bounded_waiver(expect_sign="+")
+    out = tables.comparison_table(_zone_carrier_frame(500.0, 400.0), reg, signed)
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert out.iloc[0]["hotfix"] == "waiver HF-27 bounds violated (sign)"
+
+
+def test_both_magnitude_bounds_are_checked_when_both_are_given():
+    """A percent bound that holds does not excuse an MW bound that does not."""
+    reg = {"HF-27": {"id": "HF-27", "ported": False, "usa_noop": False}}
+    both = _abs_bounded_waiver(max_abs_pct=100)
+    # +50 % is inside max_abs_pct, but +5,000 MW is ten times max_abs_delta_mw.
+    out = tables.comparison_table(_zone_carrier_frame(10_000.0, 15_000.0), reg, both)
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert out.iloc[0]["hotfix"] == "waiver HF-27 bounds violated (magnitude)"
+
+
+def test_max_abs_delta_mw_is_a_table_bound_the_ledger_test_can_see():
+    """The bound registry is what makes the key legal in waivers.yaml."""
+    assert "max_abs_delta_mw" in tables.WAIVER_BOUND_KEYS
+    assert "max_abs_delta_mw" not in compare.CELL_BOUND_KEYS
+
+
+def test_the_shipped_hf26_and_hf27_waivers_are_bounded():
+    """Every shipped HF-26/HF-27 table waiver states what it measured."""
+    rows = [w for w in _real_waivers() if w.get("hotfix") in ("HF-26", "HF-27") and w.get("metric")]
+    assert len(rows) == 9, f"expected the 9 shipped existing-capacity waivers, got {len(rows)}"
+    for w in rows:
+        assert w["interconnect"] == "western" and w["prong"] == 2, w
+        assert w["ledger"] in ("DL-20", "DL-21"), w
+        bounds = [k for k in tables.WAIVER_BOUND_KEYS if k in w]
+        assert bounds, f"unbounded waiver: {w}"
+        if "max_abs_pct" in w:
+            assert float(w["max_abs_pct"]) > 0, w
+            assert w["expect_sign"] in ("+", "-"), w
+        else:
+            # The p8 rows, where master is 0 or ~10 MW: absolute bound only.
+            assert w["key"].startswith("p8 |"), w
+            assert float(w["max_abs_delta_mw"]) == 200, w
+
+
+def test_the_shipped_hf26_waiver_holds_at_the_measured_western_delta():
+    """End to end on the real files: onwind 3,097.6 -> 6,554.5 MW is explained."""
+    reg = tables.load_hotfixes()
+    frames = {"capacity_existing_by_carrier": _metric_frame({"onwind": 3097.6}, {"onwind": 6554.5})}
+    out = tables.comparison_table(frames, reg, _real_waivers(), interconnect="western", prong=2)
+    assert out.iloc[0]["verdict"] == "explained"
+    assert out.iloc[0]["hotfix"] == "HF-26"
+
+    # HF-26 only ever ADDS capacity on develop; a loss is a different animal.
+    flipped = {"capacity_existing_by_carrier": _metric_frame({"onwind": 6554.5}, {"onwind": 3097.6})}
+    out = tables.comparison_table(flipped, reg, _real_waivers(), interconnect="western", prong=2)
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert "bounds violated (sign)" in out.iloc[0]["hotfix"]
+
+
+def test_the_shipped_hf27_p8_waiver_holds_at_the_measured_western_delta():
+    reg = tables.load_hotfixes()
+    out = tables.comparison_table(
+        _zone_carrier_frame(0.0, 101.2),
+        reg,
+        _real_waivers(),
+        interconnect="western",
+        prong=2,
+    )
+    assert out.iloc[0]["verdict"] == "explained"
+    assert out.iloc[0]["hotfix"] == "HF-27"
+
+    # 5 GW appearing in p8 is not the 101 MW anyone signed off.
+    out = tables.comparison_table(
+        _zone_carrier_frame(0.0, 5_000.0),
+        reg,
+        _real_waivers(),
+        interconnect="western",
+        prong=2,
+    )
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert "bounds violated (magnitude)" in out.iloc[0]["hotfix"]
+
+
+def test_a_zone_carrier_key_does_not_break_the_markdown_row():
+    """``p8 | oil`` must stay ONE cell.
+
+    ``_key_label`` flattens a (zone, carrier) MultiIndex with " | ", so every
+    ``p_nom_existing_by_zone_carrier`` row carries a literal pipe. Unescaped, it
+    ends the cell and shifts every number one column right of its heading — the
+    table then reads as though 15 MW of oil were a tolerance.
+    """
+    frames = {"p_nom_existing_by_zone_carrier": _metric_frame({"p8 | oil": 0.0}, {"p8 | oil": 15.0})}
+    table = tables.comparison_table(frames, {}, [])
+    md = tables.to_markdown(table)
+    row = next(line for line in md.splitlines() if line.startswith("| p_nom_existing_by_zone_carrier"))
+    assert "p8 \\| oil" in row
+    # header, metric, key, master, develop, delta, delta %, tol %, tol abs,
+    # verdict, hot-fix, trailing -> 11 unescaped separators.
+    assert len(re.findall(r"(?<!\\)\|", row)) == 11, row
