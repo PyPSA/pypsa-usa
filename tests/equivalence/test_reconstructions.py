@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -243,22 +244,67 @@ def test_a_zone_the_reconstruction_never_saw_still_gets_a_row():
 
 
 def test_gate_tolerance_is_the_rows_own_tolerance():
-    """0.5 % of the larger side, with a 1 MW floor -- the table's own rule."""
+    """0.5 % of MASTER, with a 1 MW floor -- byte for byte the table's own rule.
+
+    ``_row_verdict`` calls a row equivalent when ``|delta| <= atol`` or
+    ``|delta_pct| <= rtol * 100``, and ``delta_pct`` is ``100 * delta / master``.
+    So the row's tolerance in MW is master-denominated, and the gate must be too.
+    Scaling by ``max(|master|, |develop|)`` -- which this did until the verifier
+    caught it -- made the gate systematically looser than the verdict it guards,
+    because develop exceeds master throughout the HF-26 regime.
+    """
     tol = CAPACITY_TOL
     assert tol.rtol == pytest.approx(5e-3)
     assert tol.atol == pytest.approx(1.0)
     # Below the floor, the floor wins.
     assert reconstructions.gate_tolerance(100.0, 100.0, tol) == pytest.approx(1.0)
-    # Above it, 0.5 % of the larger side.
-    assert reconstructions.gate_tolerance(10_000.0, 12_000.0, tol) == pytest.approx(60.0)
+    # Above it, 0.5 % of MASTER -- not of develop, and not of the larger side.
+    assert reconstructions.gate_tolerance(10_000.0, 12_000.0, tol) == pytest.approx(50.0)
+    assert reconstructions.gate_tolerance(10_000.0, 10_000.0, tol) == pytest.approx(50.0)
+    assert reconstructions.gate_tolerance(0.0, 65_000.0, tol) == pytest.approx(1.0)
     assert reconstructions.gate_tolerance(0.0, 0.0, tol) == pytest.approx(1.0)
-    # A 9 MW gate error on a 10,000/12,000 row is inside the row's tolerance.
+
+
+def test_gate_tolerance_equals_what_the_comparison_table_calls_equivalent():
+    """The drift alarm: the gate and ``_row_verdict`` must agree on the boundary.
+
+    A delta one part in a thousand inside the row's tolerance is ``equivalent``
+    in the table; the same number must be inside the gate. One part outside, and
+    both must refuse it. Asserting the property rather than the formula is what
+    keeps the two from drifting the next time a tolerance moves.
+    """
+    tol = CAPACITY_TOL
+    for master in (200.0, 10_000.0, 17_770.9):
+        gate = reconstructions.gate_tolerance(master, master * 1.5, tol)
+        for delta, want in ((gate * 0.999, "equivalent"), (gate * 1.001, "UNEXPLAINED")):
+            frames = {"p_nom_existing_by_zone_carrier": _zone_frame({("pA", "onwind"): (master, master + delta)})}
+            out = tables.comparison_table(frames, {}, [])
+            assert out.iloc[0]["verdict"] == want, (master, delta, gate, out.iloc[0].to_dict())
+
+
+def test_a_gate_error_inside_the_rows_tolerance_still_passes():
+    """A 9 MW G1 error on a row whose own tolerance is 50 MW is not a failure."""
     rows = _rows(
         _fleet([("s1", "onwind", 12_000.0, "pA")]),
         {"onwind": {"s1"}},
-        {("pA", "onwind"): (12_000.0 - 9.0, 12_000.0)},
+        {("pA", "onwind"): (10_000.0, 12_000.0)},
     )
-    assert rows[("p_nom_existing_by_zone_carrier", "pA | onwind")].ok
+    # master 10,000 -> gate 50 MW; reconstruction profiles the whole 12,000, so
+    # G1 is 2,000 MW off and the row must FAIL.
+    row = rows[("p_nom_existing_by_zone_carrier", "pA | onwind")]
+    assert row.gate_tol_mw == pytest.approx(50.0)
+    assert not row.ok and "master gate" in row.note
+
+    # Now a 9 MW G1 error on a row whose own tolerance is ~60 MW: inside, so ok.
+    rows = _rows(
+        _fleet([("s1", "onwind", 12_000.0, "pA"), ("s2", "onwind", 9.0, "pA")]),
+        {"onwind": {"s1"}},
+        {("pA", "onwind"): (11_991.0, 12_009.0)},
+    )
+    row = rows[("p_nom_existing_by_zone_carrier", "pA | onwind")]
+    assert row.gate_tol_mw == pytest.approx(59.955)
+    assert row.master_recon_err == pytest.approx(9.0)
+    assert row.ok, row.note
 
 
 # --- core: the keys ---------------------------------------------------------
@@ -522,6 +568,36 @@ def test_a_reconstruction_that_raises_becomes_an_error_not_an_exception():
     )
     assert recon.error
     assert recon.lookup("capacity_existing_by_carrier", "onwind") is None
+
+
+def test_investment_year_prefers_the_already_loaded_network(tmp_path):
+    """Never re-open a 100 s file for one integer the caller is already holding.
+
+    ``plots.load_artifacts`` has loaded master's assembled network as
+    ``art.assembled_master`` before any reconstruction runs; reading
+    ``investment_periods`` off it costs nothing, while ``pypsa.Network(path)``
+    on the USA ``elec_s300.nc`` costs about 100 s of every run.
+    """
+    # A path that would raise if it were opened; the loaded object wins first.
+    loaded = SimpleNamespace(investment_periods=[2040])
+    assert reconstructions.investment_year(tmp_path, 2, {}, loaded) == 2040
+
+    # A real pypsa network carries a pandas INDEX here, not a list, and
+    # `Index or []` raises. That bug once made the file branch silently useless.
+    index_like = SimpleNamespace(investment_periods=pd.Index([2030, 2040]))
+    assert reconstructions.investment_year(tmp_path, 2, {}, index_like) == 2030
+    assert reconstructions._first_investment_period(index_like) == 2030
+    assert reconstructions._first_investment_period(object()) is None
+
+    # No loaded object, no file: the harness config answers.
+    cfg = {"scenario": {"planning_horizons": [2035]}}
+    assert reconstructions.investment_year(tmp_path, 2, cfg) == 2035
+
+    # An empty investment_periods list is not an answer; fall through.
+    assert reconstructions.investment_year(tmp_path, 2, cfg, SimpleNamespace(investment_periods=[])) == 2035
+
+    with pytest.raises(RuntimeError, match="no investment year"):
+        reconstructions.investment_year(tmp_path, 2, {})
 
 
 def test_no_metric_frames_is_an_error_not_a_blank_cheque():

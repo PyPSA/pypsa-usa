@@ -285,15 +285,28 @@ def reconstruct_drop(
 
 
 def gate_tolerance(master: float, develop: float, tol: tables.Tolerance) -> float:
-    """``max(tol.atol, tol.rtol * max(|master|, |develop|))`` — the row's own tolerance.
+    """``max(tol.atol, tol.rtol * |master|)`` — the row's own tolerance, exactly.
 
-    The same rule ``tables._row_verdict`` uses to call a row equivalent, so a
-    reconstruction is never held to a standard the table itself does not apply:
-    a prediction that lands inside the row's tolerance explains it, and one that
-    does not, does not.
+    ``tables._row_verdict`` calls a row equivalent when ``|delta| <= tol.atol``
+    or ``|delta_pct| <= tol.rtol * 100``, and ``delta_pct`` is
+    ``100 * delta / master``. So the row's tolerance in MW is ``tol.atol`` or
+    ``tol.rtol * |master|``, whichever is larger — **master-denominated**.
+
+    This used to scale by ``max(|master|, |develop|)``. In the whole HF-26 regime
+    develop exceeds master by construction, so that made the gate systematically
+    LOOSER than the verdict it is supposed to earn: USA ``p126 | solar`` got a
+    6.4 MW gate against a 1.1 MW row tolerance (5.9x; 12 USA rows were over 2x),
+    western ``p10 | onwind`` 23.3 against 10.5. A gate weaker than the thing it
+    guards is not a gate, and the docstring claimed parity the code did not have.
+
+    ``develop`` stays in the signature: it is the other half of the row the gate
+    describes, every caller already has it, and a future rule that needs it
+    (a symmetric metric, say) should not have to change every call site. The
+    master-is-zero rows stay workable on ``atol`` alone — ``p115 | onwind`` is
+    0 -> 65.4 MW with a residual of 0, which a 1 MW gate passes.
     """
-    m, d = abs(_f(master)), abs(_f(develop))
-    scale = float(np.nanmax([0.0, 0.0 if np.isnan(m) else m, 0.0 if np.isnan(d) else d]))
+    m = abs(_f(master))
+    scale = 0.0 if np.isnan(m) else m
     return max(float(tol.atol), float(tol.rtol) * scale)
 
 
@@ -666,21 +679,52 @@ def _harness_config() -> dict:
         return yaml.safe_load(fh) or {}
 
 
-def investment_year(master_root: Path, prong: int, config: dict | None = None) -> int:
+def _first_investment_period(network) -> int | None:
+    """``network.investment_periods[0]``, or ``None`` when there is none.
+
+    Written out rather than ``list(getattr(n, "investment_periods", []) or [])``
+    because on a real pypsa Network that attribute is a **pandas Index**, and
+    ``Index or []`` raises ``ValueError: The truth value of a Index is
+    ambiguous``. In the original file-reading branch that ValueError was caught
+    by a bare ``except`` and fell silently through to the config, so the network
+    was opened -- 100 s on the USA leg -- and then never actually read. Two bugs
+    that cancelled into a plausible-looking answer.
+    """
+    periods = getattr(network, "investment_periods", None)
+    if periods is None or len(periods) == 0:
+        return None
+    return int(periods[0])
+
+
+def investment_year(
+    master_root: Path,
+    prong: int,
+    config: dict | None = None,
+    assembled=None,
+) -> int:
     """The first investment period both sides built for.
 
     Master's assembled network first (it is what actually ran), then the harness
     config's ``scenario.planning_horizons[0]``. Neither available is an error,
     not a default: guessing the year silently re-populates the fleet.
+
+    ``assembled`` is that network if the caller already has it — it is
+    ``plots.Artifacts.assembled_master``, which ``load_artifacts`` loaded from
+    this very path. Re-opening it here to read one integer cost about 100 s on
+    every USA run. The file fallback stays for the standalone CLI and the unit
+    tests, which pass a bare :class:`plots.Artifacts`.
     """
+    period = _first_investment_period(assembled)
+    if period is not None:
+        return period
     path = Path(master_root) / baseline_assembled_target(prong)
     if path.exists():
         try:
             import pypsa
 
-            periods = list(getattr(pypsa.Network(str(path)), "investment_periods", []) or [])
-            if periods:
-                return int(periods[0])
+            period = _first_investment_period(pypsa.Network(str(path)))
+            if period is not None:
+                return period
         except Exception:  # pragma: no cover - fall through to the config
             pass
     cfg = _harness_config() if config is None else config
@@ -755,7 +799,7 @@ def hf26_existing_renewable_drop(art, frames) -> Reconstruction:
 
         fleet = filter_fleet(
             master_plant_table(master_root),
-            investment_year(master_root, prong, cfg),
+            investment_year(master_root, prong, cfg, getattr(art, "assembled_master", None)),
             interconnect,
             honor_planned_retirements(cfg),
         )

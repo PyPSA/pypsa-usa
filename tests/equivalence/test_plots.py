@@ -797,6 +797,11 @@ def test_hf26_figure_is_a_placeholder_when_the_reconstruction_failed(tmp_path):
 
 
 def test_hf26_map_figure_writes_png_and_csv(tmp_path):
+    """The CSV twin is per zone AND carrier, and carries the gate as well as the residual.
+
+    Summing the residual over carriers, which an earlier version did, lets a
+    +X onwind / -X solar zone cancel to exactly zero and draw as perfect.
+    """
     zones = _point_zones(names=("p0", "p1", "p2"))
     rows = {
         ("p0", "onwind"): (300.0, 100.0, 100.0, 300.0),
@@ -805,10 +810,54 @@ def test_hf26_map_figure_writes_png_and_csv(tmp_path):
     }
     png, csv = plots.hf26_dropped_map_figure(zones, _recon(rows), "hf26_dropped_mw_map", tmp_path)
     assert png.exists() and csv.exists()
-    frame = pd.read_csv(csv, index_col=0)
-    assert "residual_mw" in frame.columns
-    assert "onwind_dropped_mw" in frame.columns and "solar_dropped_mw" in frame.columns
-    assert frame.loc["p0", "onwind_dropped_mw"] == pytest.approx(200.0)
+    frame = pd.read_csv(csv)
+    assert {"zone", "carrier", "dropped_mw", "residual_mw", "gate_tol_mw", "residual_over_gate", "ok"} <= set(
+        frame.columns,
+    )
+    assert len(frame) == len(rows)
+    onwind_p0 = frame[(frame["zone"] == "p0") & (frame["carrier"] == "onwind")].iloc[0]
+    assert onwind_p0["dropped_mw"] == pytest.approx(200.0)
+    assert onwind_p0["residual_over_gate"] == pytest.approx(0.0)
+
+
+def test_hf26_map_residual_is_not_summed_across_carriers(tmp_path):
+    """+100 onwind and -100 solar in one zone must NOT cancel to zero."""
+    zones = _point_zones(names=("p0", "p1"))
+    rows = {
+        # fleet, profiled, master, develop -> residual = (dev-mas) - (fleet-profiled)
+        ("p0", "onwind"): (500.0, 500.0, 500.0, 600.0),  # residual +100
+        ("p0", "solar"): (500.0, 500.0, 500.0, 400.0),  # residual -100
+    }
+    _png, csv = plots.hf26_dropped_map_figure(zones, _recon(rows), "hf26_map_signs", tmp_path)
+    frame = pd.read_csv(csv).set_index(["zone", "carrier"])
+    assert frame.loc[("p0", "onwind"), "residual_mw"] == pytest.approx(100.0)
+    assert frame.loc[("p0", "solar"), "residual_mw"] == pytest.approx(-100.0)
+    # Both fail their own gate, and the figure says so per carrier.
+    assert not bool(frame.loc[("p0", "onwind"), "ok"])
+    assert not bool(frame.loc[("p0", "solar"), "ok"])
+
+
+def test_hf26_map_residual_ratio_makes_a_small_failure_visible(tmp_path):
+    """A 2 MW residual against a 1 MW gate must read as a failure, not as noise.
+
+    This is the USA ``p129 | solar`` shape. Beside a zone holding 20,000 MW, a
+    raw-MW scale drew it at under 10 % of the ramp; in units of its own gate it
+    is 2.0, i.e. twice the band edge.
+    """
+    zones = _point_zones(names=("p129", "p10"))
+    rows = {
+        ("p129", "solar"): (100.0, 100.0, 100.0, 102.0),  # residual +2, gate 1.0 (atol)
+        ("p10", "solar"): (21000.0, 17700.0, 17700.0, 21000.0),  # exact, gate 88.5
+    }
+    _png, csv = plots.hf26_dropped_map_figure(zones, _recon(rows), "hf26_map_ratio", tmp_path)
+    frame = pd.read_csv(csv).set_index(["zone", "carrier"])
+    assert frame.loc[("p129", "solar"), "gate_tol_mw"] == pytest.approx(1.0)
+    assert frame.loc[("p129", "solar"), "residual_over_gate"] == pytest.approx(2.0)
+    assert not bool(frame.loc[("p129", "solar"), "ok"])
+    # The big zone is exact, so it sits at the neutral middle of the same scale.
+    assert frame.loc[("p10", "solar"), "residual_over_gate"] == pytest.approx(0.0)
+    assert bool(frame.loc[("p10", "solar"), "ok"])
+    assert abs(2.0) < plots.RECON_RESIDUAL_RATIO_MAX, "the failure must be inside the drawn range"
 
 
 def test_hf26_map_figure_is_skipped_without_zones(tmp_path):

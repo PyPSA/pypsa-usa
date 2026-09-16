@@ -290,17 +290,58 @@ def choropleth_triptych(
     return save_figure(fig, data, name, outdir)
 
 
-def _zone_panel(fig, ax, zones, values: pd.Series, cmap, vmin: float, vmax: float, label: str) -> None:
+def _zone_panel(
+    fig,
+    ax,
+    zones,
+    values: pd.Series,
+    cmap,
+    vmin: float,
+    vmax: float,
+    label: str,
+    cbar_label: str = "",
+    outline: pd.Series | None = None,
+) -> None:
     """One zone panel: a choropleth when ``zones`` has geometry, else a point map.
 
     Extracted from :func:`choropleth_triptych` so the HF-26 reconstruction map
     draws zones with exactly the same styling and the same "grey means no data"
     rule, rather than a second look-alike implementation that drifts.
+
+    ``cbar_label`` names what the colour means. A diverging ramp whose unit is
+    not stated is a picture that can be read either way.
+
+    ``outline`` is a boolean Series of zones to mark as FAILING: they are drawn
+    again on top, hatched and black-edged. Colour alone cannot carry a pass/fail
+    distinction when the scale is continuous — the reader has to be able to see
+    which zones are out of bounds without measuring them against a colourbar.
     """
     is_geo = "geometry" in getattr(zones, "columns", [])
     joined = zones.join(values.rename("v"))
+    flagged = None
+    if outline is not None:
+        flagged = pd.Series(outline).reindex(joined.index).fillna(False).astype(bool).to_numpy()
     if is_geo:
-        joined.plot(column="v", ax=ax, cmap=cmap, vmin=vmin, vmax=vmax, legend=True, missing_kwds=MISSING_KW)
+        legend_kwds = {"label": cbar_label} if cbar_label else {}
+        joined.plot(
+            column="v",
+            ax=ax,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            legend=True,
+            legend_kwds=legend_kwds,
+            missing_kwds=MISSING_KW,
+        )
+        if flagged is not None and flagged.any():
+            joined[flagged].plot(
+                ax=ax,
+                facecolor="none",
+                edgecolor="#1a1a1a",
+                linewidth=1.2,
+                hatch="///",
+                zorder=3,
+            )
     else:
         miss = joined["v"].isna()
         size = max(40.0, min(260.0, 6000.0 / max(len(joined), 1)))
@@ -323,9 +364,21 @@ def _zone_panel(fig, ax, zones, values: pd.Series, cmap, vmin: float, vmax: floa
             edgecolors="white",
             linewidths=0.5,
         )
+        if flagged is not None and flagged.any():
+            ax.scatter(
+                joined.loc[flagged, "x"],
+                joined.loc[flagged, "y"],
+                facecolors="none",
+                edgecolors="#1a1a1a",
+                linewidths=1.8,
+                s=size * 2.0,
+                zorder=4,
+            )
         ax.set_aspect("equal", adjustable="box")
         ax.margins(0.15)
-        fig.colorbar(sc, ax=ax, shrink=0.7, fraction=0.045, pad=0.02)
+        cb = fig.colorbar(sc, ax=ax, shrink=0.7, fraction=0.045, pad=0.02)
+        if cbar_label:
+            cb.set_label(cbar_label, fontsize=8, color=TEXT_MUTED)
     ax.set_title(label, fontsize=9)
     if is_geo:
         ax.set_axis_off()
@@ -346,6 +399,13 @@ RECON_FLEET_COLOR = "#7f7f78"
 #: leg has 134 ReEDS zones; the CSV twin is always complete.
 RECON_ZONE_CAP = 25
 
+#: Half-width of the residual map's colour scale, in units of the row's OWN gate
+#: tolerance. At 3, +/-1 sits a third of the way out, so the band edge is a
+#: readable landmark and a gate failure is unmistakably beyond it. A scale in raw
+#: MW cannot do this: the gate is per row, so the same MW is a failure in one
+#: zone and rounding in another.
+RECON_RESIDUAL_RATIO_MAX = 3.0
+
 _RECON_NUMERIC = ("fleet_mw", "profiled_mw", "dropped_mw", "master_mw", "develop_mw", "residual_mw", "gate_tol_mw")
 
 
@@ -365,6 +425,25 @@ def _recon_frame(recon) -> tuple[pd.DataFrame | None, str]:
     out["zone"] = out["zone"].astype(str)
     out["carrier"] = out["carrier"].astype(str)
     return out, ""
+
+
+def _residual_ratio(df: pd.DataFrame) -> pd.Series:
+    """``residual_mw / gate_tol_mw`` — the residual measured in its own gate.
+
+    This is the quantity a reader can compare ACROSS zones. ``residual_mw``
+    alone is not: the gate is the row's own tolerance (0.5 % of master, 1 MW
+    floor), so 2.0 MW is a gate failure where master holds 200 MW and pure
+    rounding where it holds 20,000.
+
+    A zero gate (which cannot happen while ``atol`` is positive, but would mean
+    "no tolerance at all") yields NaN rather than an infinity, so the zone is
+    drawn grey — "not assessable" — instead of saturating the scale.
+    """
+    gate = df["gate_tol_mw"].to_numpy(dtype=float)
+    res = df["residual_mw"].to_numpy(dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.where(gate > 0, res / gate, np.nan)
+    return pd.Series(ratio, index=df.index)
 
 
 def _recon_plot_rows(sub: pd.DataFrame, cap: int) -> pd.DataFrame:
@@ -480,60 +559,88 @@ def hf26_dropped_map_figure(
     name: str,
     outdir: Path,
 ) -> tuple[Path, Path]:
-    """Zone choropleth of ``dropped_mw`` per carrier, plus a residual panel.
+    """Per carrier: where master dropped capacity, and where that fails to explain it.
 
-    Where the reconstruction says master lost capacity, and where the prediction
-    fails to account for the difference. The residual panel is on a diverging
-    scale on purpose: the relocation shape is equal-and-opposite neighbours, and
-    a sequential ramp hides the pairing.
+    Top row, one panel per carrier: ``dropped_mw``, the MW the mechanism says
+    master lost at substations its profile file does not cover.
+
+    Bottom row, one panel per carrier: the residual **in units of that row's own
+    gate tolerance** (:func:`_residual_ratio`), on a diverging scale fixed to
+    +/-:data:`RECON_RESIDUAL_RATIO_MAX`, so +/-1 is the band edge and a gate
+    failure is visibly outside it. Zones whose gates failed are hatched.
+
+    Two earlier versions of this panel were unreadable as a failure indicator,
+    and both are worth naming because the fixes are not obvious:
+
+    - **One residual panel summed over carriers.** A zone with +X onwind and -X
+      solar cancelled to exactly zero and drew as "perfect".
+    - **Colour by raw MW on a scale floored at the largest GLOBAL gate.** The
+      gate is per row (0.5 % of master, 1 MW floor), so 2.0 MW is a failure in
+      one zone and noise in another. On the USA leg ``p129 | solar`` (+2.0 MW
+      against its own 1.0 MW gate) and ``p123 | solar`` (+9.4 against 4.9) both
+      rendered at under 10 % of a +/-105 MW ramp: failures drawn as "inside
+      tolerance".
+
+    Normalising by the row's own gate fixes both, and keeps the property the
+    global floor was reaching for — an exact reconstruction is white, because
+    its ratio is 0, not because the scale was widened to hide it.
     """
     df, note = _recon_frame(recon)
     if df is None:
         return _empty_figure("HF-26 dropped capacity by zone", name, outdir, note=note)
     if zones is None or len(zones) == 0:
         return _empty_figure("HF-26 dropped capacity by zone", name, outdir, note="no zone data")
+    df = df.copy()
+    df["residual_over_gate"] = _residual_ratio(df)
+    df["ok"] = df["ok"].astype(bool)
     carriers = sorted(df["carrier"].unique())
-    dropped = df.pivot_table(index="zone", columns="carrier", values="dropped_mw", aggfunc="sum")
-    residual = df.groupby("zone")["residual_mw"].sum()
-    vmax = float(np.nanmax(dropped.to_numpy(dtype=float))) if dropped.size else 0.0
+    vmax = float(np.nanmax(df["dropped_mw"].to_numpy(dtype=float))) if len(df) else 0.0
     vmax = vmax if vmax > 0 else 1e-9
-    # The residual scale is floored at the largest gate tolerance, never at the
-    # largest residual. Without the floor a run where every residual is float
-    # round-off (1e-13 MW, which is what an exact reconstruction looks like)
-    # renders as a saturated red map: correct arithmetic drawn as a catastrophe.
-    # With it, "inside its own tolerance" is pale by construction and only a
-    # real relocation reaches the ends of the ramp.
-    gate = float(np.nanmax(df["gate_tol_mw"].to_numpy(dtype=float))) if len(df) else 0.0
-    dmax = float(np.nanmax(np.abs(residual.to_numpy(dtype=float)))) if len(residual) else 0.0
-    dmax = max(dmax, gate)
-    dmax = dmax if dmax > 0 else 1e-9
+    rmax = RECON_RESIDUAL_RATIO_MAX
 
-    fig, axes = plt.subplots(1, len(carriers) + 1, figsize=(5.4 * (len(carriers) + 1), 4.6), squeeze=False)
-    flat = list(axes[0])
-    for ax, carrier in zip(flat, carriers):
+    ncol = len(carriers)
+    fig, axes = plt.subplots(2, ncol, figsize=(5.4 * ncol, 9.4), squeeze=False)
+    for col, carrier in enumerate(carriers):
+        sub = df[df["carrier"] == carrier].set_index("zone")
+        failed = int((~sub["ok"]).sum())
         _zone_panel(
             fig,
-            ax,
+            axes[0][col],
             zones,
-            dropped[carrier],
+            sub["dropped_mw"],
             "viridis",
             0.0,
             vmax,
-            f"{carrier} dropped by master\n[MW] (grey = no data)",
+            f"{carrier} dropped by master\n(grey = no data)",
+            cbar_label="dropped [MW]",
         )
-    _zone_panel(
-        fig,
-        flat[-1],
-        zones,
-        residual,
-        DELTA_CMAP,
-        -dmax,
-        dmax,
-        "residual: (develop - master) - dropped\n[MW] (grey = no data)",
-    )
+        _zone_panel(
+            fig,
+            axes[1][col],
+            zones,
+            sub["residual_over_gate"],
+            DELTA_CMAP,
+            -rmax,
+            rmax,
+            f"{carrier} residual, in units of its own gate\n(hatched = gate failed, {failed} zone(s); grey = no data)",
+            cbar_label=f"residual / gate tolerance (+/-1 = band edge, scale +/-{rmax:g})",
+            outline=~sub["ok"],
+        )
     fig.suptitle(_recon_title(df), fontsize=9)
-    fig.tight_layout(rect=(0, 0, 1, 0.92))
-    data = dropped.add_suffix("_dropped_mw").join(residual.rename("residual_mw"))
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    data = df[
+        [
+            "zone",
+            "carrier",
+            "dropped_mw",
+            "master_mw",
+            "develop_mw",
+            "residual_mw",
+            "gate_tol_mw",
+            "residual_over_gate",
+            "ok",
+        ]
+    ].reset_index(drop=True)
     return save_figure(fig, data, name, outdir)
 
 
