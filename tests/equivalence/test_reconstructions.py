@@ -1062,3 +1062,29 @@ def test_the_reconstructions_summary_reports_both_providers(tmp_path):
     tables.write_tables({"comparison": pd.DataFrame()}, tmp_path, reconstructions=registry)
     csv = pd.read_csv(tmp_path / "tables" / "reconstructions.csv")
     assert set(csv["reconstruction"]) == set(registry)
+
+
+def test_the_summary_columns_are_provider_neutral():
+    """A summary header cannot name one provider: not a fleet, and not national.
+
+    The summary table holds every provider at once, so its headers cannot name
+    one provider's quantity. They say what the numbers ARE for any provider --
+    what the mechanism predicts each side should hold -- and the residual column
+    beside them says whether the prediction matched.
+    """
+    assert "predicts develop" in tables.RECONSTRUCTION_SUMMARY_COLUMNS
+    assert "predicts master" in tables.RECONSTRUCTION_SUMMARY_COLUMNS
+    assert not any("fleet" in c or "national" in c for c in tables.RECONSTRUCTION_SUMMARY_COLUMNS)
+
+    hf24 = _caps_rows({"pA": (150.0, 150.0), "pB": (0.0, 225.0)})
+    registry = {
+        "hf24_nrel_caps_drop": reconstructions.Reconstruction(
+            "hf24_nrel_caps_drop",
+            reconstructions.rows_frame(hf24),
+            hf24,
+        ),
+    }
+    md = tables.to_markdown(pd.DataFrame(), reconstructions=registry)
+    # predicts develop 375 MW, predicts master 150 MW, dropped 225 MW.
+    assert "375 MW" in md and "150 MW" in md and "225 MW" in md
+    assert "0.000 MW" in md, "an exact reconstruction must not round to '0 MW'"

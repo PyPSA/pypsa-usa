@@ -928,12 +928,20 @@ def findings_markdown(result: object, cap: int = MD_ROW_CAP) -> list[str]:
 
 
 #: Summary columns of the **Reconstructions** section's first table.
+#:
+#: Provider-neutral on purpose. "national fleet" was written when HF-26 was the
+#: only reconstruction, and it is wrong twice over for HF-24: that provider
+#: reconstructs installable POTENTIAL, which is not a fleet, and its totals come
+#: from the zone rows rather than from a national one. "predicts develop" and
+#: "predicts master" say what the two numbers actually are for any provider —
+#: the value the mechanism claims each side should hold — and the claim is that
+#: they match the table columns.
 RECONSTRUCTION_SUMMARY_COLUMNS = (
     "reconstruction",
     "rows",
-    "national fleet",
-    "national master",
-    "national dropped",
+    "predicts develop",
+    "predicts master",
+    "dropped",
     r"max \|residual\|",
     "status",
 )
@@ -1016,7 +1024,7 @@ def _reconstruction_summary_row(name: str, recon) -> list[str]:
         _md_cell(name),
         str(len(rows)),
         _mw(totals.get("fleet_mw", 0.0)),
-        _mw(totals.get("master_mw", 0.0)),
+        _mw(totals.get("profiled_mw", 0.0)),
         _mw(totals.get("dropped_mw", 0.0)),
         "n/a" if not np.isfinite(worst) else f"{worst:,.3f} MW",
         _md_cell(f"ERROR: {error}") if error else "computed",

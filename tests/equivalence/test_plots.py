@@ -775,7 +775,7 @@ def test_hf26_figure_writes_png_and_full_csv(tmp_path):
     """
     rows = {(f"p{i}", "onwind"): (100.0 + i, 50.0, 50.0, 100.0 + i) for i in range(8)}
     rows[("p0", "solar")] = (900.0, 400.0, 400.0, 900.0)
-    png, csv = plots.hf26_dropped_zone_figure(_recon(rows), "hf26_dropped_mw_by_zone", tmp_path, cap=3)
+    png, csv = plots.reconstruction_zone_figure(_recon(rows), "hf26_dropped_mw_by_zone", tmp_path, cap=3)
     assert png.exists() and csv.exists()
     frame = pd.read_csv(csv)
     # Every zone, uncapped, both carriers.
@@ -786,13 +786,13 @@ def test_hf26_figure_writes_png_and_full_csv(tmp_path):
 
 
 def test_hf26_figure_is_a_placeholder_when_the_reconstruction_failed(tmp_path):
-    png, csv = plots.hf26_dropped_zone_figure(
+    png, csv = plots.reconstruction_zone_figure(
         _recon({}, error="FileNotFoundError: elec_base_network.nc"),
         "hf26_dropped_mw_by_zone",
         tmp_path,
     )
     assert png.exists() and csv.exists()
-    png, _ = plots.hf26_dropped_zone_figure(None, "hf26_none", tmp_path)
+    png, _ = plots.reconstruction_zone_figure(None, "hf26_none", tmp_path)
     assert png.exists()
 
 
@@ -808,7 +808,7 @@ def test_hf26_map_figure_writes_png_and_csv(tmp_path):
         ("p1", "onwind"): (50.0, 50.0, 50.0, 50.0),
         ("p0", "solar"): (900.0, 400.0, 400.0, 900.0),
     }
-    png, csv = plots.hf26_dropped_map_figure(zones, _recon(rows), "hf26_dropped_mw_map", tmp_path)
+    png, csv = plots.reconstruction_map_figure(zones, _recon(rows), "hf26_dropped_mw_map", tmp_path)
     assert png.exists() and csv.exists()
     frame = pd.read_csv(csv)
     assert {"zone", "carrier", "dropped_mw", "residual_mw", "gate_tol_mw", "residual_over_gate", "ok"} <= set(
@@ -828,7 +828,7 @@ def test_hf26_map_residual_is_not_summed_across_carriers(tmp_path):
         ("p0", "onwind"): (500.0, 500.0, 500.0, 600.0),  # residual +100
         ("p0", "solar"): (500.0, 500.0, 500.0, 400.0),  # residual -100
     }
-    _png, csv = plots.hf26_dropped_map_figure(zones, _recon(rows), "hf26_map_signs", tmp_path)
+    _png, csv = plots.reconstruction_map_figure(zones, _recon(rows), "hf26_map_signs", tmp_path)
     frame = pd.read_csv(csv).set_index(["zone", "carrier"])
     assert frame.loc[("p0", "onwind"), "residual_mw"] == pytest.approx(100.0)
     assert frame.loc[("p0", "solar"), "residual_mw"] == pytest.approx(-100.0)
@@ -849,7 +849,7 @@ def test_hf26_map_residual_ratio_makes_a_small_failure_visible(tmp_path):
         ("p129", "solar"): (100.0, 100.0, 100.0, 102.0),  # residual +2, gate 1.0 (atol)
         ("p10", "solar"): (21000.0, 17700.0, 17700.0, 21000.0),  # exact, gate 88.5
     }
-    _png, csv = plots.hf26_dropped_map_figure(zones, _recon(rows), "hf26_map_ratio", tmp_path)
+    _png, csv = plots.reconstruction_map_figure(zones, _recon(rows), "hf26_map_ratio", tmp_path)
     frame = pd.read_csv(csv).set_index(["zone", "carrier"])
     assert frame.loc[("p129", "solar"), "gate_tol_mw"] == pytest.approx(1.0)
     assert frame.loc[("p129", "solar"), "residual_over_gate"] == pytest.approx(2.0)
@@ -862,7 +862,7 @@ def test_hf26_map_residual_ratio_makes_a_small_failure_visible(tmp_path):
 
 def test_hf26_map_figure_is_skipped_without_zones(tmp_path):
     rows = {("p0", "onwind"): (300.0, 100.0, 100.0, 300.0)}
-    png, csv = plots.hf26_dropped_map_figure(None, _recon(rows), "hf26_map_none", tmp_path)
+    png, csv = plots.reconstruction_map_figure(None, _recon(rows), "hf26_map_none", tmp_path)
     assert png.exists() and csv.exists()
     assert pd.read_csv(csv).empty
 
@@ -888,3 +888,48 @@ def test_hf26_figure_states_what_it_did_not_draw(tmp_path):
     shown, note = plots._recon_plot_rows(plots._recon_frame(_recon(rows))[0], cap=25)
     assert len(shown) == 8
     assert note == ""
+
+
+def test_reconstruction_figure_labels_come_from_the_provider(tmp_path):
+    """HF-26 draws existing capacity; HF-24 draws installable potential.
+
+    One hard-coded axis label is a lie on one of them — and the lie that was
+    there read 9.7 million MW of HF-24 onwind POTENTIAL as "existing capacity",
+    which is exactly the misreading a reader validating from the PNG would make.
+    """
+    from tests.equivalence import reconstructions
+
+    hf26 = plots._recon_labels(reconstructions.Reconstruction("hf26_existing_renewable_drop", pd.DataFrame()))
+    hf24 = plots._recon_labels(reconstructions.Reconstruction("hf24_nrel_caps_drop", pd.DataFrame()))
+    assert hf26.quantity == "existing capacity [MW]"
+    assert hf24.quantity == "installable potential p_nom_max [MW]"
+    assert hf26.fleet != hf24.fleet
+    assert "HF-26" in hf26.headline and "HF-24" in hf24.headline
+    # An unknown provider gets a neutral label, never HF-26's.
+    other = plots._recon_labels(reconstructions.Reconstruction("something_new", pd.DataFrame()))
+    assert "existing" not in other.quantity and "fleet" not in other.fleet
+
+    # Every provider that gets a figure has labels of its own.
+    for recon_name, _stem, _metric in plots.RECON_FIGURES:
+        assert recon_name in plots.RECON_LABELS, recon_name
+
+
+def test_reconstruction_figure_has_a_dedicated_dropped_panel(tmp_path):
+    """Three panels per carrier: totals, dropped, residual.
+
+    The stacked totals panel is only legible when the drop is a large fraction
+    of the total. HF-26 moves 14-112 % and reads well; HF-24 moves 0.14 %, so
+    all three totals bars render identically and the hatched segment is
+    sub-pixel. The middle panel gives the explained quantity its own axis.
+    """
+    rows = {
+        # A 0.14 %-scale drop, the HF-24 shape.
+        ("pA", "onwind"): (1_000_000.0, 998_600.0, 998_600.0, 1_000_000.0),
+        ("pB", "onwind"): (500_000.0, 499_900.0, 499_900.0, 500_000.0),
+    }
+    png, csv = plots.reconstruction_zone_figure(_recon(rows), "hf24_caps_drop_by_zone", tmp_path)
+    assert png.exists() and csv.exists()
+    fig = plt.figure()
+    plt.close(fig)
+    frame = pd.read_csv(csv)
+    assert frame["dropped_mw"].tolist() == [1400.0, 100.0]

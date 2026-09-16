@@ -364,15 +364,18 @@ def _make_row(
     if not np.isfinite(master_mw) or not np.isfinite(develop_mw):
         notes.append(f"table row is not finite (master {master_mw}, develop {develop_mw})")
     else:
+        # The wording stays provider-neutral: this note lands in the comparison
+        # table's hot-fix column, where "reconstructed fleet" would describe
+        # HF-24's installable potential as an existing fleet.
         if abs(g1) > gate_tol:
             notes.append(
-                f"master gate: reconstructed profiled {profiled_mw:,.1f} MW vs master {master_mw:,.1f} MW "
-                f"(off by {g1:,.1f} MW, tolerance {gate_tol:,.1f} MW)",
+                f"master gate: reconstruction predicts {profiled_mw:,.1f} MW for master, table says "
+                f"{master_mw:,.1f} MW (off by {g1:,.1f} MW, tolerance {gate_tol:,.1f} MW)",
             )
         if abs(g2) > gate_tol:
             notes.append(
-                f"develop gate: reconstructed fleet {fleet_mw:,.1f} MW vs develop {develop_mw:,.1f} MW "
-                f"(off by {g2:,.1f} MW, tolerance {gate_tol:,.1f} MW)",
+                f"develop gate: reconstruction predicts {fleet_mw:,.1f} MW for develop, table says "
+                f"{develop_mw:,.1f} MW (off by {g2:,.1f} MW, tolerance {gate_tol:,.1f} MW)",
             )
     return ReconRow(
         metric=metric,

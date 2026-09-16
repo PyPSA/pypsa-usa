@@ -290,6 +290,26 @@ def choropleth_triptych(
     return save_figure(fig, data, name, outdir)
 
 
+def _row_colorbar(fig, axes, cmap, vmin: float, vmax: float, label: str):
+    """One colourbar for a whole row of panels that share a scale.
+
+    Every panel of a reconstruction map row is drawn on the same ``vmin``/
+    ``vmax``, so a bar per panel repeats the same statement and costs the maps
+    a fifth of their width each. Built from a bare ``ScalarMappable`` rather than
+    from one panel's artist, because the geo and point branches produce
+    different artists and only the norm is common to both.
+    """
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import Normalize
+
+    sm = ScalarMappable(cmap=cmap, norm=Normalize(vmin=vmin, vmax=vmax))
+    sm.set_array([])
+    cb = fig.colorbar(sm, ax=list(axes), shrink=0.75, fraction=0.035, pad=0.02)
+    cb.set_label(label, fontsize=8, color=TEXT_MUTED)
+    cb.ax.tick_params(labelsize=7)
+    return cb
+
+
 def _zone_panel(
     fig,
     ax,
@@ -301,6 +321,7 @@ def _zone_panel(
     label: str,
     cbar_label: str = "",
     outline: pd.Series | None = None,
+    colorbar: bool = True,
 ) -> None:
     """One zone panel: a choropleth when ``zones`` has geometry, else a point map.
 
@@ -315,6 +336,10 @@ def _zone_panel(
     again on top, hatched and black-edged. Colour alone cannot carry a pass/fail
     distinction when the scale is continuous — the reader has to be able to see
     which zones are out of bounds without measuring them against a colourbar.
+
+    ``colorbar=False`` suppresses this panel's own bar, for a caller that draws
+    one shared bar across a row of panels on a common scale
+    (:func:`_row_colorbar`).
     """
     is_geo = "geometry" in getattr(zones, "columns", [])
     joined = zones.join(values.rename("v"))
@@ -329,7 +354,7 @@ def _zone_panel(
             cmap=cmap,
             vmin=vmin,
             vmax=vmax,
-            legend=True,
+            legend=colorbar,
             legend_kwds=legend_kwds,
             missing_kwds=MISSING_KW,
         )
@@ -376,9 +401,10 @@ def _zone_panel(
             )
         ax.set_aspect("equal", adjustable="box")
         ax.margins(0.15)
-        cb = fig.colorbar(sc, ax=ax, shrink=0.7, fraction=0.045, pad=0.02)
-        if cbar_label:
-            cb.set_label(cbar_label, fontsize=8, color=TEXT_MUTED)
+        if colorbar:
+            cb = fig.colorbar(sc, ax=ax, shrink=0.7, fraction=0.045, pad=0.02)
+            if cbar_label:
+                cb.set_label(cbar_label, fontsize=8, color=TEXT_MUTED)
     ax.set_title(label, fontsize=9)
     if is_geo:
         ax.set_axis_off()
@@ -470,75 +496,127 @@ def _recon_plot_rows(sub: pd.DataFrame, cap: int) -> tuple[pd.DataFrame, str]:
     return head, note
 
 
-#: Headline for each provider's figures, keyed by its ``Reconstruction.name``.
-#: A figure that does not say which mechanism it is drawing is a picture of some
-#: numbers.
-RECON_HEADLINES = {
-    "hf26_existing_renewable_drop": (
-        "HF-26 reconstruction: existing renewable MW master drops at substations its profile file does not cover"
+@dataclass(frozen=True)
+class ReconLabels:
+    """What one provider's figures call the quantity they are drawing.
+
+    The reconstruction CODE is deliberately generic — ``fleet_mw`` means "what
+    the mechanism predicts for develop" whatever the mechanism — but a FIGURE
+    may not be. HF-26 moves existing capacity and HF-24 moves installable
+    potential, and an axis labelled "existing capacity [MW]" over HF-24's
+    9.7 million MW of onwind invites a reader validating from the PNG to read it
+    as installed plant. The label therefore belongs to the provider, not to the
+    plotting function.
+    """
+
+    headline: str
+    quantity: str  # axis label for the totals panel, unit included
+    fleet: str  # legend for the series that predicts develop
+    dropped: str  # legend and axis for the part master drops
+
+
+#: Per-provider figure labels, keyed by ``Reconstruction.name``.
+RECON_LABELS: dict[str, ReconLabels] = {
+    "hf26_existing_renewable_drop": ReconLabels(
+        headline=(
+            "HF-26 reconstruction: existing renewable MW master drops at substations its profile file does not cover"
+        ),
+        quantity="existing capacity [MW]",
+        fleet="reconstructed fleet",
+        dropped="dropped by master (reconstructed)",
     ),
-    "hf24_nrel_caps_drop": (
-        "HF-24 reconstruction: NREL caps p_nom_max master drops with substations of zero GODEEEP land availability"
+    "hf24_nrel_caps_drop": ReconLabels(
+        headline=(
+            "HF-24 reconstruction: NREL caps p_nom_max master drops with substations of zero GODEEEP land availability"
+        ),
+        quantity="installable potential p_nom_max [MW]",
+        fleet="reconstructed caps",
+        dropped="dropped by master (reconstructed)",
     ),
 }
-_RECON_DEFAULT_HEADLINE = "Reconstruction: MW master drops and develop keeps"
+_RECON_DEFAULT_LABELS = ReconLabels(
+    headline="Reconstruction: MW master drops and develop keeps",
+    quantity="reconstructed quantity [MW]",
+    fleet="reconstructed total",
+    dropped="dropped by master (reconstructed)",
+)
 
 
-def _recon_headline(recon) -> str:
-    """The title line for this provider's figures."""
-    return RECON_HEADLINES.get(str(getattr(recon, "name", "")), _RECON_DEFAULT_HEADLINE)
+def _recon_labels(recon) -> ReconLabels:
+    """The figure labels for this provider, or a neutral default for an unknown one."""
+    return RECON_LABELS.get(str(getattr(recon, "name", "")), _RECON_DEFAULT_LABELS)
 
 
-def _recon_title(df: pd.DataFrame, headline: str = _RECON_DEFAULT_HEADLINE) -> str:
-    """Totals per carrier and max |residual|, under ``headline``."""
+def _recon_title(df: pd.DataFrame, labels: ReconLabels = _RECON_DEFAULT_LABELS) -> str:
+    """Totals per carrier and max |residual|, under the provider's headline.
+
+    "predicted develop" and "predicted master", not "fleet" and "master": the
+    two numbers are what the RECONSTRUCTION says each side should hold, and the
+    whole claim is that they match the columns beside them.
+    """
     parts = []
     for carrier, g in df.groupby("carrier", sort=True):
         parts.append(
-            f"{carrier}: fleet {g['fleet_mw'].sum():,.0f} / master {g['master_mw'].sum():,.0f} / "
-            f"develop {g['develop_mw'].sum():,.0f} / dropped {g['dropped_mw'].sum():,.0f} MW",
+            f"{carrier}: predicted develop {g['fleet_mw'].sum():,.0f} / predicted master "
+            f"{g['profiled_mw'].sum():,.0f} / dropped {g['dropped_mw'].sum():,.0f} MW "
+            f"(table: master {g['master_mw'].sum():,.0f}, develop {g['develop_mw'].sum():,.0f})",
         )
     worst = float(df["residual_mw"].abs().max()) if len(df) else 0.0
     return (
-        headline
+        labels.headline
         + "\n"
         + "; ".join(parts)
         + f"\nmax |residual| {worst:,.3f} MW (residual = (develop - master) - dropped)"
     )
 
 
-def hf26_dropped_zone_figure(
+def reconstruction_zone_figure(
     recon,
     name: str,
     outdir: Path,
     cap: int = RECON_ZONE_CAP,
 ) -> tuple[Path, Path]:
-    """Per-zone bars of the reconstruction, with a residual panel beside them.
+    """Three panels per carrier: the totals, the dropped MW, and the residual.
 
-    Left panel per carrier: ``master``, the reconstructed ``dropped_mw`` hatched
-    and stacked on top of it, ``develop``, and the reconstructed ``fleet_mw``. The
-    hatched segment is the claim: ``master + dropped`` must reach ``develop``.
+    **Totals** — ``master``, the reconstructed ``dropped_mw`` hatched and stacked
+    on top of it, ``develop``, and the reconstruction's own prediction of
+    develop. The claim in picture form: ``master + dropped`` reaches ``develop``.
 
-    Right panel: ``residual_mw`` against a shaded +/-``gate_tol_mw`` band, so a
-    zone the mechanism does NOT explain is the one bar sticking out of its band
-    (drawn in the failure colour). That is the HF-27 relocation shape.
+    **Dropped** — the same ``dropped_mw`` on its own axis. This panel exists
+    because the stacked view is only legible when the drop is a large fraction
+    of the total: HF-26 moves 14 % to 112 % and reads perfectly, while HF-24
+    moves 13,686 MW against a 9,700,392 MW total (0.14 %), so all three totals
+    bars render identically and the hatched segment is sub-pixel. Without its own
+    axis, the quantity the figure exists to explain is invisible on any provider
+    whose effect is small against the stock — which is most of them.
 
-    The CSV twin is the FULL, uncapped frame, whatever the plot pooled.
+    **Residual** — ``residual_mw`` against a shaded +/-``gate_tol_mw`` band, so a
+    zone the mechanism does NOT explain is the one bar sticking out of its band,
+    drawn in the failure colour. That is the HF-27 relocation shape.
+
+    Axis and legend text come from the PROVIDER (:class:`ReconLabels`), not from
+    here: HF-26 draws existing capacity and HF-24 draws installable potential,
+    and one hard-coded label would be a lie on one of them.
+
+    The CSV twin is the FULL, uncapped frame, whatever the plot capped.
     """
     df, note = _recon_frame(recon)
+    labels = _recon_labels(recon)
     if df is None:
-        return _empty_figure(_recon_headline(recon), name, outdir, note=note)
+        return _empty_figure(labels.headline, name, outdir, note=note)
     carriers = sorted(df["carrier"].unique())
     rows = [_recon_plot_rows(df[df["carrier"] == c], cap) for c in carriers]
     height = sum(max(2.6, 0.30 * len(r) + 1.8) for r, _n in rows)
     fig, axes = plt.subplots(
         len(carriers),
-        2,
-        figsize=(14, height),
-        width_ratios=[2.4, 1],
+        3,
+        figsize=(17, height),
+        width_ratios=[2.2, 1, 1],
         squeeze=False,
     )
-    for (ax1, ax2), carrier, (plot_df, more) in zip(axes, carriers, rows):
+    for (ax1, ax2, ax3), carrier, (plot_df, more) in zip(axes, carriers, rows):
         y = np.arange(len(plot_df))
+        zone_labels = plot_df["zone"]
         h = 0.26
         ax1.barh(y + h, plot_df["master_mw"], height=h, color=SIDE_COLORS["master"], label=LABELS["master"])
         ax1.barh(
@@ -550,41 +628,49 @@ def hf26_dropped_zone_figure(
             alpha=0.35,
             hatch="///",
             edgecolor="white",
-            label="dropped by master (reconstructed)",
+            label=labels.dropped,
         )
         ax1.barh(y, plot_df["develop_mw"], height=h, color=SIDE_COLORS["develop"], label=LABELS["develop"])
-        ax1.barh(y - h, plot_df["fleet_mw"], height=h, color=RECON_FLEET_COLOR, label="reconstructed fleet")
+        ax1.barh(y - h, plot_df["fleet_mw"], height=h, color=RECON_FLEET_COLOR, label=labels.fleet)
         ax1.set_yticks(y)
-        ax1.set_yticklabels(plot_df["zone"], fontsize=8)
+        ax1.set_yticklabels(zone_labels, fontsize=8)
         ax1.invert_yaxis()
-        _style(ax1, xlabel="existing capacity [MW]")
+        _style(ax1, xlabel=labels.quantity)
         ax1.legend(fontsize=7, frameon=False)
         ax1.set_title(
             f"{carrier}: master + dropped should meet develop" + (f"\n{more}" if more else ""),
             fontsize=10,
         )
 
+        ax2.barh(y, plot_df["dropped_mw"], height=0.6, color=carrier_color(carrier))
+        ax2.axvline(0, color="#999999", lw=0.8)
+        ax2.set_yticks(y)
+        ax2.set_yticklabels(zone_labels, fontsize=8)
+        ax2.invert_yaxis()
+        _style(ax2, xlabel=f"{labels.dropped} [MW]")
+        ax2.set_title("what the mechanism explains", fontsize=10)
+
         tol = plot_df["gate_tol_mw"].to_numpy(dtype=float)
         res = plot_df["residual_mw"].to_numpy(dtype=float)
-        ax2.barh(y, 2.0 * tol, left=-tol, height=0.82, color=RECON_BAND_COLOR, zorder=0, label="gate tolerance")
+        ax3.barh(y, 2.0 * tol, left=-tol, height=0.82, color=RECON_BAND_COLOR, zorder=0, label="gate tolerance")
         colors = [RECON_FAIL_COLOR if abs(r) > t else carrier_color(carrier) for r, t in zip(res, tol)]
-        ax2.barh(y, res, height=0.52, color=colors, zorder=2)
-        ax2.axvline(0, color="#999999", lw=0.8, zorder=3)
-        ax2.set_yticks(y)
-        # Repeat the zone labels: the two panels are not sharey (their x scales
-        # differ by three orders of magnitude), so a bare 0..n index here would
+        ax3.barh(y, res, height=0.52, color=colors, zorder=2)
+        ax3.axvline(0, color="#999999", lw=0.8, zorder=3)
+        ax3.set_yticks(y)
+        # Repeat the zone labels on every panel: the three are not sharey (their
+        # x scales differ by orders of magnitude), so a bare 0..n index would
         # leave the reader guessing which bar is which zone.
-        ax2.set_yticklabels(plot_df["zone"], fontsize=8)
-        ax2.invert_yaxis()
-        _style(ax2, xlabel="residual [MW]")
-        ax2.legend(fontsize=7, frameon=False)
-        ax2.set_title("(develop - master) - dropped", fontsize=10)
-    fig.suptitle(_recon_title(df, _recon_headline(recon)), fontsize=9)
+        ax3.set_yticklabels(zone_labels, fontsize=8)
+        ax3.invert_yaxis()
+        _style(ax3, xlabel="residual [MW]")
+        ax3.legend(fontsize=7, frameon=False)
+        ax3.set_title("residual: (develop - master) - dropped", fontsize=10)
+    fig.suptitle(_recon_title(df, labels), fontsize=9)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     return save_figure(fig, df, name, outdir)
 
 
-def hf26_dropped_map_figure(
+def reconstruction_map_figure(
     zones,
     recon,
     name: str,
@@ -617,10 +703,11 @@ def hf26_dropped_map_figure(
     its ratio is 0, not because the scale was widened to hide it.
     """
     df, note = _recon_frame(recon)
+    labels = _recon_labels(recon)
     if df is None:
-        return _empty_figure(_recon_headline(recon), name, outdir, note=note)
+        return _empty_figure(labels.headline, name, outdir, note=note)
     if zones is None or len(zones) == 0:
-        return _empty_figure(_recon_headline(recon), name, outdir, note="no zone data")
+        return _empty_figure(labels.headline, name, outdir, note="no zone data")
     df = df.copy()
     df["residual_over_gate"] = _residual_ratio(df)
     df["ok"] = df["ok"].astype(bool)
@@ -630,10 +717,19 @@ def hf26_dropped_map_figure(
     rmax = RECON_RESIDUAL_RATIO_MAX
 
     ncol = len(carriers)
-    fig, axes = plt.subplots(2, ncol, figsize=(5.4 * ncol, 9.4), squeeze=False)
+    # Constrained rather than tight layout: a colourbar that spans a whole ROW
+    # of axes is not something tight_layout can place, and it says so with a
+    # UserWarning and a figure whose panels overlap the bar.
+    # 3.6 per row, not 4.5: the panels hold equal-aspect maps, so a figure taller
+    # than the maps want just pads the gaps, and constrained layout cannot shrink
+    # a figure to fit its content.
+    fig, axes = plt.subplots(2, ncol, figsize=(5.0 * ncol, 3.6 * 2 + 0.9), squeeze=False, layout="constrained")
     for col, carrier in enumerate(carriers):
         sub = df[df["carrier"] == carrier].set_index("zone")
         failed = int((~sub["ok"]).sum())
+        # colorbar=False on both: every panel of a row shares one scale, so one
+        # colourbar per row says the same thing and gives the maps the width
+        # back. Attached below.
         _zone_panel(
             fig,
             axes[0][col],
@@ -643,7 +739,7 @@ def hf26_dropped_map_figure(
             0.0,
             vmax,
             f"{carrier} dropped by master\n(grey = no data)",
-            cbar_label="dropped [MW]",
+            colorbar=False,
         )
         _zone_panel(
             fig,
@@ -654,11 +750,20 @@ def hf26_dropped_map_figure(
             -rmax,
             rmax,
             f"{carrier} residual, in units of its own gate\n(hatched = gate failed, {failed} zone(s); grey = no data)",
-            cbar_label=f"residual / gate tolerance (+/-1 = band edge, scale +/-{rmax:g})",
             outline=~sub["ok"],
+            colorbar=False,
         )
-    fig.suptitle(_recon_title(df, _recon_headline(recon)), fontsize=9)
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    _row_colorbar(fig, axes[0], "viridis", 0.0, vmax, f"{labels.dropped} [MW]")
+    _row_colorbar(
+        fig,
+        axes[1],
+        DELTA_CMAP,
+        -rmax,
+        rmax,
+        f"residual / gate tolerance (+/-1 = band edge, scale +/-{rmax:g})",
+    )
+    fig.suptitle(_recon_title(df, labels), fontsize=9)
+    # No tight_layout: layout="constrained" above already places the row bars.
     data = df[
         [
             "zone",
@@ -1272,8 +1377,8 @@ def export_all(
     # explicitly and the memoised registry keeps that to one computation.
     for recon_name, stem, metric in RECON_FIGURES:
         recon = _reconstruction(artifacts, m, recon_name, metric, reconstructions)
-        hf26_dropped_zone_figure(recon, f"{stem}_by_zone", run_dir)
-        hf26_dropped_map_figure(artifacts.zones, recon, f"{stem}_map", run_dir)
+        reconstruction_zone_figure(recon, f"{stem}_by_zone", run_dir)
+        reconstruction_map_figure(artifacts.zones, recon, f"{stem}_map", run_dir)
 
     zc = m.get("p_nom_existing_by_zone_carrier")
     if zc is not None and not zc.empty:
