@@ -448,76 +448,49 @@
   max_total_pct: 0.5
   max_mean_rel_pct: 1.5
   reason: HF-24's retained solar capacity (2,566 MW) raises develop's available power in every daylight hour; annual +0.14 %, mean hourly 0.98 %
-# --- HF-26: existing capacity at the assembled stage (western prong 2)
+# --- HF-26: existing renewable capacity master drops at attach.
 #
-# Measured on the assembled networks of western-p2-3h-20260915-1449 (develop
-# elec_s20_l_pp.pkl vs master elec_s20.nc):
+# The bound is COMPUTED per row by tests/equivalence/reconstructions.py
+# (hf26_existing_renewable_drop), not measured by hand: for each (zone, carrier)
+# it rebuilds the existing fleet from the plant table, assigns it to master's
+# nodal substations, and predicts develop - master = the MW at substations
+# master's profile file does not cover. A row is explained only when the
+# prediction matches its delta within the row's own tolerance AND the
+# reconstruction reproduces BOTH sides (gates G1/G2). Unscoped by interconnect
+# on purpose: the reconstruction is the scope, and it is the only thing that can
+# bound the USA rows where master is ~0 MW and |delta %| is 28,620.
 #
-#   HF-26 (DL-20) CREATES capacity on develop. Master's nodal
-#     attach_renewable_capacities_to_atlite drops every existing renewable plant
-#     at a substation its profile file does not cover; develop, running the same
-#     function at cluster granularity, keeps them. Always positive, and bounded
-#     just above the measured size: onwind +111.60 % system / +121.63 % p10 /
-#     +99.71 % p9, solar +16.27 % system / +18.85 % p10 / +12.75 % p9.
+# This REPLACES six hand-measured `max_abs_pct` rows (capacity_existing_by_carrier
+# onwind/solar, p_nom_existing_by_zone_carrier p10|p9 x onwind|solar, all scoped
+# `interconnect: western, prong: 2`). They are deleted rather than kept beside
+# the reconstruction: keeping both would let a row be explained by the weaker
+# percentage bound exactly when the reconstruction disagrees with it, which is a
+# silent downgrade of the stronger test. They were also already incomplete --
+# `p11 | solar` (189.4 vs 239.9 MW) was never measured, so it was never waived.
+#
+# Neither entry names a `key`, so each covers every key of its metric. That is
+# safe because a key the reconstruction has no row for (`CCGT`, a storage
+# carrier) resolves to `lookup() is None`, which `_bounds_violation` refuses as
+# "reconstruction unavailable".
 #
 # HF-27 (DL-21), the per-zone RELOCATION of existing capacity, used to be waived
-# alongside it. It is not any more: it was a develop regression (plants matched
-# to cluster centroids after simplify-early), it is fixed, and its rows must now
-# come back equivalent. See the note where those three waivers used to be.
-- interconnect: western
-  prong: 2
-  metric: capacity_existing_by_carrier
-  key: onwind
+# alongside HF-26. It is not any more: it was a develop regression (plants
+# matched to cluster centroids after simplify-early), it is fixed, and its rows
+# must now come back equivalent. The reconstruction subsumes the detector for
+# free -- a relocation makes the reconstructed fleet disagree with develop's row,
+# and the row stays UNEXPLAINED with the relocated MW as its residual.
+- metric: p_nom_existing_by_zone_carrier
+  reconstruction: hf26_existing_renewable_drop
   ledger: DL-20
   hotfix: HF-26
   expect_sign: '+'
-  max_abs_pct: 120
-  reason: master drops existing onwind plants at substations with no profile generator (3,097.6 vs 6,554.5 MW, +111.60 %); develop attaches them at cluster granularity (HF-26)
-- interconnect: western
-  prong: 2
-  metric: capacity_existing_by_carrier
-  key: solar
+  reason: master drops existing renewable plants at substations with no profile generator; the dropped MW is reconstructed per zone and must equal develop - master
+- metric: capacity_existing_by_carrier
+  reconstruction: hf26_existing_renewable_drop
   ledger: DL-20
   hotfix: HF-26
   expect_sign: '+'
-  max_abs_pct: 20
-  reason: master drops existing solar plants at substations with no profile generator (26,822.8 vs 31,188.0 MW, +16.27 %); develop attaches them at cluster granularity (HF-26)
-- interconnect: western
-  prong: 2
-  metric: p_nom_existing_by_zone_carrier
-  key: p10 | onwind
-  ledger: DL-20
-  hotfix: HF-26
-  expect_sign: '+'
-  max_abs_pct: 130
-  reason: HF-26's dropped onwind plants, by zone — p10 2,100.4 vs 4,655.2 MW (+121.63 %)
-- interconnect: western
-  prong: 2
-  metric: p_nom_existing_by_zone_carrier
-  key: p9 | onwind
-  ledger: DL-20
-  hotfix: HF-26
-  expect_sign: '+'
-  max_abs_pct: 130
-  reason: HF-26's dropped onwind plants, by zone — p9 803.2 vs 1,604.1 MW (+99.71 %)
-- interconnect: western
-  prong: 2
-  metric: p_nom_existing_by_zone_carrier
-  key: p10 | solar
-  ledger: DL-20
-  hotfix: HF-26
-  expect_sign: '+'
-  max_abs_pct: 20
-  reason: HF-26's dropped solar plants, by zone — p10 17,770.9 vs 21,120.9 MW (+18.85 %)
-- interconnect: western
-  prong: 2
-  metric: p_nom_existing_by_zone_carrier
-  key: p9 | solar
-  ledger: DL-20
-  hotfix: HF-26
-  expect_sign: '+'
-  max_abs_pct: 20
-  reason: HF-26's dropped solar plants, by zone — p9 8,852.4 vs 9,980.7 MW (+12.75 %)
+  reason: the national sum of the same reconstruction
 # The three HF-27 waivers that stood here (p11 | solar, p8 | onwind,
 # p8 | solar) were REMOVED when the zone misassignment was fixed on develop
 # (add_electricity now matches plants to substations and maps through

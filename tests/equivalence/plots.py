@@ -283,46 +283,257 @@ def choropleth_triptych(
         ("develop", LABELS["develop"], "viridis", 0.0, vmax),
         ("delta", f"{LABELS['develop']} - {LABELS['master']}\n(grey = no data)", DELTA_CMAP, -dmax, dmax),
     )
-    is_geo = "geometry" in getattr(zones, "columns", [])
     fig, axes = plt.subplots(1, 3, figsize=(16, 4.6))
     for ax, (col, lab, cmap, vmin, vhi) in zip(axes, panels):
-        joined = zones.join(data[col].rename("v"))
-        if is_geo:
-            joined.plot(column="v", ax=ax, cmap=cmap, vmin=vmin, vmax=vhi, legend=True, missing_kwds=MISSING_KW)
-        else:
-            miss = joined["v"].isna()
-            size = max(40.0, min(260.0, 6000.0 / max(len(joined), 1)))
-            ax.scatter(
-                joined.loc[miss, "x"],
-                joined.loc[miss, "y"],
-                c=MISSING_KW["color"],
-                s=size,
-                edgecolors="white",
-                linewidths=0.5,
-            )
-            sc = ax.scatter(
-                joined.loc[~miss, "x"],
-                joined.loc[~miss, "y"],
-                c=joined.loc[~miss, "v"],
-                cmap=cmap,
-                vmin=vmin,
-                vmax=vhi,
-                s=size,
-                edgecolors="white",
-                linewidths=0.5,
-            )
-            ax.set_aspect("equal", adjustable="box")
-            ax.margins(0.15)
-            fig.colorbar(sc, ax=ax, shrink=0.7, fraction=0.045, pad=0.02)
-        ax.set_title(f"{lab}\n{title} [{unit}]", fontsize=9)
-        if is_geo:
-            ax.set_axis_off()
-        else:
-            # The point fallback has no coastline to orient against, so keep
-            # the coordinate axes as the spatial reference.
-            _style(ax, xlabel="x [deg]", ylabel="y [deg]")
-            ax.tick_params(labelsize=7)
+        _zone_panel(fig, ax, zones, data[col], cmap, vmin, vhi, f"{lab}\n{title} [{unit}]")
     fig.tight_layout()
+    return save_figure(fig, data, name, outdir)
+
+
+def _zone_panel(fig, ax, zones, values: pd.Series, cmap, vmin: float, vmax: float, label: str) -> None:
+    """One zone panel: a choropleth when ``zones`` has geometry, else a point map.
+
+    Extracted from :func:`choropleth_triptych` so the HF-26 reconstruction map
+    draws zones with exactly the same styling and the same "grey means no data"
+    rule, rather than a second look-alike implementation that drifts.
+    """
+    is_geo = "geometry" in getattr(zones, "columns", [])
+    joined = zones.join(values.rename("v"))
+    if is_geo:
+        joined.plot(column="v", ax=ax, cmap=cmap, vmin=vmin, vmax=vmax, legend=True, missing_kwds=MISSING_KW)
+    else:
+        miss = joined["v"].isna()
+        size = max(40.0, min(260.0, 6000.0 / max(len(joined), 1)))
+        ax.scatter(
+            joined.loc[miss, "x"],
+            joined.loc[miss, "y"],
+            c=MISSING_KW["color"],
+            s=size,
+            edgecolors="white",
+            linewidths=0.5,
+        )
+        sc = ax.scatter(
+            joined.loc[~miss, "x"],
+            joined.loc[~miss, "y"],
+            c=joined.loc[~miss, "v"],
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            s=size,
+            edgecolors="white",
+            linewidths=0.5,
+        )
+        ax.set_aspect("equal", adjustable="box")
+        ax.margins(0.15)
+        fig.colorbar(sc, ax=ax, shrink=0.7, fraction=0.045, pad=0.02)
+    ax.set_title(label, fontsize=9)
+    if is_geo:
+        ax.set_axis_off()
+    else:
+        # The point fallback has no coastline to orient against, so keep the
+        # coordinate axes as the spatial reference.
+        _style(ax, xlabel="x [deg]", ylabel="y [deg]")
+        ax.tick_params(labelsize=7)
+
+
+#: Bar colour for a reconstruction row whose residual is outside its gate.
+RECON_FAIL_COLOR = "#c0392b"
+#: Fill of the +/- gate_tol_mw band on the residual panel.
+RECON_BAND_COLOR = "#dfe7ee"
+#: The reconstruction's own prediction of the fleet, drawn beside the two sides.
+RECON_FLEET_COLOR = "#7f7f78"
+#: How many zones a reconstruction figure plots before pooling the rest. The USA
+#: leg has 134 ReEDS zones; the CSV twin is always complete.
+RECON_ZONE_CAP = 25
+
+_RECON_NUMERIC = ("fleet_mw", "profiled_mw", "dropped_mw", "master_mw", "develop_mw", "residual_mw", "gate_tol_mw")
+
+
+def _recon_frame(recon) -> tuple[pd.DataFrame | None, str]:
+    """``(frame, note)`` for a reconstruction: the frame, or why there is none."""
+    if recon is None:
+        return None, "no reconstruction was computed for this run"
+    error = getattr(recon, "error", None)
+    if error:
+        return None, f"reconstruction unavailable: {error}"
+    frame = getattr(recon, "frame", None)
+    if frame is None or frame.empty:
+        return None, "reconstruction produced no rows"
+    out = frame.reset_index(drop=True).copy()
+    for col in _RECON_NUMERIC:
+        out[col] = pd.to_numeric(out[col], errors="coerce").fillna(0.0)
+    out["zone"] = out["zone"].astype(str)
+    out["carrier"] = out["carrier"].astype(str)
+    return out, ""
+
+
+def _recon_plot_rows(sub: pd.DataFrame, cap: int) -> pd.DataFrame:
+    """Top ``cap`` zones by ``|dropped_mw|``, with the remainder pooled.
+
+    Pooling rather than truncating: a figure that silently stops at 25 of 134
+    zones invites the reader to add up what is drawn and get a different national
+    total than the title states.
+    """
+    ordered = sub.assign(_o=sub["dropped_mw"].abs()).sort_values("_o", ascending=False).drop(columns="_o")
+    if len(ordered) <= cap:
+        return ordered
+    head, tail = ordered.iloc[:cap], ordered.iloc[cap:]
+    pooled = {c: float(tail[c].sum()) for c in _RECON_NUMERIC}
+    pooled.update(zone=f"other ({len(tail)} zones)", carrier=str(head["carrier"].iloc[0]))
+    return pd.concat([head, pd.DataFrame([pooled])], ignore_index=True)
+
+
+def _recon_title(df: pd.DataFrame) -> str:
+    """National fleet / master / develop / dropped per carrier, and max |residual|."""
+    parts = []
+    for carrier, g in df.groupby("carrier", sort=True):
+        parts.append(
+            f"{carrier}: fleet {g['fleet_mw'].sum():,.0f} / master {g['master_mw'].sum():,.0f} / "
+            f"develop {g['develop_mw'].sum():,.0f} / dropped {g['dropped_mw'].sum():,.0f} MW",
+        )
+    worst = float(df["residual_mw"].abs().max()) if len(df) else 0.0
+    return (
+        "HF-26 reconstruction: existing renewable MW master drops at substations its profile file does not cover\n"
+        + "; ".join(parts)
+        + f"\nmax |residual| {worst:,.1f} MW (residual = (develop - master) - dropped)"
+    )
+
+
+def hf26_dropped_zone_figure(
+    recon,
+    name: str,
+    outdir: Path,
+    cap: int = RECON_ZONE_CAP,
+) -> tuple[Path, Path]:
+    """Per-zone bars of the reconstruction, with a residual panel beside them.
+
+    Left panel per carrier: ``master``, the reconstructed ``dropped_mw`` hatched
+    and stacked on top of it, ``develop``, and the reconstructed ``fleet_mw``. The
+    hatched segment is the claim: ``master + dropped`` must reach ``develop``.
+
+    Right panel: ``residual_mw`` against a shaded +/-``gate_tol_mw`` band, so a
+    zone the mechanism does NOT explain is the one bar sticking out of its band
+    (drawn in the failure colour). That is the HF-27 relocation shape.
+
+    The CSV twin is the FULL, uncapped frame, whatever the plot pooled.
+    """
+    df, note = _recon_frame(recon)
+    if df is None:
+        return _empty_figure("HF-26 reconstruction", name, outdir, note=note)
+    carriers = sorted(df["carrier"].unique())
+    rows = [_recon_plot_rows(df[df["carrier"] == c], cap) for c in carriers]
+    height = sum(max(2.6, 0.30 * len(r) + 1.6) for r in rows)
+    fig, axes = plt.subplots(
+        len(carriers),
+        2,
+        figsize=(14, height),
+        width_ratios=[2.4, 1],
+        squeeze=False,
+    )
+    for (ax1, ax2), carrier, plot_df in zip(axes, carriers, rows):
+        y = np.arange(len(plot_df))
+        h = 0.26
+        ax1.barh(y + h, plot_df["master_mw"], height=h, color=SIDE_COLORS["master"], label=LABELS["master"])
+        ax1.barh(
+            y + h,
+            plot_df["dropped_mw"],
+            height=h,
+            left=plot_df["master_mw"],
+            color=SIDE_COLORS["master"],
+            alpha=0.35,
+            hatch="///",
+            edgecolor="white",
+            label="dropped by master (reconstructed)",
+        )
+        ax1.barh(y, plot_df["develop_mw"], height=h, color=SIDE_COLORS["develop"], label=LABELS["develop"])
+        ax1.barh(y - h, plot_df["fleet_mw"], height=h, color=RECON_FLEET_COLOR, label="reconstructed fleet")
+        ax1.set_yticks(y)
+        ax1.set_yticklabels(plot_df["zone"], fontsize=8)
+        ax1.invert_yaxis()
+        _style(ax1, xlabel="existing capacity [MW]")
+        ax1.legend(fontsize=7, frameon=False)
+        ax1.set_title(f"{carrier}: master + dropped should meet develop", fontsize=10)
+
+        tol = plot_df["gate_tol_mw"].to_numpy(dtype=float)
+        res = plot_df["residual_mw"].to_numpy(dtype=float)
+        ax2.barh(y, 2.0 * tol, left=-tol, height=0.82, color=RECON_BAND_COLOR, zorder=0, label="gate tolerance")
+        colors = [RECON_FAIL_COLOR if abs(r) > t else carrier_color(carrier) for r, t in zip(res, tol)]
+        ax2.barh(y, res, height=0.52, color=colors, zorder=2)
+        ax2.axvline(0, color="#999999", lw=0.8, zorder=3)
+        ax2.set_yticks(y)
+        # Repeat the zone labels: the two panels are not sharey (their x scales
+        # differ by three orders of magnitude), so a bare 0..n index here would
+        # leave the reader guessing which bar is which zone.
+        ax2.set_yticklabels(plot_df["zone"], fontsize=8)
+        ax2.invert_yaxis()
+        _style(ax2, xlabel="residual [MW]")
+        ax2.legend(fontsize=7, frameon=False)
+        ax2.set_title("(develop - master) - dropped", fontsize=10)
+    fig.suptitle(_recon_title(df), fontsize=9)
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    return save_figure(fig, df, name, outdir)
+
+
+def hf26_dropped_map_figure(
+    zones,
+    recon,
+    name: str,
+    outdir: Path,
+) -> tuple[Path, Path]:
+    """Zone choropleth of ``dropped_mw`` per carrier, plus a residual panel.
+
+    Where the reconstruction says master lost capacity, and where the prediction
+    fails to account for the difference. The residual panel is on a diverging
+    scale on purpose: the relocation shape is equal-and-opposite neighbours, and
+    a sequential ramp hides the pairing.
+    """
+    df, note = _recon_frame(recon)
+    if df is None:
+        return _empty_figure("HF-26 dropped capacity by zone", name, outdir, note=note)
+    if zones is None or len(zones) == 0:
+        return _empty_figure("HF-26 dropped capacity by zone", name, outdir, note="no zone data")
+    carriers = sorted(df["carrier"].unique())
+    dropped = df.pivot_table(index="zone", columns="carrier", values="dropped_mw", aggfunc="sum")
+    residual = df.groupby("zone")["residual_mw"].sum()
+    vmax = float(np.nanmax(dropped.to_numpy(dtype=float))) if dropped.size else 0.0
+    vmax = vmax if vmax > 0 else 1e-9
+    # The residual scale is floored at the largest gate tolerance, never at the
+    # largest residual. Without the floor a run where every residual is float
+    # round-off (1e-13 MW, which is what an exact reconstruction looks like)
+    # renders as a saturated red map: correct arithmetic drawn as a catastrophe.
+    # With it, "inside its own tolerance" is pale by construction and only a
+    # real relocation reaches the ends of the ramp.
+    gate = float(np.nanmax(df["gate_tol_mw"].to_numpy(dtype=float))) if len(df) else 0.0
+    dmax = float(np.nanmax(np.abs(residual.to_numpy(dtype=float)))) if len(residual) else 0.0
+    dmax = max(dmax, gate)
+    dmax = dmax if dmax > 0 else 1e-9
+
+    fig, axes = plt.subplots(1, len(carriers) + 1, figsize=(5.4 * (len(carriers) + 1), 4.6), squeeze=False)
+    flat = list(axes[0])
+    for ax, carrier in zip(flat, carriers):
+        _zone_panel(
+            fig,
+            ax,
+            zones,
+            dropped[carrier],
+            "viridis",
+            0.0,
+            vmax,
+            f"{carrier} dropped by master\n[MW] (grey = no data)",
+        )
+    _zone_panel(
+        fig,
+        flat[-1],
+        zones,
+        residual,
+        DELTA_CMAP,
+        -dmax,
+        dmax,
+        "residual: (develop - master) - dropped\n[MW] (grey = no data)",
+    )
+    fig.suptitle(_recon_title(df), fontsize=9)
+    fig.tight_layout(rect=(0, 0, 1, 0.92))
+    data = dropped.add_suffix("_dropped_mw").join(residual.rename("residual_mw"))
     return save_figure(fig, data, name, outdir)
 
 
@@ -836,6 +1047,22 @@ def _record_cluster_sets(art: Artifacts) -> None:
         print(f"[plots] could not update run_meta.json: {exc}")
 
 
+def _hf26_reconstruction(artifacts, frames, reconstructions=None):
+    """The HF-26 reconstruction for this run, or ``None``.
+
+    ``None`` when the run has no existing-capacity criterion to reconstruct (a
+    solve-only export), or when ``EQ_RECONSTRUCTIONS=0`` emptied the registry.
+    Both cases draw a labelled placeholder rather than skipping the figure, so a
+    missing reconstruction is visible in ``figures/`` instead of absent from it.
+    """
+    if (frames or {}).get("p_nom_existing_by_zone_carrier") is None:
+        return None
+    from . import reconstructions as recon_mod
+
+    reg = recon_mod.registry(artifacts, frames) if reconstructions is None else reconstructions
+    return reg.get("hf26_existing_renewable_drop") if reg else None
+
+
 def _carrier_zone_slice(df: pd.DataFrame, carrier: str) -> tuple[pd.Series, pd.Series]:
     """(master, develop) zone Series for one carrier of a (zone, carrier) frame."""
     sub = df.xs(carrier, level="carrier")
@@ -850,6 +1077,7 @@ def export_all(
     findings: list[dict] | None = None,
     missing: list[dict] | None = None,
     zone_carriers: int = 6,
+    reconstructions=None,
 ) -> Path:
     """Render every required figure under ``<run_dir>/figures/``.
 
@@ -875,14 +1103,30 @@ def export_all(
 
     objective_figure(m.get("objective"), "objective", run_dir)
     paired_bar(
-        m.get("capacity_existing_by_carrier"), "existing capacity", "MW", "capacity_existing_by_carrier", run_dir
+        m.get("capacity_existing_by_carrier"),
+        "existing capacity",
+        "MW",
+        "capacity_existing_by_carrier",
+        run_dir,
     )
     paired_bar(m.get("capacity_opt_by_carrier"), "optimised capacity", "MW", "capacity_opt_by_carrier", run_dir)
     paired_bar(m.get("dispatch_by_carrier"), "annual dispatch", "MWh", "dispatch_by_carrier", run_dir)
     paired_bar(
-        m.get("capacity_factor_by_carrier"), "realised capacity factor", "-", "capacity_factor_by_carrier", run_dir
+        m.get("capacity_factor_by_carrier"),
+        "realised capacity factor",
+        "-",
+        "capacity_factor_by_carrier",
+        run_dir,
     )
     paired_bar(m.get("demand_by_zone"), "demand by zone", "MW", "demand_zones", run_dir)
+
+    # HF-26's computed explanation, drawn whatever the verdicts were. The table
+    # only resolves a reconstruction when a row needs it; the figures are a
+    # deliverable in their own right (PROJECT.md 3.2), so they ask for it
+    # explicitly and the memoised registry keeps that to one computation.
+    recon = _hf26_reconstruction(artifacts, m, reconstructions)
+    hf26_dropped_zone_figure(recon, "hf26_dropped_mw_by_zone", run_dir)
+    hf26_dropped_map_figure(artifacts.zones, recon, "hf26_dropped_mw_map", run_dir)
 
     zc = m.get("p_nom_existing_by_zone_carrier")
     if zc is not None and not zc.empty:

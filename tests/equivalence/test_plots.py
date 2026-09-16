@@ -566,7 +566,7 @@ def test_the_duration_curve_plots_the_rolled_up_master_at_prong_2(tmp_path, monk
     equivalent. Here master rolls up to exactly develop, so every percentile of
     the figure's CSV twin must match — and the old code path provably would not.
     """
-    art, tech, master, develop = _prong2_profile_fixture(tmp_path, monkeypatch)
+    art, tech, master, _develop = _prong2_profile_fixture(tmp_path, monkeypatch)
     missing: list[dict] = []
     frames = plots.collect_metrics(art, missing)
     assert missing == []
@@ -734,3 +734,85 @@ def test_load_artifacts_reads_the_assembled_pair(tmp_path, monkeypatch):
     assert art.assembled_master is not None
     assert set(loaded) == {dp, mp}
     assert dp.suffix == ".pkl" and mp.suffix == ".nc"
+
+
+# ---------------------------------------------------------------------------
+# HF-26 reconstruction figures.
+
+
+def _recon(rows: dict[tuple[str, str], tuple[float, float, float, float]], error: str | None = None):
+    """A :class:`reconstructions.Reconstruction` from (fleet, profiled, master, develop)."""
+    from tests.equivalence import reconstructions, tables
+
+    tol = tables.tolerance_for("p_nom_existing_by_zone_carrier")
+    made = {}
+    for (zone, carrier), (fleet, profiled, master, develop) in rows.items():
+        row = reconstructions._make_row(
+            "p_nom_existing_by_zone_carrier",
+            zone,
+            carrier,
+            fleet,
+            profiled,
+            master,
+            develop,
+            tol,
+        )
+        made[("p_nom_existing_by_zone_carrier", row.key)] = row
+    return reconstructions.Reconstruction(
+        name="hf26_existing_renewable_drop",
+        frame=reconstructions.rows_frame(made),
+        rows=made,
+        error=error,
+    )
+
+
+def test_hf26_figure_writes_png_and_full_csv(tmp_path):
+    """The plot caps at ``cap`` zones; the CSV twin keeps every one of them.
+
+    The cap exists because the USA leg has 134 ReEDS zones. A capped CSV would
+    make the figure's own data table disagree with the national totals in its
+    title, which is the one thing the CSV twin is for.
+    """
+    rows = {(f"p{i}", "onwind"): (100.0 + i, 50.0, 50.0, 100.0 + i) for i in range(8)}
+    rows[("p0", "solar")] = (900.0, 400.0, 400.0, 900.0)
+    png, csv = plots.hf26_dropped_zone_figure(_recon(rows), "hf26_dropped_mw_by_zone", tmp_path, cap=3)
+    assert png.exists() and csv.exists()
+    frame = pd.read_csv(csv)
+    # Every zone, uncapped, both carriers.
+    assert len(frame) == len(rows)
+    assert set(frame["zone"]) == {f"p{i}" for i in range(8)}
+    assert set(frame["carrier"]) == {"onwind", "solar"}
+    assert {"dropped_mw", "residual_mw", "gate_tol_mw"} <= set(frame.columns)
+
+
+def test_hf26_figure_is_a_placeholder_when_the_reconstruction_failed(tmp_path):
+    png, csv = plots.hf26_dropped_zone_figure(
+        _recon({}, error="FileNotFoundError: elec_base_network.nc"),
+        "hf26_dropped_mw_by_zone",
+        tmp_path,
+    )
+    assert png.exists() and csv.exists()
+    png, _ = plots.hf26_dropped_zone_figure(None, "hf26_none", tmp_path)
+    assert png.exists()
+
+
+def test_hf26_map_figure_writes_png_and_csv(tmp_path):
+    zones = _point_zones(names=("p0", "p1", "p2"))
+    rows = {
+        ("p0", "onwind"): (300.0, 100.0, 100.0, 300.0),
+        ("p1", "onwind"): (50.0, 50.0, 50.0, 50.0),
+        ("p0", "solar"): (900.0, 400.0, 400.0, 900.0),
+    }
+    png, csv = plots.hf26_dropped_map_figure(zones, _recon(rows), "hf26_dropped_mw_map", tmp_path)
+    assert png.exists() and csv.exists()
+    frame = pd.read_csv(csv, index_col=0)
+    assert "residual_mw" in frame.columns
+    assert "onwind_dropped_mw" in frame.columns and "solar_dropped_mw" in frame.columns
+    assert frame.loc["p0", "onwind_dropped_mw"] == pytest.approx(200.0)
+
+
+def test_hf26_map_figure_is_skipped_without_zones(tmp_path):
+    rows = {("p0", "onwind"): (300.0, 100.0, 100.0, 300.0)}
+    png, csv = plots.hf26_dropped_map_figure(None, _recon(rows), "hf26_map_none", tmp_path)
+    assert png.exists() and csv.exists()
+    assert pd.read_csv(csv).empty

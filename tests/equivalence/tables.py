@@ -288,6 +288,8 @@ def _waiver_in_scope(waiver: dict, run: dict) -> bool:
 #: ``expect_sign``      '+' or '-': the sign of ``develop - master``.
 #: ``max_abs_pct``      upper bound on ``|delta %|``.
 #: ``max_abs_delta_mw`` upper bound on ``|delta|`` in the metric's own unit.
+#: ``reconstruction``   the name of a ``reconstructions.py`` function that
+#:                      RECOMPUTES the bound for this row from the artifacts.
 #:
 #: ``max_abs_delta_mw`` exists because ``max_abs_pct`` is unusable on a row
 #: whose master side is 0 — the appear-from-nothing case, where ``delta_pct`` is
@@ -298,11 +300,52 @@ def _waiver_in_scope(waiver: dict, run: dict) -> bool:
 #: waived, so nothing ships with this bound today — it stays because the
 #: appear-from-nothing shape recurs, and because it bounds ``|delta|``, which is
 #: the honest bound whenever the denominator is not what anyone measured.
-WAIVER_BOUND_KEYS = ("expect_sign", "max_abs_pct", "max_abs_delta_mw")
+#:
+#: ``reconstruction`` is the fourth, and it is a different kind of bound: not a
+#: number someone measured on one run, but the NAME of a function in
+#: ``reconstructions.py`` that recomputes the expected difference for this row
+#: from the artifacts of THIS run. It exists because the hand-measured bounds do
+#: not scale and are not always expressible: HF-26's six western ``max_abs_pct``
+#: rows missed ``p11 | solar`` outright, and on the USA leg the same difference
+#: reaches +28,620 % on rows where master is ~0 MW, where a percentage bound is
+#: not a usable statement at all.
+WAIVER_BOUND_KEYS = ("expect_sign", "max_abs_pct", "max_abs_delta_mw", "reconstruction")
+
+#: The subset of :data:`WAIVER_BOUND_KEYS` whose value is a NAME, not a number.
+#: ``test_waiver_ledger`` keeps these out of its numeric well-formedness check;
+#: they are validated instead against ``reconstructions.RECONSTRUCTIONS``.
+WAIVER_COMPUTED_KEYS = ("reconstruction",)
 
 
-def _bounds_violation(waiver: dict, delta: float, pct: float) -> str | None:
+def reconstruction_names(waivers: list[dict] | None) -> list[str]:
+    """The reconstruction names the given waivers reference, sorted.
+
+    ``export_all`` asks the registry for exactly these, so the lazy registry is
+    never iterated -- which would compute every reconstruction, including ones
+    no waiver in this run uses.
+    """
+    return sorted({str(w["reconstruction"]) for w in (waivers or []) if w.get("reconstruction")})
+
+
+def _bounds_violation(waiver: dict, delta: float, pct: float, recon_row=None) -> str | None:
     """Which bound this waiver puts on the row is broken, or ``None``.
+
+    A ``reconstruction:`` waiver is checked FIRST and on its own terms;
+    ``recon_row`` is the :class:`reconstructions.ReconRow` for this row.
+
+    - no row at all (the reconstruction did not run, or has nothing to say about
+      this key) is ``"reconstruction unavailable"``. **Absent is refused, never
+      assumed**: a computed bound that could not be computed has not been shown
+      to hold;
+    - a row whose GATES failed (the reconstruction does not reproduce master's
+      side, or develop's) is refused with the gate note, because a mechanism
+      that cannot predict either side has not explained the difference between
+      them;
+    - a residual outside the row's own tolerance is refused with the residual in
+      MW. That is the relocation shape, and the MW is the diagnosis.
+
+    Only then do the hand-written bounds below apply, so a waiver may carry
+    both: the shipped HF-26 pair keeps ``expect_sign`` beside its reconstruction.
 
     Returns ``'sign'`` or ``'magnitude'``; a waiver carrying no bound at all can
     never violate one. An undefined ``delta_pct`` (master is 0, develop is not —
@@ -313,6 +356,14 @@ def _bounds_violation(waiver: dict, delta: float, pct: float) -> str | None:
     percentage does not; a non-finite ``delta`` violates it for the same reason.
     Both magnitude bounds are checked when both are given.
     """
+    if waiver.get("reconstruction"):
+        if recon_row is None:
+            return "reconstruction unavailable"
+        if not recon_row.ok:
+            return f"reconstruction gate: {recon_row.note}"
+        residual = float(recon_row.residual_mw)
+        if not np.isfinite(residual) or abs(residual) > float(recon_row.gate_tol_mw):
+            return f"reconstruction residual {residual:,.1f} MW"
     want = waiver.get("expect_sign")
     if want in ("+", "-"):
         sign = "+" if delta > 0 else "-" if delta < 0 else "0"
@@ -409,6 +460,21 @@ def candidate_hotfixes(metric: str, key: str, hotfixes: dict[str, dict]) -> list
     )
 
 
+def _recon_row(waiver: dict, metric: str, key: str, reconstructions):
+    """The :class:`reconstructions.ReconRow` this waiver needs, or ``None``.
+
+    ``None`` whenever the waiver names no reconstruction (there is nothing to
+    look up), the registry was not supplied, the named reconstruction is not in
+    it, or it has no row for this key. Every one of those is refused by
+    :func:`_bounds_violation`, so an unresolvable computed bound fails closed.
+    """
+    name = waiver.get("reconstruction")
+    if not name or reconstructions is None:
+        return None
+    recon = reconstructions.get(str(name))
+    return None if recon is None else recon.lookup(metric, key)
+
+
 def _explanation(
     metric: str,
     family: str,
@@ -418,6 +484,7 @@ def _explanation(
     run: dict | None = None,
     delta: float = float("nan"),
     pct: float = float("nan"),
+    reconstructions=None,
 ) -> tuple[str, bool]:
     """(hotfix cell, is_valid_explanation) for an over-tolerance row.
 
@@ -433,6 +500,13 @@ def _explanation(
     of us. Several waivers may name the same row; the first one that both
     resolves and holds explains it.
 
+    ``reconstructions`` is the run's ``{name: Reconstruction}`` mapping (see
+    ``reconstructions.registry``). A waiver carrying ``reconstruction:`` is
+    resolved through it to the row for THIS ``(metric, key)``. Passing ``None``
+    means **the waiver does not hold**: a bound that is recomputed per run has
+    said nothing at all when the recomputation did not happen, and "assume it
+    would have passed" is how a computed bound becomes a blank cheque.
+
     An ``expect`` glob does NOT explain anything; it only populates the advisory
     ``candidates`` column. Between them the registry's globs cover every known
     metric, so honouring them here made UNEXPLAINED unreachable.
@@ -447,7 +521,7 @@ def _explanation(
         if not ok:
             rejected = rejected or f"{hid}: {reason}"
             continue
-        broken = _bounds_violation(w, delta, pct)
+        broken = _bounds_violation(w, delta, pct, _recon_row(w, metric, key, reconstructions))
         if broken is None:
             return hid, True
         rejected = rejected or f"waiver {hid} bounds violated ({broken})"
@@ -487,6 +561,7 @@ def _row_verdict(
     hotfixes: dict[str, dict],
     waivers: list[dict],
     run: dict | None = None,
+    reconstructions=None,
 ) -> tuple[str, str]:
     """(verdict, hotfix cell) for one comparison row."""
     m_na, d_na = np.isnan(master), np.isnan(develop)
@@ -496,7 +571,17 @@ def _row_verdict(
         return "one-sided", "develop only" if m_na else "master only"
     if abs(delta) <= tol.atol or (np.isfinite(pct) and abs(pct) <= tol.rtol * 100.0):
         return "equivalent", ""
-    cell, ok = _explanation(metric, family, key, hotfixes, waivers, run, delta=delta, pct=pct)
+    cell, ok = _explanation(
+        metric,
+        family,
+        key,
+        hotfixes,
+        waivers,
+        run,
+        delta=delta,
+        pct=pct,
+        reconstructions=reconstructions,
+    )
     return ("explained" if ok else "UNEXPLAINED"), cell
 
 
@@ -507,6 +592,7 @@ def comparison_table(
     missing: list[dict] | None = None,
     interconnect: str | None = None,
     prong: int | None = None,
+    reconstructions=None,
 ) -> pd.DataFrame:
     """One row per ``(metric, key)`` with a verdict.
 
@@ -527,6 +613,11 @@ def comparison_table(
     cannot be checked, so it has not been shown to apply. ``missing`` is the list of metrics
     that could not be computed (``plots.collect_metrics`` fills it); each becomes
     a ``MISSING`` row so that a criterion cannot vanish from the table silently.
+
+    ``reconstructions`` is the run's ``{name: Reconstruction}`` mapping. It is
+    needed by, and only by, waivers that carry ``reconstruction:``; leave it
+    ``None`` and those waivers explain nothing, exactly as a scoped waiver whose
+    scope cannot be checked explains nothing.
 
     A ``delta_pct`` of NaN with a finite master of 0 means an
     appear-from-nothing difference; it is over tolerance unless the absolute
@@ -559,6 +650,7 @@ def comparison_table(
                 hotfixes,
                 waivers,
                 run,
+                reconstructions,
             )
             rows.append(
                 {
@@ -835,12 +927,172 @@ def findings_markdown(result: object, cap: int = MD_ROW_CAP) -> list[str]:
     return [*lines, ""]
 
 
-def to_markdown(table: pd.DataFrame, cap: int = MD_ROW_CAP, result: object = None) -> str:
+#: Summary columns of the **Reconstructions** section's first table.
+RECONSTRUCTION_SUMMARY_COLUMNS = (
+    "reconstruction",
+    "rows",
+    "national fleet",
+    "national master",
+    "national dropped",
+    r"max \|residual\|",
+    "status",
+)
+
+#: Per-row columns of the **Reconstructions** section's second table.
+RECONSTRUCTION_ROW_COLUMNS = (
+    "metric",
+    "key",
+    "master",
+    "develop",
+    "delta",
+    "dropped (recon)",
+    "residual",
+    "gate",
+    "verdict",
+)
+
+
+def reconstruction_frame(reconstructions) -> pd.DataFrame:
+    """Every computed reconstruction's per-(zone, carrier) frame, concatenated.
+
+    This is ``tables/hf26_reconstruction.csv``: complete and uncapped, so the
+    figure's top-25 cap and the markdown's row cap never hide a zone.
+    """
+    from . import reconstructions as recon_mod
+
+    parts = []
+    for name, recon in recon_mod.resolved(reconstructions).items():
+        frame = getattr(recon, "frame", None)
+        if frame is None or frame.empty:
+            continue
+        parts.append(frame.assign(reconstruction=name))
+    if not parts:
+        return recon_mod.empty_recon_frame().assign(reconstruction=pd.Series(dtype=object))
+    return pd.concat(parts)
+
+
+def reconstructions_summary(reconstructions) -> list[dict]:
+    """``reconstructions.json``: one record per computed reconstruction.
+
+    Written whatever happened, so a reconstruction that could not run survives
+    the run even if nobody reads stdout. ``ok: false`` with an ``error`` is the
+    shape to grep for: it means every row it would have covered is UNEXPLAINED.
+    """
+    from . import reconstructions as recon_mod
+
+    out = []
+    for name, recon in recon_mod.resolved(reconstructions).items():
+        rows = getattr(recon, "rows", {}) or {}
+        residuals = [abs(float(r.residual_mw)) for r in rows.values() if np.isfinite(r.residual_mw)]
+        out.append(
+            {
+                "name": name,
+                "ok": bool(getattr(recon, "error", None) is None),
+                "error": getattr(recon, "error", None),
+                "n_rows": len(rows),
+                "max_abs_residual_mw": max(residuals) if residuals else None,
+                "national": recon.national() if hasattr(recon, "national") else {},
+            },
+        )
+    return out
+
+
+def _reconstruction_summary_row(name: str, recon) -> list[str]:
+    """One line of the Reconstructions summary table."""
+    nat = recon.national() if hasattr(recon, "national") else {}
+    rows = getattr(recon, "rows", {}) or {}
+    residuals = [abs(float(r.residual_mw)) for r in rows.values() if np.isfinite(r.residual_mw)]
+    error = getattr(recon, "error", None)
+    return [
+        _md_cell(name),
+        str(len(rows)),
+        _mw(sum(v.get("fleet_mw", 0.0) for v in nat.values())),
+        _mw(sum(v.get("master_mw", 0.0) for v in nat.values())),
+        _mw(sum(v.get("dropped_mw", 0.0) for v in nat.values())),
+        _mw(max(residuals) if residuals else 0.0),
+        _md_cell(f"ERROR: {error}") if error else "computed",
+    ]
+
+
+def reconstructions_markdown(table: pd.DataFrame, reconstructions, cap: int = MD_ROW_CAP) -> list[str]:
+    """The **Reconstructions** section: every computed explanation and its residual.
+
+    Written even when nothing was consulted, same rule as the Findings section:
+    "no reconstruction ran" is a statement the run makes, not a section that
+    quietly failed to render. Only reconstructions that were actually COMPUTED
+    appear, so rendering this section never forces one to run.
+
+    The second table lists the non-equivalent comparison rows each
+    reconstruction covers, with its prediction beside the observed delta. A
+    reader who wants every zone, equivalent ones included, has
+    ``tables/hf26_reconstruction.csv``.
+    """
+    from . import reconstructions as recon_mod
+
+    lines = ["## Reconstructions", ""]
+    computed = recon_mod.resolved(reconstructions)
+    if not computed:
+        return [*lines, "_No reconstructions were consulted for this run._", ""]
+    lines += [
+        "Computed explanations: a waiver whose bound is recomputed per row from the artifacts "
+        "rather than measured by hand. A row is explained only when the prediction matches its "
+        "delta AND the reconstruction reproduces both sides (gates G1/G2).",
+        "",
+        "| " + " | ".join(RECONSTRUCTION_SUMMARY_COLUMNS) + " |",
+        "|---|---:|---:|---:|---:|---:|---|",
+    ]
+    for name, recon in computed.items():
+        lines.append("| " + " | ".join(_reconstruction_summary_row(name, recon)) + " |")
+
+    verdicts: dict[tuple[str, str], str] = {}
+    if table is not None and not table.empty:
+        verdicts = {(str(r["metric"]), str(r["key"])): str(r["verdict"]) for _, r in table.iterrows()}
+    detail: list[list[str]] = []
+    for _name, recon in computed.items():
+        for (metric, key), row in sorted((getattr(recon, "rows", {}) or {}).items()):
+            verdict = verdicts.get((str(metric), str(key)))
+            if verdict is None or verdict == "equivalent":
+                continue
+            detail.append(
+                [
+                    _md_cell(metric),
+                    _md_cell(key),
+                    _fmt(row.master_mw),
+                    _fmt(row.develop_mw),
+                    _fmt(row.develop_mw - row.master_mw),
+                    _fmt(row.dropped_mw),
+                    _fmt(row.residual_mw),
+                    _fmt(row.gate_tol_mw),
+                    _md_cell(verdict),
+                ],
+            )
+    lines += [""]
+    if not detail:
+        return [*lines, "_Every row these reconstructions cover is equivalent; none was consulted for a verdict._", ""]
+    lines += [
+        "| " + " | ".join(RECONSTRUCTION_ROW_COLUMNS) + " |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---|",
+    ]
+    for row in detail[:cap]:
+        lines.append("| " + " | ".join(row) + " |")
+    if len(detail) > cap:
+        lines += ["", f"_{len(detail) - cap} more reconstruction rows in hf26_reconstruction.csv_"]
+    return [*lines, ""]
+
+
+def to_markdown(
+    table: pd.DataFrame,
+    cap: int = MD_ROW_CAP,
+    result: object = None,
+    reconstructions=None,
+) -> str:
     """Render the comparison table as markdown, capped at ``cap`` rows.
 
     ``result`` is ``compare.run_comparison``'s dict; when given, the verdict
     summary is followed by the cluster note and the **Findings** section, so a
     reader of this one file sees the differences the table cannot show.
+    ``reconstructions`` adds the **Reconstructions** section, which is where a
+    computed waiver's arithmetic is shown rather than asserted.
     """
     c = verdict_counts(table)
     head = [
@@ -856,6 +1108,8 @@ def to_markdown(table: pd.DataFrame, cap: int = MD_ROW_CAP, result: object = Non
         head += [*(f"_{line}_" for line in notes), ""]
     if result is not None:
         head += findings_markdown(result, cap)
+    if reconstructions is not None:
+        head += reconstructions_markdown(table, reconstructions, cap)
     head += [
         "## Comparison table",
         "",
@@ -886,7 +1140,12 @@ def to_markdown(table: pd.DataFrame, cap: int = MD_ROW_CAP, result: object = Non
     return "\n".join([*head, ""])
 
 
-def write_tables(tables: dict[str, pd.DataFrame], outdir: Path, result: object = None) -> list[Path]:
+def write_tables(
+    tables: dict[str, pd.DataFrame],
+    outdir: Path,
+    result: object = None,
+    reconstructions=None,
+) -> list[Path]:
     """Write ``<outdir>/tables/<name>.csv`` per frame, plus ``comparison.md``.
 
     ``tables`` must contain a ``comparison`` frame for the markdown to be
@@ -897,6 +1156,10 @@ def write_tables(tables: dict[str, pd.DataFrame], outdir: Path, result: object =
     a machine-readable home of their own (``findings.csv``) and a human-readable
     one in ``comparison.md``'s **Findings** section — the two views of the same
     rows, written from the same function so they cannot disagree.
+
+    ``reconstructions`` does the same for the computed explanations:
+    ``hf26_reconstruction.csv`` (complete, every zone) and the
+    **Reconstructions** section of ``comparison.md`` (the non-equivalent rows).
     """
     tdir = Path(outdir) / "tables"
     tdir.mkdir(parents=True, exist_ok=True)
@@ -914,9 +1177,13 @@ def write_tables(tables: dict[str, pd.DataFrame], outdir: Path, result: object =
         fc = tdir / "findings.csv"
         findings_frame(result).to_csv(fc, index=False)
         written.append(fc)
+    if reconstructions is not None:
+        rc = tdir / "hf26_reconstruction.csv"
+        reconstruction_frame(reconstructions).to_csv(rc, index=False)
+        written.append(rc)
     if "comparison" in tables and tables["comparison"] is not None:
         md = tdir / "comparison.md"
-        md.write_text(to_markdown(tables["comparison"], result=result))
+        md.write_text(to_markdown(tables["comparison"], result=result, reconstructions=reconstructions))
         written.append(md)
     return written
 
@@ -936,21 +1203,42 @@ def export_all(run_dir: Path, ctx: object | None = None, result: dict | None = N
     a waiver written for the deferred western prong-1 leg cannot sign off a
     whole-USA prong-2 difference.
     """
+    import json
+
     from . import plots
+    from . import reconstructions as recon_mod
     from .compare import load_waivers
     from .paths import INTERCONNECT
 
     prong = int(getattr(ctx, "prong", 2))
     interconnect = str(getattr(ctx, "interconnect", None) or INTERCONNECT)
-    _artifacts, frames, missing = plots.run_metrics(prong)
+    artifacts, frames, missing = plots.run_metrics(prong)
+    waivers = load_waivers()
+    # Lazy: nothing is computed until a waiver's row is actually consulted, so a
+    # run whose existing-capacity rows are all equivalent opens no extra file.
+    reconstructions = recon_mod.registry(artifacts, frames)
     comparison = comparison_table(
         frames,
         load_hotfixes(),
-        load_waivers(),
+        waivers,
         missing,
         interconnect=interconnect,
         prong=prong,
+        reconstructions=reconstructions,
     )
-    written = write_tables({**frames, "comparison": comparison}, run_dir, result=result)
+    written = write_tables(
+        {**frames, "comparison": comparison},
+        run_dir,
+        result=result,
+        reconstructions=reconstructions,
+    )
+    summary = reconstructions_summary(reconstructions)
+    (Path(run_dir) / "reconstructions.json").write_text(json.dumps(summary, indent=1, default=float))
+    for entry in summary:
+        if not entry["ok"]:
+            print(f"[equivalence] reconstruction {entry['name']} FAILED: {entry['error']}")
+    unused = [n for n in reconstruction_names(waivers) if n not in recon_mod.resolved(reconstructions)]
+    if unused:
+        print(f"[equivalence] reconstructions not consulted (no non-equivalent row needed them): {unused}")
     print(f"[equivalence] tables: {len(written)} file(s) under {Path(run_dir) / 'tables'}")
     return comparison

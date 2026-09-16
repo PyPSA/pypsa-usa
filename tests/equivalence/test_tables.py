@@ -499,6 +499,39 @@ def _real_waivers():
     return _yaml.safe_load((Path(tables.__file__).parent / "waivers.yaml").read_text()) or []
 
 
+def _stub_reconstruction(
+    rows: dict[tuple[str, str], dict],
+    name: str = "hf26_existing_renewable_drop",
+    tol=None,
+):
+    """A ``{name: Reconstruction}`` mapping built from four numbers per row.
+
+    What ``tables.py`` is being tested on is the CONTRACT it holds a
+    reconstruction to, not whether artifacts can be opened. The gates and the
+    residual are still computed by ``reconstructions._make_row``, the same
+    function the real loader uses, so a stub cannot pass a row the real thing
+    would fail.
+    """
+    from tests.equivalence import reconstructions as recon_mod
+
+    tol = tol or tables.tolerance_for("capacity_existing_by_carrier")
+    made: dict[tuple[str, str], object] = {}
+    for (metric, key), v in rows.items():
+        zone, carrier = key.split(" | ", 1) if " | " in key else (None, key)
+        row = recon_mod._make_row(
+            metric,
+            zone,
+            carrier,
+            v["fleet_mw"],
+            v["profiled_mw"],
+            v["master_mw"],
+            v["develop_mw"],
+            tol,
+        )
+        made[(metric, row.key)] = row
+    return {name: recon_mod.Reconstruction(name=name, frame=recon_mod.rows_frame(made), rows=made)}
+
+
 def test_cell_waiver_shape_never_explains_a_table_row():
     """waivers.yaml entries key on stage/component/column/kind, never metric/key.
 
@@ -820,8 +853,17 @@ def test_real_waivers_hotfix_tags_stay_out_of_the_table():
     ``waivers.yaml`` also holds genuine TABLE waivers (HF-24's
     ``p_nom_max_by_zone_*`` rows). Those are legitimate and are checked here for
     the two things that make them safe: they name a metric the table can
-    actually produce, and they are scoped to the leg they were measured on, so
-    they cannot reach forward to sign off a run nobody looked at.
+    actually produce, and their reach is bounded to what someone measured —
+    either by ``interconnect``/``prong`` scoping, or by a ``reconstruction:``
+    that recomputes the bound per row and is therefore its own scope.
+
+    The property asserted on the numbers is that the real waivers change no
+    VERDICT on metrics they do not explain. It is verdicts, not whole frames:
+    the unscoped HF-26 reconstruction waivers do name
+    ``capacity_existing_by_carrier``, so with no reconstruction supplied the
+    ``hotfix`` cell now records "considered and refused" instead of staying
+    blank. That is a disclosure, not an explanation, and the verdict is what
+    decides whether a run passes.
     """
     tagged = [w for w in _real_waivers() if w.get("hotfix")]
     assert tagged, "T4 added hotfix: tags to waivers.yaml"
@@ -830,7 +872,8 @@ def test_real_waivers_hotfix_tags_stay_out_of_the_table():
     assert cell, "the HF-12 cell waivers must still be cell waivers"
     for w in table_waivers:
         assert w.get("metric") in tables.KNOWN_METRICS, w
-        assert w.get("interconnect") and w.get("prong"), f"unscoped table waiver: {w}"
+        scoped = bool(w.get("interconnect")) and bool(w.get("prong"))
+        assert scoped or w.get("reconstruction"), f"unscoped, uncomputed table waiver: {w}"
     frames = {
         "capacity_existing_by_carrier": _metric_frame({"solar": 100.0}, {"solar": 180.0}),
         "dispatch_by_carrier": _metric_frame({"CCGT": 100.0}, {"CCGT": 180.0}),
@@ -839,7 +882,11 @@ def test_real_waivers_hotfix_tags_stay_out_of_the_table():
     reg = tables.load_hotfixes()
     without = tables.comparison_table(frames, reg, [])
     with_waivers = tables.comparison_table(frames, reg, _real_waivers())
-    pd.testing.assert_frame_equal(without, with_waivers)
+    assert list(with_waivers["verdict"]) == list(without["verdict"])
+    assert set(with_waivers["verdict"]) == {"UNEXPLAINED"}
+    named = with_waivers[with_waivers["hotfix"] != ""]
+    assert set(named["metric"]) <= {"capacity_existing_by_carrier"}
+    assert all("bounds violated" in c for c in named["hotfix"]), list(named["hotfix"])
 
 
 def test_registry_expect_patterns_are_all_satisfiable():
@@ -1125,21 +1172,34 @@ def test_max_abs_delta_mw_is_a_table_bound_the_ledger_test_can_see():
 def test_the_shipped_hf26_waivers_are_bounded():
     """Every shipped HF-26 table waiver states what it measured.
 
+    Six hand-measured ``max_abs_pct`` rows (western prong 2) were replaced by
+    TWO ``reconstruction:`` rows, one per metric, whose bound is recomputed per
+    row by ``reconstructions.hf26_existing_renewable_drop``. The six are deleted
+    rather than kept beside them: a row that the reconstruction refuses must not
+    fall back on a weaker percentage that happens to cover it.
+
+    They are deliberately UNSCOPED — no ``interconnect``, no ``prong`` — because
+    the reconstruction is the scope. On the USA leg the same difference reaches
+    +28,620 % on rows where master is ~0 MW, which no percentage bound states.
+
     HF-27 used to contribute three more rows here (``p11 | solar``,
-    ``p8 | onwind``, ``p8 | solar``, the absolute-bound ones). They were removed
-    when the zone misassignment turned out to be a DEVELOP regression and was
-    fixed — see :func:`test_no_shipped_waiver_still_cites_hf27`. The expected
-    count is therefore 6, all of them percent-bounded and signed.
+    ``p8 | onwind``, ``p8 | solar``). They were removed when the zone
+    misassignment turned out to be a DEVELOP regression and was fixed — see
+    :func:`test_no_shipped_waiver_still_cites_hf27`.
     """
     rows = [w for w in _real_waivers() if w.get("hotfix") in ("HF-26", "HF-27") and w.get("metric")]
-    assert len(rows) == 6, f"expected the 6 shipped existing-capacity waivers, got {len(rows)}"
+    assert len(rows) == 2, f"expected the 2 shipped existing-capacity waivers, got {len(rows)}"
+    assert {w["metric"] for w in rows} == {
+        "capacity_existing_by_carrier",
+        "p_nom_existing_by_zone_carrier",
+    }
     for w in rows:
-        assert w["interconnect"] == "western" and w["prong"] == 2, w
         assert w["ledger"] == "DL-20", w
-        bounds = [k for k in tables.WAIVER_BOUND_KEYS if k in w]
-        assert bounds, f"unbounded waiver: {w}"
-        assert float(w["max_abs_pct"]) > 0, w
-        assert w["expect_sign"] in ("+", "-"), w
+        assert w.get("interconnect") is None and w.get("prong") is None, f"scoped by hand: {w}"
+        assert w.get("key") is None, f"a key would defeat the point of a computed bound: {w}"
+        assert w["reconstruction"] == "hf26_existing_renewable_drop", w
+        assert w["expect_sign"] == "+", w
+        assert "max_abs_pct" not in w, f"a hand bound beside the reconstruction downgrades it: {w}"
 
 
 def test_no_shipped_waiver_still_cites_hf27():
@@ -1156,18 +1216,62 @@ def test_no_shipped_waiver_still_cites_hf27():
 
 
 def test_the_shipped_hf26_waiver_holds_at_the_measured_western_delta():
-    """End to end on the real files: onwind 3,097.6 -> 6,554.5 MW is explained."""
+    """End to end on the real files: onwind 3,097.6 -> 6,554.5 MW is explained.
+
+    The waiver now carries a reconstruction, so the table needs one: the
+    western 2127 numbers are master 3,097.6 MW profiled out of a 6,554.5 MW
+    reconstructed fleet, i.e. 3,456.9 MW dropped, which is exactly the delta.
+    """
     reg = tables.load_hotfixes()
     frames = {"capacity_existing_by_carrier": _metric_frame({"onwind": 3097.6}, {"onwind": 6554.5})}
-    out = tables.comparison_table(frames, reg, _real_waivers(), interconnect="western", prong=2)
+    recon = _stub_reconstruction(
+        {
+            ("capacity_existing_by_carrier", "onwind"): dict(
+                fleet_mw=6554.5,
+                profiled_mw=3097.6,
+                master_mw=3097.6,
+                develop_mw=6554.5,
+            ),
+        },
+    )
+    out = tables.comparison_table(
+        frames,
+        reg,
+        _real_waivers(),
+        interconnect="western",
+        prong=2,
+        reconstructions=recon,
+    )
     assert out.iloc[0]["verdict"] == "explained"
     assert out.iloc[0]["hotfix"] == "HF-26"
 
     # HF-26 only ever ADDS capacity on develop; a loss is a different animal.
     flipped = {"capacity_existing_by_carrier": _metric_frame({"onwind": 6554.5}, {"onwind": 3097.6})}
-    out = tables.comparison_table(flipped, reg, _real_waivers(), interconnect="western", prong=2)
+    flipped_recon = _stub_reconstruction(
+        {
+            ("capacity_existing_by_carrier", "onwind"): dict(
+                fleet_mw=3097.6,
+                profiled_mw=6554.5,
+                master_mw=6554.5,
+                develop_mw=3097.6,
+            ),
+        },
+    )
+    out = tables.comparison_table(
+        flipped,
+        reg,
+        _real_waivers(),
+        interconnect="western",
+        prong=2,
+        reconstructions=flipped_recon,
+    )
     assert out.iloc[0]["verdict"] == "UNEXPLAINED"
     assert "bounds violated (sign)" in out.iloc[0]["hotfix"]
+
+    # And with no reconstruction at all the row is not explained either.
+    out = tables.comparison_table(frames, reg, _real_waivers(), interconnect="western", prong=2)
+    assert out.iloc[0]["verdict"] == "UNEXPLAINED"
+    assert "reconstruction unavailable" in out.iloc[0]["hotfix"]
 
 
 def test_the_western_p8_zone_row_is_no_longer_explained_by_hf27():
@@ -1177,8 +1281,14 @@ def test_the_western_p8_zone_row_is_no_longer_explained_by_hf27():
     centroid in the next zone. With the substation-first match it should not
     reappear at all; if it does, the shipped files must call it UNEXPLAINED
     rather than hand it HF-27's old signature. Both halves of that are checked:
-    no waiver names the row, and HF-27 would be refused even if one did
+    nothing explains the row, and HF-27 would be refused even if something tried
     (``usa_noop: true``).
+
+    HF-26's reconstruction waiver does NAME this metric, so the cell is no longer
+    blank: with no reconstruction supplied it reads "bounds violated
+    (reconstruction unavailable)", which is the waiver being refused. That is the
+    point of a computed bound. What must not appear is an ``explained`` verdict,
+    or HF-27.
     """
     reg = tables.load_hotfixes()
     out = tables.comparison_table(
@@ -1189,7 +1299,8 @@ def test_the_western_p8_zone_row_is_no_longer_explained_by_hf27():
         prong=2,
     )
     assert out.iloc[0]["verdict"] == "UNEXPLAINED"
-    assert out.iloc[0]["hotfix"] == ""
+    assert "reconstruction unavailable" in out.iloc[0]["hotfix"]
+    assert "HF-27" not in out.iloc[0]["hotfix"]
 
     ok, reason = hotfixes.explains("HF-27", reg)
     assert not ok and "no-op" in reason, reason
