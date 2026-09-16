@@ -495,7 +495,7 @@
     fig5_mw_accounting.png
 
 - id: HF-27
-  commit: f78d923
+  commit: 440f0d7
   pr: null
   title: "plant -> bus assignment: a DEVELOP REGRESSION, now FIXED — after simplify-early develop matched plants to the {simpl} cluster CENTROIDS (median 37 km) instead of to substations (median 1.0 km, master's own bus set), putting 6.1 % of existing MW in the wrong ReEDS zone; develop now matches substations and maps through busmap_s{simpl}"
   confidence: high
