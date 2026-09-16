@@ -239,10 +239,15 @@ done
 
 # --- 6. Clear stale snakemake locks ------------------------------------------
 # Left behind by a killed predecessor job; best-effort on both sides.
+if [ "$EQ_INTERCONNECT" = western ]; then _cfg_name=config.equivalence.yaml; else _cfg_name="config.equivalence-${EQ_INTERCONNECT}.yaml"; fi
 for wf in "$REPO/workflow" "$REPO/.worktrees/master-benchmark/workflow"; do
     if [ -d "$wf/.snakemake/locks" ] && [ -n "$(ls -A "$wf/.snakemake/locks" 2>/dev/null)" ]; then
         echo "[driver] clearing stale locks in $wf"
-        (cd "$wf" && uv run snakemake --unlock) || true
+        # --unlock still parses the Snakefile, and master's needs the harness config
+        # (KeyError 'enable' in retrieve.smk without it, job 43616413): pass the
+        # side's configfile, and fail loudly if the unlock itself fails.
+        if [ "$wf" = "$REPO/workflow" ]; then _cfg="repo_data/config/$_cfg_name"; else _cfg="config/$_cfg_name"; fi
+        (cd "$wf" && uv run snakemake --unlock --configfile "$_cfg") || { echo "ERROR: snakemake --unlock failed in $wf" >&2; exit 1; }
     fi
 done
 
