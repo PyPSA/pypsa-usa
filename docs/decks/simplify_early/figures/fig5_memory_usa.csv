@@ -1,0 +1,9 @@
+stage,master_MiB,develop_MiB,delta_develop_minus_master_MiB,ratio_master_over_develop,master_benchmark_file,develop_benchmark_file,master_mtime,develop_mtime
+build_fuel_prices,1327.43,2017.84,690.41,0.658,equivalence/usa/build_fuel_prices,equivalence/usa/build_fuel_prices,2026-09-15 15:01:34,2026-09-15 16:04:57
+build_renewable profiles (onwind),5013.57,3033.98,-1979.59,1.652,equivalence/usa/build_renewable_profiles_onwind,equivalence/usa/build_renewable_profiles_onwind_s300,2026-09-15 15:34:40,2026-09-15 16:18:49
+build_renewable profiles (solar),5459.79,2966.12,-2493.67,1.841,equivalence/usa/build_renewable_profiles_solar,equivalence/usa/build_renewable_profiles_solar_s300,2026-09-15 15:33:31,2026-09-15 16:19:37
+build_electrical demand,10604.3,11076.7,472.4,0.957,equivalence/usa/power_build_demand,equivalence/usa/power_build_demand_s300,2026-09-15 15:12:51,2026-09-15 16:17:02
+add_demand,14785.31,348.05,-14437.26,42.48,equivalence/usa/add_demand,equivalence/usa/elec_s300_add_demand,2026-09-15 15:29:28,2026-09-15 16:19:48
+add_electricity,8357.12,2372.67,-5984.45,3.522,equivalence/usa/add_electricity,equivalence/usa/elec_s300_add_electricity,2026-09-15 18:51:58,2026-09-15 21:50:21
+cluster_network,671.02,2171.8,1500.78,0.309,cluster_network/usa/elec_s300_c134m,cluster_network/usa/elec_s300_c134,2026-09-15 19:35:52,2026-09-15 21:54:12
+solve_network,17535.61,25973.46,8437.85,0.675,equivalence/solve_network/usa/elec_s300_c134m_ec_lv1.0_3h_E,equivalence/solve_network/usa/elec_s300_c134_ec_lv1.0_3h_E,2026-09-15 20:34:34,2026-09-15 22:53:43

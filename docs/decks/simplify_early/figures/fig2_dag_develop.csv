@@ -1,0 +1,19 @@
+order,stage,rules,buses_seen,kind
+1,build_base_network,"build_base
+network","82,549",plain
+2,build_bus_regions,"build_bus
+regions","82,549",plain
+3,aggregate_to_substations,"aggregate_to
+substations","82,549 -> 41,012",reduce
+4,cluster_resources,"cluster
+resources","41,012 -> 300",reduce
+5,per-bus heavy rules,"build_renewable
+profiles + build_electrical
+demand",300,heavy
+6,add_demand,add_demand,300,heavy
+7,add_electricity,add_electricity,300,heavy
+8,cluster_network,"cluster
+network",300 -> 134,reduce
+9,solve,"prepare
+network + solve
+network",134,solve

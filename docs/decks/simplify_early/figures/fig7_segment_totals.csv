@@ -1,0 +1,6 @@
+quantity,master,develop,unit,note
+"heavy per-bus rules, summed wall time",4063.24,356.1,s,5 rules measured on both branches
+"develop-only reduction rules, summed wall time",0,545.93,s,aggregate_to_substations + cluster_resources
+master simplify_network wall time,NOT MEASURED,,s,"master's simplify_network does both jobs that develop splits into aggregate_to_substations and cluster_resources, but it carries no `benchmark:` directive on master-benchmark, so no per-rule wall time or peak RSS was recorded for it."
+segment wall time as measured,4063.24,902.03,s,master value is a lower bound: simplify_network is missing from it
+worst-rule peak RSS in segment,14785.31,29449.73,MiB,master = add_demand; develop = aggregate_to_substations

@@ -1,0 +1,5 @@
+stage,buses,source
+nodal (elec_base_network),82549,rows in resources/equivalence/busmaps/usa/bus2sub.csv (develop) - one row per base-network bus
+substations (elec_b),41012,unique sub_id in resources/equivalence/busmaps/usa/busmap_b.csv
+{simpl} clusters (elec_s300),300,unique cluster_bus in resources/equivalence/busmaps/usa/busmap_s300.csv
+final clusters (elec_s300_c134),134,unique target in resources/equivalence/busmaps/usa/busmap_s300_134.csv
