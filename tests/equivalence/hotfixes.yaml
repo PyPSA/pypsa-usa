@@ -539,3 +539,84 @@
     `wip/plant-match` on top of it.
     figures: experiments/runs/eq-western-db47198d8592/diagnosis/fig8..fig11*,
     fig6_by_reeds_zone.png, fig5_mw_accounting.png
+
+- id: HF-28
+  commit: 01f742f
+  pr: null
+  title: "demand disaggregation key: master splits EFS state demand over NODAL buses keyed on `buses.state`, develop over s{simpl} buses keyed on `buses.reeds_state`; the LAF both sides consume was normalised over a THIRD column (`full_state`), so neither conserved state demand until the renormalisation landed"
+  confidence: high
+  ported: false
+  usa_noop: false
+  expect: [demand_by_zone/*, dispatch_by_carrier/*, capacity_opt_by_carrier/*, objective]
+  master: >-
+    `WriteStrategy._get_state_zones` returns `n.buses.state` and the split runs
+    on the 82,549 NODAL buses. `state` is the geographic/power-region column
+    written by `build_base_network`
+  develop: >-
+    `_get_state_zones` returns `n.buses.reeds_state.map(CODE_2_STATE)` and the
+    split runs on the 300 `s{simpl}` cluster buses, because
+    `aggregate_to_substations` drops `state` when `topological_boundaries:
+    reeds_zone`. The two columns disagree on 547 nodal buses (LAF mass 0.582) --
+    Oregon/Washington, Missouri/Kansas, New Hampshire/Massachusetts and the
+    17 downtown-DC buses
+  notes: >-
+    TWO HALVES, AND ONLY ONE OF THEM IS PORTED.
+    (1) NON-CONSERVATION -- FIXED ON BOTH BRANCHES. `LAF_state` is normalised in
+    `build_base_network` over `full_state`, which neither consumption key
+    reproduces, so `sum(laf)` inside a demand key was not 1: 20 of 48 states on
+    master (Maryland 1.588, Virginia 1.409), 38 of 48 on develop (Maryland
+    2.008). Allocated demand exceeded the EFS state totals by +2.28 % (master)
+    and +1.85 % (develop); measured on usa s300, 2026-09-15, 470,193.2 vs
+    461,636.2 MW mean. `dissagregate_demand` now renormalises the factors within
+    the consumption key on develop (02e1b59) and on master-benchmark
+    (5f88d66), so each key is conserved exactly whatever the key is. THIS HALF
+    IS NEUTRALISED and cannot explain a residual difference.
+    (2) THE KEY COLUMN ITSELF -- NOT PORTED, hence `ported: false`. After the
+    renormalisation a bus still draws from the state its key names, so the 547
+    buses where `state != reeds_state` still move demand between zones. Expect a
+    residual, DIFFUSE `demand_by_zone` signature (43 zones on the pre-fix usa
+    run, sum|delta| 3,009 MW, national 0 after the fix) that HF-28 legitimately
+    explains. The CONCENTRATED p99/p123 signature is HF-5, not this row.
+    BOTH LEGS MUST BE REBUILT: the fix moves both sides by ~2 %, so no pre-fix
+    artifact may be compared against a post-fix one.
+    The key choice arrives with the simplify-early stack (01f742f, the `commit` above); 02e1b59 is
+    the fix commit, not the origin. Checker:
+    tests/equivalence/diagnostics/demand_conservation.py reproduces the pre-fix
+    baseline exactly. Backlog B7 / issue #3. Prose home:
+    memory/plans/hotfix-ledger.md.
+    figures: experiments/runs/eq-usa-82c25a3177d0/diagnosis/fig4_reconstruction_and_decomposition.png,
+    fig5_state_demand_conservation.png
+
+- id: HF-29
+  commit: 02e1b59
+  pr: null
+  title: "District of Columbia demand is folded into Maryland before disaggregation, so a demand table that has a DC column stops losing it in silence"
+  confidence: none
+  ported: true
+  ported_sha: 5f88d66
+  usa_noop: true
+  expect: [demand_by_zone/*]
+  notes: >-
+    No bus can carry a District of Columbia key on either branch: ReEDS files DC
+    inside zone p123 with `st = MD`, and the DC buses' geographic `state`
+    resolves to Maryland (develop) or northern Virginia (master, via the HF-5
+    clobber). A demand column named `District of Columbia` therefore hit the
+    silent drop in `_disaggregate_demand_to_buses`. `DEMAND_KEY_FOLDS` in
+    build_demand.py now folds it into Maryland before the split, with a
+    logger.info naming the MW, and any demand column with no bus under the
+    current key is logged with the MW it drops.
+    `usa_noop: true` AND `confidence: none` ARE MEASURED, NOT ASSUMED: the NREL
+    EFS load profiles this benchmark reads
+    (data/nrel_efs/EFSLoadProfile_{High_Rapid,Reference_Moderate}.csv) contain 48
+    state codes and NO DC row (checked 2026-09-17), and the resolved zonal table
+    for the usa leg has 48 columns. On this config the fold is a GUARD and moves
+    nothing; the whole of the pre-fix over-allocation is HF-28's unnormalised
+    LAF. It bites for readers whose source does carry DC (EULP per-state files,
+    EER, SERVM).
+    CONSEQUENCE WORTH SAYING OUT LOUD: after HF-28 lands, DC's real electricity
+    demand is ABSENT from the model on both branches -- before the fix it was
+    accidentally present, but as a far larger phantom (+8,763 MW billed to
+    Maryland on develop, +5,656 MW to Virginia and +5,115 MW to Maryland on
+    master). Giving DC its own key end to end is the real fix and is still open.
+    Ported to master-benchmark as 5f88d66, so both sides fold identically.
+    Backlog B7 / issue #3. Prose home: memory/plans/hotfix-ledger.md.
