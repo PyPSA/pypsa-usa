@@ -28,6 +28,32 @@ CODE_2_STATE = const.CODE_2_STATE
 STATE_TIMEZONE = const.STATE_2_TIMEZONE
 TBTU_2_MWH = const.TBTU_2_MWH
 
+#: Demand-table columns folded into another column before disaggregation, because
+#: no bus ever carries the source key (HF-29, ported from develop).
+#:
+#: No bus can carry a District of Columbia key: the DC buses come out of
+#: ``assign_missing_regions`` with ``state`` set to Virginia or Maryland. A
+#: demand table that has a DC column therefore loses it in silence while DC's
+#: load-allocation mass is spent on its neighbours' demand.
+#:
+#: Measured 2026-09-17: the NREL EFS load profiles
+#: (``data/nrel_efs/EFSLoadProfile_*.csv``) hold **48 state codes and no DC**,
+#: so on the EFS path this map is a GUARD, not a correction -- the whole of the
+#: +2.28 % over-allocation there is the unnormalised LAF (HF-28), and after that
+#: fix DC's real demand is simply absent from the model on both branches. The
+#: fold bites for readers whose source does carry DC (EULP per-state files,
+#: EER). Both the full-name and the two-letter spelling are listed because
+#: readers differ in which one they emit (``ReadEfs``/``ReadEer``/``ReadEulp``
+#: map through ``CODE_2_STATE``; a reader that does not would leave the code).
+DEMAND_KEY_FOLDS = {
+    "District of Columbia": "Maryland",
+    "DC": "MD",
+}
+
+#: Buses with a load allocation factor below this are dropped from the
+#: allocation by ``WriteStrategy._disaggregate_demand_to_buses``.
+LAF_DROP_THRESHOLD = 0.000001
+
 
 class Context:
     """The Context defines the interface of interest to clients."""
@@ -1639,6 +1665,10 @@ class WriteStrategy(ABC):
         # assign buses to dissagregation zone
         dissagregation_zones = self._get_load_dissagregation_zones(zone)
 
+        # fold demand keys that no bus carries (HF-29); a key some bus DOES
+        # carry is left alone, so the fold cannot defeat a future DC key
+        demand = self._fold_demand_keys(demand, zone, bus_keys=dissagregation_zones)
+
         # get implementation specific dissgregation factors
         laf = self._get_load_allocation_factor(df=dissagregation_zones, zone=zone)
 
@@ -1646,7 +1676,134 @@ class WriteStrategy(ABC):
         zone_data = dissagregation_zones.to_frame(name="zone").join(
             laf.to_frame(name="laf"),
         )
+        # HF-28: the factors are normalised upstream over a DIFFERENT column
+        # than the one demand is keyed on, so renormalise them here.
+        zone_data = self._normalize_laf_within_zone(zone_data, demand)
+        self._log_unallocated_demand(demand, zone_data)
         return self._disaggregate_demand_to_buses(demand, zone_data)
+
+    @staticmethod
+    def _fold_demand_keys(
+        demand: pd.DataFrame,
+        zone: str,
+        bus_keys: pd.Series | None = None,
+    ) -> pd.DataFrame:
+        """Merge demand columns that no bus key carries (HF-29).
+
+        ``bus_keys`` is the per-bus disaggregation key; a source column that
+        any bus carries is NOT folded (the guard must never override a real
+        key). The EFS demand tables carry a ``District of Columbia`` column, but no
+        bus carries that key: ``assign_missing_regions`` resolves the DC buses
+        to Virginia or Maryland. Left alone the column is silently dropped -- a
+        GW of real demand that never reaches the model, while DC's
+        load-allocation mass is billed against its neighbours' demand. Folding
+        it into Maryland before disaggregation keeps the energy in the system.
+        Interim measure: the real fix is for DC to keep its own key end to end.
+        """
+        if zone != "state":
+            return demand
+
+        carried = set() if bus_keys is None else set(pd.Series(bus_keys).dropna().astype(str))
+        folded = demand
+        for source, target in DEMAND_KEY_FOLDS.items():
+            if source not in folded.columns:
+                continue
+            if source in carried:
+                logger.info(
+                    "Demand key '%s' is carried by %d buses; not folding it into '%s'.",
+                    source,
+                    int((pd.Series(bus_keys).astype(str) == source).sum()),
+                    target,
+                )
+                continue
+            if folded is demand:
+                folded = demand.copy()
+            moved = folded[source].astype(float)
+            folded[target] = folded[target].astype(float) + moved if target in folded.columns else moved
+            folded = folded.drop(columns=[source])
+            logger.info(
+                "Folding demand key '%s' into '%s': %.1f MW mean, %.1f MW peak. "
+                "No bus carries '%s' under the '%s' disaggregation key.",
+                source,
+                target,
+                float(moved.mean()),
+                float(moved.max()),
+                source,
+                zone,
+            )
+        return folded
+
+    @staticmethod
+    def _normalize_laf_within_zone(
+        zone_data: pd.DataFrame,
+        demand: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """Rescale load allocation factors to sum to one inside each demand key (HF-28).
+
+        ``build_base_network`` normalises ``LAF_state`` over ``full_state``,
+        a column no demand key reproduces (it separates the District of
+        Columbia), and the population/industrial factors are normalised over
+        whatever zone mapping they were built with. The consumption key here --
+        ``state``, ``ba``, ``reeds`` -- is a different column, so ``sum(laf)``
+        inside a key is not 1 and the allocated demand does not equal the
+        demand table's column for that key (USA 2026-09-15: +2.28 % on this
+        branch, +1.85 % on develop). Renormalising within the key that demand
+        is actually indexed by makes the allocation conserving whatever the key
+        is.
+
+        A key whose factors sum to zero gets 0, never NaN, and is logged with
+        the demand it cannot place.
+
+        The rescale runs twice. ``_disaggregate_demand_to_buses`` drops every
+        bus below ``LAF_DROP_THRESHOLD``, so the first pass is followed by
+        zeroing those buses and rescaling the survivors; the second pass can
+        only raise a share (it divides by a total <= 1), so nothing new falls
+        under the threshold and the downstream drop cannot leak demand.
+        """
+        normalized = zone_data.copy()
+        laf = pd.to_numeric(normalized["laf"], errors="coerce").fillna(0.0)
+        zones = normalized["zone"]
+
+        def rescale(values: pd.Series) -> tuple[pd.Series, pd.Series]:
+            totals = values.groupby(zones).sum()
+            per_bus = pd.to_numeric(zones.map(totals), errors="coerce")
+            return values.div(per_bus).where(per_bus > 0, 0.0).astype(float), totals
+
+        shares, zone_totals = rescale(laf)
+        shares, _ = rescale(shares.where(shares >= LAF_DROP_THRESHOLD, 0.0))
+        normalized["laf"] = shares
+
+        empty_zones = [z for z, total in zone_totals.items() if not total > 0]
+        if empty_zones:
+            unplaced = {str(z): float(demand[z].mean()) for z in empty_zones if z in demand.columns}
+            logger.warning(
+                "Zero load allocation factor mass in zone(s) %s; their allocation is set to 0. "
+                "Unplaced demand: %s (%.1f MW mean in total).",
+                sorted(str(z) for z in empty_zones),
+                {k: round(v, 1) for k, v in sorted(unplaced.items())},
+                sum(unplaced.values()),
+            )
+        return normalized
+
+    @staticmethod
+    def _log_unallocated_demand(demand: pd.DataFrame, zone_data: pd.DataFrame) -> None:
+        """Warn loudly about demand columns that no bus carries.
+
+        Demand for a key absent from the bus mapping is silently discarded by
+        ``_disaggregate_demand_to_buses`` (it only warns the other way round,
+        about buses whose key has no demand). That is how the District of
+        Columbia's load went missing unnoticed, so say it out loud with the MW.
+        """
+        keys = set(zone_data["zone"].dropna().unique())
+        orphans = {str(column): float(demand[column].mean()) for column in demand.columns if column not in keys}
+        if not orphans:
+            return
+        logger.warning(
+            "No bus carries demand key(s) %s; %.1f MW of mean demand is DROPPED. Per key: %s.",
+            sorted(orphans),
+            sum(orphans.values()),
+            {k: round(v, 1) for k, v in sorted(orphans.items())},
+        )
 
     def _get_load_dissagregation_zones(self, zone: str) -> pd.Series:
         """Map each bus to the load dissagregation zone (states, ba, ...)."""
@@ -1730,7 +1887,7 @@ class WriteStrategy(ABC):
 
         for load_zone in laf.zone.unique():
             load = laf[laf.zone == load_zone]
-            load = load[~(load.laf < 0.000001)].copy()  # drop any buses that have zero load
+            load = load[~(load.laf < LAF_DROP_THRESHOLD)].copy()  # drop any buses that have zero load
             if load_zone not in demand:
                 # occurs if laf overlaps with a neighbouring interconnect
                 # to replicate, run only 'AR' and 'Texas' will be a Key Error
