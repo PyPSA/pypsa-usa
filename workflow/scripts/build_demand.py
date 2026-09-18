@@ -1980,11 +1980,12 @@ class WriteStrategy(ABC):
         if demand.empty:
             demand = self._make_empty_demand(columns=df.columns)
 
-        # fold demand keys that no bus can ever carry (HF-29)
-        demand = self._fold_demand_keys(demand, zone)
-
         # assign buses to dissagregation zone
         dissagregation_zones = self._get_load_dissagregation_zones(zone)
+
+        # fold demand keys that no bus carries (HF-29); a key some bus DOES
+        # carry is left alone, so the fold cannot defeat a future DC key
+        demand = self._fold_demand_keys(demand, zone, bus_keys=dissagregation_zones)
 
         # get implementation specific dissgregation factors
         laf = self._get_load_allocation_factor(df=dissagregation_zones, zone=zone)
@@ -2000,10 +2001,16 @@ class WriteStrategy(ABC):
         return self._disaggregate_demand_to_buses(demand, zone_data)
 
     @staticmethod
-    def _fold_demand_keys(demand: pd.DataFrame, zone: str) -> pd.DataFrame:
-        """Merge demand columns that no bus key can ever carry (HF-29).
+    def _fold_demand_keys(
+        demand: pd.DataFrame,
+        zone: str,
+        bus_keys: pd.Series | None = None,
+    ) -> pd.DataFrame:
+        """Merge demand columns that no bus key carries (HF-29).
 
-        The EFS demand tables carry a ``District of Columbia`` column, but no
+        ``bus_keys`` is the per-bus disaggregation key; a source column that
+        any bus carries is NOT folded (the guard must never override a real
+        key). The EFS demand tables carry a ``District of Columbia`` column, but no
         bus carries that key: ReEDS files DC inside zone p123 with ``st = MD``,
         and the geographic ``state`` of the DC buses resolves to Maryland or
         Virginia. Left alone the column is silently dropped -- a GW of real
@@ -2015,9 +2022,18 @@ class WriteStrategy(ABC):
         if zone != "state":
             return demand
 
+        carried = set() if bus_keys is None else set(pd.Series(bus_keys).dropna().astype(str))
         folded = demand
         for source, target in DEMAND_KEY_FOLDS.items():
             if source not in folded.columns:
+                continue
+            if source in carried:
+                logger.info(
+                    "Demand key '%s' is carried by %d buses; not folding it into '%s'.",
+                    source,
+                    int((pd.Series(bus_keys).astype(str) == source).sum()),
+                    target,
+                )
                 continue
             if folded is demand:
                 folded = demand.copy()

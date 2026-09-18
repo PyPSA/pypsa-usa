@@ -541,7 +541,7 @@
     fig6_by_reeds_zone.png, fig5_mw_accounting.png
 
 - id: HF-28
-  commit: 02e1b59
+  commit: 01f742f
   pr: null
   title: "demand disaggregation key: master splits EFS state demand over NODAL buses keyed on `buses.state`, develop over s{simpl} buses keyed on `buses.reeds_state`; the LAF both sides consume was normalised over a THIRD column (`full_state`), so neither conserved state demand until the renormalisation landed"
   confidence: high
@@ -579,7 +579,7 @@
     explains. The CONCENTRATED p99/p123 signature is HF-5, not this row.
     BOTH LEGS MUST BE REBUILT: the fix moves both sides by ~2 %, so no pre-fix
     artifact may be compared against a post-fix one.
-    The key choice arrives with the simplify-early stack (01f742f); 02e1b59 is
+    The key choice arrives with the simplify-early stack (01f742f, the `commit` above); 02e1b59 is
     the fix commit, not the origin. Checker:
     tests/equivalence/diagnostics/demand_conservation.py reproduces the pre-fix
     baseline exactly. Backlog B7 / issue #3. Prose home:

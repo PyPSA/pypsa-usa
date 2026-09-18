@@ -256,3 +256,41 @@ def test_demand_for_an_absent_key_is_logged_with_its_mw(caplog):
     assert "Texas" in warnings
     assert "700.0" in warnings
     assert result.sum().sum() == pytest.approx(1500.0, abs=1e-9)
+
+
+# --- (f) the fold must never override a key a bus actually carries -----------
+
+
+def test_fold_is_skipped_when_a_bus_carries_the_dc_key():
+    """A DC bus with a DC demand column keeps its own demand; nothing is folded."""
+    buses = dict(BUSES)
+    buses["dc"] = ("DC", "p123", 1.0)  # the future fix: DC keeps its own key
+    n = make_network(buses)
+    demand = make_demand(
+        n,
+        {"Maryland": [100.0], "Virginia": [50.0], "District of Columbia": [50.0]},
+    )
+
+    result = WritePopulation(n).dissagregate_demand(demand, "state")
+
+    assert float(result["dc"].iloc[0]) == pytest.approx(50.0)
+    assert float(result[["md_a", "md_b"]].iloc[0].sum()) == pytest.approx(100.0)
+    assert result.sum().sum() == pytest.approx(200.0, abs=1e-9)
+
+
+# --- (g) a share under LAF_DROP_THRESHOLD is zeroed and the rest rescaled ----
+
+
+def test_sub_threshold_share_is_zeroed_and_the_key_still_conserves():
+    """A bus with a vanishing factor gets exactly 0; its key's demand is intact."""
+    buses = dict(BUSES)
+    buses["md_tiny"] = ("MD", "p123", 1e-9)
+    n = make_network(buses)
+    demand = make_demand(n, {"Maryland": [1000.0], "Virginia": [500.0]})
+
+    result = WritePopulation(n).dissagregate_demand(demand, "state")
+
+    assert "md_tiny" not in result.columns or float(result["md_tiny"].iloc[0]) == 0.0
+    per_key = allocated_by_key(result, n)
+    assert per_key["Maryland"].iloc[0] == pytest.approx(1000.0, abs=1e-9)
+    assert result.sum().sum() == pytest.approx(1500.0, abs=1e-9)
