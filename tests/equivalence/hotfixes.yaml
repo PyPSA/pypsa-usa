@@ -568,8 +568,8 @@
     2.008). Allocated demand exceeded the EFS state totals by +2.28 % (master)
     and +1.85 % (develop); measured on usa s300, 2026-09-15, 470,193.2 vs
     461,636.2 MW mean. `dissagregate_demand` now renormalises the factors within
-    the consumption key on develop (02e1b59) and on master-benchmark
-    (5f88d66), so each key is conserved exactly whatever the key is. THIS HALF
+    the consumption key on develop (02e1b59, guard 4b287b2) and on master-benchmark
+    (969ae8b, the HF-29 row), so each key is conserved exactly whatever the key is. THIS HALF
     IS NEUTRALISED and cannot explain a residual difference.
     (2) THE KEY COLUMN ITSELF -- NOT PORTED, hence `ported: false`. After the
     renormalisation a bus still draws from the state its key names, so the 547
@@ -590,10 +590,10 @@
 - id: HF-29
   commit: 02e1b59
   pr: null
-  title: "District of Columbia demand is folded into Maryland before disaggregation, so a demand table that has a DC column stops losing it in silence"
+  title: "LAF renormalised inside the demand key at consumption time, on BOTH branches (state demand conserved: was +2.28 % master, +1.85 % develop); plus a DC-column fold into Maryland that is skipped when a bus carries the key"
   confidence: none
   ported: true
-  ported_sha: 752099a
+  ported_sha: 969ae8b
   usa_noop: true
   expect: [demand_by_zone/*]
   notes: >-
@@ -618,5 +618,5 @@
     accidentally present, but as a far larger phantom (+8,763 MW billed to
     Maryland on develop, +5,656 MW to Virginia and +5,115 MW to Maryland on
     master). Giving DC its own key end to end is the real fix and is still open.
-    Ported to master-benchmark as 5f88d66, so both sides fold identically.
+    Ported to master-benchmark as 969ae8b (renormalisation + fold), so both sides behave identically.
     Backlog B7 / issue #3. Prose home: memory/plans/hotfix-ledger.md.
