@@ -593,7 +593,7 @@
   title: "District of Columbia demand is folded into Maryland before disaggregation, so a demand table that has a DC column stops losing it in silence"
   confidence: none
   ported: true
-  ported_sha: 5f88d66
+  ported_sha: 752099a
   usa_noop: true
   expect: [demand_by_zone/*]
   notes: >-

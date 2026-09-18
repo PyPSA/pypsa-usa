@@ -526,3 +526,251 @@
 # those rows must come back equivalent. If one of them differs again, it is a
 # finding — hence HF-27 is `usa_noop: true` in hotfixes.yaml and can no longer
 # explain anything.
+
+# --- HF-5 zone relabel of EXISTING CAPACITY, usa prong 2 (decided 2026-09-17: explained, develop
+# correct, no fix; bounded so the verdict reads explained). Source:
+# experiments/runs/eq-usa-80abb3bc125f/diagnosis/{conventional_zone_rows.md,waiver_rows_usa_hf5.yaml}.
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p122 | CCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 900
+  reason: Marcus Hook Energy LP (4 units, 836.1 MW) moves p126 -> p122; master's clobbered county for substation 7163 is Gloucester NJ, the polygon says Delaware PA (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p126 | CCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 900
+  reason: the p126 side of the same 836.1 MW Marcus Hook move (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p126 | OCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 700
+  reason: Bayonne Energy Center 644.0 MW p127 -> p126 plus Newman (PA) 1.8 MW p122 -> p126; master puts substation 2796 in Richmond NY, the polygon says Hudson NJ (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p127 | OCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 700
+  reason: the p127 side of the 644.0 MW Bayonne Energy Center move (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p31 | OCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 330
+  reason: Rio Grande 298.3 MW p59 -> p31; master puts substation 38886 in El Paso TX, the polygon says Dona Ana NM (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p59 | OCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 330
+  reason: the p59 side of the 298.3 MW Rio Grande move (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p122 | waste
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 100
+  reason: Covanta Delaware Valley 90.0 MW p126 -> p122 (substation 6456, master county Gloucester NJ vs polygon Delaware PA) (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p126 | waste
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 100
+  reason: the p126 side of the 90.0 MW Covanta Delaware Valley move (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p8 | battery
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 30
+  reason: Fish Springs 25.0 MW p12 -> p8; master puts substation 37808 in Washoe NV, the polygon says Lassen CA. master's side of the row is 0 MW, so the bound is MW not pct (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p12 | battery
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 30
+  reason: the p12 side of the 25.0 MW Fish Springs move (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p126 | oil
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 100
+  reason: net of Eddystone 79.6 MW p122 -> p126 and Chester 55.8 MW p126 -> p122 (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p122 | oil
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 100
+  reason: the p122 side of the Eddystone / Chester oil exchange (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p123 | OCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 26
+  reason: three federal DC gas turbines (22.9 MW) move p99 -> p123; master puts the DC substations in Arlington / Alexandria VA, the polygon says District of Columbia (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p123 | biomass
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 16
+  reason: DC Water CHP 14.1 MW moves p99 -> p123 by the same DC county clobber (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p99 | biomass
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 16
+  reason: the p99 side of the 14.1 MW DC Water CHP move (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p124 | oil
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 5
+  reason: Tangier and Smith Island (3.9 MW) move p123 -> p124; substation 10310 sits in a ReEDS shape gap in Chesapeake Bay, master's county is Somerset MD, the polygon says Accomack VA (HF-5)
+# The six solar rows mix HF-26 (master drops plants at unprofiled substations,
+# reconstructed) with the HF-5 relabel; the reconstruction fails its develop gate
+# on them by exactly the relabelled MW, so they are bounded here on the WHOLE
+# delta (HF-26 dropped + HF-5 moved), ~10 % above the measured value.
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p12 | solar
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 250
+  reason: HF-26 dropped 323.0 MW minus Fish Springs solar 100.0 MW relabelled p12 -> p8 (HF-5); measured +223.0
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p8 | solar
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 110
+  reason: the p8 side of the 100.0 MW Fish Springs solar relabel (HF-5); measured +100.0
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p123 | solar
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 410
+  reason: HF-26 dropped 363.8 MW plus 9.4 MW of DC solar relabelled p99 -> p123 (HF-5); measured +373.2
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p126 | solar
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 1170
+  reason: HF-26 dropped 1,056.8 MW plus 3.0 MW relabelled into p126 (HF-5); measured +1,059.8
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p129 | solar
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 115
+  reason: HF-26 dropped 100.4 MW plus 2.0 MW relabelled p130 -> p129 (HF-5); measured +102.4
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p130 | solar
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 40
+  reason: HF-26 dropped 34.9 MW minus 2.0 MW relabelled p130 -> p129 (HF-5); measured +32.9
+
+# --- HF-5 zone relabel of DEMAND, usa prong 2: the 17 downtown-DC buses carry
+# 5,767.6 MW of mean demand that master files under p99 (Virginia) and develop
+# under p123 (Maryland + DC). Bounds are ~10 % above the post-HF-28 expectation
+# (the p123 row previously netted a -2,155 MW HF-28 term that the fix removes).
+# Source: experiments/runs/eq-usa-82c25a3177d0/diagnosis/demand_by_zone.md §3.
+- interconnect: usa
+  prong: 2
+  metric: demand_by_zone
+  key: p99 | mean
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 6500
+  reason: DC core buses relabelled p99 -> p123 by master's county clobber; 5,767.6 MW mean (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: demand_by_zone
+  key: p123 | mean
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 6500
+  reason: the p123 side of the DC relabel, 5,766.0 MW mean (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: demand_by_zone
+  key: p99 | peak
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 12000
+  reason: peak-hour counterpart of the DC relabel; measured -10,040.6 MW before HF-28 (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: demand_by_zone
+  key: p123 | peak
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 12000
+  reason: the p123 side of the peak-hour DC relabel (HF-5)
