@@ -252,7 +252,7 @@
   master: ZenodoScenarioDownloader with hardcoded record ids and silent nearest-year substitution
   develop: godeeep_cf_registry; unresolvable (dataset, year) fails at parse time
   notes: >-
-    Mitigated on the usa leg, where a7304ce pins renewable_scenarios to
+    Mitigated on the usa leg, where e1f5841 pins renewable_scenarios to
     historical 2012 and overrides the registry sources to Zenodo-only so both
     sides retrieve byte-identical inputs. Verify the resolved record ids match
     before blaming anything else.
@@ -351,7 +351,7 @@
     switched on.
 
 - id: HF-22
-  commit: a7304ce
+  commit: e1f5841
   pr: null
   title: build_renewable_profiles._drop_leap_day — Feb 29 dropped from the selection window so a leap weather year yields the standard 8760-hour axis
   confidence: none
@@ -384,7 +384,7 @@
     Needed for a bare-master baseline to run at all from a cold cache.
 
 - id: HF-24
-  commit: ff2093f
+  commit: 3b149ae
   pr: null
   title: build_renewable_profiles keeps NREL caps capacity for substations with zero GODEEEP availability or no intersecting cell, instead of silently dropping it
   confidence: high
@@ -414,7 +414,7 @@
     memory/plans/hotfix-ledger.md in the project brain.
 
 - id: HF-25
-  commit: ff2093f
+  commit: 3b149ae
   pr: null
   title: "renewable.godeeep_cf_weighting: develop weights substation capacity factors up to the s{simpl} cluster by INSTALLABLE capacity (NREL caps p_nom_max); master weights them by EXISTING p_nom and falls back to an unweighted mean where a cluster has none"
   confidence: high
@@ -450,7 +450,7 @@
     tip the diagnosis was made on, not an isolated fix commit.
 
 - id: HF-26
-  commit: a437a4e
+  commit: a5ed78c
   pr: null
   title: "attach_renewable_capacities_to_atlite runs at CLUSTER granularity on develop, so existing renewable plants at substations with no profile generator keep their MW; on master the same function runs nodally and drops them"
   confidence: high
@@ -495,7 +495,7 @@
     fig5_mw_accounting.png
 
 - id: HF-27
-  commit: 440f0d7
+  commit: 382535b
   pr: null
   title: "plant -> bus assignment: a DEVELOP REGRESSION, now FIXED — after simplify-early develop matched plants to the {simpl} cluster CENTROIDS (median 37 km) instead of to substations (median 1.0 km, master's own bus set), putting 6.1 % of existing MW in the wrong ReEDS zone; develop now matches substations and maps through busmap_s{simpl}"
   confidence: high
@@ -568,7 +568,7 @@
     2.008). Allocated demand exceeded the EFS state totals by +2.28 % (master)
     and +1.85 % (develop); measured on usa s300, 2026-09-15, 470,193.2 vs
     461,636.2 MW mean. `dissagregate_demand` now renormalises the factors within
-    the consumption key on develop (02e1b59, guard 4b287b2) and on master-benchmark
+    the consumption key on develop (2a3adf8, guard 190029c) and on master-benchmark
     (969ae8b, the HF-29 row), so each key is conserved exactly whatever the key is. THIS HALF
     IS NEUTRALISED and cannot explain a residual difference.
     (2) THE KEY COLUMN ITSELF -- NOT PORTED, hence `ported: false`. After the
@@ -579,7 +579,7 @@
     explains. The CONCENTRATED p99/p123 signature is HF-5, not this row.
     BOTH LEGS MUST BE REBUILT: the fix moves both sides by ~2 %, so no pre-fix
     artifact may be compared against a post-fix one.
-    The key choice arrives with the simplify-early stack (01f742f, the `commit` above); 02e1b59 is
+    The key choice arrives with the simplify-early stack (01f742f, the `commit` above); 2a3adf8 is
     the fix commit, not the origin. Checker:
     tests/equivalence/diagnostics/demand_conservation.py reproduces the pre-fix
     baseline exactly. Backlog B7 / issue #3. Prose home:
@@ -588,7 +588,7 @@
     fig5_state_demand_conservation.png
 
 - id: HF-29
-  commit: 02e1b59
+  commit: 2a3adf8
   pr: null
   title: "LAF renormalised inside the demand key at consumption time, on BOTH branches (state demand conserved: was +2.28 % master, +1.85 % develop); plus a DC-column fold into Maryland that is skipped when a bus carries the key"
   confidence: none
