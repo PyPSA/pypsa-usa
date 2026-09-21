@@ -34,7 +34,7 @@ def itl_network():
         "p1||p2_fwd_2040": ("p1", "p2", 0.0),
         "p1||p2_rev_2040": ("p2", "p1", 0.0),
         "p1||p3_fwd": ("p1", "p2", 50.0),  # no matching _rev
-        "p1||p2_exp": ("p1", "p2", 0.0),  # not a directional name
+        "p1||p2_other": ("p1", "p2", 0.0),  # not a directional name
     }
     for name, (bus0, bus1, p_nom) in links.items():
         n.add("Link", name, bus0=bus0, bus1=bus1, p_nom=p_nom, p_nom_min=p_nom, p_nom_extendable=True, carrier="AC")
