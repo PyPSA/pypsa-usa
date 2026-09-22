@@ -185,12 +185,6 @@ electricity:
   SAFE_reservemargin: 0.14                 # SAFE planning reserve margin (fraction of peak load); used with SAFE opt
   SAFE_regional_reservemargins:   'repo_data/config/policy_constraints/SAFE_regional_prm.csv'
 
-  operational_reserve:                     # GenX-style reserve requirement; only active when activate=true
-    activate: false
-    epsilon_load: 0.02                     # share of total load held as reserve
-    epsilon_vres:  0.02                    # share of VRE supply held as reserve
-    contingency: 4000                      # fixed reserve floor in MW
-
   erm:                                     # Energy Reserve Margin — only consumed when the ERM opt is enabled
     all: 0.15                              # default ERM applied to every region (fraction of annual energy)
 

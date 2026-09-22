@@ -17,12 +17,6 @@ remote_contracted_resources:,,,"California only. Re-adds the physically out-of-s
 SAFE_reservemargin,p.u.,float,"System-wide planning reserve margin as a fraction of peak load. Reserved setting — not currently enforced by an active constraint; the ``ERM`` option is the active resource-adequacy mechanism."
 SAFE_regional_reservemargins,--,path,"CSV of per-region planning reserve margins (``repo_data/config/policy_constraints/SAFE_regional_prm.csv``). Reserved setting — not currently enforced by an active constraint."
 ,,,
-operational_reserve:,,,Settings for reserve requirements following `GenX <https://genxproject.github.io/GenX.jl/stable/Model_Reference/core/#Operational-Reserves>`_
--- activate,bool,true or false,Whether to take operational reserve requirements into account during optimisation
--- epsilon_load,--,float,share of total load
--- epsilon_vres,--,float,share of total renewable supply
--- contingency,MW,float,fixed reserve capacity
-,,,
 erm:,,,Energy Reserve Margin settings (used when ERM opt is enabled). Ensures sufficient firm capacity to meet demand plus reserve margin at every timestep.
 -- <region>,--,float,"Reserve margin as a fraction (e.g., 0.15 for 15%). Use ``all`` for all regions, or specify region codes (state, interconnect, NERC region, or ReEDS zone). Defaults to ``all: 0.15`` if not specified."
 ,,,

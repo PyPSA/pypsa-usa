@@ -48,7 +48,6 @@ from opts.policy import (
 )
 from opts.reserves import (
     add_ERM_constraints,
-    add_operational_reserve_margin,
     store_ERM_duals,
 )
 from opts.sector import (
@@ -182,11 +181,6 @@ def extra_functionality(n, snapshots):
 
     # Always apply bidirectional link constraints
     add_bidirectional_link_constraints(n)
-
-    # Apply operational reserve if configured
-    reserve = config["electricity"].get("operational_reserve", {})
-    if reserve.get("activate"):
-        add_operational_reserve_margin(n, snapshots, config)
 
     # Apply demand response if configured
     dr_config = config["electricity"].get("demand_response", {})

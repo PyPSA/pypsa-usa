@@ -243,15 +243,6 @@ properties:
       portfolio_standards: {type: string}
       transmission_interface_limits: {type: string}
 
-      operational_reserve:
-        type: object
-        additionalProperties: false
-        properties:
-          activate: {type: boolean}
-          epsilon_load: {type: number}
-          epsilon_vres: {type: number}
-          contingency: {type: number}
-
       erm:
         type: object
 
