@@ -30,9 +30,9 @@ In production cost-minimizing optimization models, a generator’s marginal cost
 
 A California-scoped run (`model_topology: include: reeds_state: ['CA']`) attaches only the
 plants that fall inside the model footprint, so every resource that is *physically* outside
-California is dropped by `filter_plants_by_region` — including roughly 10.9 GW that the CPUC
-ledger attributes to California load regions and that genuinely serves California load: SCE's
-635 MW share of Palo Verde, LADWP's 1,185 MW of Intermountain and 566 MW of Apex, the Hoover
+California is dropped by `filter_plants_by_region` — including roughly 11.2 GW (75 rows,
+11,173 MW of `capmax_mw`) that the CPUC ledger attributes to California load regions and that
+genuinely serves California load: SCE's 635 MW share of Palo Verde, LADWP's 1,185 MW of Intermountain and 566 MW of Apex, the Hoover
 entitlements, and about 2 GW of Arizona and Nevada solar and battery contracts.
 
 Setting `electricity: remote_contracted_resources: enable: true` adds them back. For each row
@@ -64,8 +64,9 @@ Four simplifications are deliberate and worth knowing before reading results:
 2. **Remote hydro (the Hoover entitlements) is attached as a firm, energy-unlimited
    generator** carrying only the EIA-860 seasonal derate. CRSP hydrology, Lake Mead elevation
    and the monthly energy schedules that actually bound those entitlements are not modelled.
-3. **Rows with no `eia_plant_id` are skipped** — Mexicali TDM/LR2, Powerex/BC, the ESJ Baja
-   wind contracts and a few pure entitlement rows (about 1.9 GW). They have no PUDL
+3. **Rows with no `eia_plant_id` are skipped** — nine rows, 2,210 MW in total: Mexicali
+   TDM/LR2, Powerex/BC, the ESJ Baja wind contracts, a few pure entitlement rows (1,931 MW
+   together) and the three `TAHOE_2_THOBT1/2/3` rows (60, 109 and 110 MW). They have no PUDL
    techno-economics to inherit and remain in import-machinery territory; the run logs a single
    summary warning naming them and their MW.
 4. **The CPUC baseline benchmark keeps scoring these units on its `EXCLUDED` row**, because it
@@ -99,7 +100,7 @@ GODEEEP capacity factors are re-aggregated to PyPSA-USA bus polygons using a run
 2. **Cell→bus mapping** computed once per bus layout from a county-level shapefile (cached on disk; ~14 min per interconnect at county resolution).
 3. **Per-bus rollup** of `weight`, `p_nom_max`, `potential`, `average_distance`, and (for offshore) `underwater_fraction` from NREL supply-curve site locations within each bus polygon.
 
-The availability rasters and per-bus capacity rollups are published as a separate Zenodo record ([10.5281/zenodo.20127899](https://doi.org/10.5281/zenodo.20127899)) and downloaded on first run.
+The availability rasters and per-bus capacity rollups are published as a separate Zenodo record ([10.5281/zenodo.20316475](https://doi.org/10.5281/zenodo.20316475)) and downloaded on first run.
 
 (godeeep_weather_years)=
 ##### Historical weather-year availability

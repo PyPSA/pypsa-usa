@@ -289,13 +289,13 @@ def clustering_for_n_clusters(
     return clustering
 
 
-def add_itls(buses, itls, itl_cost, planning_horizons, lifetime, expansion=True):
+def add_itls(buses, itls, itl_cost, planning_horizons, lifetime):
     """
     Adds ITL limits to the network.
 
-    Adds bi-directional links for all ITLS which are non-expandable.
-    Adds a second link that is expandable with equal expansion in each
-    direction.
+    Adds a fwd and a rev link for every ITL, non-expandable here. prepare_network
+    makes them extendable when the transmission limit allows expansion, and
+    solve_network constrains each pair to equal expansion in both directions.
 
     For each ITL, the original fwd/rev links are stamped at the first planning
     horizon and carry the existing REEDS capacity (mw_f0/mw_r0). For every
@@ -332,7 +332,7 @@ def add_itls(buses, itls, itl_cost, planning_horizons, lifetime, expansion=True)
     )  # divide by 2 to avoid accounting for the capital cost repeatedly
     efficiency = 1 if itl_cost is None else itls.efficiency.values
 
-    # The fwd and rev links will be made extendable in prepare_network, so no need to add AC_exp
+    # The fwd and rev links will be made extendable in prepare_network
     clustering.n.add(
         "Link",
         name=itls.interface,  # itl name
@@ -486,12 +486,10 @@ def convert_to_transport(
 
         itl_lower_res = pd.concat([itl_lower_res, itls_between])
         itl_agg_costs = None if itl_agg_costs_fn is None else pd.concat([itl_cost, pd.read_csv(itl_agg_costs_fn)])
-        add_itls(buses, itl_lower_res, itl_agg_costs, planning_horizons, lifetime, expansion=True)
+        add_itls(buses, itl_lower_res, itl_agg_costs, planning_horizons, lifetime)
         itls = pd.concat([itls_filt, itl_lower_res])
     else:
         itls = itls_filt
-
-    clustering.n.add("Carrier", "AC_exp", co2_emissions=0)
 
     # If bus 'p19' is in the network, add a link from it to 'p20'
     # reeds dataset is missing link to and from this zone

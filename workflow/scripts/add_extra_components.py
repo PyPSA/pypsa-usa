@@ -9,8 +9,13 @@ import pypsa
 from _helpers import calculate_annuity, configure_logging, load_costs, log_network_schema
 from add_electricity import add_missing_carriers
 from constants import HOURS_PER_YEAR
-from eia import FuelCosts
-from opts._helpers import get_region_buses
+from external_regions import (
+    add_external_regions,
+    convert_flowgates_to_state,
+    format_flowgates_for_imports_exports,
+    load_remote_unit_bundle,
+    resolve_trade_costs,
+)
 from shapely.geometry import Point
 
 idx = pd.IndexSlice
@@ -696,370 +701,6 @@ def add_demand_response(
     )
 
 
-def trim_network(n, trim_topology):
-    """
-    Trim_network splits the network into two parts:
-        - The internal network, which is the network within the specified zones.
-        - The external network, which is the network outside the specified zones.
-
-    The internal network is retained and unchanged. While the external network components are removed. The external buses which are directly connected to the internal network are aggregated to the `nerc_reg` value of their buses.
-    The only generators kept are the OCGTs at the external buses, which are set to non-extendable.
-
-    The external OCGT generators are set to the carrier name `imports` and retain the same emissions intensity.
-
-    """
-    retain_zones = trim_topology["zone"]
-    internal_buses = get_region_buses(n, retain_zones)
-    if internal_buses.empty:
-        logger.warning("No internal buses found, skipping trim_network")
-        return None
-
-    # Get all lines and links connected to internal buses
-    retain_lines = n.lines[n.lines.bus0.isin(internal_buses.index) | n.lines.bus1.isin(internal_buses.index)]
-    retain_links = n.links[n.links.bus0.isin(internal_buses.index) | n.links.bus1.isin(internal_buses.index)]
-
-    # Find buses to remove (those not connected to internal network)
-    buses_to_remove = n.buses[
-        ~n.buses.index.isin(retain_lines.bus0)
-        & ~n.buses.index.isin(retain_lines.bus1)
-        & ~n.buses.index.isin(retain_links.bus0)
-        & ~n.buses.index.isin(retain_links.bus1)
-    ]
-
-    # Find external buses to keep (connected to internal network but not internal)
-    external_buses_to_keep = n.buses.loc[
-        ~n.buses.index.isin(buses_to_remove.index) & ~n.buses.index.isin(internal_buses.index)
-    ]
-
-    # Remove components at buses that are being removed
-    for c in n.one_port_components:
-        component = n.components[c].static
-        rm = component[component.bus.isin(buses_to_remove.index)]
-        if not rm.empty:
-            n.remove(c, rm.index)
-
-    # Remove lines and links at buses being removed
-    for c in ["Line", "Link"]:
-        component = n.components[c].static
-        rm = component[~component.bus0.isin(internal_buses.index) & ~component.bus1.isin(internal_buses.index)]
-        if not rm.empty:
-            n.remove(c, rm.index)
-
-    # Remove the buses
-    n.remove("Bus", buses_to_remove.index)
-
-    # Get OCGT generators and calculate average marginal cost
-    ocgt_gens = n.generators[n.generators.carrier == "OCGT"]
-    avg_marginal_cost = n.get_switchable_as_dense("Generator", "marginal_cost").loc[:, ocgt_gens.index].mean().mean()
-    n.add("Carrier", "imports", co2_emissions=0.428, nice_name="imports")
-
-    # remove existing oneport components at bus
-    for c in n.one_port_components:
-        component = n.components[c].static
-        rm = component[component.bus.isin(external_buses_to_keep.index)]
-        if not rm.empty:
-            logger.info(f"Removing {c} at external buses {external_buses_to_keep.index} with components {rm.index}")
-            n.remove(c, rm.index)
-
-    # Handle external buses and their generators
-    for bus in external_buses_to_keep.index:
-        # Create new import generator
-        bus_name = n.buses.loc[bus].name
-        n.add(
-            "Generator",
-            f"import_{bus_name}",
-            bus=bus,
-            carrier="imports",
-            p_nom=1e4,
-            p_nom_extendable=False,
-            marginal_cost=avg_marginal_cost,
-            efficiency=1,
-            build_year=n.investment_periods[0],
-            lifetime=100,
-        )
-
-        # Change location names of external buses, append imports to the ['reeds_state', 'reeds_zone', 'reeds_ba', 'interconnect', 'trans_reg', 'trans_grp']
-        n.buses.loc[bus, "reeds_state"] = f"imports_{n.buses.loc[bus, 'reeds_state']}"
-        n.buses.loc[bus, "reeds_zone"] = f"imports_{n.buses.loc[bus, 'reeds_zone']}"
-        n.buses.loc[bus, "reeds_ba"] = f"imports_{n.buses.loc[bus, 'reeds_ba']}"
-        n.buses.loc[bus, "interconnect"] = f"imports_{n.buses.loc[bus, 'interconnect']}"
-        n.buses.loc[bus, "trans_reg"] = f"imports_{n.buses.loc[bus, 'trans_reg']}"
-        n.buses.loc[bus, "trans_grp"] = f"imports_{n.buses.loc[bus, 'trans_grp']}"
-
-        # Set all links and lines connected to the bus as non-extendable
-        for c in ["Line", "Link"]:
-            attr_name = "p_nom_extendable" if c == "Link" else "s_nom_extendable"
-            component = n.components[c].static
-            mask = (component.bus0 == bus) | (component.bus1 == bus)
-            if mask.any():
-                component.loc[mask, attr_name] = False
-                n.components[c].static.update(component)
-
-        # Remove the links which have "exp" in the name and are connected to the external buses
-        links_to_remove = n.links[
-            n.links.index.str.contains("exp")
-            & (n.links.bus0.isin(external_buses_to_keep.index) | n.links.bus1.isin(external_buses_to_keep.index))
-        ]
-        n.remove("Link", links_to_remove.index)
-
-    # Update network topology
-    n.determine_network_topology()
-
-
-def calc_import_export_costs(n: pypsa.Network, carrier: str) -> float:
-    """Calculates the average marginal cost for a given carrier."""
-    gens = n.generators[n.generators.carrier == carrier]
-    component = "Generator"
-    if gens.empty:
-        gens = n.links[n.links.carrier == carrier]
-        component = "Link"
-    if gens.empty:
-        raise ValueError(f"No generators or links found for carrier to calculate imports/exports costs: {carrier}")
-    costs = n.get_switchable_as_dense(component, "marginal_cost").loc[:, gens.index].mean().mean()
-    if costs <= 0.01:
-        raise ValueError(
-            f"Average marginal cost for {carrier} is less than or equal to 0.01. Check the fuel costs configuration.",
-        )
-    return costs
-
-
-def load_import_export_costs(eia_api: str, year: int) -> pd.DataFrame:
-    """Loads fuel costs from EIA."""
-    return FuelCosts(fuel="electricity", year=year, api=eia_api).get_data()
-
-
-def format_import_export_costs(n: pypsa.Network, fuel_costs: pd.DataFrame) -> pd.DataFrame:
-    """Formats fuel costs for BA mappings."""
-    df = fuel_costs.copy()
-    data = []
-
-    buses = n.buses.copy()
-
-    region_mapping = buses.set_index("country")["reeds_state"].to_dict()
-    for region, state in region_mapping.items():
-        for period in df.index.unique():
-            temp = df[(df.index == period) & (df.state == state)]
-            value = temp.value.mean()
-            data.append([period, region, value, "usd/mwh"])
-    formatted = pd.DataFrame(data, columns=["period", "zone", "value", "units"]).set_index("period")
-    return formatted[~formatted.value.isna()]  # regions outside of model scope
-
-
-def format_flowgates_for_imports_exports(n: pypsa.Network, flowgates: pd.DataFrame, zone_col: str) -> pd.DataFrame:
-    """Formats flowgates for zone mappings."""
-    zones_in_model = n.buses[zone_col].unique()
-    df = flowgates.copy()
-
-    # only keep flowgates that connect inside to outside model scope
-    df = df[df.r.isin(zones_in_model) ^ df.rr.isin(zones_in_model)]
-
-    # reformat to sinlge value column for easier addition to network
-    data = []
-    for _, row in df.iterrows():
-        if row.MW_f0 > 0:
-            data.append([row.r, row.rr, row.MW_f0])
-        if row.MW_r0 > 0:
-            data.append([row.rr, row.r, row.MW_r0])
-
-    return pd.DataFrame(data, columns=["r", "rr", "value"])
-
-
-def convert_flowgates_to_state(flowgates: pd.DataFrame, membership: pd.DataFrame) -> pd.DataFrame:
-    """Converts flowgates to state level."""
-    mbshp = membership.set_index("ba")
-    df = flowgates.copy()
-
-    df["s"] = df.r.map(mbshp["st"])
-    df["ss"] = df.rr.map(mbshp["st"])
-    df = df.drop(columns=["r", "rr"])
-    df = df.rename(columns={"s": "r", "ss": "rr"})
-    return df
-
-
-def add_elec_imports_exports(
-    n: pypsa.Network,
-    direction: str,
-    flowgates: pd.DataFrame,
-    fuel_costs: pd.DataFrame | float,
-    co2_emissions: float = 0,
-    zone_col: str = "reeds_zone",
-):
-    """Add electricity imports and exports to the network.
-
-    These are capacity constrianed links to/from states outside the model spatial scope.
-    """
-
-    def _get_regions_2_add(n: pypsa.Network, flowgates: pd.DataFrame, zone_col: str) -> list[str]:
-        """Gets regions to add import and export buses to."""
-        unique_regions = set(flowgates.r.unique()) | set(flowgates.rr.unique())
-        return [x for x in unique_regions if x not in n.buses[zone_col].unique()]
-
-    def _add_import_export_carriers(n: pypsa.Network, direction: str, co2_emissions: float | None = None) -> None:
-        """Adds import and export carriers to the network."""
-        if direction == "imports":
-            co2_emissions = 0 if not co2_emissions else co2_emissions
-            n.add("Carrier", "imports", co2_emissions=co2_emissions, nice_name="Imports")
-        elif direction == "exports":
-            n.add("Carrier", "exports", co2_emissions=0, nice_name="Exports")
-        else:
-            raise ValueError(f"direction must be either imports or exports; received: {direction}")
-
-    def _add_import_export_buses(n: pypsa.Network, regions_2_add: list[str], direction: str) -> None:
-        """Adds import and export buses to the network."""
-        if direction == "imports":
-            suffix = "_imports"
-            carrier = "imports"
-        elif direction == "exports":
-            suffix = "_exports"
-            carrier = "exports"
-        else:
-            raise ValueError(f"direction must be either imports or exports; received: {direction}")
-
-        # cant add in the reeds_state, reeds_zone, reeds_ba, interconnect, trans_reg, trans_grp
-        # because this information has already been filtered out of the network
-
-        n.add(
-            "Bus",
-            regions_2_add,
-            suffix=suffix,
-            carrier=carrier,
-            country=regions_2_add,
-        )
-
-    def _add_import_export_stores(n: pypsa.Network, regions_2_add: list[str], direction: str) -> None:
-        """Adds import and export stores to the network."""
-        if direction == "imports":
-            n.add(
-                "Store",
-                regions_2_add,
-                bus=[f"{x}_imports" for x in regions_2_add],
-                suffix="_imports",
-                carrier="imports",
-                e_nom=0,
-                e_nom_extendable=True,
-                capital_cost=0,
-                e_nom_min=0,
-                e_nom_max=1e9,
-                e_min_pu=-1,
-                e_max_pu=0,
-                e_cyclic_per_period=False,
-                marginal_cost=0,
-            )
-        elif direction == "exports":
-            n.add(
-                "Store",
-                regions_2_add,
-                bus=[f"{x}_exports" for x in regions_2_add],
-                suffix="_exports",
-                carrier="exports",
-                e_nom_extendable=True,
-                marginal_cost=0,
-                e_nom=0,
-                e_nom_max=1e9,
-                e_min=0,
-                e_min_pu=0,
-                e_max_pu=1,
-            )
-        else:
-            raise ValueError(f"direction must be either imports or exports; received: {direction}")
-
-    def _build_cost_timeseries(n: pypsa.Network, costs: pd.DataFrame, zone: str) -> pd.Series:
-        """Builds a cost timeseries for a given state."""
-        timesteps = n.snapshots.get_level_values("timestep")
-        years = n.investment_periods
-        cost_by_zone = costs[costs.zone == zone].drop(columns=["zone", "units"])
-        dfs = []
-        for year in years:
-            df = cost_by_zone.copy()
-            df.index = pd.to_datetime(df.index).map(lambda x: x.replace(year=year))
-            df = df.resample("h").ffill().reindex(timesteps).ffill()
-            df["year"] = year
-            df = df.set_index(["year", df.index])  # df.index is timestep
-            dfs.append(df)
-        df = pd.concat(dfs)
-        return df.reindex(n.snapshots)
-
-    def _add_import_export_links(
-        n: pypsa.Network,
-        flowgates: pd.DataFrame,
-        fuel_costs: pd.DataFrame | float | str,
-        direction: str,
-        zone_col: str = "reeds_zone",
-    ) -> None:
-        """Adds import and export links to the network."""
-        costs = {}
-        zones_in_model = n.buses[zone_col].dropna().unique()
-
-        for _, row in flowgates.iterrows():
-            zone_inside = row.r if row.r in zones_in_model else row.rr
-            zone_outside = row.r if row.r not in zones_in_model else row.rr
-
-            # extremely crude caching for generating cost timeseries :|
-            # keyed by the INSIDE zone — checking the outside zone here skipped
-            # the write whenever an earlier row's inside zone happened to match,
-            # leaving costs[zone_inside] unset (KeyError on county networks).
-            if zone_inside not in costs:
-                if isinstance(fuel_costs, float | int):
-                    costs[zone_inside] = fuel_costs
-                elif isinstance(fuel_costs, pd.DataFrame):
-                    costs[zone_inside] = _build_cost_timeseries(n, fuel_costs, zone_inside)
-                else:
-                    costs[zone_inside] = 0
-
-            marginal_cost = costs[zone_inside]
-
-            capacity = row.value
-
-            """Structre of flowgates is given by:
-
-                  r   rr     value
-            0    p6   p8   488.117
-            1    p8   p6   378.458
-            2    p6   p9  4800.000
-            ...
-            """
-
-            if direction == "imports":
-                if row.r == zone_inside:  # originating at r is exports (ie r -> rr)
-                    continue
-                name = f"{zone_inside}_{zone_outside}_imports"
-                bus0 = f"{zone_outside}_imports"
-                bus1 = zone_inside
-                carrier = "imports"
-            else:
-                if row.r == zone_outside:  # originating at rr is exports (ie rr -> r)
-                    continue
-                name = f"{zone_inside}_{zone_outside}_exports"
-                bus0 = zone_inside
-                bus1 = f"{zone_outside}_exports"
-                carrier = "exports"
-                if isinstance(marginal_cost, pd.Series):
-                    marginal_cost = marginal_cost.mul(-1)  # constraint will limit exports
-
-            mc = marginal_cost.value if isinstance(marginal_cost, pd.DataFrame) else marginal_cost
-
-            n.add(
-                "Link",
-                name,
-                bus0=bus0,
-                bus1=bus1,
-                carrier=carrier,
-                p_nom_extendable=False,
-                p_min_pu=0,
-                p_max_pu=1,
-                marginal_cost=mc,
-                p_nom=capacity,
-            )
-
-    assert direction in ["imports", "exports"], f"direction must be either imports or exports; received: {direction}"
-
-    regions_2_add = _get_regions_2_add(n, flowgates, zone_col)
-    _add_import_export_carriers(n, direction, co2_emissions)
-    _add_import_export_buses(n, regions_2_add, direction)
-    _add_import_export_stores(n, regions_2_add, direction)
-    _add_import_export_links(n, flowgates, fuel_costs, direction, zone_col)
-
-
 def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs: pd.DataFrame, sector: bool):
     """Adds node level CO2 (underground) storage."""
     # get node level CO2 (underground) storage potential and cost from CSV file
@@ -1556,23 +1197,16 @@ def main(snakemake) -> None:
     if dr_config:
         add_demand_response(n, dr_config)
 
-    trim_network_config = snakemake.params.trim_network
     imports_config = snakemake.params.imports
     exports_config = snakemake.params.exports
-
-    assert not (
-        snakemake.params.trim_network and (imports_config.get("enable", False) or exports_config.get("enable", False))
-    ), "trim_network and imports/exports cannot be used together"
-
-    if snakemake.params.trim_network:
-        trim_network(n, trim_network_config)
+    representation = imports_config.get("representation", "store")
 
     if snakemake.params.transmission_network == "reeds":
         # flowgates to limit the capacity (removed later if configured capacity limit is inf)
         flowgates = pd.read_csv(snakemake.input.flowgates)
+        membership = pd.read_csv(snakemake.input.reeds_memberships)
         if snakemake.params.topological_boundaries == "state":
             zone_col = "reeds_state"
-            membership = pd.read_csv(snakemake.input.reeds_memberships)
             flowgates = convert_flowgates_to_state(flowgates, membership)
             flowgates = format_flowgates_for_imports_exports(n, flowgates, zone_col)
             flowgates = flowgates.groupby(["r", "rr"], as_index=False).sum()
@@ -1597,22 +1231,24 @@ def main(snakemake) -> None:
         if not imports_config.get("capacity_limit", True):
             import_flowgates["value"] = np.inf
 
-        import_costs = imports_config.get("costs", False)
+        fuel_costs = resolve_trade_costs(n, imports_config, "imports", snakemake.params.eia_api, year)
 
-        if isinstance(import_costs, float | int):  # user defined value
-            fuel_costs = import_costs
-        elif isinstance(import_costs, str):  # 'wholesale' or name of carrier
-            if import_costs == "wholesale":
-                fuel_costs = load_import_export_costs(snakemake.params.eia_api, year)
-                fuel_costs = format_import_export_costs(n, fuel_costs)
-            else:
-                fuel_costs = calc_import_export_costs(n, import_costs)
-        else:
-            raise ValueError(
-                f"'imports.costs' must be 'wholesale', name of a carrier, or a float/int. Received: {import_costs}",
-            )
+        # Only `generator` mode places the CPUC contracted units behind the
+        # boundary; in `store` mode add_electricity has already attached them
+        # and the bundle is a sentinel.
+        remote_bundle = load_remote_unit_bundle(snakemake.input.remote_units) if representation == "generator" else None
 
-        add_elec_imports_exports(n, "imports", import_flowgates, fuel_costs, co2_emissions, zone_col)
+        add_external_regions(
+            n,
+            "imports",
+            representation,
+            import_flowgates,
+            fuel_costs,
+            co2_emissions,
+            zone_col,
+            remote_bundle=remote_bundle,
+            membership=membership,
+        )
 
     # Electricity exports configuration
     if exports_config.get("enable", False) and snakemake.params.transmission_network == "reeds":
@@ -1627,25 +1263,17 @@ def main(snakemake) -> None:
         if not exports_config.get("capacity_limit", True):
             export_flowgates["value"] = np.inf
 
-        export_costs = exports_config.get("costs", False)
+        fuel_costs = resolve_trade_costs(n, exports_config, "exports", snakemake.params.eia_api, year)
 
-        if isinstance(export_costs, float | int):  # user defined value
-            fuel_costs = export_costs
-            fuel_costs *= -1  # make money by exporting
-        elif isinstance(export_costs, str):  # 'wholesale' or name of carrier
-            if export_costs == "wholesale":
-                fuel_costs = load_import_export_costs(snakemake.params.eia_api, year)
-                fuel_costs = format_import_export_costs(n, fuel_costs)
-                fuel_costs["value"] = fuel_costs.value.mul(-1)  # make money by exporting
-            else:
-                fuel_costs = calc_import_export_costs(n, export_costs)
-                fuel_costs *= -1  # make money by exporting
-        else:
-            raise ValueError(
-                f"'exports.costs' must be 'wholesale', name of a carrier, or a float/int. Received: {export_costs}",
-            )
-
-        add_elec_imports_exports(n, "exports", export_flowgates, fuel_costs, co2_emissions, zone_col)
+        add_external_regions(
+            n,
+            "exports",
+            representation,
+            export_flowgates,
+            fuel_costs,
+            co2_emissions,
+            zone_col,
+        )
 
     if snakemake.config["scenario"]["sector"] == "E":
         co2_storage = snakemake.config.get("co2", {}).get("storage", False)

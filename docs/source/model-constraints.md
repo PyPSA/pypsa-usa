@@ -37,22 +37,23 @@ snapshot weighting in hours, and {math}`d_{n,t}` the exogenous load at bus {math
 Regions used by the policy constraints may be specified as state codes, ReEDS zones
 (`p1`, `p2`, ...), interconnect names, NERC region names, individual bus names, or `all`
 (see `get_region_buses` in
-[opts/_helpers.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/_helpers.py)).
+[opts/_helpers.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/_helpers.py));
+`country` and, where present, `region` bus attributes also match, and interconnect names
+are compared lower-cased.
 
 ## Overview
 
 | Constraint | What it enforces | Trigger | Source |
 |---|---|---|---|
-| [Portfolio standards (RPS/CES)](#portfolio-standards-rps) | Minimum share of eligible generation relative to demand per region and horizon | `RPS` opts token; `electricity: portfolio_standards` + ReEDS RPS/CES data | [policy.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/policy.py) |
-| [Regional emission limits](#regional-emission-limits-rem) | Cap on annual power-sector CO2 per region and horizon | `REM` opts token; `electricity: regional_Co2_limits` | [policy.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/policy.py) |
-| [Energy reserve margin](#energy-reserve-margin-erm) | Energy-backed firm capacity above demand in every snapshot, per region | `ERM` opts token; `electricity: erm` | [reserves.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/reserves.py) |
-| [Technology capacity targets](#technology-capacity-targets-tct) | Minimum/maximum nominal capacity per carrier group, region, and horizon | `TCT` opts token; `electricity: technology_capacity_targets` | [policy.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/policy.py) |
-| [Operational reserves](#operational-reserves) | System-wide spinning-reserve requirement (GenX formulation) | `electricity: operational_reserve: activate` | [reserves.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/reserves.py) |
+| [Portfolio standards (RPS/CES)](#portfolio-standards-rps) | Minimum share of eligible generation relative to demand per region and horizon | `RPS` opts token (skipped when no generator is extendable); `electricity: portfolio_standards` + ReEDS RPS/CES data | [policy.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/policy.py) |
+| [Regional emission limits](#regional-emission-limits-rem) | Cap on annual power-sector CO2 per region and horizon | `REM` opts token (skipped when no generator is extendable; in sector runs dispatches the sector CO2 constraints instead); `electricity: regional_Co2_limits` | [policy.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/policy.py) |
+| [Energy reserve margin](#energy-reserve-margin-erm) | Energy-backed firm capacity above demand in every snapshot, per region | `ERM` opts token (skipped when no generator is extendable); `electricity: erm` | [reserves.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/reserves.py) |
+| [Technology capacity targets](#technology-capacity-targets-tct) | Minimum/maximum nominal capacity per carrier group, region, and horizon | `TCT` opts token (skipped when no generator is extendable; under `foresight: myopic` also applies forced retirements before each horizon); `electricity: technology_capacity_targets` | [policy.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/policy.py) |
 | [Land-use limits](#land-use-limits) | Renewable capacity per carrier and land region bounded by developable potential | always active | [land.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/land.py) |
 | [Bidirectional link coupling](#bidirectional-link-coupling) | Equal capacity expansion of paired forward/reverse links | always active | [bidirectional_link.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/bidirectional_link.py) |
-| [Demand-response capacity](#demand-response-capacity) | Shifted load bounded by a fixed share of nominal load per bus and snapshot | `electricity: demand_response: shift` | [sector.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/sector.py) |
-| [Import/export volume limits](#import-and-export-volume-limits) | Traded energy bounded by a share of demand per balancing period | `electricity: imports/exports: volume_limit` | [interchange.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/interchange.py) |
-| [Interface transmission limits](#interface-transmission-limits) | Aggregate MW cap on the total flow across a bundle of transmission paths | `model_topology: interface_transmission_limits`; `electricity: transmission_interface_limits` | [interfaces.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/interfaces.py) |
+| [Demand-response capacity](#demand-response-capacity) | Shifted load bounded by a fixed share of nominal load per bus and snapshot | `electricity: demand_response: shift` ≥ 0.001 | [sector.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/sector.py) |
+| [Import/export volume limits](#import-and-export-volume-limits) | Traded energy bounded by a share of demand per balancing period | `electricity: imports/exports: enable: true` and a finite `volume_limit` > 0 | [interchange.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/interchange.py) |
+| [Interface transmission limits](#interface-transmission-limits) | Aggregate MW cap on the total flow across a bundle of transmission paths | `model_topology: interface_transmission_limits`; `electricity: transmission_interface_limits` | [interfaces.py](https://github.com/PyPSA/pypsa-usa/blob/develop/workflow/scripts/opts/interfaces.py) |
 | [National emission cap](#national-emission-cap-co2l) | System-wide CO2 cap via PyPSA `GlobalConstraint` | `Co2L` opts token; `electricity: co2limit` | [prepare_network.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/prepare_network.py) |
 | [Natural gas limit](#natural-gas-limit-ch4l) | Cap on annual gas-fired primary energy | `CH4L` opts token; `electricity: gaslimit` | [prepare_network.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/prepare_network.py) |
 | [Emission pricing](#emission-pricing-ep) | CO2 price added to marginal costs (objective, not a constraint) | `Ep` opts token; `costs: emission_prices` | [prepare_network.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/prepare_network.py) |
@@ -72,26 +73,47 @@ supplied by the workflow. Eligible carriers default to
 additionally includes `nuclear, SMR, hydrogen_ct, CCGT-95CCS, CCGT-99CCS, Coal-95CCS`.
 Custom rows may specify any carrier group.
 
-**Trigger:** `RPS` token in `{opts}`.
+:::{figure} _static/generated/rec_trading_zones.png
+:width: 100%
+:alt: CONUS states coloured by REC trading zone
 
-For each REC trading zone {math}`Z` (a set of states {math}`r`), planning horizon
-{math}`y`, and eligible carrier group {math}`C`:
+The REC trading zones over which portfolio standards are pooled. States in the same
+tracking system (WREGIS, M-RETS, PJM-GATS, NEPOOL, ...) share one constraint; states not
+mapped to a system form a zone of their own. The mapping is
+`REC_TRADING_ZONE_MAPPER` in `workflow/scripts/constants.py`, applied to each bus's
+`reeds_state` in `build_base_network`. Regenerate with `snakemake docs_rec_trading_zones`.
+:::
+
+**Trigger:** `RPS` token in `{opts}`. Like the other policy tokens it is skipped
+when the network has no extendable generator (dispatch-only runs).
+
+Targets are grouped by REC trading zone, planning horizon and the *exact* carrier string of
+the row, so a custom row whose carrier list is spelled differently from the ReEDS default
+forms its own constraint. The `region` column must be a single `reeds_state` code; rows
+with any other region identifier are dropped. Only the states of a zone that carry a
+positive target for that horizon and carrier group enter the constraint, on both sides:
+for each zone {math}`Z`, horizon {math}`y` and carrier group {math}`C`, let
+{math}`Z' \subseteq Z` be those states. Then:
 
 \begin{align*}
     &\ \text{let:} \\
     &\ \hspace{1cm} T_y \hspace{1cm} \text{Set of snapshots in planning horizon } y \\
-    &\ \hspace{1cm} G_{Z,C} \hspace{0.72cm} \text{Generators with carrier in } C \text{ at buses in zone } Z \\
+    &\ \hspace{1cm} G_{Z',C} \hspace{0.72cm} \text{Generators with carrier in } C \text{ at buses in the states } Z' \\
     &\ \hspace{1cm} d_{r,t} = \text{Exogenous load in state } r \text{ at snapshot } t \\
     &\ \hspace{1cm} \gamma_{r,y} = \text{Required generation share for state } r \text{ in horizon } y \\
     &\ s.t. \\
-    &\ \hspace{1cm} \sum_{g \in G_{Z,C}} \sum_{t \in T_y} p_{g,t} \;\geq\; \sum_{r \in Z} \gamma_{r,y} \sum_{t \in T_y} d_{r,t}
+    &\ \hspace{1cm} \sum_{g \in G_{Z',C}} \sum_{t \in T_y} p_{g,t} \;\geq\; \sum_{r \in Z'} \gamma_{r,y} \sum_{t \in T_y} d_{r,t}
 \end{align*}
 
-In electricity-only studies the right-hand side is computed from the exogenous load time
-series. In sector-coupled studies final electricity demand is endogenous, so the requirement
-is instead applied against total power-sector supply: eligible generation (generators plus
-efficiency-weighted links feeding AC buses) must exceed {math}`\gamma_{r,y}` times total
-generation in each state of the zone (`add_RPS_constraints_sector`).
+Neither side carries snapshot weightings, so the constraint is a share of energy only
+under uniform weightings. A zone/horizon/carrier group with no eligible generator is skipped
+with a warning. In electricity-only studies the right-hand side is computed from the
+exogenous load time series. In sector-coupled studies final electricity demand is
+endogenous, so the requirement is instead applied against power-sector supply, pooled over
+the zone: eligible generation (generators plus links feeding AC buses, weighted by their
+static efficiency) must exceed {math}`\sum_{r \in Z'} \gamma_{r,y}` times the supply from
+carriers listed under `conventional_carriers`, `renewable_carriers` and
+`extendable_carriers: Generator` in each state (`add_RPS_constraints_sector`).
 
 Data sources and coverage are described on the {ref}`policies page <data-policies>`.
 
@@ -101,7 +123,9 @@ Data sources and coverage are described on the {ref}`policies page <data-policie
 Regional emission limits cap annual power-sector CO2 emissions for arbitrary bus regions
 (states, ReEDS zones, interconnects, NERC regions, or `all`) and planning horizons. Limits
 are read from the CSV at `electricity: regional_Co2_limits` with columns
-`regions`, `planning_horizon`, `limit` (tonnes CO2).
+`name`, `regions`, `planning_horizon`, `limit` (tonnes CO2); `name` becomes the constraint
+name. Rows whose horizon is not an investment period, whose region matches no bus, or
+whose region has no emitting generator are skipped silently.
 
 **Trigger:** `REM` token in `{opts}`.
 
@@ -109,10 +133,10 @@ For each limit row with region set {math}`R`, horizon {math}`y`, and cap {math}`
 
 \begin{align*}
     &\ \text{let:} \\
-    &\ \hspace{1cm} G_R^{em} \hspace{0.9cm} \text{Emitting generators at buses in } R \text{ (carrier CO2 intensity} > 0) \\
+    &\ \hspace{1cm} G_R^{em} \hspace{0.9cm} \text{Emitting generators at buses in } R \text{ (carrier CO2 intensity} \neq 0) \\
     &\ \hspace{1cm} \epsilon_{c} = \text{CO2 intensity of carrier } c \text{ [t/MWh}_{th}] \\
     &\ \hspace{1cm} \eta_{g,t} = \text{Generator efficiency [MWh}_{el}\text{/MWh}_{th}] \\
-    &\ \hspace{1cm} e^{atm}_{y} = \text{End-of-horizon level of CO2 atmosphere stores, if present} \\
+    &\ \hspace{1cm} e^{atm}_{y} = \text{End-of-horizon level of all CO2 atmosphere stores in the network, if present} \\
     &\ s.t. \\
     &\ \hspace{1cm} \sum_{g \in G_R^{em}} \sum_{t \in T_y} w_t \, \frac{\epsilon_{c(g)}}{\eta_{g,t}} \, p_{g,t} + e^{atm}_{y} \;\leq\; E_{R,y}
 \end{align*}
@@ -136,14 +160,22 @@ lines could not carry.
 **Trigger:** `ERM` token in `{opts}`; margins configured under `electricity: erm` as
 `{region: margin}` (default `{'all': 0.15}`).
 
-For every region {math}`R` with margin {math}`m_R`, auxiliary reserve variables
-{math}`\tilde{p}^{dis}_{s,t}, \tilde{p}^{sto}_{s,t}, \widetilde{soc}_{s,t}` (storage
-units), {math}`\tilde{s}_{\ell,t}` (lines), and {math}`\tilde{p}_{\ell,t}` (links) are
-added, mirroring the real dispatch variables and subject to the same bounds and storage
-energy balances (suffixed `_RESERVES` in the model). The nodal reserve adequacy constraint
-is, for every bus {math}`n \in R` and snapshot {math}`t`:
+For every region {math}`R` with margin {math}`m_R`, auxiliary reserve variables are
+added for storage units, lines and links, mirroring the real dispatch variables and subject
+to the same bounds and storage energy balances (suffixed `_RESERVES` in the model). The
+nodal reserve adequacy constraint is:
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} G^{ext}_n, G^{fix}_n \hspace{0.5cm} \text{Extendable / fixed generators at bus } n \\
+    &\ \hspace{1cm} S_n \hspace{1.55cm} \text{Storage units at bus } n \\
+    &\ \hspace{1cm} L_R \hspace{1.5cm} \text{Lines and links with both endpoints in } R \\
+    &\ \hspace{1cm} \tilde{p}^{dis}_{s,t}, \tilde{p}^{sto}_{s,t} = \text{Reserve discharge / charge of storage unit } s \\
+    &\ \hspace{1cm} \tilde{f}_{\ell,t} = \text{Reserve flow on branch } \ell \\
+    &\ \hspace{1cm} K_{n\ell} = \text{Signed incidence: } -1 \text{ at the sending bus, } +1 \text{ at the receiving bus} \\
+    &\ \hspace{1cm} \eta_\ell = \text{Link efficiency, applied to deliveries only (1 for lines)} \\
+    &\ \hspace{1cm} m_R = \text{Reserve margin of region } R \\
+    &\ s.t. \\
     &\ \hspace{1cm}
     \sum_{g \in G^{ext}_n} \bar{p}_{g,t} P^{nom}_g
     + \sum_{s \in S_n} \left( \tilde{p}^{dis}_{s,t} - \tilde{p}^{sto}_{s,t} \right)
@@ -153,48 +185,21 @@ is, for every bus {math}`n \in R` and snapshot {math}`t`:
     \hspace{0.5cm} \forall_{n \in R,\; t}
 \end{align*}
 
-where {math}`G^{ext}_n`/{math}`G^{fix}_n` are the extendable and fixed generators at bus
-{math}`n` (credited at their availability {math}`\bar{p}_{g,t}`, i.e. the capacity factor
-of that snapshot), {math}`S_n` the storage units at {math}`n`, {math}`\tilde{f}_{\ell,t}`
-the reserve flow of lines and links, and {math}`K_{n\ell}` the signed network incidence
-({math}`-1` at the sending bus, {math}`+1` at the receiving bus, where {math}`\eta_\ell`
-applies only to link deliveries). Only branches {math}`L_R` with **both** endpoints in
-{math}`R` contribute — reserve is shared within a region but not imported across its
-boundary. All terms are activity-masked by build year and lifetime in multi-horizon
-models. In planning horizons where a national CO2 limit of zero is active, emitting
-carriers receive no capacity credit.
+Generators are credited at their availability {math}`\bar{p}_{g,t}`, i.e. the capacity
+factor of that snapshot. Only branches with **both** endpoints in {math}`R` contribute —
+reserve is shared within a region but not imported across its boundary. All terms are
+activity-masked by build year and lifetime in multi-horizon
+models. In planning horizons for which the `electricity: regional_Co2_limits` table has a
+row with `regions: all` and `limit: 0` (read whether or not `REM` is in `{opts}`),
+carriers with positive CO2 intensity receive no capacity credit. A bus in {math}`R` with
+no extendable generator, storage unit or in-region branch — an empty left-hand side — and
+a non-zero right-hand side raises an error rather than an infeasible model.
 
 The dual of this constraint is stored per bus and snapshot as `n.buses_t["erm_price"]`
 ($/MW per snapshot) when solving with `ERM`, enabling capacity-price analysis.
 
 Configuration details and valid region identifiers are documented in
 {ref}`the opts wildcard section <opts>`.
-
-## Operational reserves
-
-An optional system-wide spinning-reserve requirement following the
-[GenX formulation](https://genxproject.github.io/GenX/dev/core/#Reserves). Non-negative
-reserve variables {math}`r_{g,t}` are added for every generator.
-
-**Trigger:** `electricity: operational_reserve: activate: true` with parameters
-`epsilon_load` ({math}`\varepsilon^{L}`), `epsilon_vres` ({math}`\varepsilon^{V}`), and
-`contingency` ({math}`c`, MW).
-
-Writing {math}`\kappa_g` for installed capacity ({math}`P^{nom}_g` if generator {math}`g`
-is extendable, the parameter {math}`p^{nom}_g` otherwise):
-
-\begin{align*}
-    &\ \hspace{1cm} \sum_{g} r_{g,t}
-    \;\geq\; \varepsilon^{L} \sum_{n} d_{n,t}
-    + \varepsilon^{V} \sum_{g \in VRES} \bar{p}_{g,t} \, \kappa_g
-    + c \hspace{0.5cm} \forall_{t} \\
-    &\ \hspace{1cm} p_{g,t} + r_{g,t} \;\leq\; \bar{p}_{g,t} \, \kappa_g \hspace{0.5cm} \forall_{g,t}
-\end{align*}
-
-The first constraint sizes the reserve requirement as a share of load plus a share of
-variable-renewable potential plus a fixed contingency; for extendable renewables the
-potential term is a linear expression in {math}`P^{nom}_g`. The second couples reserve
-provision to headroom below available capacity.
 
 (technology-capacity-targets-tct)=
 ## Technology capacity targets (TCT)
@@ -209,13 +214,16 @@ or coal phase-outs. Targets are read from the CSV at
 **Trigger:** `TCT` token in `{opts}`.
 
 For each target row with region {math}`R`, carrier group {math}`C`, and horizon
-{math}`y`, let {math}`A^{ext}` be the extendable generators, storage units, and links of
-those carriers active in {math}`y` at buses in {math}`R`, and {math}`p^{exist}_{R,C,y}`
-the summed nominal capacity of their non-extendable counterparts. Then:
+{math}`y`:
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} A^{ext}_{R,C,y} \hspace{0.6cm} \text{Extendable generators, storage units and links of carriers } C \text{ at buses in } R \text{, active in } y \\
+    &\ \hspace{1cm} p^{exist}_{R,C,y} = \text{Summed nominal capacity of their non-extendable counterparts} \\
+    &\ \hspace{1cm} \underline{P}_{R,C,y}, \overline{P}_{R,C,y} = \text{Target minimum / maximum capacity [MW]} \\
+    &\ s.t. \\
     &\ \hspace{1cm} \underline{P}_{R,C,y} - p^{exist}_{R,C,y}
-    \;\leq\; \sum_{a \in A^{ext}} P^{nom}_a
+    \;\leq\; \sum_{a \in A^{ext}_{R,C,y}} P^{nom}_a
     \;\leq\; \overline{P}_{R,C,y} - p^{exist}_{R,C,y}
 \end{align*}
 
@@ -224,6 +232,19 @@ right-hand side as a constant, a `max` below existing capacity cannot retire
 non-extendable assets through the LP; in myopic runs, targets with `max = 0` are instead
 enforced by zeroing the affected non-extendable capacities before each horizon's solve
 (`apply_forced_retirements`).
+
+:::{figure} _static/generated/tct_targets.png
+:width: 100%
+:alt: Three CONUS maps of the default technology capacity targets: nuclear no-build regions, forced retirements and storage mandates
+
+The technology capacity targets shipped with the repo, by policy family: ReEDS nuclear
+no-build (`max = existing` for `nuclear, SMR`, over both state and ReEDS-zone regions),
+ReEDS forced retirements (`max = 0` for the fossil and biomass carriers listed on each
+state) and ReEDS storage mandates (an annual `min` MW trajectory of
+`4hr_battery_storage`, shaded by the 2030 minimum). The map shows the shipped defaults
+only — a study can point `electricity: technology_capacity_targets` at any other CSV with
+the same columns. Regenerate with `snakemake docs_tct_targets`.
+:::
 
 ```{warning}
 TCT targets can only be used with renewable generators and utility-scale batteries in
@@ -240,24 +261,56 @@ jointly per carrier and land region rather than per generator. This constraint i
 active.
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} G^{ext}_{c,z} \hspace{0.8cm} \text{Extendable generators of carrier } c \text{ with land region } z \\
+    &\ \hspace{1cm} Y \hspace{1.35cm} \text{Investment periods in the model} \\
+    &\ \hspace{1cm} G^{fix}_{c,z,y} \hspace{0.5cm} \text{Non-extendable generators of carrier } c \text{ with land region } z \text{, active in period } y \\
+    &\ \hspace{1cm} p^{nom,max}_{g} = \text{Developable potential of generator } g \text{ [MW]} \\
+    &\ \hspace{1cm} p^{nom}_{g} = \text{Installed capacity of generator } g \text{ [MW]} \\
+    &\ s.t. \\
     &\ \hspace{1cm} \sum_{g \in G^{ext}_{c,z}} P^{nom}_g
     \;\leq\; \max_{g \in G^{ext}_{c,z}} p^{nom,max}_{g}
-    \hspace{0.5cm} \forall \; \text{carrier } c, \text{ land region } z
+    \;-\; \max_{y \in Y} \sum_{g \in G^{fix}_{c,z,y}} p^{nom}_{g}
+    \hspace{0.5cm} \forall_{c,\, z}
 \end{align*}
 
-The maximum (rather than sum) on the right-hand side reflects that all members of a group
-share the same land-region potential. With the `{clusters}` suffixes `m`/`a`/`c`,
-non-aggregated carriers keep their pre-clustering bus as `land_region`, so land limits are
-enforced at `{simpl}` resolution even when the transmission network is coarser.
+The maximum (rather than sum) on the first right-hand term reflects that all members of a
+group share the same land-region potential. That potential is *gross*: it comes from the
+land-eligibility screens of `build_renewable_profiles` and is never reduced by the plants
+already standing on the site, so capacity that is not represented by a decision variable —
+today's brownfield plants, and under `foresight: myopic` every build frozen by
+`freeze_prior_periods` — is subtracted from it. Activity is evaluated per investment period
+from `build_year`/`lifetime`, and the term subtracted is the **peak over the modelled
+investment periods** of the capacity active in that period: the constraint has no period
+dimension, so it must hold for the worst period it spans, and a unit that has retired (or has
+not yet been built) in a period releases its land there. A fixed unit with no `build_year` is
+standing today and is always counted. For a myopic solve, which carries a single period, that
+peak is simply the horizon being solved.
+Extendable assets stay on the left-hand side, so no MW is charged to the land twice, and
+a group whose existing capacity already exceeds its potential gets a right-hand side of
+zero rather than a negative one.
+
+With the `{clusters}` suffixes `m`/`a`/`c`, non-aggregated carriers keep their
+pre-clustering bus as `land_region`, so land limits are enforced at `{simpl}` resolution
+even when the transmission network is coarser.
 
 ## Bidirectional link coupling
 
 Links that represent a single physical corridor in two directions (transport-model
-transmission, H2 pipelines) are modeled as paired `_fwd`/`_rev` links. For each extendable
-pair, capacity **expansion** must be equal so both directions describe the same asset:
+transmission, H2 pipelines) are modeled as paired `_fwd`/`_rev` links. Names may also carry a
+vintage, `<name>_fwd_<year>` / `<name>_rev_<year>` — the form `add_itls` gives the
+future-horizon interface links — and pairing is **within a vintage**: `<name>_fwd_2040` is
+paired with `<name>_rev_2040`, never with `<name>_rev_2030` or an unvintaged `<name>_rev`.
+For each extendable pair, capacity **expansion** must be equal so both directions describe
+the same asset:
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} (fwd, rev) \hspace{0.6cm} \text{A pair of extendable links } \texttt{<name>\_fwd}\texttt{[\_<year>]} \text{, } \texttt{<name>\_rev}\texttt{[\_<year>]} \text{, matched on } \texttt{<name>} \text{ and } \texttt{<year>} \\
+    &\ \hspace{1cm} p^{nom}_{fwd}, p^{nom}_{rev} = \text{Existing capacity in each direction [MW]} \\
+    &\ s.t. \\
     &\ \hspace{1cm} P^{nom}_{fwd} - p^{nom}_{fwd} \;=\; P^{nom}_{rev} - p^{nom}_{rev}
+    \hspace{0.5cm} \forall \text{ pairs}
 \end{align*}
 
 This constraint is always active (it is a no-op when no paired extendable links exist).
@@ -273,8 +326,10 @@ storage-based implementation and its cost accounting — the power-sector versio
 same structure). The solve-time constraint caps how much load can be served from the
 demand-response buffer in any snapshot:
 
-**Trigger:** `electricity: demand_response: shift` (per-unit; `inf` leaves shifting
-unconstrained).
+**Trigger:** `electricity: demand_response: shift`, a per-unit number. `0` (the
+default) adds no demand-response components at all; values below `0.001` add the
+components but no constraint. There is no "unbounded" setting — the schema declares
+`shift` as a number, so the string `inf` is rejected at parse time.
 
 \begin{align*}
     &\ \text{let:} \\
@@ -284,9 +339,12 @@ unconstrained).
     &\ \hspace{1cm} \sum_{\ell \in D_n} p_{\ell,t} \;\leq\; s \cdot d_{n,t} \hspace{0.5cm} \forall_{n,t}
 \end{align*}
 
-In sector-coupled studies the same bound is applied to flows out of the demand-response
-bus (final demand being endogenous), and additional per-sector variants exist — see the
-sector list below.
+In sector-coupled studies final demand is endogenous, so the bound is instead
+{math}`\sum_{\ell \in D_n} p_{\ell,t} \leq s \sum_{\ell:\, bus0 = n} p_{\ell,t}`
+over the links leaving AC bus {math}`n` toward the end-use sectors (carriers not ending in
+`-dr`): demand-response delivery into a bus relative to all link flow leaving it. The
+additional per-sector variants take `shift` in **percent**, not per unit — see the sector
+list below.
 
 ## Import and export volume limits
 
@@ -295,18 +353,30 @@ When imports/exports to regions outside the model scope are enabled
 `exports` links are added at boundary buses. A volume constraint bounds traded energy per
 balancing period (default monthly; `day`, `week`, `month`, or `year`):
 
-**Trigger:** `electricity: imports/exports: volume_limit` (percent of demand; default 10).
+**Trigger:** `electricity: imports: volume_limit` / `electricity: exports: volume_limit`,
+a number in (0, 100] read as percent of demand, together with `enable: true` for that
+direction; the balancing period is `electricity: imports/exports: balancing_period`. The
+shipped default is `inf`, which adds no constraint. A value of `0` or an absent key is
+skipped before the constraint function is reached and also adds no constraint, so a hard
+zero-trade cap has to be expressed through `capacity_limit` or by disabling trade.
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} M \hspace{1.2cm} \text{Import (or export) links} \\
+    &\ \hspace{1cm} \tau \hspace{1.25cm} \text{A balancing period (day, week, month or year)} \\
+    &\ \hspace{1cm} v = \text{Volume limit [\% of demand]} \\
+    &\ \hspace{1cm} d_t = \text{Time-varying } p\_set \text{ of loads with carrier AC, summed} \\
+    &\ \hspace{1cm} w_t = \text{Objective snapshot weighting} \\
+    &\ s.t. \\
     &\ \hspace{1cm} \sum_{\ell \in M} \sum_{t \in \tau} w_t \, p_{\ell,t}
     \;\leq\; \frac{v}{100} \sum_{t \in \tau} w_t \, d_{t}
-    \hspace{0.5cm} \forall \; \text{balancing periods } \tau
+    \hspace{0.5cm} \forall_{\tau}
 \end{align*}
 
-where {math}`M` is the set of import (or export) links, {math}`v` the volume limit in
-percent, and {math}`d_t` total AC load in period {math}`\tau`. In sector studies demand is
-measured as the flow into the end-use sectors and the bound becomes a linear constraint in
-both trade and demand variables.
+In sector studies demand is
+measured as the flow into the end-use sectors, the bound becomes a linear constraint in
+both trade and demand variables, and the share is rounded to two decimals
+(`12.5` % becomes `12` %).
 
 (interface-transmission-limits)=
 ## Interface transmission limits
@@ -321,16 +391,19 @@ interface and direction:
 **Trigger:** `model_topology: interface_transmission_limits: true`.
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} I^{\rightarrow} \hspace{0.9cm} \text{Export links from buses in region\_1 to region\_2} \\
+    &\ \hspace{1cm} I^{\leftarrow} \hspace{0.9cm} \text{Import links from region\_2 to buses in region\_1} \\
+    &\ \hspace{1cm} F_{12}, F_{21} = \text{Interface ratings out of / into region\_1 [MW] (} flow\_12 \text{, } flow\_21 \text{)} \\
+    &\ s.t. \\
     &\ \hspace{1cm} \sum_{\ell \in I^{\rightarrow}} p_{\ell,t} \;\leq\; F_{12}
-    \hspace{0.5cm} \forall_t
-    \hspace{1cm}
-    \sum_{\ell \in I^{\leftarrow}} p_{\ell,t} \;\leq\; F_{21}
+    \hspace{0.5cm} \forall_t \\
+    &\ \hspace{1cm} \sum_{\ell \in I^{\leftarrow}} p_{\ell,t} \;\leq\; F_{21}
     \hspace{0.5cm} \forall_t
 \end{align*}
 
-where {math}`F_{12}` (`flow_12`) caps flow **out of** `region_1` into `region_2` and
-{math}`F_{21}` (`flow_21`) caps flow in the opposite direction. {math}`I^{\rightarrow}` and
-{math}`I^{\leftarrow}` are selected by bus membership and carrier, never by link name.
+{math}`I^{\rightarrow}` and {math}`I^{\leftarrow}` are selected by bus membership and
+carrier, never by link name.
 
 ```{important}
 Only the `imports` / `exports` links added by `add_extra_components` are constrained, so the
@@ -350,23 +423,36 @@ corridor's rating. This is documented, not corrected.
 `GlobalConstraint` (`CO2Limit`) on the `co2_emissions` carrier attribute:
 
 \begin{align*}
-    &\ \hspace{1cm} \sum_{g} \sum_{t} w_t \, \frac{\epsilon_{c(g)}}{\eta_{g,t}} \, p_{g,t}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} T_y \hspace{1.1cm} \text{Snapshots of investment period } y \\
+    &\ \hspace{1cm} k_y = \text{Period weighting (years to the next horizon; } investment\_period\_weightings.years \text{)} \\
+    &\ \hspace{1cm} \epsilon_{c(g)} = \text{CO2 intensity of the carrier of } g \text{ [t/MWh}_{th}] \\
+    &\ \hspace{1cm} \Omega = \text{Annual cap, } electricity{:}\ co2limit \text{ [tCO2/yr]} \\
+    &\ \hspace{1cm} n_{yr} = \text{Weather years in the first investment period} \\
+    &\ s.t. \\
+    &\ \hspace{1cm} \sum_{y} k_y \sum_{g} \sum_{t \in T_y} w_t \, \frac{\epsilon_{c(g)}}{\eta_{g,t}} \, p_{g,t}
     \;\leq\; \Omega \cdot n_{yr}
 \end{align*}
 
-with {math}`\Omega` = `electricity: co2limit` (tCO2/yr) and {math}`n_{yr}` the number of weather years.
+It is a single PyPSA
+`primary_energy` constraint over **all** snapshots of the model, not one per year: in a
+perfect-foresight run with horizons 2030/2040/2050 it caps
+{math}`10\,E_{2030} + 10\,E_{2040} + 1\,E_{2050} \leq \Omega \cdot n_{yr}`, and in a
+myopic run each horizon {math}`y` solved alone is capped at {math}`\Omega \cdot n_{yr} / k_y`.
+Non-cyclic stores and storage units whose carrier has non-zero `co2_emissions` also enter
+through their final energy level.
 The token should always carry a numeric factor scaling a reference budget: `Co2L0.05` sets
-{math}`\Omega = 0.05 \times` `electricity: co2base` (which must be defined in the config).
-Alternatively, set `electricity: co2limit_enable: true` and `electricity: co2limit`
-directly in the config without any token. The constraint mechanics (including the emission
-shadow price) are PyPSA's; see the
+{math}`\Omega = 0.05 \times` `electricity: co2base`. The constraint mechanics (including
+the emission shadow price) are PyPSA's; see the
 [PyPSA global-constraints documentation](https://pypsa.readthedocs.io/en/latest/user-guide/optimal-power-flow.html#global-constraints).
 
-```{warning}
-The token parser reads the *last* number in each token, so a bare `Co2L` (no factor) picks
-up the `2` from the token name itself and silently sets {math}`\Omega = 2 \times` `co2base`.
-Always append an explicit factor, or configure the cap via `electricity: co2limit`.
-The same applies to `CH4L` below (a bare `CH4L` parses as 4 TWh).
+```{note}
+`co2base`, `co2limit`, `co2limit_enable`, `gaslimit` and `gaslimit_enable` are optional keys
+of the `electricity:` block (commented out in `config.default.yaml`). A `Co2L<x>` token
+requires `co2base` and fails at parse time with a message naming it if it is unset
+([#813](https://github.com/PyPSA/pypsa-usa/issues/813)); a bare `Co2L` only switches the
+cap on and expects `electricity: co2limit` to be set directly. The same holds for `CH4L`
+and `gaslimit`.
 ```
 
 (natural-gas-limit-ch4l)=
@@ -374,11 +460,13 @@ The same applies to `CH4L` below (a bare `CH4L` parses as 4 TWh).
 
 `CH4L` sets `electricity: gaslimit_enable: true` and adds a `GlobalConstraint` (`GasLimit`)
 on a `gas_usage` attribute assigned to the `OCGT`, `CCGT`, and `CHP` carriers, capping their
-combined primary (thermal) energy use at `electricity: gaslimit` (MWh thermal per year,
-scaled by the number of weather years). The appended number gives the limit in TWh thermal:
-`CH4L200` caps gas use at 200 TWh thermal per year (always append a value — see the warning
-above).
-Equivalently, set `electricity: gaslimit_enable` and `electricity: gaslimit` in the config.
+combined primary (thermal) energy use at `electricity: gaslimit` × {math}`n_{yr}`, with
+the same cumulative, period-weighted form as `Co2L` above (one constraint over all
+snapshots, weighted by {math}`k_y`). The appended number gives the limit in TWh thermal:
+`CH4L200` sets 200 TWh thermal (always append a value — see the warning above). Only the
+token route works today: `gaslimit` is written into the in-memory config after schema
+validation, whereas setting it in a config file fails validation
+([#813](https://github.com/PyPSA/pypsa-usa/issues/813)).
 
 (emission-pricing-ep)=
 ## Emission pricing (Ep)
@@ -389,7 +477,13 @@ the CO2 price {math}`\pi` (`costs: emission_prices: co2`, optionally given inlin
 emission intensity,
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} \pi = \text{CO2 price, } costs{:}\ emission\_prices{:}\ co2 \text{ [\$/t]} \\
+    &\ \hspace{1cm} c^{marg}_{g} = \text{Marginal cost of generator or storage unit } g \text{ [\$/MWh]} \\
+    &\ \hspace{1cm} \eta_g = \text{Static efficiency of } g \\
+    &\ \text{then:} \\
     &\ \hspace{1cm} c^{marg}_{g} \;\mathrel{+}=\; \pi \, \frac{\epsilon_{c(g)}}{\eta_g}
+    \hspace{0.5cm} \forall_g
 \end{align*}
 
 ```{note}
@@ -404,20 +498,39 @@ plain `Ep`: static emission pricing at the configured `costs: emission_prices: c
 
 The `{ll}` wildcard (handled in `prepare_network`, not `{opts}`) bounds total transmission
 expansion with a PyPSA `GlobalConstraint` of type `transmission_volume_expansion_limit`
-(`v`, MW·km) or `transmission_expansion_cost_limit` (`c`, $): expansion across AC lines and
-AC/DC links is limited to `factor` times today's length- or cost-weighted capacity, or left
-to the optimizer with `opt`. See {ref}`the ll wildcard <ll>` for the syntax and the
+(`v`, MW·km) or `transmission_expansion_cost_limit` (`c`, $). The constraint bounds the
+**total** length- or cost-weighted nominal capacity of all *extendable* AC lines and AC/DC
+links, summed over every vintage, to `factor` times today's value: `v1.25` allows 25 %
+more MW·km, not 125 %. Factors ≤ 1 (including the default `v1.0`) make nothing extendable
+and add no binding constraint, so `v0.8` is identical to `v1.0`; `opt` makes everything
+extendable with no bound. In the ReEDS transport model each interface contributes its
+forward and reverse links (each carrying half the interface capital cost) to both sides,
+so the constant is twice the per-interface volume while the ratio is unaffected.
+
+```{warning}
+`c<factor>` is only consistent with a single investment period
+([#815](https://github.com/PyPSA/pypsa-usa/issues/815)): PyPSA weights each extendable
+asset's cost by the sum of its active periods' objective weightings, while the reference is
+unweighted, so with several horizons the constraint is infeasible for any realistic
+factor. Use `v<factor>` or `opt` in multi-period runs.
+```
+
+See {ref}`the ll wildcard <ll>` for the syntax and the
 [PyPSA documentation](https://pypsa.readthedocs.io/en/latest/user-guide/optimal-power-flow.html#global-constraints)
 for the formulation.
 
 ## Temporal resolution (nH, nSEG)
 
-Temporal aggregation happens in `prepare_network` before the model is built and only
-changes the snapshot set, not the formulation. `nH` (e.g. `3h`) resamples all time series
-by averaging over every `n` hours and scales snapshot weightings accordingly. `nSEG`
-(e.g. `4380SEG`) applies [tsam](https://tsam.readthedocs.io/en/latest/index.html)
-time-series segmentation, choosing `n` variable-length segments per investment period based
-on load, renewable availability, and inflow profiles. Both write
+Temporal aggregation happens in `prepare_network` before the model is built. `nH`
+(e.g. `3h`) resamples all time series by averaging over every `n` hours within each
+investment period, sums snapshot weightings accordingly, and rescales unit-commitment
+parameters of committable generators (`min_up_time`/`min_down_time` from hours to
+snapshots, ramp limits multiplied by `n` and clipped at 1). `nSEG` (e.g. `4380SEG`)
+applies [tsam](https://tsam.readthedocs.io/en/latest/index.html) time-series segmentation
+(an optional dependency, solved with the configured solver), choosing `n` variable-length
+segments per investment period from *all* time-varying component attributes, each
+normalised by its annual maximum. Each segment is represented by the **first hour** of the
+segment, not the segment mean, weighted by the segment duration. Both write
 `clustering: temporal: resolution_elec`, which can equivalently be set directly in the
 config file.
 
@@ -428,9 +541,11 @@ The `{opts}` grammar also accepts `<carrier>+{p,e,c,m}<factor>` tokens (e.g.
 capital_cost | marginal_cost}: {carrier: factor}`.
 
 ```{warning}
-These adjustment tokens are parsed into the config, but no script in the current workflow
-applies `adjustments:` to the network — the mechanism is inherited from PyPSA-Eur and is
-presently inactive in PyPSA-USA.
+These tokens are not usable ([#814](https://github.com/PyPSA/pypsa-usa/issues/814)): no
+config layer defines a top-level `adjustments:` key, so any `+` token raises
+`KeyError: 'adjustments'` in every rule that carries `{opts}`; and even with the key
+present no script applies `adjustments:` to the network. The mechanism is inherited from
+PyPSA-Eur.
 ```
 
 (sector-coupling-constraints)=
@@ -448,17 +563,23 @@ the sector pages and are only listed here:
 - **Cooling heat-pump coupling** — ties heat-pump cooling output to installed heating
   capacity; see the [service-sector heat-pump docs](./data-services.md#heat-pumps).
 - **GSHP capacity limit** — bounds ground-source relative to air-source heat pumps by the
-  rural/urban population ratio; see the
-  [heat-pump documentation](./data-services.md#heat-pumps).
+  rural/urban population ratio; only when `sector: service_sector: split_urban_rural` is
+  false; see the [heat-pump documentation](./data-services.md#heat-pumps).
 - **Natural-gas import/export limits** — bounds gas trade with out-of-scope regions to
-  ranges around historical volumes; see the
+  ranges around historical volumes, per link and investment period; only when
+  `sector: natural_gas: imports` is set; upper bounds given as `inf` are skipped; see the
   [natural-gas sector page](./data-naturalgas.md).
 - **Water-heater storage** — forces water-heating demand to be served through the storage
-  buffer; see the [service sector page](./data-services.md).
+  buffer; only when `sector: service_sector: water_heating: simple_storage` is **false**
+  (the default is true, so it is off by default); see the
+  [service sector page](./data-services.md).
 - **EV generation policy** — caps electric-vehicle-served transport demand per mode and
-  horizon; see the [transportation sector page](./data-transportation.md).
+  horizon as an unweighted sum over snapshots; only when
+  `sector: transport_sector: ev_policy` is non-empty; see the
+  [transportation sector page](./data-transportation.md).
 - **Sector demand response** — per-sector (and optionally per-carrier) shiftable-load
-  bounds; see {ref}`demand response <data-sector-coupling>`.
-- **Industrial fossil minimum** — a floor on fossil-served industrial heat while
-  industrial end uses are under development; see the
-  [industrial sector page](./data-industrial.md).
+  bounds, with `shift` in **percent** (the power-sector `shift` is per unit); see
+  {ref}`demand response <data-sector-coupling>`.
+- **Industrial fossil minimum** — a floor on fossil-served industrial heat per state,
+  unweighted; only when `sector: industrial_sector: min_fossil_generation` (percent)
+  exceeds 0.1; see the [industrial sector page](./data-industrial.md).

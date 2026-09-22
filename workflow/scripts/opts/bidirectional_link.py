@@ -1,6 +1,10 @@
 import logging  # noqa: D100
+import re
 
 logger = logging.getLogger(__name__)
+
+# `<name>_fwd` / `<name>_rev`, optionally followed by a vintage: `<name>_fwd_2040`
+DIRECTION_SUFFIX = re.compile(r"^(?P<base>.*)_(?P<direction>fwd|rev)(?P<vintage>_\d+)?$")
 
 
 def add_bidirectional_link_constraints(n):
@@ -10,35 +14,29 @@ def add_bidirectional_link_constraints(n):
     For pairs of extendable links with identical names except for 'fwd' and 'rev':
     Add constraint: fwd.p_nom_opt - fwd.p_nom = rev.p_nom_opt - rev.p_nom
 
+    Vintaged links ('<name>_fwd_2040' / '<name>_rev_2040') are paired within
+    their own vintage.
+
     This ensures the two links model the same physical infrastructure.
     """
     # Get all extendable links
     extendable_links = n.links[n.links.p_nom_extendable].copy()
 
     # Find potential bidirectional link pairs
-    # These are links that contain either '_fwd' or '_rev' at the end of their names
-    bidirectional_candidates = extendable_links[
-        extendable_links.index.str.contains(r"_fwd$|_rev$", regex=True, case=True)
-    ]
+    # These are links whose names end in '_fwd' or '_rev', with an optional '_<vintage>' after it
+    matches = {link_name: DIRECTION_SUFFIX.match(link_name) for link_name in extendable_links.index}
+    bidirectional_candidates = {link_name: m for link_name, m in matches.items() if m}
 
-    if bidirectional_candidates.empty:
+    if not bidirectional_candidates:
         logger.info("No bidirectional link candidates found (no _fwd or _rev at the end of the names)")
         return
 
-    # Group links by their base name (removing _fwd or _rev parts)
+    # Group links by their base name (removing the _fwd or _rev part, keeping the vintage)
     link_pairs = {}
 
-    for link_name in bidirectional_candidates.index:
-        if "_fwd" in link_name:
-            base_name = link_name.replace("_fwd", "", 1)
-            if base_name not in link_pairs:
-                link_pairs[base_name] = {}
-            link_pairs[base_name]["fwd"] = link_name
-        elif "_rev" in link_name:
-            base_name = link_name.replace("_rev", "", 1)
-            if base_name not in link_pairs:
-                link_pairs[base_name] = {}
-            link_pairs[base_name]["rev"] = link_name
+    for link_name, m in bidirectional_candidates.items():
+        base_name = m["base"] + (m["vintage"] or "")
+        link_pairs.setdefault(base_name, {})[m["direction"]] = link_name
 
     # Filter to only complete pairs (both fwd and rev exist)
     complete_pairs = {base_name: pair for base_name, pair in link_pairs.items() if "fwd" in pair and "rev" in pair}

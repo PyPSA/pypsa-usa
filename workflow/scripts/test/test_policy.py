@@ -113,13 +113,7 @@ def rps_config():
                     "ces_reeds": os.path.join(os.path.dirname(__file__), "fixtures/ces_reeds.csv"),
                 },
             )
-            self.params = type(
-                "obj",
-                (object,),
-                {
-                    "planning_horizons": [2030],
-                },
-            )
+            # rule solve_network passes no planning_horizons param; horizons come from the network
 
     snakemake = MockSnakemake()
 
@@ -522,3 +516,56 @@ def test_apply_forced_retirements_all_region(policy_network, tmp_path):
 
     assert n.generators.loc["coal_ca", "p_nom"] == 0.0
     assert n.generators.loc["coal_tx", "p_nom"] == 0.0
+
+
+def test_add_rps_constraints_without_params(policy_network, rps_config):
+    """The solve rule passes no ``planning_horizons`` param; horizons must come from the network."""
+    from opts.policy import add_RPS_constraints
+
+    n = policy_network
+    config, snakemake = rps_config
+    assert not hasattr(snakemake, "params")
+
+    n.optimize.create_model(multi_investment_periods=True)
+    add_RPS_constraints(n, config, snakemake=snakemake)
+
+    rps = [c for c in n.model.constraints if c.endswith("_rps_limit")]
+    assert rps, "no RPS constraint was added"
+    assert all("2030" in c for c in rps)
+
+
+def test_process_reeds_wide_format_horizons_are_ints(tmp_path):
+    """The wide CES file melts to string years; they must be cast so the horizon filter keeps them."""
+    from opts.policy import CES_CARRIERS, _process_reeds_data
+
+    fn = tmp_path / "ces_fraction.csv"
+    fn.write_text("st,2029,2030,2040\nCA,0,0.571,0.8\nCO,0,0,0.5\n")
+
+    ces = _process_reeds_data(fn, CES_CARRIERS, value_col="pct")
+
+    assert ces.planning_horizon.dtype.kind == "i"
+    assert ces.planning_horizon.isin([2030, 2040]).sum() == 3
+    assert ces.set_index(["region", "planning_horizon"]).pct.loc[("CA", 2030)] == 0.571
+
+
+def test_add_rps_constraints_zone_without_eligible_gens_does_not_stop_others(policy_network, rps_config, tmp_path):
+    """A zone with no eligible generators is skipped; the remaining zones still get their constraint."""
+    from opts.policy import add_RPS_constraints
+
+    n = policy_network
+    config, snakemake = rps_config
+
+    # give CA a carrier no generator has, so its group is empty; TX keeps its real carriers
+    ps = pd.read_csv(config["electricity"]["portfolio_standards"])
+    ps.loc[ps.region == "CA", "carrier"] = "geothermal"
+    fn = tmp_path / "portfolio_standards.csv"
+    ps.to_csv(fn, index=False)
+    config["electricity"]["portfolio_standards"] = str(fn)
+
+    n.optimize.create_model(multi_investment_periods=True)
+    add_RPS_constraints(n, config, snakemake=snakemake)
+
+    rps = [c for c in n.model.constraints if c.endswith("_rps_limit")]
+    assert rps, "the non-empty zone lost its constraint"
+    assert not any(c.startswith("GlobalConstraint-CA") for c in rps)
+

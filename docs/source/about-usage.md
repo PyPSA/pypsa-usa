@@ -38,7 +38,7 @@ snakemake -j1 --configfile config/config.default.yaml
 
 ### Generate Data Model
 
-To generate the data model only, specify the rule `data_model` in the `snakemake` call. The `data_model` rule generates the network file that is passed into the `solve_network` rule. This network will **not** include any additional policy constraints and only includes input data (ie. the network is not solved). The network is available in the `resources/networks/` folder.
+To generate the data model only, specify the rule `data_model` in the `snakemake` call. The `data_model` rule builds the network file that is passed into the `solve_network` rule, so it already carries everything `prepare_network` applies — the `{ll}` transmission limit and any `Co2L`/`CH4L`/`Ep` options in the `{opts}` wildcard. What it does **not** carry are the solve-time policy constraints (`RPS`, `REM`, `ERM`, `TCT`), and the network is not solved. It is written to `resources/{run name}/networks/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc` (the `{run name}/` segment is dropped when `run: shared_resources: true`).
 
 UV:
 ```console
@@ -54,17 +54,31 @@ snakemake data_model -j1 --configfile config/config.default.yaml
 
 ## Running on HPC Cluster
 
-If you are running the workflow on an High-Performance Compute (HPC) cluster, you will first need to update the configuration settings in `workflow/config/config.slurm.yaml` (seeded by `init_pypsa_usa.sh`). Update the account, partition, email, and chdir fields to match the information of your institutions cluster.
+On a High-Performance Compute (HPC) cluster, `workflow/run_slurm.sh` runs one or more scenario
+overlays, submitting each snakemake rule to Slurm as its own job via `workflow/slurm_submit.sh`.
+The script itself must run **inside a compute job or an interactive shell** (`sh_dev` on Sherlock),
+never on a login node.
 
-Next, identify the name of the configuration file you would like to run by editing the `--configfile` argument in the `run_slurm.sh` script; the path shipped in the script is only an example. The script also passes `--cluster-config config/config.slurm.yaml`, which is what resolves the `{cluster.*}` placeholders in its `sbatch` command line.
-
-To run, open a terminal within a login node of your cluster and run the script included in the `workflow` directory:
+Each overlay is a small config file in `workflow/config/weather_years/`, and that directory's
+`manifest.tsv` maps an overlay filename to its run name and build target (tab-separated,
+three columns). Both are yours to create. Overlay filenames are passed as positional arguments,
+and each is layered on top of `repo_data/config/config.california.yaml`:
 
 ```console
-bash run_slurm.sh
+bash run_slurm.sh ca2040_wy2019_z4.yaml ca2040_wy2019_county.yaml
 ```
 
-We have included settings in the Snakemake workflow to dynamically request resources from an HPC cluster based on the size of the pypsa-usa model you decide to run. To modify these resource selections checkout the `memory` and `threads` fields in individual snakemake rules.
+Cluster settings come from the environment, not from a config file. `PARTITION` and `EMAIL` are
+exported to the `sbatch` wrapper; `JOBS` (rule-jobs in flight per overlay), `CONCURRENCY`
+(overlays at a time) and `RESTART_TIMES` tune the scheduling:
+
+```console
+PARTITION=<partition> EMAIL=<you@example.edu> JOBS=20 bash run_slurm.sh ca2040_wy2019_z4.yaml
+```
+
+Driver logs land in `workflow/logs/drivers/`, per-rule Slurm logs in `workflow/logs/slurm/`.
+Resource requests are computed per rule from the input size; to change them, edit the
+`resources: mem_mb:` / `walltime:` and `threads:` fields of the individual snakemake rules.
 
 ## Examine Results
 

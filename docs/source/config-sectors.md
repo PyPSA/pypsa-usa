@@ -61,7 +61,12 @@ Only single-period studies are currently supported when running sector studies.
 ```
 
 :::{note}
-If running demand response at a per-carrier level, put each carrier as a key. For example:
+`by_carrier` is optional (default `False`) and applies to the service and industrial sectors.
+Set it to `True` to give each end-use carrier its own demand-response settings, replacing the
+sector-wide `shift`/`marginal_cost` pair. Recognised carrier keys are `elec`, `heat`,
+`space-heat`, `water-heat` and `cool`; a sector only uses the ones it actually models
+(`elec`, `space-heat`/`heat` and `cool` for the service sector; `elec` and `heat` for the
+industrial sector). For example:
 ```yaml
 demand_response:
   by_carrier: True
@@ -101,17 +106,3 @@ demand_response:
    :widths: 22,7,22,33
    :file: configtables/sector_industrial.csv
 ```
-
-:::{note}
-If running demand response at a per-carrier level, put each carrier as a key. For example:
-```yaml
-demand_response:
-  by_carrier: True
-  elec:
-    shift: 30
-    marginal_cost: 25
-  heat:
-    shift: 10
-    marginal_cost: 30
-```
-:::

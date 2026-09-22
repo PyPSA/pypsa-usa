@@ -162,13 +162,13 @@ Following [PyPSA-Eur](https://pypsa-eur.readthedocs.io/en/latest/), ground-sourc
 
 Consider the following scenario:
 - A cluster consists of 75% urban and 25% rural population
-- The ratio of urban to rural population is 25 / 75 = 0.33
+- The ratio of rural to urban population is 25 / 75 = 0.33; the code multiplies GSHP capacity by its inverse, `urban_fraction / rural_fraction` = 3
 - We want to enforce that, at max, only 0.33 units of GSHP can be installed for every unit of ASHP
 
 The following (general) constraint can be added to represent this:
 
 \begin{align*}
-    &\ \text{ASHP}_{\text{capacity}} - \frac{\text{urban}}{\text{rural}} \times \text{GSHP}_{capacity} \leq 0
+    &\ \text{ASHP}_{\text{capacity}} - \frac{\text{urban}}{\text{rural}} \times \text{GSHP}_{capacity} \geq 0
 \end{align*}
 
 ```{note}

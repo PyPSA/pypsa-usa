@@ -65,7 +65,7 @@ copy of the code under your account on the repository service.
 - Clone this copy to your local disk:
 
     ``` bash
-    ~/repositories $ git clone https://github.com/<github_username>/PyPSA/pypsa-usa.git
+    ~/repositories $ git clone https://github.com/<github_username>/pypsa-usa.git
     ~/repositories $ cd pypsa-usa
     ~/repositories/pypsa-usa $
     ```
@@ -189,5 +189,8 @@ Two conventions to know when touching documentation:
   move, or rename a config section, keep its marker with it — `pytest tests/docs`
   verifies that every include renders exactly the section it claims to.
 - Workflow-generated documentation figures live in `docs/source/_static/generated/`
-  and are re-rendered with `snakemake docs_figures`; the DAG images are re-rendered
+  and are re-rendered with `snakemake docs_figures` (needs built networks),
+  `snakemake docs_simpl_resolutions` (needs the `""` and `<N>a` variants, plus an optional `<run>County` sibling run),
+  `snakemake docs_rec_trading_zones` and `snakemake docs_tct_targets` (repo data only);
+  the DAG images are re-rendered
   with `snakemake dag`. Don't hand-edit these.
