@@ -263,17 +263,30 @@ active.
 \begin{align*}
     &\ \text{let:} \\
     &\ \hspace{1cm} G^{ext}_{c,z} \hspace{0.8cm} \text{Extendable generators of carrier } c \text{ with land region } z \\
+    &\ \hspace{1cm} G^{fix}_{c,z} \hspace{0.85cm} \text{Non-extendable generators of carrier } c \text{ with land region } z \text{, active in the horizon} \\
     &\ \hspace{1cm} p^{nom,max}_{g} = \text{Developable potential of generator } g \text{ [MW]} \\
+    &\ \hspace{1cm} p^{nom}_{g} = \text{Installed capacity of generator } g \text{ [MW]} \\
     &\ s.t. \\
     &\ \hspace{1cm} \sum_{g \in G^{ext}_{c,z}} P^{nom}_g
     \;\leq\; \max_{g \in G^{ext}_{c,z}} p^{nom,max}_{g}
+    \;-\; \sum_{g \in G^{fix}_{c,z}} p^{nom}_{g}
     \hspace{0.5cm} \forall_{c,\, z}
 \end{align*}
 
-The maximum (rather than sum) on the right-hand side reflects that all members of a group
-share the same land-region potential. With the `{clusters}` suffixes `m`/`a`/`c`,
-non-aggregated carriers keep their pre-clustering bus as `land_region`, so land limits are
-enforced at `{simpl}` resolution even when the transmission network is coarser.
+The maximum (rather than sum) on the first right-hand term reflects that all members of a
+group share the same land-region potential. That potential is *gross*: it comes from the
+land-eligibility screens of `build_renewable_profiles` and is never reduced by the plants
+already standing on the site, so capacity that is not represented by a decision variable —
+today's brownfield plants, and under `foresight: myopic` every build frozen by
+`freeze_prior_periods` — is subtracted from it. Only capacity that is active in the
+horizon being solved counts (`build_year`/`lifetime`); a retired unit releases its land.
+Extendable assets stay on the left-hand side, so no MW is charged to the land twice, and
+a group whose existing capacity already exceeds its potential gets a right-hand side of
+zero rather than a negative one.
+
+With the `{clusters}` suffixes `m`/`a`/`c`, non-aggregated carriers keep their
+pre-clustering bus as `land_region`, so land limits are enforced at `{simpl}` resolution
+even when the transmission network is coarser.
 
 ## Bidirectional link coupling
 
