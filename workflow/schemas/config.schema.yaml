@@ -238,6 +238,11 @@ properties:
 
       SAFE_reservemargin: {type: number}
       SAFE_regional_reservemargins: {type: string}
+      co2base: {type: number, description: "Reference CO2 budget (tCO2/yr) scaled by the Co2L<x> opts token"}
+      co2limit_enable: {type: boolean}
+      co2limit: {type: number, description: "System-wide CO2 cap (tCO2/yr); set by Co2L<x> or directly"}
+      gaslimit_enable: {type: boolean}
+      gaslimit: {type: number, description: "Cap on gas-fired primary energy (MWh thermal/yr); set by CH4L<x> or directly"}
       regional_Co2_limits: {type: string}
       technology_capacity_targets: {type: string}
       portfolio_standards: {type: string}

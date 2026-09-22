@@ -53,7 +53,7 @@ are compared lower-cased.
 | [Bidirectional link coupling](#bidirectional-link-coupling) | Equal capacity expansion of paired forward/reverse links | always active | [bidirectional_link.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/bidirectional_link.py) |
 | [Demand-response capacity](#demand-response-capacity) | Shifted load bounded by a fixed share of nominal load per bus and snapshot | `electricity: demand_response: shift` ≥ 0.001 | [sector.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/sector.py) |
 | [Import/export volume limits](#import-and-export-volume-limits) | Traded energy bounded by a share of demand per balancing period | `electricity: imports/exports: enable: true` and a finite `volume_limit` > 0 | [interchange.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/interchange.py) |
-| [Interface transmission limits](#interface-transmission-limits) | Aggregate MW cap on the total flow across a bundle of transmission paths | `model_topology: interface_transmission_limits`; `electricity: transmission_interface_limits` | [interfaces.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/interfaces.py) |
+| [Interface transmission limits](#interface-transmission-limits) | Aggregate MW cap on the total flow across a bundle of transmission paths | `model_topology: interface_transmission_limits`; `electricity: transmission_interface_limits` | [interfaces.py](https://github.com/PyPSA/pypsa-usa/blob/develop/workflow/scripts/opts/interfaces.py) |
 | [National emission cap](#national-emission-cap-co2l) | System-wide CO2 cap via PyPSA `GlobalConstraint` | `Co2L` opts token; `electricity: co2limit` | [prepare_network.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/prepare_network.py) |
 | [Natural gas limit](#natural-gas-limit-ch4l) | Cap on annual gas-fired primary energy | `CH4L` opts token; `electricity: gaslimit` | [prepare_network.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/prepare_network.py) |
 | [Emission pricing](#emission-pricing-ep) | CO2 price added to marginal costs (objective, not a constraint) | `Ep` opts token; `costs: emission_prices` | [prepare_network.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/prepare_network.py) |
@@ -263,13 +263,14 @@ active.
 \begin{align*}
     &\ \text{let:} \\
     &\ \hspace{1cm} G^{ext}_{c,z} \hspace{0.8cm} \text{Extendable generators of carrier } c \text{ with land region } z \\
-    &\ \hspace{1cm} G^{fix}_{c,z} \hspace{0.85cm} \text{Non-extendable generators of carrier } c \text{ with land region } z \text{, active in any modelled period} \\
+    &\ \hspace{1cm} Y \hspace{1.35cm} \text{Investment periods in the model} \\
+    &\ \hspace{1cm} G^{fix}_{c,z,y} \hspace{0.5cm} \text{Non-extendable generators of carrier } c \text{ with land region } z \text{, active in period } y \\
     &\ \hspace{1cm} p^{nom,max}_{g} = \text{Developable potential of generator } g \text{ [MW]} \\
     &\ \hspace{1cm} p^{nom}_{g} = \text{Installed capacity of generator } g \text{ [MW]} \\
     &\ s.t. \\
     &\ \hspace{1cm} \sum_{g \in G^{ext}_{c,z}} P^{nom}_g
     \;\leq\; \max_{g \in G^{ext}_{c,z}} p^{nom,max}_{g}
-    \;-\; \sum_{g \in G^{fix}_{c,z}} p^{nom}_{g}
+    \;-\; \max_{y \in Y} \sum_{g \in G^{fix}_{c,z,y}} p^{nom}_{g}
     \hspace{0.5cm} \forall_{c,\, z}
 \end{align*}
 
@@ -278,8 +279,13 @@ group share the same land-region potential. That potential is *gross*: it comes 
 land-eligibility screens of `build_renewable_profiles` and is never reduced by the plants
 already standing on the site, so capacity that is not represented by a decision variable —
 today's brownfield plants, and under `foresight: myopic` every build frozen by
-`freeze_prior_periods` — is subtracted from it. Only capacity that is active in the
-horizon being solved counts (`build_year`/`lifetime`); a retired unit releases its land.
+`freeze_prior_periods` — is subtracted from it. Activity is evaluated per investment period
+from `build_year`/`lifetime`, and the term subtracted is the **peak over the modelled
+investment periods** of the capacity active in that period: the constraint has no period
+dimension, so it must hold for the worst period it spans, and a unit that has retired (or has
+not yet been built) in a period releases its land there. A fixed unit with no `build_year` is
+standing today and is always counted. For a myopic solve, which carries a single period, that
+peak is simply the horizon being solved.
 Extendable assets stay on the left-hand side, so no MW is charged to the land twice, and
 a group whose existing capacity already exceeds its potential gets a right-hand side of
 zero rather than a negative one.
@@ -291,12 +297,16 @@ even when the transmission network is coarser.
 ## Bidirectional link coupling
 
 Links that represent a single physical corridor in two directions (transport-model
-transmission, H2 pipelines) are modeled as paired `_fwd`/`_rev` links. For each extendable
-pair, capacity **expansion** must be equal so both directions describe the same asset:
+transmission, H2 pipelines) are modeled as paired `_fwd`/`_rev` links. Names may also carry a
+vintage, `<name>_fwd_<year>` / `<name>_rev_<year>` — the form `add_itls` gives the
+future-horizon interface links — and pairing is **within a vintage**: `<name>_fwd_2040` is
+paired with `<name>_rev_2040`, never with `<name>_rev_2030` or an unvintaged `<name>_rev`.
+For each extendable pair, capacity **expansion** must be equal so both directions describe
+the same asset:
 
 \begin{align*}
     &\ \text{let:} \\
-    &\ \hspace{1cm} (fwd, rev) \hspace{0.6cm} \text{A pair of extendable links } \texttt{<name>\_fwd} \text{, } \texttt{<name>\_rev} \\
+    &\ \hspace{1cm} (fwd, rev) \hspace{0.6cm} \text{A pair of extendable links } \texttt{<name>\_fwd}\texttt{[\_<year>]} \text{, } \texttt{<name>\_rev}\texttt{[\_<year>]} \text{, matched on } \texttt{<name>} \text{ and } \texttt{<year>} \\
     &\ \hspace{1cm} p^{nom}_{fwd}, p^{nom}_{rev} = \text{Existing capacity in each direction [MW]} \\
     &\ s.t. \\
     &\ \hspace{1cm} P^{nom}_{fwd} - p^{nom}_{fwd} \;=\; P^{nom}_{rev} - p^{nom}_{rev}
@@ -436,16 +446,13 @@ The token should always carry a numeric factor scaling a reference budget: `Co2L
 the emission shadow price) are PyPSA's; see the
 [PyPSA global-constraints documentation](https://pypsa.readthedocs.io/en/latest/user-guide/optimal-power-flow.html#global-constraints).
 
-```{warning}
-`Co2L` is currently not usable on `develop`
-([#813](https://github.com/PyPSA/pypsa-usa/issues/813)): `co2base` is defined in no config
-layer, so any `Co2L<x>` token raises `KeyError: 'co2base'`, and `co2base`, `co2limit`,
-`co2limit_enable`, `gaslimit` and `gaslimit_enable` are absent from the closed
-`electricity:` schema block, so they cannot be set in a config file either. When fixed:
-the token parser reads the *last* number in each token, so a bare `Co2L` (no factor) picks
-up the `2` from the token name itself and silently sets {math}`\Omega = 2 \times` `co2base`.
-Always append an explicit factor. The same applies to `CH4L` below (a bare `CH4L` parses as
-4 TWh).
+```{note}
+`co2base`, `co2limit`, `co2limit_enable`, `gaslimit` and `gaslimit_enable` are optional keys
+of the `electricity:` block (commented out in `config.default.yaml`). A `Co2L<x>` token
+requires `co2base` and fails at parse time with a message naming it if it is unset
+([#813](https://github.com/PyPSA/pypsa-usa/issues/813)); a bare `Co2L` only switches the
+cap on and expects `electricity: co2limit` to be set directly. The same holds for `CH4L`
+and `gaslimit`.
 ```
 
 (natural-gas-limit-ch4l)=

@@ -189,6 +189,11 @@ electricity:
     all: 0.15                              # default ERM applied to every region (fraction of annual energy)
 
   # ---------------- Policy & emissions ----------------
+  # co2base: 2.4e9                       # OPTIONAL: reference CO2 budget (tCO2/yr) scaled by the Co2L<x> opt; required by Co2L<x>
+  # co2limit_enable: false               # OPTIONAL: system-wide CO2 cap on/off (a bare Co2L opt sets it true)
+  # co2limit: 1.0e9                      # OPTIONAL: the cap itself (tCO2/yr); Co2L<x> computes it as x * co2base
+  # gaslimit_enable: false               # OPTIONAL: gas-fired primary-energy cap on/off (a bare CH4L opt sets it true)
+  # gaslimit: 2.0e8                      # OPTIONAL: the cap itself (MWh thermal/yr); CH4L<x> sets x * 1e6
   regional_Co2_limits:            'repo_data/config/policy_constraints/regional_Co2_limits.csv'           # per-region CO2 caps (tCO2/yr)
   technology_capacity_targets:    'repo_data/config/policy_constraints/technology_capacity_targets.csv'   # forced min/max build by tech & region
   portfolio_standards:            'repo_data/config/policy_constraints/portfolio_standards.csv'           # RPS/CES fractions by region
