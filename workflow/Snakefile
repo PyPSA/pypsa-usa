@@ -418,6 +418,65 @@ rule docs_figures:
         "scripts/plot_docs_figures.py"
 
 
+def _docs_simpl_network(simpl, run_dir=None):
+    root = ("resources/" + run_dir + "/networks/") if run_dir else NETWORKS
+    return expand(
+        root + "{interconnect}/elec_s{simpl}.nc",
+        interconnect=config["scenario"]["interconnect"],
+        simpl=[simpl],
+    )[0]
+
+
+def _docs_simpl_clustered(simpl, clusters, run_dir=None):
+    root = ("resources/" + run_dir + "/networks/") if run_dir else NETWORKS
+    return expand(
+        root + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
+        interconnect=config["scenario"]["interconnect"],
+        simpl=[simpl],
+        clusters=[clusters],
+    )[0]
+
+
+# The county fast-path needs `model_topology.topological_boundaries: county`
+# and then exactly one cluster per county, so it cannot be built inside this
+# run's DAG. If a sibling run named `<run.name>County` exists on disk (built
+# with that override and `clusters: <n>a`), its panel is included.
+DOCS_COUNTY_RUN = (run.get("name") or "") + "County"
+
+
+def _docs_county_inputs():
+    import glob
+
+    simpl = _docs_simpl_network("county", DOCS_COUNTY_RUN)
+    pattern = _docs_simpl_clustered("county", "*a", DOCS_COUNTY_RUN)
+    clustered = sorted(glob.glob(pattern))
+    return [simpl, clustered[0]] if clustered and os.path.exists(simpl) else []
+
+
+rule docs_simpl_resolutions:
+    message:
+        "Rendering the {{simpl}}-resolution comparison into docs/source/_static/generated/."
+    input:
+        numeric_simpl=_docs_simpl_network(config["scenario"]["simpl"][0]),
+        numeric_clustered=_docs_simpl_clustered(
+            config["scenario"]["simpl"][0], f"{DOCS_CLUSTERS_N}a"
+        ),
+        identity_simpl=_docs_simpl_network(""),
+        identity_clustered=_docs_simpl_clustered("", f"{DOCS_CLUSTERS_N}a"),
+        county=_docs_county_inputs(),
+        onshore_shapes=expand(
+            GEOSPATIAL + "{interconnect}/onshore_shapes.geojson",
+            interconnect=config["scenario"]["interconnect"],
+        )[0],
+    params:
+        conventional_carriers=config_provider("electricity", "conventional_carriers"),
+        numeric_simpl=config["scenario"]["simpl"][0],
+    output:
+        simpl_resolutions="../docs/source/_static/generated/simpl_resolutions.png",
+    script:
+        "scripts/plot_docs_figures.py"
+
+
 rule docs_rec_trading_zones:
     message:
         "Rendering the REC trading zone map into docs/source/_static/generated/."

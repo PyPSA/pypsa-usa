@@ -71,6 +71,22 @@ plants collapse; `c` is the mirror image; `a` aggregates nothing and both groups
 `{simpl}` resolution. Regenerate with `snakemake docs_figures`.
 :::
 
+:::{figure} _static/generated/simpl_resolutions.png
+:width: 100%
+:alt: The same footprint at numeric, county and identity simpl resolution, each clustered with the a suffix
+
+What the `{simpl}` value changes, with `a` clustering so nothing is aggregated and every
+generator sits at its `{simpl}` zone. A number (left) k-means the substation network to
+that many resource zones (75 requested, 74 delivered here). `county` (centre) uses the
+county FIPS partition as the busmap — one zone per county — and requires
+`model_topology: topological_boundaries: county`, which in turn pins `{clusters}` to one
+per county (58 in California), so this panel is `58a`. The empty string (right) is the
+identity pass-through: every substation bus is its own resource zone (1,976 here), the
+finest resolution the workflow supports. Regenerate with `snakemake docs_simpl_resolutions`;
+the county panel is picked up from a sibling run named `<run.name>County` built with the
+county boundaries, and is omitted if none exists.
+:::
+
 Clustering respects administrative boundaries: with
 `model_topology: topological_boundaries` set to `county`, `reeds_zone`, or `state`, no
 cluster crosses a boundary of that type. This is what lets

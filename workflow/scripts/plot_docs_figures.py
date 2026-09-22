@@ -123,6 +123,48 @@ def _cluster_suffix(cluster_wildcard):
     return last if last in ("m", "c", "a") else ""
 
 
+def _draw_generators(ax, n, simpl_buses, conventional, cap, jitter, rng):
+    """Scatter ``n``'s generators: aggregated ones at their cluster bus, the rest at their {simpl} zone."""
+    gens = n.generators
+    if not len(gens):
+        return
+    # non-aggregated generators keep land_region = their {simpl} bus: draw them there
+    land_region = gens.get("land_region", pd.Series(index=gens.index, dtype=object)).fillna("")
+    at_simpl = land_region.isin(simpl_buses.index) & (land_region != gens.bus)
+    anchor = gens.bus.where(~at_simpl, land_region)
+    lookup = pd.concat([n.buses[["x", "y"]], simpl_buses[["x", "y"]]])
+    lookup = lookup[~lookup.index.duplicated()]
+    xy = lookup.loc[anchor, ["x", "y"]].to_numpy(dtype=float)
+    offsets = rng.normal(scale=jitter, size=xy.shape)
+    crowded = (anchor.map(anchor.value_counts()) > 1).to_numpy()
+    offsets[~crowded] = 0.0
+    xy = xy + offsets
+    is_conventional = gens.carrier.isin(conventional).to_numpy()
+    sizes = 6.0 + 34.0 * np.sqrt(np.clip(gens.p_nom.fillna(0.0).to_numpy(dtype=float), 0, cap) / cap)
+    for mask, key in ((is_conventional, "conventional"), (~is_conventional, "renewable")):
+        if mask.any():
+            ax.scatter(
+                xy[mask, 0],
+                xy[mask, 1],
+                s=sizes[mask],
+                c=GEN_COLORS[key],
+                alpha=0.75,
+                linewidths=0.3,
+                edgecolors="white",
+                zorder=5,
+            )
+
+
+def _generator_legend(fig, title):
+    handles = [
+        plt.Line2D([], [], marker="o", linestyle="", color=GEN_COLORS["conventional"], label="conventional generator"),
+        plt.Line2D(
+            [], [], marker="o", linestyle="", color=GEN_COLORS["renewable"], label="renewable / other generator"
+        ),
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=2, frameon=False, fontsize=9, title=title, title_fontsize=8)
+
+
 def plot_cluster_suffixes(simpl_path, suffix_paths, shapes_path, out_path, conventional_carriers=None):
     """Four-panel map: one ``{simpl}`` network clustered with each ``{clusters}`` suffix.
 
@@ -170,32 +212,7 @@ def plot_cluster_suffixes(simpl_path, suffix_paths, shapes_path, out_path, conve
     for ax, (suffix, wildcard, n) in zip(np.atleast_1d(axes), ordered):
         _plot_network_panel(ax, n, shapes, None, extent=extent)
         gens = n.generators
-        if len(gens):
-            # non-aggregated generators keep land_region = their {simpl} bus: draw them there
-            land_region = gens.get("land_region", pd.Series(index=gens.index, dtype=object)).fillna("")
-            at_simpl = land_region.isin(simpl_buses.index) & (land_region != gens.bus)
-            anchor = gens.bus.where(~at_simpl, land_region)
-            lookup = pd.concat([n.buses[["x", "y"]], simpl_buses[["x", "y"]]])
-            lookup = lookup[~lookup.index.duplicated()]
-            xy = lookup.loc[anchor, ["x", "y"]].to_numpy(dtype=float)
-            offsets = rng.normal(scale=jitter, size=xy.shape)
-            crowded = (anchor.map(anchor.value_counts()) > 1).to_numpy()
-            offsets[~crowded] = 0.0
-            xy = xy + offsets
-            is_conventional = gens.carrier.isin(conventional).to_numpy()
-            sizes = 6.0 + 34.0 * np.sqrt(np.clip(gens.p_nom.fillna(0.0).to_numpy(dtype=float), 0, cap) / cap)
-            for mask, key in ((is_conventional, "conventional"), (~is_conventional, "renewable")):
-                if mask.any():
-                    ax.scatter(
-                        xy[mask, 0],
-                        xy[mask, 1],
-                        s=sizes[mask],
-                        c=GEN_COLORS[key],
-                        alpha=0.75,
-                        linewidths=0.3,
-                        edgecolors="white",
-                        zorder=5,
-                    )
+        _draw_generators(ax, n, simpl_buses, conventional, cap, jitter, rng)
         ax.set_title(
             f"{{clusters}} = {wildcard}\n{SUFFIX_DESCRIPTIONS[suffix]}\n({len(gens)} generators)",
             fontsize=9,
@@ -206,25 +223,73 @@ def plot_cluster_suffixes(simpl_path, suffix_paths, shapes_path, out_path, conve
         f"{len(buses)} zones by each {{clusters}} suffix",
         fontsize=11,
     )
-    handles = [
-        plt.Line2D([], [], marker="o", linestyle="", color=GEN_COLORS["conventional"], label="conventional generator"),
-        plt.Line2D(
-            [], [], marker="o", linestyle="", color=GEN_COLORS["renewable"], label="renewable / other generator"
-        ),
-    ]
-    fig.legend(
-        handles=handles,
-        loc="lower center",
-        ncol=2,
-        frameon=False,
-        fontsize=9,
-        title="marker area ∝ p_nom (capped); non-aggregated generators drawn at their {simpl} zone, aggregated ones at the cluster bus",
-        title_fontsize=8,
+    _generator_legend(
+        fig,
+        "marker area ∝ p_nom (capped); non-aggregated generators drawn at their {simpl} zone, aggregated ones at the cluster bus",
     )
     fig.tight_layout(rect=(0, 0.09, 1, 0.92))
     fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     logger.info("wrote %s", out_path)
+
+
+SIMPL_DESCRIPTIONS = {
+    "": "identity: every substation bus kept",
+    "county": "county fast-path: one bus per county",
+}
+
+
+def plot_simpl_resolutions(panels, shapes_path, out_path, conventional_carriers=None):
+    """One panel per ``{simpl}`` value, all clustered with the same ``<N>a`` wildcard.
+
+    ``panels`` maps a ``{simpl}`` wildcard value (``"75"``, ``"county"``, ``""``)
+    to ``(simpl_network_path, clustered_network_path)``. With ``a`` nothing is
+    aggregated, so every generator is drawn at its ``{simpl}`` zone and the
+    panels show the resource resolution each ``{simpl}`` mode gives. The
+    cluster count may differ per panel: ``county`` requires
+    ``topological_boundaries: county`` and therefore one cluster per county.
+    """
+    conventional = set(conventional_carriers or FALLBACK_CONVENTIONAL_CARRIERS)
+    shapes = None
+    if shapes_path:
+        import geopandas as gpd
+
+        shapes = gpd.read_file(shapes_path)
+
+    loaded = {str(k): (pypsa.Network(sp), pypsa.Network(cp)) for k, (sp, cp) in panels.items()}
+    order = sorted(loaded, key=lambda k: (not k.isdigit(), k != "county"))  # numeric, county, identity
+    p_nom = pd.concat([c.generators.p_nom for _, c in loaded.values()]).fillna(0.0)
+    cap = max(float(p_nom.quantile(0.95)), 1.0)
+    extent = _footprint_extent(*[n for pair in loaded.values() for n in pair])
+    span = max(extent[1] - extent[0], extent[3] - extent[2], 1e-6)
+    jitter = 0.015 * span
+    rng = np.random.default_rng(0)
+
+    fig, axes = plt.subplots(1, len(order), figsize=(4.3 * len(order), 5.6))
+    for ax, key in zip(np.atleast_1d(axes), order):
+        simpl_network, clustered = loaded[key]
+        _plot_network_panel(ax, clustered, shapes, None, extent=extent)
+        _draw_generators(ax, clustered, simpl_network.buses, conventional, cap, jitter, rng)
+        what = SIMPL_DESCRIPTIONS.get(key, f"k-means to {key} zones")
+        ax.set_title(
+            f"{{simpl}} = {key!r}, {{clusters}} = {_clusters_wildcard(clustered)}\n{what}\n"
+            f"({len(simpl_network.buses)} {{simpl}} buses, {len(clustered.generators)} generators)",
+            fontsize=9,
+        )
+    fig.suptitle(
+        "The same footprint at each {simpl} resolution, clustered with the a suffix (nothing aggregated)",
+        fontsize=11,
+    )
+    _generator_legend(fig, "marker area ∝ p_nom (capped); every generator drawn at its {simpl} zone (nothing aggregated)")
+    fig.tight_layout(rect=(0, 0.09, 1, 0.92))
+    fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    logger.info("wrote %s", out_path)
+
+
+def _clusters_wildcard(n):
+    """Best-effort ``{clusters}`` label for a clustered network: its bus count plus the ``a`` suffix."""
+    return f"{len(n.buses)}a"
 
 
 def _carrier_colors(n, carriers):
@@ -306,6 +371,23 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake("docs_figures")
     logging.basicConfig(level=logging.INFO)
+
+    if hasattr(snakemake.output, "simpl_resolutions"):
+        panels = {
+            str(snakemake.params.numeric_simpl): (snakemake.input.numeric_simpl, snakemake.input.numeric_clustered),
+            "": (snakemake.input.identity_simpl, snakemake.input.identity_clustered),
+        }
+        county = list(snakemake.input.county)
+        if len(county) == 2:
+            panels["county"] = (county[0], county[1])
+        plot_simpl_resolutions(
+            panels,
+            snakemake.input.onshore_shapes,
+            snakemake.output.simpl_resolutions,
+            conventional_carriers=snakemake.params.conventional_carriers,
+        )
+        raise SystemExit(0)
+
     plot_network_aggregation(
         snakemake.input.base_network,
         snakemake.input.simpl_network,
