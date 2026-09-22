@@ -160,14 +160,22 @@ lines could not carry.
 **Trigger:** `ERM` token in `{opts}`; margins configured under `electricity: erm` as
 `{region: margin}` (default `{'all': 0.15}`).
 
-For every region {math}`R` with margin {math}`m_R`, auxiliary reserve variables
-{math}`\tilde{p}^{dis}_{s,t}, \tilde{p}^{sto}_{s,t}, \widetilde{soc}_{s,t}` (storage
-units), {math}`\tilde{s}_{\ell,t}` (lines), and {math}`\tilde{p}_{\ell,t}` (links) are
-added, mirroring the real dispatch variables and subject to the same bounds and storage
-energy balances (suffixed `_RESERVES` in the model). The nodal reserve adequacy constraint
-is, for every bus {math}`n \in R` and snapshot {math}`t`:
+For every region {math}`R` with margin {math}`m_R`, auxiliary reserve variables are
+added for storage units, lines and links, mirroring the real dispatch variables and subject
+to the same bounds and storage energy balances (suffixed `_RESERVES` in the model). The
+nodal reserve adequacy constraint is:
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} G^{ext}_n, G^{fix}_n \hspace{0.5cm} \text{Extendable / fixed generators at bus } n \\
+    &\ \hspace{1cm} S_n \hspace{1.55cm} \text{Storage units at bus } n \\
+    &\ \hspace{1cm} L_R \hspace{1.5cm} \text{Lines and links with both endpoints in } R \\
+    &\ \hspace{1cm} \tilde{p}^{dis}_{s,t}, \tilde{p}^{sto}_{s,t} = \text{Reserve discharge / charge of storage unit } s \\
+    &\ \hspace{1cm} \tilde{f}_{\ell,t} = \text{Reserve flow on branch } \ell \\
+    &\ \hspace{1cm} K_{n\ell} = \text{Signed incidence: } -1 \text{ at the sending bus, } +1 \text{ at the receiving bus} \\
+    &\ \hspace{1cm} \eta_\ell = \text{Link efficiency, applied to deliveries only (1 for lines)} \\
+    &\ \hspace{1cm} m_R = \text{Reserve margin of region } R \\
+    &\ s.t. \\
     &\ \hspace{1cm}
     \sum_{g \in G^{ext}_n} \bar{p}_{g,t} P^{nom}_g
     + \sum_{s \in S_n} \left( \tilde{p}^{dis}_{s,t} - \tilde{p}^{sto}_{s,t} \right)
@@ -177,14 +185,10 @@ is, for every bus {math}`n \in R` and snapshot {math}`t`:
     \hspace{0.5cm} \forall_{n \in R,\; t}
 \end{align*}
 
-where {math}`G^{ext}_n`/{math}`G^{fix}_n` are the extendable and fixed generators at bus
-{math}`n` (credited at their availability {math}`\bar{p}_{g,t}`, i.e. the capacity factor
-of that snapshot), {math}`S_n` the storage units at {math}`n`, {math}`\tilde{f}_{\ell,t}`
-the reserve flow of lines and links, and {math}`K_{n\ell}` the signed network incidence
-({math}`-1` at the sending bus, {math}`+1` at the receiving bus, where {math}`\eta_\ell`
-applies only to link deliveries). Only branches {math}`L_R` with **both** endpoints in
-{math}`R` contribute — reserve is shared within a region but not imported across its
-boundary. All terms are activity-masked by build year and lifetime in multi-horizon
+Generators are credited at their availability {math}`\bar{p}_{g,t}`, i.e. the capacity
+factor of that snapshot. Only branches with **both** endpoints in {math}`R` contribute —
+reserve is shared within a region but not imported across its boundary. All terms are
+activity-masked by build year and lifetime in multi-horizon
 models. In planning horizons for which the `electricity: regional_Co2_limits` table has a
 row with `regions: all` and `limit: 0` (read whether or not `REM` is in `{opts}`),
 carriers with positive CO2 intensity receive no capacity credit. A bus in {math}`R` with
@@ -210,13 +214,16 @@ or coal phase-outs. Targets are read from the CSV at
 **Trigger:** `TCT` token in `{opts}`.
 
 For each target row with region {math}`R`, carrier group {math}`C`, and horizon
-{math}`y`, let {math}`A^{ext}` be the extendable generators, storage units, and links of
-those carriers active in {math}`y` at buses in {math}`R`, and {math}`p^{exist}_{R,C,y}`
-the summed nominal capacity of their non-extendable counterparts. Then:
+{math}`y`:
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} A^{ext}_{R,C,y} \hspace{0.6cm} \text{Extendable generators, storage units and links of carriers } C \text{ at buses in } R \text{, active in } y \\
+    &\ \hspace{1cm} p^{exist}_{R,C,y} = \text{Summed nominal capacity of their non-extendable counterparts} \\
+    &\ \hspace{1cm} \underline{P}_{R,C,y}, \overline{P}_{R,C,y} = \text{Target minimum / maximum capacity [MW]} \\
+    &\ s.t. \\
     &\ \hspace{1cm} \underline{P}_{R,C,y} - p^{exist}_{R,C,y}
-    \;\leq\; \sum_{a \in A^{ext}} P^{nom}_a
+    \;\leq\; \sum_{a \in A^{ext}_{R,C,y}} P^{nom}_a
     \;\leq\; \overline{P}_{R,C,y} - p^{exist}_{R,C,y}
 \end{align*}
 
@@ -241,9 +248,13 @@ jointly per carrier and land region rather than per generator. This constraint i
 active.
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} G^{ext}_{c,z} \hspace{0.8cm} \text{Extendable generators of carrier } c \text{ with land region } z \\
+    &\ \hspace{1cm} p^{nom,max}_{g} = \text{Developable potential of generator } g \text{ [MW]} \\
+    &\ s.t. \\
     &\ \hspace{1cm} \sum_{g \in G^{ext}_{c,z}} P^{nom}_g
     \;\leq\; \max_{g \in G^{ext}_{c,z}} p^{nom,max}_{g}
-    \hspace{0.5cm} \forall \; \text{carrier } c, \text{ land region } z
+    \hspace{0.5cm} \forall_{c,\, z}
 \end{align*}
 
 The maximum (rather than sum) on the right-hand side reflects that all members of a group
@@ -258,7 +269,12 @@ transmission, H2 pipelines) are modeled as paired `_fwd`/`_rev` links. For each 
 pair, capacity **expansion** must be equal so both directions describe the same asset:
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} (fwd, rev) \hspace{0.6cm} \text{A pair of extendable links } \texttt{<name>\_fwd} \text{, } \texttt{<name>\_rev} \\
+    &\ \hspace{1cm} p^{nom}_{fwd}, p^{nom}_{rev} = \text{Existing capacity in each direction [MW]} \\
+    &\ s.t. \\
     &\ \hspace{1cm} P^{nom}_{fwd} - p^{nom}_{fwd} \;=\; P^{nom}_{rev} - p^{nom}_{rev}
+    \hspace{0.5cm} \forall \text{ pairs}
 \end{align*}
 
 This constraint is always active (it is a no-op when no paired extendable links exist).
@@ -309,14 +325,19 @@ skipped before the constraint function is reached and also adds no constraint, s
 zero-trade cap has to be expressed through `capacity_limit` or by disabling trade.
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} M \hspace{1.2cm} \text{Import (or export) links} \\
+    &\ \hspace{1cm} \tau \hspace{1.25cm} \text{A balancing period (day, week, month or year)} \\
+    &\ \hspace{1cm} v = \text{Volume limit [\% of demand]} \\
+    &\ \hspace{1cm} d_t = \text{Time-varying } p\_set \text{ of loads with carrier AC, summed} \\
+    &\ \hspace{1cm} w_t = \text{Objective snapshot weighting} \\
+    &\ s.t. \\
     &\ \hspace{1cm} \sum_{\ell \in M} \sum_{t \in \tau} w_t \, p_{\ell,t}
     \;\leq\; \frac{v}{100} \sum_{t \in \tau} w_t \, d_{t}
-    \hspace{0.5cm} \forall \; \text{balancing periods } \tau
+    \hspace{0.5cm} \forall_{\tau}
 \end{align*}
 
-where {math}`M` is the set of import (or export) links, {math}`v` the volume limit in
-percent, {math}`d_t` the time-varying `p_set` of loads with carrier `AC`, and {math}`w_t`
-here the *objective* snapshot weighting on both sides. In sector studies demand is
+In sector studies demand is
 measured as the flow into the end-use sectors, the bound becomes a linear constraint in
 both trade and demand variables, and the share is rounded to two decimals
 (`12.5` % becomes `12` %).
@@ -334,16 +355,19 @@ interface and direction:
 **Trigger:** `model_topology: interface_transmission_limits: true`.
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} I^{\rightarrow} \hspace{0.9cm} \text{Export links from buses in region\_1 to region\_2} \\
+    &\ \hspace{1cm} I^{\leftarrow} \hspace{0.9cm} \text{Import links from region\_2 to buses in region\_1} \\
+    &\ \hspace{1cm} F_{12}, F_{21} = \text{Interface ratings out of / into region\_1 [MW] (} flow\_12 \text{, } flow\_21 \text{)} \\
+    &\ s.t. \\
     &\ \hspace{1cm} \sum_{\ell \in I^{\rightarrow}} p_{\ell,t} \;\leq\; F_{12}
-    \hspace{0.5cm} \forall_t
-    \hspace{1cm}
-    \sum_{\ell \in I^{\leftarrow}} p_{\ell,t} \;\leq\; F_{21}
+    \hspace{0.5cm} \forall_t \\
+    &\ \hspace{1cm} \sum_{\ell \in I^{\leftarrow}} p_{\ell,t} \;\leq\; F_{21}
     \hspace{0.5cm} \forall_t
 \end{align*}
 
-where {math}`F_{12}` (`flow_12`) caps flow **out of** `region_1` into `region_2` and
-{math}`F_{21}` (`flow_21`) caps flow in the opposite direction. {math}`I^{\rightarrow}` and
-{math}`I^{\leftarrow}` are selected by bus membership and carrier, never by link name.
+{math}`I^{\rightarrow}` and {math}`I^{\leftarrow}` are selected by bus membership and
+carrier, never by link name.
 
 ```{important}
 Only the `imports` / `exports` links added by `add_extra_components` are constrained, so the
@@ -363,13 +387,18 @@ corridor's rating. This is documented, not corrected.
 `GlobalConstraint` (`CO2Limit`) on the `co2_emissions` carrier attribute:
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} T_y \hspace{1.1cm} \text{Snapshots of investment period } y \\
+    &\ \hspace{1cm} k_y = \text{Period weighting (years to the next horizon; } investment\_period\_weightings.years \text{)} \\
+    &\ \hspace{1cm} \epsilon_{c(g)} = \text{CO2 intensity of the carrier of } g \text{ [t/MWh}_{th}] \\
+    &\ \hspace{1cm} \Omega = \text{Annual cap, } electricity{:}\ co2limit \text{ [tCO2/yr]} \\
+    &\ \hspace{1cm} n_{yr} = \text{Weather years in the first investment period} \\
+    &\ s.t. \\
     &\ \hspace{1cm} \sum_{y} k_y \sum_{g} \sum_{t \in T_y} w_t \, \frac{\epsilon_{c(g)}}{\eta_{g,t}} \, p_{g,t}
     \;\leq\; \Omega \cdot n_{yr}
 \end{align*}
 
-with {math}`\Omega` = `electricity: co2limit` (tCO2/yr), {math}`n_{yr}` the number of
-weather years in the *first* investment period, and {math}`k_y` =
-`investment_period_weightings.years` (the gap to the next horizon). It is a single PyPSA
+It is a single PyPSA
 `primary_energy` constraint over **all** snapshots of the model, not one per year: in a
 perfect-foresight run with horizons 2030/2040/2050 it caps
 {math}`10\,E_{2030} + 10\,E_{2040} + 1\,E_{2050} \leq \Omega \cdot n_{yr}`, and in a
@@ -415,7 +444,13 @@ the CO2 price {math}`\pi` (`costs: emission_prices: co2`, optionally given inlin
 emission intensity,
 
 \begin{align*}
+    &\ \text{let:} \\
+    &\ \hspace{1cm} \pi = \text{CO2 price, } costs{:}\ emission\_prices{:}\ co2 \text{ [\$/t]} \\
+    &\ \hspace{1cm} c^{marg}_{g} = \text{Marginal cost of generator or storage unit } g \text{ [\$/MWh]} \\
+    &\ \hspace{1cm} \eta_g = \text{Static efficiency of } g \\
+    &\ \text{then:} \\
     &\ \hspace{1cm} c^{marg}_{g} \;\mathrel{+}=\; \pi \, \frac{\epsilon_{c(g)}}{\eta_g}
+    \hspace{0.5cm} \forall_g
 \end{align*}
 
 ```{note}
