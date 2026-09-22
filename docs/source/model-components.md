@@ -35,9 +35,15 @@ space at two configurable levels:
    `{simpl}` zones early in the pipeline. Renewable profiles, demand, and the
    generator fleet are all built at this resolution ({doc}`model-workflow`).
 2. **`{clusters}` — the transmission resolution.** The final clustering step reduces
-   the network to `{clusters}` zones, which is what the optimization sees. Suffixes
-   (`m`, `a`, `c`) control how existing transmission capacity is carried into the
-   clustered network ({doc}`config-spatial`).
+   the network to `{clusters}` zones, which is what the optimization sees. A letter
+   suffix on the wildcard controls which *generator carriers* are aggregated into the
+   cluster buses: a plain integer aggregates all of them (one generator per carrier and
+   bus); `m` aggregates only the conventional carriers, so renewable generators move
+   onto the cluster bus but keep their distinct `{simpl}`-level resource zones; `c`
+   aggregates everything *except* the conventional carriers; and `a` aggregates none, so
+   every generator keeps its `{simpl}`-level resolution. Carriers listed under
+   `clustering: cluster_network: exclude_carriers` are never aggregated. See
+   {ref}`the clusters wildcard <clusters>`.
 
 :::{figure} _static/generated/network_aggregation.png
 :width: 100%
@@ -47,6 +53,21 @@ The two-stage spatial aggregation on a California test system: the nodal base ne
 (left) is clustered to 20 `{simpl}` zones (center), at which resolution demand,
 renewable profiles, and generators are built, and finally to 4 `{clusters}` zones
 (right) for the optimization. Regenerate with `snakemake docs_figures`.
+:::
+
+:::{figure} _static/generated/cluster_suffixes.png
+:width: 100%
+:alt: The same clustered network with each of the four clusters-wildcard suffixes, generators drawn as markers
+
+What the `{clusters}` suffix changes. All four panels are the same `{simpl}` network
+reduced to the same cluster buses and branches; only the generators differ. Each marker
+is one generator, drawn at its bus and jittered where a bus hosts several, coloured by
+whether its carrier is conventional or renewable/other and sized by `p_nom`. With a
+plain integer (left) every carrier is aggregated, so each bus carries one marker per
+carrier. With `m` the renewables stay unaggregated and form a cloud at each bus — one
+member per `{simpl}`-level resource zone — while the conventional plants are merged;
+`c` is the mirror image; `a` aggregates nothing and both groups stay as clouds.
+Regenerate with `snakemake docs_figures`.
 :::
 
 Clustering respects administrative boundaries: with

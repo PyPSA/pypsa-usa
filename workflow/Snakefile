@@ -360,9 +360,31 @@ rule dag:
         """
 
 
+# The cluster-suffix figure needs the SAME {simpl} network clustered with each
+# of the four {clusters} wildcard variants, so strip any carrier-aggregation
+# suffix off the configured value and rebuild all four from the bare count.
+DOCS_CLUSTERS = str(config["scenario"]["clusters"][0])
+DOCS_CLUSTERS_N = (
+    DOCS_CLUSTERS[:-1]
+    if DOCS_CLUSTERS[-1] in "mca" and DOCS_CLUSTERS[:-1].isdigit()
+    else DOCS_CLUSTERS
+)
+
+
+def _docs_clustered(clusters):
+    return expand(
+        NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
+        interconnect=config["scenario"]["interconnect"],
+        simpl=config["scenario"]["simpl"],
+        clusters=[clusters],
+    )[0]
+
+
 rule docs_figures:
     message:
         "Rendering documentation figures into docs/source/_static/generated/."
+    params:
+        conventional_carriers=config_provider("electricity", "conventional_carriers"),
     input:
         base_network=expand(
             NETWORKS + "{interconnect}/elec_base_network.nc",
@@ -375,6 +397,10 @@ rule docs_figures:
             NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
             **config["scenario"],
         )[0],
+        clustered_plain=_docs_clustered(DOCS_CLUSTERS_N),
+        clustered_m=_docs_clustered(DOCS_CLUSTERS_N + "m"),
+        clustered_c=_docs_clustered(DOCS_CLUSTERS_N + "c"),
+        clustered_a=_docs_clustered(DOCS_CLUSTERS_N + "a"),
         onshore_shapes=expand(
             GEOSPATIAL + "{interconnect}/onshore_shapes.geojson",
             interconnect=config["scenario"]["interconnect"],
@@ -386,6 +412,7 @@ rule docs_figures:
         )[0],
     output:
         network_aggregation="../docs/source/_static/generated/network_aggregation.png",
+        cluster_suffixes="../docs/source/_static/generated/cluster_suffixes.png",
         example_outputs="../docs/source/_static/generated/example_outputs.png",
     script:
         "scripts/plot_docs_figures.py"

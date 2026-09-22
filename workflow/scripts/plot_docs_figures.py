@@ -7,6 +7,9 @@ regenerated from the current pipeline rather than hand-maintained:
 
 - ``network_aggregation.png`` — the same system at nodal, ``{simpl}``, and
   ``{clusters}`` resolution, illustrating the two-stage spatial aggregation.
+- ``cluster_suffixes.png`` — the same ``{simpl}`` network clustered with the
+  four ``{clusters}`` wildcard variants (``N``, ``Nm``, ``Nc``, ``Na``),
+  showing which generator carriers each variant aggregates.
 - ``example_outputs.png`` — optimal capacity by carrier and a week of dispatch
   from a solved network.
 
@@ -14,17 +17,42 @@ Run via ``snakemake docs_figures`` (see ``workflow/Snakefile``).
 """
 
 import logging
+from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pypsa
 
 logger = logging.getLogger(__name__)
 
 NET_KW = dict(geomap=False, bus_colors="firebrick")
+
+# Used only if the rule does not hand in electricity:conventional_carriers.
+FALLBACK_CONVENTIONAL_CARRIERS = [
+    "nuclear",
+    "oil",
+    "OCGT",
+    "CCGT",
+    "coal",
+    "geothermal",
+    "biomass",
+    "waste",
+]
+
+# The four `{clusters}` wildcard variants, in the order they are drawn, with
+# the behaviour `cluster_network.py` implements for each.
+SUFFIX_DESCRIPTIONS = {
+    "": "all carriers aggregated",
+    "m": "conventional aggregated; renewables keep {simpl} zones",
+    "c": "renewables aggregated; conventional keep {simpl} zones",
+    "a": "nothing aggregated",
+}
+
+GEN_COLORS = {"conventional": "#1f3a93", "renewable": "#2e9e5b"}
 
 
 def _plot_network_panel(ax, n, shapes, title):
@@ -33,12 +61,13 @@ def _plot_network_panel(ax, n, shapes, title):
     n.plot(
         ax=ax,
         bus_sizes=0.004,
-        line_widths=n.lines.s_nom / n.lines.s_nom.max() * 2.0 if len(n.lines) else 0,
-        link_widths=0.8,
+        line_widths=n.lines.s_nom / n.lines.s_nom.max() * 2.2 if len(n.lines) else 0,
+        link_widths=0.88,
         **NET_KW,
     )
     n_branches = len(n.lines) + len(n.links)
-    ax.set_title(f"{title}\n({len(n.buses)} buses, {n_branches} branches)", fontsize=10)
+    if title is not None:
+        ax.set_title(f"{title}\n({len(n.buses)} buses, {n_branches} branches)", fontsize=10)
     ax.set_aspect("equal")
     ax.axis("off")
 
@@ -59,6 +88,104 @@ def plot_network_aggregation(base_path, simpl_path, clusters_path, shapes_path, 
     ):
         _plot_network_panel(ax, pypsa.Network(path), shapes, title)
     fig.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    logger.info("wrote %s", out_path)
+
+
+def _cluster_suffix(cluster_wildcard):
+    """``"4m" -> "m"``, ``"4" -> ""`` — the carrier-aggregation suffix."""
+    last = str(cluster_wildcard)[-1]
+    return last if last in ("m", "c", "a") else ""
+
+
+def plot_cluster_suffixes(simpl_path, suffix_paths, shapes_path, out_path, conventional_carriers=None):
+    """Four-panel map: one ``{simpl}`` network clustered with each ``{clusters}`` suffix.
+
+    ``suffix_paths`` maps a ``{clusters}`` wildcard value (``"4"``, ``"4m"``,
+    ``"4c"``, ``"4a"``) to the clustered network built with it. Every panel
+    draws the same clustered buses and branches; what differs is the
+    generators, drawn as markers at their bus coordinates and jittered where a
+    bus hosts more than one, so a carrier that was *not* aggregated shows up as
+    a cloud (its members keep distinct ``{simpl}``-level ``land_region``
+    values) while an aggregated carrier shows up as a single marker per bus.
+    """
+    conventional = set(conventional_carriers or FALLBACK_CONVENTIONAL_CARRIERS)
+
+    shapes = None
+    if shapes_path:
+        import geopandas as gpd
+
+        shapes = gpd.read_file(shapes_path)
+
+    panels = {}
+    for wildcard, path in suffix_paths.items():
+        panels[_cluster_suffix(wildcard)] = (str(wildcard), pypsa.Network(path))
+    ordered = [(suffix, *panels[suffix]) for suffix in SUFFIX_DESCRIPTIONS if suffix in panels]
+
+    # One capacity scale for the whole figure, so the same p_nom is the same
+    # marker size in every panel. Capped at the 95th percentile: a handful of
+    # very large plants would otherwise set the scale for all the rest.
+    p_nom = pd.concat([n.generators.p_nom for _, _, n in ordered]).fillna(0.0)
+    cap = max(float(p_nom.quantile(0.95)), 1.0)
+
+    # Jitter radius from the map extent, so the clouds read the same at any zoom.
+    buses = ordered[0][2].buses
+    span = max(float(buses.x.max() - buses.x.min()), float(buses.y.max() - buses.y.min()), 1e-6)
+    jitter = 0.015 * span
+
+    rng = np.random.default_rng(0)
+    fig, axes = plt.subplots(1, len(ordered), figsize=(4.3 * len(ordered), 5))
+    for ax, (suffix, wildcard, n) in zip(np.atleast_1d(axes), ordered):
+        _plot_network_panel(ax, n, shapes, None)
+        gens = n.generators
+        if len(gens):
+            xy = n.buses.loc[gens.bus, ["x", "y"]].to_numpy(dtype=float)
+            offsets = rng.normal(scale=jitter, size=xy.shape)
+            crowded = (gens.bus.map(gens.bus.value_counts()) > 1).to_numpy()
+            offsets[~crowded] = 0.0
+            xy = xy + offsets
+            is_conventional = gens.carrier.isin(conventional).to_numpy()
+            sizes = 6.0 + 34.0 * np.sqrt(np.clip(gens.p_nom.fillna(0.0).to_numpy(dtype=float), 0, cap) / cap)
+            for mask, key in ((is_conventional, "conventional"), (~is_conventional, "renewable")):
+                if mask.any():
+                    ax.scatter(
+                        xy[mask, 0],
+                        xy[mask, 1],
+                        s=sizes[mask],
+                        c=GEN_COLORS[key],
+                        alpha=0.75,
+                        linewidths=0.3,
+                        edgecolors="white",
+                        zorder=5,
+                    )
+        ax.set_title(
+            f"{{clusters}} = {wildcard}\n{SUFFIX_DESCRIPTIONS[suffix]}\n({len(gens)} generators)",
+            fontsize=9,
+        )
+
+    n_simpl_buses = len(pypsa.Network(simpl_path).buses)
+    fig.suptitle(
+        f"The same {n_simpl_buses}-zone {{simpl}} network clustered to "
+        f"{len(buses)} zones by each {{clusters}} suffix",
+        fontsize=11,
+    )
+    handles = [
+        plt.Line2D([], [], marker="o", linestyle="", color=GEN_COLORS["conventional"], label="conventional generator"),
+        plt.Line2D(
+            [], [], marker="o", linestyle="", color=GEN_COLORS["renewable"], label="renewable / other generator"
+        ),
+    ]
+    fig.legend(
+        handles=handles,
+        loc="lower center",
+        ncol=2,
+        frameon=False,
+        fontsize=9,
+        title="marker area ∝ p_nom (capped); markers jittered where a bus hosts several generators",
+        title_fontsize=8,
+    )
+    fig.tight_layout(rect=(0, 0.09, 1, 0.97))
     fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     logger.info("wrote %s", out_path)
@@ -149,6 +276,19 @@ if __name__ == "__main__":
         snakemake.input.clustered_network,
         snakemake.input.onshore_shapes,
         snakemake.output.network_aggregation,
+    )
+    # Key each clustered network by its own {clusters} wildcard, read off the
+    # filename, so the panel titles cannot drift from the file that was built.
+    suffix_paths = {}
+    for key in ("clustered_plain", "clustered_m", "clustered_c", "clustered_a"):
+        path = getattr(snakemake.input, key)
+        suffix_paths[Path(path).stem.rsplit("_c", 1)[-1]] = path
+    plot_cluster_suffixes(
+        snakemake.input.simpl_network,
+        suffix_paths,
+        snakemake.input.onshore_shapes,
+        snakemake.output.cluster_suffixes,
+        conventional_carriers=snakemake.params.conventional_carriers,
     )
     plot_example_outputs(
         snakemake.input.solved_network,
