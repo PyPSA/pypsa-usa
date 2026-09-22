@@ -55,7 +55,13 @@ SUFFIX_DESCRIPTIONS = {
 GEN_COLORS = {"conventional": "#1f3a93", "renewable": "#2e9e5b"}
 
 
-def _plot_network_panel(ax, n, shapes, title):
+def _plot_network_panel(ax, n, shapes, title, extent=None):
+    """Draw one network on ``ax``.
+
+    ``extent`` is ``(xmin, xmax, ymin, ymax)``; when given, the panel is framed
+    on it rather than on the network's own bus bounding box, so a heavily
+    clustered network (a handful of buses) still shows the whole footprint.
+    """
     if shapes is not None:
         shapes.plot(ax=ax, facecolor="#f0f0f0", edgecolor="white", linewidth=0.6)
     n.plot(
@@ -68,8 +74,24 @@ def _plot_network_panel(ax, n, shapes, title):
     n_branches = len(n.lines) + len(n.links)
     if title is not None:
         ax.set_title(f"{title}\n({len(n.buses)} buses, {n_branches} branches)", fontsize=10)
+    if extent is not None:
+        ax.set_xlim(extent[0], extent[1])
+        ax.set_ylim(extent[2], extent[3])
     ax.set_aspect("equal")
     ax.axis("off")
+
+
+def _footprint_extent(*networks, pad=0.06):
+    """Padded bounding box of every bus in ``networks`` — the modelled footprint.
+
+    The shapes file is not used for this: it covers the whole interconnect, while
+    the model may be a slice of it (the tutorial is California only).
+    """
+    xs = pd.concat([n.buses.x for n in networks])
+    ys = pd.concat([n.buses.y for n in networks])
+    xmin, xmax, ymin, ymax = xs.min(), xs.max(), ys.min(), ys.max()
+    dx, dy = (xmax - xmin) * pad, (ymax - ymin) * pad
+    return (xmin - dx, xmax + dx, ymin - dy, ymax + dy)
 
 
 def plot_network_aggregation(base_path, simpl_path, clusters_path, shapes_path, out_path):
@@ -80,13 +102,15 @@ def plot_network_aggregation(base_path, simpl_path, clusters_path, shapes_path, 
 
         shapes = gpd.read_file(shapes_path)
 
+    networks = [pypsa.Network(path) for path in (base_path, simpl_path, clusters_path)]
+    extent = _footprint_extent(*networks)
     fig, axes = plt.subplots(1, 3, figsize=(13, 5))
-    for ax, path, title in zip(
+    for ax, n, title in zip(
         axes,
-        [base_path, simpl_path, clusters_path],
+        networks,
         ["Nodal base network", "After cluster_simpl ({simpl})", "After cluster_network ({clusters})"],
     ):
-        _plot_network_panel(ax, pypsa.Network(path), shapes, title)
+        _plot_network_panel(ax, n, shapes, title, extent=extent)
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
     plt.close(fig)
@@ -136,13 +160,15 @@ def plot_cluster_suffixes(simpl_path, suffix_paths, shapes_path, out_path, conve
     span = max(float(buses.x.max() - buses.x.min()), float(buses.y.max() - buses.y.min()), 1e-6)
     jitter = 0.015 * span
 
-    simpl_buses = pypsa.Network(simpl_path).buses
+    simpl_network = pypsa.Network(simpl_path)
+    simpl_buses = simpl_network.buses
     n_simpl_buses = len(simpl_buses)
+    extent = _footprint_extent(simpl_network, *[n for _, _, n in ordered])
 
     rng = np.random.default_rng(0)
-    fig, axes = plt.subplots(1, len(ordered), figsize=(4.3 * len(ordered), 5))
+    fig, axes = plt.subplots(1, len(ordered), figsize=(4.3 * len(ordered), 5.6))
     for ax, (suffix, wildcard, n) in zip(np.atleast_1d(axes), ordered):
-        _plot_network_panel(ax, n, shapes, None)
+        _plot_network_panel(ax, n, shapes, None, extent=extent)
         gens = n.generators
         if len(gens):
             # non-aggregated generators keep land_region = their {simpl} bus: draw them there
@@ -195,7 +221,7 @@ def plot_cluster_suffixes(simpl_path, suffix_paths, shapes_path, out_path, conve
         title="marker area ∝ p_nom (capped); non-aggregated generators drawn at their {simpl} zone, aggregated ones at the cluster bus",
         title_fontsize=8,
     )
-    fig.tight_layout(rect=(0, 0.09, 1, 0.97))
+    fig.tight_layout(rect=(0, 0.09, 1, 0.92))
     fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     logger.info("wrote %s", out_path)
