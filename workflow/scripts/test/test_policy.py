@@ -113,13 +113,7 @@ def rps_config():
                     "ces_reeds": os.path.join(os.path.dirname(__file__), "fixtures/ces_reeds.csv"),
                 },
             )
-            self.params = type(
-                "obj",
-                (object,),
-                {
-                    "planning_horizons": [2030],
-                },
-            )
+            # rule solve_network passes no planning_horizons param; horizons come from the network
 
     snakemake = MockSnakemake()
 
@@ -522,3 +516,20 @@ def test_apply_forced_retirements_all_region(policy_network, tmp_path):
 
     assert n.generators.loc["coal_ca", "p_nom"] == 0.0
     assert n.generators.loc["coal_tx", "p_nom"] == 0.0
+
+
+def test_add_rps_constraints_without_params(policy_network, rps_config):
+    """The solve rule passes no ``planning_horizons`` param; horizons must come from the network."""
+    from opts.policy import add_RPS_constraints
+
+    n = policy_network
+    config, snakemake = rps_config
+    assert not hasattr(snakemake, "params")
+
+    n.optimize.create_model(multi_investment_periods=True)
+    add_RPS_constraints(n, config, snakemake=snakemake)
+
+    rps = [c for c in n.model.constraints if c.endswith("_rps_limit")]
+    assert rps, "no RPS constraint was added"
+    assert all("2030" in c for c in rps)
+

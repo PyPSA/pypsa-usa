@@ -374,7 +374,7 @@ def add_RPS_constraints(n, config, snakemake=None):
     # Concatenate all portfolio standards
     portfolio_standards = _collapse_portfolio_standards(
         n,
-        snakemake.params.planning_horizons,
+        list(n.investment_periods),
         portfolio_standards,
         rps_reeds,
         ces_reeds,
@@ -485,7 +485,7 @@ def add_RPS_constraints_sector(n, config, snakemake=None):
     # Concatenate all portfolio standards
     portfolio_standards = _collapse_portfolio_standards(
         n,
-        snakemake.params.planning_horizons,
+        list(n.investment_periods),
         portfolio_standards,
         rps_reeds,
         ces_reeds,
