@@ -533,3 +533,17 @@ def test_add_rps_constraints_without_params(policy_network, rps_config):
     assert rps, "no RPS constraint was added"
     assert all("2030" in c for c in rps)
 
+
+def test_process_reeds_wide_format_horizons_are_ints(tmp_path):
+    """The wide CES file melts to string years; they must be cast so the horizon filter keeps them."""
+    from opts.policy import CES_CARRIERS, _process_reeds_data
+
+    fn = tmp_path / "ces_fraction.csv"
+    fn.write_text("st,2029,2030,2040\nCA,0,0.571,0.8\nCO,0,0,0.5\n")
+
+    ces = _process_reeds_data(fn, CES_CARRIERS, value_col="pct")
+
+    assert ces.planning_horizon.dtype.kind == "i"
+    assert ces.planning_horizon.isin([2030, 2040]).sum() == 3
+    assert ces.set_index(["region", "planning_horizon"]).pct.loc[("CA", 2030)] == 0.571
+

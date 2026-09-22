@@ -292,6 +292,8 @@ def _process_reeds_data(filepath, carriers, value_col):
             var_name="planning_horizon",
             value_name=value_col,
         )
+        # melted column headers are strings; the horizon filter compares against ints
+        reeds["planning_horizon"] = reeds["planning_horizon"].astype(int)
 
     # Standardize column names
     reeds = reeds.rename(
