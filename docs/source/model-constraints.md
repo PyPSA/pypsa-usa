@@ -47,7 +47,6 @@ Regions used by the policy constraints may be specified as state codes, ReEDS zo
 | [Regional emission limits](#regional-emission-limits-rem) | Cap on annual power-sector CO2 per region and horizon | `REM` opts token; `electricity: regional_Co2_limits` | [policy.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/policy.py) |
 | [Energy reserve margin](#energy-reserve-margin-erm) | Energy-backed firm capacity above demand in every snapshot, per region | `ERM` opts token; `electricity: erm` | [reserves.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/reserves.py) |
 | [Technology capacity targets](#technology-capacity-targets-tct) | Minimum/maximum nominal capacity per carrier group, region, and horizon | `TCT` opts token; `electricity: technology_capacity_targets` | [policy.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/policy.py) |
-| [Operational reserves](#operational-reserves) | System-wide spinning-reserve requirement (GenX formulation) | `electricity: operational_reserve: activate` | [reserves.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/reserves.py) |
 | [Land-use limits](#land-use-limits) | Renewable capacity per carrier and land region bounded by developable potential | always active | [land.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/land.py) |
 | [Bidirectional link coupling](#bidirectional-link-coupling) | Equal capacity expansion of paired forward/reverse links | always active | [bidirectional_link.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/bidirectional_link.py) |
 | [Demand-response capacity](#demand-response-capacity) | Shifted load bounded by a fixed share of nominal load per bus and snapshot | `electricity: demand_response: shift` | [sector.py](https://github.com/PyPSA/pypsa-usa/blob/master/workflow/scripts/opts/sector.py) |
@@ -180,32 +179,6 @@ The dual of this constraint is stored per bus and snapshot as `n.buses_t["erm_pr
 
 Configuration details and valid region identifiers are documented in
 {ref}`the opts wildcard section <opts>`.
-
-## Operational reserves
-
-An optional system-wide spinning-reserve requirement following the
-[GenX formulation](https://genxproject.github.io/GenX/dev/core/#Reserves). Non-negative
-reserve variables {math}`r_{g,t}` are added for every generator.
-
-**Trigger:** `electricity: operational_reserve: activate: true` with parameters
-`epsilon_load` ({math}`\varepsilon^{L}`), `epsilon_vres` ({math}`\varepsilon^{V}`), and
-`contingency` ({math}`c`, MW).
-
-Writing {math}`\kappa_g` for installed capacity ({math}`P^{nom}_g` if generator {math}`g`
-is extendable, the parameter {math}`p^{nom}_g` otherwise):
-
-\begin{align*}
-    &\ \hspace{1cm} \sum_{g} r_{g,t}
-    \;\geq\; \varepsilon^{L} \sum_{n} d_{n,t}
-    + \varepsilon^{V} \sum_{g \in VRES} \bar{p}_{g,t} \, \kappa_g
-    + c \hspace{0.5cm} \forall_{t} \\
-    &\ \hspace{1cm} p_{g,t} + r_{g,t} \;\leq\; \bar{p}_{g,t} \, \kappa_g \hspace{0.5cm} \forall_{g,t}
-\end{align*}
-
-The first constraint sizes the reserve requirement as a share of load plus a share of
-variable-renewable potential plus a fixed contingency; for extendable renewables the
-potential term is a linear expression in {math}`P^{nom}_g`. The second couples reserve
-provision to headroom below available capacity.
 
 (technology-capacity-targets-tct)=
 ## Technology capacity targets (TCT)
