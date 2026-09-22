@@ -259,4 +259,19 @@ def test_oversubscribed_land_is_clipped_to_zero(myopic_land_network, caplog):
         add_land_use_constraints(n)
 
     assert _rhs(n).loc[("onwind", "region_a")] == pytest.approx(0.0)
-    assert "exceeds the developable potential" in caplog.text
+    assert "uses the whole developable potential" in caplog.text
+
+
+def test_exactly_exhausted_land_is_reported(myopic_land_network, caplog):
+    """update_p_nom_max clamps potential up to existing capacity, so exhaustion shows as E == G, not E > G."""
+    from opts.land import add_land_use_constraints
+
+    n = myopic_land_network
+    n.generators.loc["wind1 2030", "p_nom"] = 300  # exactly the 300 MW potential
+
+    n.optimize.create_model(multi_investment_periods=True)
+    with caplog.at_level("WARNING"):
+        add_land_use_constraints(n)
+
+    assert _rhs(n).loc[("onwind", "region_a")] == pytest.approx(0.0)
+    assert "onwind/region_a" in caplog.text

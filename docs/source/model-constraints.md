@@ -263,7 +263,7 @@ active.
 \begin{align*}
     &\ \text{let:} \\
     &\ \hspace{1cm} G^{ext}_{c,z} \hspace{0.8cm} \text{Extendable generators of carrier } c \text{ with land region } z \\
-    &\ \hspace{1cm} G^{fix}_{c,z} \hspace{0.85cm} \text{Non-extendable generators of carrier } c \text{ with land region } z \text{, active in the horizon} \\
+    &\ \hspace{1cm} G^{fix}_{c,z} \hspace{0.85cm} \text{Non-extendable generators of carrier } c \text{ with land region } z \text{, active in any modelled period} \\
     &\ \hspace{1cm} p^{nom,max}_{g} = \text{Developable potential of generator } g \text{ [MW]} \\
     &\ \hspace{1cm} p^{nom}_{g} = \text{Installed capacity of generator } g \text{ [MW]} \\
     &\ s.t. \\

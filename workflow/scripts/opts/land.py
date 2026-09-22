@@ -50,6 +50,8 @@ def _occupied_by_fixed_capacity(n: pypsa.Network, fixed: pd.DataFrame) -> pd.Ser
     for period in periods:
         active = component.get_active_assets(investment_period=period)
         active = active.reindex(fixed.index).fillna(False).astype(bool)
+        # a fixed unit with no build_year is standing today: count it, do not let NaN mean "never built"
+        active |= fixed.build_year.isna() if "build_year" in fixed else False
         per_period.append(
             fixed[active.to_numpy()].groupby(["carrier", "land_region"])["p_nom"].sum(),
         )
@@ -122,12 +124,16 @@ def add_land_use_constraints(n):
     occupied = _occupied_by_fixed_capacity(n, with_region[~with_region.p_nom_extendable])
     if not occupied.empty:
         maximum = maximum.sub(occupied.reindex(maximum.index).fillna(0.0))
-        oversubscribed = maximum < 0
-        if oversubscribed.any():
+        # update_p_nom_max clamps p_nom_max up to existing capacity before the solve, so
+        # oversubscription shows up as exactly zero headroom, not a negative number
+        exhausted = maximum <= 0
+        if exhausted.any():
             logger.warning(
-                "Existing capacity exceeds the developable potential for %d (carrier, land_region) "
-                "group(s); their remaining land is clipped to 0 MW.",
-                int(oversubscribed.sum()),
+                "Existing capacity uses the whole developable potential in %d (carrier, land_region) "
+                "group(s), so no new build is allowed there: %s",
+                int(exhausted.sum()),
+                ", ".join(f"{c}/{z}" for c, z in exhausted[exhausted].index[:10])
+                + (" ..." if exhausted.sum() > 10 else ""),
             )
             maximum = maximum.clip(lower=0.0)
 
