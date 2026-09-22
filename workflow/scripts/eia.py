@@ -35,11 +35,16 @@ period
 2020-12-01  Wyoming Price of Natural Gas Delivered to Resi...   8.00  $/MCF Wyoming
 """
 
+import hashlib
+import json
 import logging
 import math
 import os
 from abc import ABC, abstractmethod
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import ClassVar
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import constants
 import numpy as np
@@ -52,6 +57,13 @@ from urllib3.util import Retry
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://api.eia.gov/v2/"
+
+# On-disk cache of EIA API responses. Relative to the snakemake working
+# directory (``workflow/``), so it lands in the gitignored ``workflow/data/``.
+# Override with $EIA_CACHE_DIR (read at call time, so tests can point it at a
+# tmp_path). The cache key never contains the API key, so the directory is
+# safe to share between users and machines.
+EIA_CACHE_DIR = Path("data/eia/cache")
 
 STATE_CODES = constants.STATE_2_CODE
 
@@ -97,6 +109,66 @@ POINTS_OF_ENTRY = {
     "VT": "QC",  # Vermont - Mexico
     "WA": "BC",  # Washington - BC
 }
+
+
+###
+# On-disk response cache
+###
+
+
+def get_cache_dir() -> Path:
+    """Directory holding cached EIA responses ($EIA_CACHE_DIR wins)."""
+    return Path(os.environ.get("EIA_CACHE_DIR") or EIA_CACHE_DIR)
+
+
+def strip_api_key(url: str) -> str:
+    """
+    Normalise an EIA request url and drop the ``api_key`` query parameter.
+
+    The result is what the cache is keyed on and what is written to disk, so
+    the secret never lands in a cache file and the cache is shareable.
+    """
+    parts = urlsplit(url)
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "api_key"]
+    query.sort()
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
+def _cache_path(keyless_url: str) -> Path:
+    sha = hashlib.sha256(keyless_url.encode("utf-8")).hexdigest()
+    return get_cache_dir() / f"{sha}.json"
+
+
+def _read_cache(keyless_url: str) -> dict | None:
+    """Returns the cached payload for a key-less url, or None on a miss."""
+    path = _cache_path(keyless_url)
+    if not path.is_file():
+        return None
+    try:
+        with path.open() as f:
+            entry = json.load(f)
+        return entry["payload"]
+    except (OSError, ValueError, KeyError, TypeError):
+        logger.warning(f"Ignoring unreadable EIA cache entry {path}")
+        return None
+
+
+def _write_cache(keyless_url: str, payload: dict) -> None:
+    """Writes a payload to the cache; a cache failure is never fatal."""
+    path = _cache_path(keyless_url)
+    entry = {
+        "url": keyless_url,  # api key removed
+        "fetched_at": datetime.now(UTC).isoformat(),
+        "payload": payload,
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(f".{os.getpid()}.tmp")
+        with tmp.open("w") as f:
+            json.dump(entry, f)
+        os.replace(tmp, path)
+    except (OSError, TypeError, ValueError) as exc:
+        logger.warning(f"Could not cache EIA response at {path}: {exc}")
 
 
 # exceptions
@@ -537,10 +609,23 @@ class DataExtractor(ABC):
     @staticmethod
     def _request_eia_data(url: str) -> dict[str, dict | str]:
         """
-        Retrieves data from EIA API.
+        Retrieves data from EIA API, via an on-disk cache.
 
         url in the form of "https://api.eia.gov/v2/" followed by api key and facets
+
+        Responses are cached under ``get_cache_dir()`` keyed on the sha256 of
+        the request url with the ``api_key`` parameter removed, so a repeated
+        request (a rebuilt ``resources/`` tree, a second interconnect, another
+        user sharing the directory) costs no network call and the key is never
+        written to disk.
         """
+        keyless_url = strip_api_key(url)
+
+        cached = _read_cache(keyless_url)
+        if cached is not None:
+            logger.debug(f"EIA cache hit for {keyless_url}")
+            return cached
+
         # sometimes running into HTTPSConnectionPool error. adding in retries helped
         session = requests.Session()
         retries = Retry(
@@ -552,7 +637,9 @@ class DataExtractor(ABC):
 
         response = session.get(url, timeout=30)
         if response.status_code == 200:
-            return response.json()  # Assumes the response is in JSON format
+            payload = response.json()  # Assumes the response is in JSON format
+            _write_cache(keyless_url, payload)
+            return payload
         else:
             logger.error(f"EIA Request failed with status code: {response.status_code}")
             raise requests.ConnectionError(f"Status code {response.status_code}")
