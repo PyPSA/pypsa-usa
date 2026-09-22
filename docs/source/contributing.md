@@ -189,6 +189,7 @@ Two conventions to know when touching documentation:
   move, or rename a config section, keep its marker with it — `pytest tests/docs`
   verifies that every include renders exactly the section it claims to.
 - Workflow-generated documentation figures live in `docs/source/_static/generated/`
-  and are re-rendered with `snakemake docs_figures` (needs built networks) and
-  `snakemake docs_rec_trading_zones` (repo data only); the DAG images are re-rendered
+  and are re-rendered with `snakemake docs_figures` (needs built networks),
+  `snakemake docs_rec_trading_zones` and `snakemake docs_tct_targets` (repo data only);
+  the DAG images are re-rendered
   with `snakemake dag`. Don't hand-edit these.

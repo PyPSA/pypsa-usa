@@ -233,6 +233,19 @@ non-extendable assets through the LP; in myopic runs, targets with `max = 0` are
 enforced by zeroing the affected non-extendable capacities before each horizon's solve
 (`apply_forced_retirements`).
 
+:::{figure} _static/generated/tct_targets.png
+:width: 100%
+:alt: Three CONUS maps of the default technology capacity targets: nuclear no-build regions, forced retirements and storage mandates
+
+The technology capacity targets shipped with the repo, by policy family: ReEDS nuclear
+no-build (`max = existing` for `nuclear, SMR`, over both state and ReEDS-zone regions),
+ReEDS forced retirements (`max = 0` for the fossil and biomass carriers listed on each
+state) and ReEDS storage mandates (an annual `min` MW trajectory of
+`4hr_battery_storage`, shaded by the 2030 minimum). The map shows the shipped defaults
+only — a study can point `electricity: technology_capacity_targets` at any other CSV with
+the same columns. Regenerate with `snakemake docs_tct_targets`.
+:::
+
 ```{warning}
 TCT targets can only be used with renewable generators and utility-scale batteries in
 sector-coupled studies.

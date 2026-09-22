@@ -403,6 +403,19 @@ rule docs_rec_trading_zones:
         "scripts/plot_rec_trading_zones.py"
 
 
+rule docs_tct_targets:
+    message:
+        "Rendering the technology capacity target map into docs/source/_static/generated/."
+    input:
+        tct="repo_data/config/policy_constraints/technology_capacity_targets.csv",
+        reeds_shapes="repo_data/geospatial/Reeds_Shapes/rb_and_ba_areas.shp",
+        reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
+    output:
+        tct_targets="../docs/source/_static/generated/tct_targets.png",
+    script:
+        "scripts/plot_tct_targets.py"
+
+
 rule clean:
     message:
         "Remove all build results but keep downloaded data."
