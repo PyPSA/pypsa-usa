@@ -716,6 +716,7 @@ rule build_fuel_prices:
     params:
         snapshots=config["snapshots"],
         api_eia=config["api"]["eia"],
+        dynamic_fuel_price=config_provider("conventional", "dynamic_fuel_price"),
         pudl_path=config_provider("pudl_path"),
     input:
         gas_balancing_area=ba_gas_dynamic_fuel_price_files,

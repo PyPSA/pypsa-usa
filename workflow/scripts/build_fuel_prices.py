@@ -10,6 +10,11 @@ Build_fuel_prices.py is a script that prepares data for dynamic fuel prices to b
 
     fuel_year:
     snapshots:
+    api:
+        eia:
+    conventional:
+        dynamic_fuel_price:
+            enable:
 
 **Inputs**
 
@@ -99,6 +104,44 @@ def get_state_ng_power_prices(sns: pd.date_range, eia_api: str) -> pd.DataFrame:
 def get_state_coal_power_prices(sns: pd.date_range, eia_api: str) -> pd.DataFrame:
     eia_coal = _clamped_fuel_costs("coal", sns, eia_api, floor=2008) * const.COAL_dol_ton_2_MWHthermal
     return make_hourly(eia_coal)
+
+
+def build_state_power_prices(
+    sns: pd.DatetimeIndex,
+    eia_api: str | None,
+    dynamic_fuel_price: dict | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Build the state-level natural gas and coal power price tables.
+
+    The EIA API is only queried when dynamic fuel pricing is switched on
+    (``conventional: dynamic_fuel_price: enable``) *and* an API key is
+    available. Otherwise empty tables indexed on the snapshots are returned,
+    which is what ``add_electricity`` expects when the feature is off — so a
+    default power-only run needs no EIA key and makes no HTTP request.
+
+    Returns ``(state_ng_power_prices, state_coal_power_prices)``.
+    """
+    enabled = bool((dynamic_fuel_price or {}).get("enable", False))
+
+    if not enabled:
+        logger.info(
+            "Skipping EIA state fuel price download: conventional.dynamic_fuel_price.enable is false. "
+            "Writing empty state price tables.",
+        )
+        return pd.DataFrame(index=sns), pd.DataFrame(index=sns)
+
+    if not eia_api:
+        # add_electricity asserts on the missing key when it actually needs the
+        # wholesale prices; warn loudly here so the empty tables are not a surprise.
+        logger.warning(
+            "Dynamic fuel pricing is enabled but no EIA API key is configured "
+            "(config api: eia: or $EIA_API_KEY). Writing empty state price tables; "
+            "add_electricity will fail if wholesale prices are required.",
+        )
+        return pd.DataFrame(index=sns), pd.DataFrame(index=sns)
+
+    return get_state_ng_power_prices(sns, eia_api), get_state_coal_power_prices(sns, eia_api)
 
 
 # note, new functions to add must include the **kwargs argument
@@ -211,13 +254,12 @@ if __name__ == "__main__":
         "caiso_ng_power_prices": get_caiso_ng_power_prices,
     }
 
-    # state level prices are always attempted
-    if not eia_api:
-        state_ng_power_prices = pd.DataFrame(index=snapshots)
-        state_coal_power_prices = pd.DataFrame(index=snapshots)
-    else:
-        state_ng_power_prices = get_state_ng_power_prices(snapshots, eia_api)
-        state_coal_power_prices = get_state_coal_power_prices(snapshots, eia_api)
+    # state level prices are only fetched when dynamic fuel pricing is enabled
+    state_ng_power_prices, state_coal_power_prices = build_state_power_prices(
+        snapshots,
+        eia_api,
+        snakemake.params.dynamic_fuel_price,
+    )
 
     # get any regional specific prices
     # only gas level ba implemented right now, but can be replicated for any
