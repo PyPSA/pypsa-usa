@@ -105,10 +105,12 @@ def plot_cluster_suffixes(simpl_path, suffix_paths, shapes_path, out_path, conve
     ``suffix_paths`` maps a ``{clusters}`` wildcard value (``"4"``, ``"4m"``,
     ``"4c"``, ``"4a"``) to the clustered network built with it. Every panel
     draws the same clustered buses and branches; what differs is the
-    generators, drawn as markers at their bus coordinates and jittered where a
-    bus hosts more than one, so a carrier that was *not* aggregated shows up as
-    a cloud (its members keep distinct ``{simpl}``-level ``land_region``
-    values) while an aggregated carrier shows up as a single marker per bus.
+    generators. Every generator of the clustered network is attached to a
+    cluster bus, but a carrier that was *not* aggregated keeps one generator per
+    ``{simpl}`` zone, recorded in ``land_region``. Those are drawn at the
+    coordinates of their ``{simpl}`` bus, so they spread over the resource zones
+    they still resolve, while an aggregated carrier collapses to one marker per
+    cluster bus (jittered slightly where several carriers share a bus).
     """
     conventional = set(conventional_carriers or FALLBACK_CONVENTIONAL_CARRIERS)
 
@@ -134,15 +136,24 @@ def plot_cluster_suffixes(simpl_path, suffix_paths, shapes_path, out_path, conve
     span = max(float(buses.x.max() - buses.x.min()), float(buses.y.max() - buses.y.min()), 1e-6)
     jitter = 0.015 * span
 
+    simpl_buses = pypsa.Network(simpl_path).buses
+    n_simpl_buses = len(simpl_buses)
+
     rng = np.random.default_rng(0)
     fig, axes = plt.subplots(1, len(ordered), figsize=(4.3 * len(ordered), 5))
     for ax, (suffix, wildcard, n) in zip(np.atleast_1d(axes), ordered):
         _plot_network_panel(ax, n, shapes, None)
         gens = n.generators
         if len(gens):
-            xy = n.buses.loc[gens.bus, ["x", "y"]].to_numpy(dtype=float)
+            # non-aggregated generators keep land_region = their {simpl} bus: draw them there
+            land_region = gens.get("land_region", pd.Series(index=gens.index, dtype=object)).fillna("")
+            at_simpl = land_region.isin(simpl_buses.index) & (land_region != gens.bus)
+            anchor = gens.bus.where(~at_simpl, land_region)
+            lookup = pd.concat([n.buses[["x", "y"]], simpl_buses[["x", "y"]]])
+            lookup = lookup[~lookup.index.duplicated()]
+            xy = lookup.loc[anchor, ["x", "y"]].to_numpy(dtype=float)
             offsets = rng.normal(scale=jitter, size=xy.shape)
-            crowded = (gens.bus.map(gens.bus.value_counts()) > 1).to_numpy()
+            crowded = (anchor.map(anchor.value_counts()) > 1).to_numpy()
             offsets[~crowded] = 0.0
             xy = xy + offsets
             is_conventional = gens.carrier.isin(conventional).to_numpy()
@@ -164,7 +175,6 @@ def plot_cluster_suffixes(simpl_path, suffix_paths, shapes_path, out_path, conve
             fontsize=9,
         )
 
-    n_simpl_buses = len(pypsa.Network(simpl_path).buses)
     fig.suptitle(
         f"The same {n_simpl_buses}-zone {{simpl}} network clustered to "
         f"{len(buses)} zones by each {{clusters}} suffix",
@@ -182,7 +192,7 @@ def plot_cluster_suffixes(simpl_path, suffix_paths, shapes_path, out_path, conve
         ncol=2,
         frameon=False,
         fontsize=9,
-        title="marker area ∝ p_nom (capped); markers jittered where a bus hosts several generators",
+        title="marker area ∝ p_nom (capped); non-aggregated generators drawn at their {simpl} zone, aggregated ones at the cluster bus",
         title_fontsize=8,
     )
     fig.tight_layout(rect=(0, 0.09, 1, 0.97))

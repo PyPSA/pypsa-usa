@@ -61,13 +61,14 @@ renewable profiles, and generators are built, and finally to 4 `{clusters}` zone
 
 What the `{clusters}` suffix changes. All four panels are the same `{simpl}` network
 reduced to the same cluster buses and branches; only the generators differ. Each marker
-is one generator, drawn at its bus and jittered where a bus hosts several, coloured by
-whether its carrier is conventional or renewable/other and sized by `p_nom`. With a
-plain integer (left) every carrier is aggregated, so each bus carries one marker per
-carrier. With `m` the renewables stay unaggregated and form a cloud at each bus — one
-member per `{simpl}`-level resource zone — while the conventional plants are merged;
-`c` is the mirror image; `a` aggregates nothing and both groups stay as clouds.
-Regenerate with `snakemake docs_figures`.
+is one generator, coloured by whether its carrier is conventional or renewable/other and
+sized by `p_nom`. An aggregated carrier has one generator per cluster bus and is drawn
+there; a carrier that was not aggregated keeps one generator per `{simpl}` resource zone
+(its `land_region`) and is drawn at that zone, even though it is electrically attached to
+the cluster bus. With a plain integer (left) every carrier collapses onto the four buses.
+With `m` the renewables stay spread over their 74 `{simpl}` zones while the conventional
+plants collapse; `c` is the mirror image; `a` aggregates nothing and both groups keep
+`{simpl}` resolution. Regenerate with `snakemake docs_figures`.
 :::
 
 Clustering respects administrative boundaries: with
