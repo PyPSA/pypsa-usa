@@ -65,7 +65,7 @@ copy of the code under your account on the repository service.
 - Clone this copy to your local disk:
 
     ``` bash
-    ~/repositories $ git clone https://github.com/<github_username>/PyPSA/pypsa-usa.git
+    ~/repositories $ git clone https://github.com/<github_username>/pypsa-usa.git
     ~/repositories $ cd pypsa-usa
     ~/repositories/pypsa-usa $
     ```

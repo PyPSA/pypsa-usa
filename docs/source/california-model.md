@@ -2,14 +2,18 @@
 # California Model (CPUC SERVM)
 
 PyPSA-USA ships a maintained, runnable California-only configuration at
-`workflow/repo_data/config/config.california.yaml` (copied to `workflow/config/` by
-`init_pypsa_usa.sh`). This page is the reference for that configuration: what data goes into
-it, which weather years are available for each ingredient, and which simplifications the
-results carry.
+`workflow/repo_data/config/config.california.yaml`. It is a sparse overlay on the layered base
+config and is run in place, with `--configfile repo_data/config/config.california.yaml`; it is
+*not* copied into `workflow/config/` by `init_pypsa_usa.sh`, which seeds only the three
+per-user files (`config.default.yaml`, `config.api.yaml`, `config.slurm.yaml`). This page is
+the reference for that configuration: what data goes into it, which weather years are
+available for each ingredient, and which simplifications the results carry.
 
 The model is a **California carve-out of the Western Interconnection**, not a standalone
 network. The footprint is the four California ReEDS zones (`p8`, `p9`, `p10`, `p11`); the rest
-of WECC is represented as capped import/export links rather than as buses. Load is the
+of WECC is not modelled as buses but as external import/export regions at the footprint
+boundary — as shipped, an import *generator* behind an unpriced interface link (see
+[Trade with the rest of WECC](#trade-with-the-rest-of-wecc)). Load is the
 California Public Utilities Commission's 2026 Integrated Resource Planning hourly forecast,
 produced with the SERVM production-cost model.
 
@@ -28,8 +32,12 @@ uv run snakemake data_model -j1 --configfile repo_data/config/config.california.
 The first build downloads one ~118 MB SERVM load CSV per planning horizon from
 `files.cpuc.ca.gov` (`retrieve_cpuc_servm_load`), the CPUC Baseline Generator List workbook
 (`retrieve_cpuc_baseline_generators`), and the GODEEEP / NREL land-access artifacts from
-Zenodo. `imports: costs: wholesale` calls the EIA API, so a key must be present in
-`config/config.api.yaml`.
+Zenodo. Imports are priced at a **flat `imports: costs: 60` \$/MWh**, so no EIA key is needed
+for import prices; the `wholesale` setting is available but the EIA series it pulls is
+retail-priced ([issue #807](https://github.com/PyPSA/pypsa-usa/issues/807)). Exports are left
+at the base default `exports: costs: wholesale`, which does call the EIA API, so a key in
+`workflow/config/config.api.yaml` (or `$EIA_API_KEY`) is still required unless exports are
+given a flat price too.
 
 Scenario settings as shipped: `interconnect: western`, `simpl: 75`, `clusters: 4`,
 `ll: v1.0`, `opts: REM-3h`, `planning_horizons: [2030, 2035, 2040, 2045]`, `foresight: perfect`,
@@ -47,8 +55,8 @@ Scenario settings as shipped: `interconnect: western`, `simpl: 75`, `clusters: 4
 | **Transmission backbone** | ReEDS/NARIS zonal network | `model_topology: transmission_network: reeds` | `workflow/repo_data/ReEDS_Constraints/transmission/` |
 | **Trade capacity** | NARIS AC flowgate ratings on the footprint boundary | `imports/exports: capacity_limit: true` | `transmission_capacity_init_AC_ba_NARIS2024.csv` (or `..._county_...` at county resolution) |
 | **Trade interface caps** | CPUC RESOLVE aggregate CAISO interface limits | `model_topology: interface_transmission_limits: true` | `config/policy_constraints/transmission_interface_limits.csv` |
-| **Trade prices** | EIA wholesale electricity prices for the weather year | `imports/exports: costs: wholesale` | EIA API (`config/config.api.yaml`) |
-| **Out-of-state contracts** | CPUC ledger of physically out-of-state units serving California load (74 rows, 10,873 MW) | `electricity: remote_contracted_resources: enable: true` | `workflow/repo_data/CPUC/servm_out_of_state_units.csv` |
+| **Trade prices** | Imports: flat \$60/MWh. Exports: EIA wholesale electricity prices for the weather year (`wholesale` is available for imports too, but is retail-priced — [#807](https://github.com/PyPSA/pypsa-usa/issues/807)) | `imports: costs: 60`; `exports: costs: wholesale` | flat value in the config; EIA API (`config/config.api.yaml`) for exports |
+| **Out-of-state contracts** | CPUC ledger of physically out-of-state units serving California load (75 rows, 11,173 MW) | `electricity: remote_contracted_resources: enable: true` | `workflow/repo_data/CPUC/servm_out_of_state_units.csv` |
 | **Emissions limit** | CARB 2022 Scoping Plan AB 32 trajectory, annual 2025-2050, import emissions factor 0.428 tCO2/MWh | `REM` token in `{opts}`; `electricity: regional_Co2_limits` | `config/policy_constraints/regional_Co2_limits.csv` (`CA_AB32` rows) |
 | **Benchmark reference** | CPUC Baseline Generator List (`BaselineGeneratorList_CAISO.xlsx`), plus the out-of-state exclusion ledger | `run: benchmark_cpuc: true` | `data/cpuc/BaselineGeneratorList_CAISO.xlsx`, `workflow/repo_data/CPUC/servm_benchmark_regions.csv`, `servm_tech_map.csv` |
 | **Costs** | NREL ATB (`Market` / `Moderate`) with IRA ITC/PTC modifiers; AEO reference fuel outlook | `costs:` block | see [Costs](data-costs.md) |
@@ -114,11 +122,12 @@ demand weather year 2000–2022 pairable with a screened renewable profile of th
 SERVM years 2023–2024 currently have no matching GODEEEP profile.
 
 ```{note}
-`config.california.yaml` ships with `renewable_scenarios: ["rcp85cooler"]` and
-`planning_horizons: [2030, 2035, 2040, 2045]`. Only 2030 and 2040 have a published GODEEEP
-climate record; 2035 and 2045 have none. Use `planning_horizons: [2030, 2040]` under a climate
-scenario, or switch to `renewable_scenarios: ["historical"]` (with the weather-year rules
-above) for the other SERVM horizons.
+`config.california.yaml` ships with `renewable_scenarios: ['historical']` and
+`planning_horizons: [2030, 2035, 2040, 2045]`, precisely so that all four SERVM horizons can
+be modelled: historical profiles are indexed by the weather year, not by the horizon. If you
+switch to a climate scenario (`rcp45hotter`, `rcp45cooler`, `rcp85hotter`, `rcp85cooler`) you
+must also restrict `planning_horizons` to `[2030, 2040]` — only 2030, 2040 and 2050 are
+published per `(tech, scenario)`, and the registry fails at parse time for 2035 and 2045.
 ```
 
 ## Spatial resolution
@@ -164,7 +173,32 @@ takes `any`.
 ## Trade with the rest of WECC
 
 California is not modelled as an island. `electricity: imports` and `electricity: exports` are
-both enabled, adding trade links at boundary buses; three bounds apply.
+both enabled, adding an external bus per neighbouring flowgate zone (`{zone}_imports`,
+`{zone}_exports`) and trade links from those buses into the footprint.
+
+**The shipped representation is `imports: representation: generator`.** Each external
+`{zone}_imports` bus carries a generic import **generator** (carrier `unspecified_imports`)
+rated at that zone's total inbound interface capacity and priced by `imports: costs`
+(the flat \$60/MWh above); the `imports`-carrier links from the external bus into the
+footprint are *unpriced* and rated at the NARIS flowgate capacity, so the price sits on the
+generator and the link is pure transfer capacity. The CPUC-contracted out-of-state units are
+attached at that same external bus, i.e. **behind** the model boundary, so their deliveries
+traverse an `imports` link and are metered against the interface and volume caps below.
+Import CO2 (`imports: co2_emissions: 0.428` tCO2/MWh) is carried by the
+`unspecified_imports` carrier, and the `imports` carrier is set to zero — PyPSA attributes
+primary-energy emissions to generators and stores, never to links, so nothing is
+double-counted.
+
+The alternative is `representation: store` (the base default): the external bus carries a
+bottomless `Store` on the `imports` carrier instead of a generator, the links into the
+footprint are the priced element, and the contracted units are attached at California buses,
+where they look like in-state generation and bypass both trade caps. Both modes keep the link
+carriers `imports`/`exports` untouched, and the export half is identical in both: the negative
+export price stays on the export link, the absorbing `Store` behind it is free, and exported
+energy is assigned zero emissions. Imports and exports deliberately use separate external
+buses, so the priced import generator cannot sell straight into the export sink.
+
+Three bounds apply to trade.
 
 1. **Per-path capacity** — `capacity_limit: true` rates each link from the NARIS AC flowgate
    table for the active `topological_boundaries`.
@@ -181,9 +215,8 @@ both enabled, adding trade links at boundary buses; three bounds apply.
    separately exported) energy at 25 % of total demand, roughly CAISO's historical net-import
    share.
 
-Imported energy is priced at EIA monthly wholesale prices and charged
-`co2_emissions: 0.428` tCO2/MWh, the same import emissions factor the `CA_AB32` rows carry.
-Exports earn the same wholesale price and are assigned zero emissions.
+The import emissions factor `co2_emissions: 0.428` tCO2/MWh is the same one the `CA_AB32`
+rows carry.
 
 Details of both constraint formulations are in
 [Interface transmission limits](interface-transmission-limits) and
@@ -197,10 +230,18 @@ for California from the 2022 CARB Scoping Plan, from 46.6 MtCO2 in 2025 down to 
 2045, with imported energy charged at 0.428 tCO2/MWh.
 
 ```{note}
-`config.california.yaml` also populates `SAFE_reservemargin`, `SAFE_regional_reservemargins`
-and `erm`. Neither constraint is active as shipped: the SAFE planning-reserve constraint is
-switched on by a `SAFE` token in `{opts}` and the energy reserve margin by an `ERM` token, and
-`opts` is `REM-3h`. Add the tokens (e.g. `REM-ERM-3h`) to bind them.
+The layered base config (`config.default.yaml`) carries `SAFE_reservemargin`,
+`SAFE_regional_reservemargins` and `erm`; `config.california.yaml` does not override them and
+neither is active as shipped, because `opts` is `REM-3h`.
+
+The **energy reserve margin** is real: an `ERM` token in `{opts}` dispatches
+`add_ERM_constraints` in `solve_network`, so `opts: REM-ERM-3h` binds it against the
+`electricity: erm` settings.
+
+There is **no SAFE constraint on develop.** A `SAFE` token only sets
+`config["solving"]["constraints"]["SAFE"] = True` in `_helpers.py`, and nothing reads that
+flag — no solve-time constraint exists. The `SAFE_*` keys are therefore currently dead;
+treat them as reserved until a planning-reserve constraint is implemented.
 ```
 
 `technology_capacity_targets.csv` and `portfolio_standards.csv` are wired in but carry mostly
@@ -241,9 +282,19 @@ entries that a physically located model cannot carry, so reporting them as model
 would be misleading.
 
 Setting `electricity: remote_contracted_resources: enable: true` adds the EIA-identifiable
-subset of exactly those units back into the model — 74 rows totalling 10,873 MW in
-`servm_out_of_state_units.csv`, of which 8 rows / 1,910 MW have no `eia_plant_id` and are
-skipped with a summary warning. **The benchmark keeps scoring them on the `EXCLUDED` row
+subset of exactly those units back into the model. `servm_out_of_state_units.csv` holds 75
+rows totalling 11,172.8 MW, of which 9 rows / 2,210.0 MW have no `eia_plant_id` and are
+skipped with a summary warning (leaving 66 rows / 8,962.8 MW eligible; rows whose EIA plants
+have no live generator in `powerplants.csv` are skipped too, and each unit's `p_nom` is
+`min(capmax_mw, live plant capacity)`).
+
+Where those units land depends on `electricity: imports: representation`. Under the shipped
+`generator` mode they are *not* attached at California buses: `add_electricity` serializes
+them into a bundle and `add_extra_components` attaches them at the external `{zone}_imports`
+buses — behind the model boundary — so their output crosses an `imports` link and is metered
+against the interface and volume caps. Under `store` mode they are attached directly at the
+California bus derived from the contracting SERVM region, inside the footprint and outside
+both caps. **The benchmark keeps scoring them on the `EXCLUDED` row
 regardless**, because it reads `powerplants.csv` rather than the network. When the option is
 on, the MW on that row is what has been added back. See
 [Out-of-State Contracted Resources](remote_contracted_resources) for the attachment rules and

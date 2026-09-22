@@ -26,7 +26,11 @@ service_sector,,,Options when implementing the service sector (Residential and C
 -- loads,,,Loads to include. Electricity is always modelled.
 -- -- heating,--,"bool {true, false}",Include heating loads.
 -- -- cooling,--,"bool {true, false}",Include cooling loads. Heating must be included to also include cooling
--- demnand_response,,,Demand response options for the service sector.
+-- demand_response,,,Demand response options for the service sector.
 -- -- shift,percentage,"float {0 <=, >= 100} or 'inf'",Allowable load to be shifted per snapshot. Set to 0 to turn off demand response. Set to 'inf' to not enforce capacity limits.
--- -- marginal_cost,$/MWh,float {0 <=},Cost to store one unit of energy for one hour.
--- -- by_carrier,,"bool {true, false}",Run demand response at a per-carrier level.
+-- -- marginal_cost,,,"Cost to store one unit of energy for one hour, given as a mapping from end-use carrier to price. ``config.sector.yaml`` ships the four keys below."
+-- -- -- electricity,$/MWh,float {0 <=},Cost applied to shifted electricity load.
+-- -- -- space-heat,$/MWh,float {0 <=},Cost applied to shifted space-heating load.
+-- -- -- cool,$/MWh,float {0 <=},Cost applied to shifted cooling load.
+-- -- -- heat,$/MWh,float {0 <=},"Cost applied to shifted heat load on the combined ``heat`` carrier, used when ``water_heating: split_space_water`` is false."
+-- -- by_carrier,--,"bool {true, false}","Optional; defaults to false and is absent from the shipped ``config.sector.yaml``. When true, ``demand_response`` instead carries one sub-mapping per end-use carrier (``elec``, ``heat``, ``space-heat``, ``water-heat``, ``cool``), each with its own ``shift`` and ``marginal_cost``; see the note below the table."
