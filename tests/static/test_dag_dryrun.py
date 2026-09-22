@@ -11,6 +11,7 @@ No seeding step: ``workflow/Snakefile`` reads its whole layered base and the
 ``init_pypsa_usa.sh`` having been run.
 """
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -72,3 +73,51 @@ def test_snakemake_dryrun_resolves(configfile, target, overrides):
         f"stderr:\n{result.stderr}\n"
         f"stdout (last 50 lines):\n" + "\n".join(result.stdout.splitlines()[-50:])
     )
+
+
+def _solve_network_inputs(overrides):
+    """Return the ``solve_network`` input paths snakemake resolves in a dry run."""
+    cmd = [
+        "snakemake",
+        "-n",
+        "--configfile",
+        "repo_data/config/config.tutorial.yaml",
+        "--until",
+        "solve_network",
+    ]
+    if overrides:
+        cmd += ["--config", *overrides]
+    result = subprocess.run(
+        cmd,
+        cwd=WORKFLOW_DIR,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, (
+        f"snakemake -n failed (overrides={overrides})\nstderr:\n{result.stderr}\n"
+        f"stdout (last 50 lines):\n" + "\n".join(result.stdout.splitlines()[-50:])
+    )
+    match = re.search(r"^rule solve_network:\n\s*input: (.*)$", result.stdout, re.MULTILINE)
+    assert match, f"no solve_network job in the dry run output:\n{result.stdout}"
+    return [path.strip() for path in match.group(1).split(",")]
+
+
+@pytest.mark.fast
+def test_interface_limits_input_follows_config_key(tmp_path):
+    """``electricity: transmission_interface_limits`` selects the interface CSV.
+
+    The key was declared in the schema, documented and defaulted, but
+    ``solve_network`` hard-coded the repo path as its ``interface_limits``
+    input, so pointing the key elsewhere had no effect. Assert the rule input
+    tracks the config value: the default path by default, an overridden path
+    when the key is overridden.
+    """
+    default_path = "repo_data/config/policy_constraints/transmission_interface_limits.csv"
+    assert default_path in _solve_network_inputs([])
+
+    custom = tmp_path / "custom_interface_limits.csv"
+    custom.write_text((WORKFLOW_DIR / default_path).read_text())
+    inputs = _solve_network_inputs([f"electricity={{transmission_interface_limits: '{custom}'}}"])
+    assert str(custom) in inputs
+    assert default_path not in inputs
