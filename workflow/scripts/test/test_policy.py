@@ -547,3 +547,25 @@ def test_process_reeds_wide_format_horizons_are_ints(tmp_path):
     assert ces.planning_horizon.isin([2030, 2040]).sum() == 3
     assert ces.set_index(["region", "planning_horizon"]).pct.loc[("CA", 2030)] == 0.571
 
+
+def test_add_rps_constraints_zone_without_eligible_gens_does_not_stop_others(policy_network, rps_config, tmp_path):
+    """A zone with no eligible generators is skipped; the remaining zones still get their constraint."""
+    from opts.policy import add_RPS_constraints
+
+    n = policy_network
+    config, snakemake = rps_config
+
+    # give CA a carrier no generator has, so its group is empty; TX keeps its real carriers
+    ps = pd.read_csv(config["electricity"]["portfolio_standards"])
+    ps.loc[ps.region == "CA", "carrier"] = "geothermal"
+    fn = tmp_path / "portfolio_standards.csv"
+    ps.to_csv(fn, index=False)
+    config["electricity"]["portfolio_standards"] = str(fn)
+
+    n.optimize.create_model(multi_investment_periods=True)
+    add_RPS_constraints(n, config, snakemake=snakemake)
+
+    rps = [c for c in n.model.constraints if c.endswith("_rps_limit")]
+    assert rps, "the non-empty zone lost its constraint"
+    assert not any(c.startswith("GlobalConstraint-CA") for c in rps)
+

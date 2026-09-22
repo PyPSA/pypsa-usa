@@ -411,7 +411,11 @@ def add_RPS_constraints(n, config, snakemake=None):
         region_gens_eligible = region_gens[region_gens.carrier.isin(carriers)]
 
         if region_gens_eligible.empty:
-            return
+            logger.warning(
+                f"RPS constraint '{rec_trading_zone}' for {planning_horizon} skipped: "
+                f"no generators with carriers {carriers} in the zone.",
+            )
+            continue
 
         # Eligible generation
         p_eligible = n.model["Generator-p"].sel(
