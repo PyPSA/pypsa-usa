@@ -72,6 +72,17 @@ supplied by the workflow. Eligible carriers default to
 additionally includes `nuclear, SMR, hydrogen_ct, CCGT-95CCS, CCGT-99CCS, Coal-95CCS`.
 Custom rows may specify any carrier group.
 
+:::{figure} _static/generated/rec_trading_zones.png
+:width: 100%
+:alt: CONUS states coloured by REC trading zone
+
+The REC trading zones over which portfolio standards are pooled. States in the same
+tracking system (WREGIS, M-RETS, PJM-GATS, NEPOOL, ...) share one constraint; states not
+mapped to a system form a zone of their own. The mapping is
+`REC_TRADING_ZONE_MAPPER` in `workflow/scripts/constants.py`, applied to each bus's
+`reeds_state` in `build_base_network`. Regenerate with `snakemake docs_rec_trading_zones`.
+:::
+
 **Trigger:** `RPS` token in `{opts}`.
 
 For each REC trading zone {math}`Z` (a set of states {math}`r`), planning horizon

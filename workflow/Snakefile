@@ -391,6 +391,18 @@ rule docs_figures:
         "scripts/plot_docs_figures.py"
 
 
+rule docs_rec_trading_zones:
+    message:
+        "Rendering the REC trading zone map into docs/source/_static/generated/."
+    input:
+        reeds_shapes="repo_data/geospatial/Reeds_Shapes/rb_and_ba_areas.shp",
+        reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
+    output:
+        rec_trading_zones="../docs/source/_static/generated/rec_trading_zones.png",
+    script:
+        "scripts/plot_rec_trading_zones.py"
+
+
 rule clean:
     message:
         "Remove all build results but keep downloaded data."
