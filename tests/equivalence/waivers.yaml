@@ -1,13 +1,71 @@
 # Machine-readable waivers for the equivalence harness (spec D8).
 # Each entry suppresses exactly one signed-off delta and MUST reference a row
 # in docs/superpowers/specs/2026-08-07-deltas-ledger.md.
-# Fields: stage, component, column, kind ('*' wildcards allowed), ledger, reason.
+#
+# There are TWO kinds of entry here and an entry is one or the other, never
+# both:
+#
+#   CELL waiver   stage, component, column, kind ('*' wildcards allowed).
+#                 Suppresses a stage-by-stage finding in compare.py.
+#   TABLE waiver  metric, key (optionally family). Explains one row of
+#                 tables.comparison_table, turning UNEXPLAINED into explained.
+#
+# Each kind ignores the other's fields, and `compare.is_waived` SKIPS any entry
+# that names metric/key/family: its four cell fields are absent, and absent
+# means "any", so a table waiver read as a cell waiver would silence every
+# finding in the run.
+#
+# Both kinds take `ledger:` (required), `reason:`, the optional `hotfix:`, and
+# the optional scope fields `interconnect:` and `prong:` — a scope field that is
+# set must match the run, so a waiver measured on one leg cannot sign off
+# another.
+#
+# EITHER kind may also BOUND the difference it explains. A bound is a claim
+# about a measured quantity, so a waiver that carries one only holds while the
+# difference stays inside it.
+#
+#   TABLE waivers (checked by tables._bounds_violation, against the row's delta)
+#     expect_sign        '+' or '-', the sign of (develop - master).
+#     max_abs_pct        upper bound on |delta %|.
+#     max_abs_delta_mw   upper bound on |delta| in the metric's own unit. Use it
+#                        instead of max_abs_pct when master's side of the row is
+#                        0 (or so small the percentage is noise): |delta %| is
+#                        then undefined and max_abs_pct always fires, while the
+#                        MW that was actually measured is still a real bound.
+#
+#   CELL waivers (checked by compare._cell_bounds_violation, against the
+#   finding's `detail`; for system_available_mw-style findings)
+#     expect_sign        '+' or '-', the sign of the ANNUAL TOTAL delta
+#                        (develop_total_mwh - master_total_mwh).
+#     max_total_pct      upper bound on |annual total delta| as % of master.
+#     max_mean_rel_pct   upper bound on the finding's mean_rel_pct.
+#
+# `worst_rel_pct` is deliberately not boundable: at dawn and dusk master's
+# available power is a few MW, so a fraction of a MW is a 100 % relative error.
+# The energy-weighted mean relative error (sum|delta| / sum master) is recorded
+# in the finding detail instead.
+#
+# Without bounds a waiver is unbounded in sign and magnitude: the HF-24 entry
+# written for "+2,158 MW of potential master silently dropped" (+1.1 %) would
+# equally explain a -50 % row or a 10,000x one. A row outside the bounds is
+# reported as `waiver HF-n bounds violated (sign|magnitude)` and stays
+# UNEXPLAINED; a finding outside them stays LIVE with a `waiver_note` naming
+# the bound that failed. `max_abs_pct` also refuses an undefined delta %
+# (master 0, develop non-zero), and a cell bound refuses a finding that does
+# not carry the totals it needs: the bound cannot be shown to hold.
+#
+# `hotfix: HF-<n>` names the row in tests/equivalence/hotfixes.yaml — the
+# machine-readable extract of memory/plans/hotfix-ledger.md — that CAUSES the
+# waived delta. `ledger:` says the delta was signed off; `hotfix:` says which
+# change on develop produces it, so a waiver and a comparison-table row that
+# describe the same difference can be recognised as one thing. Optional because
+# several deltas predate both branches and belong to no hot-fix.
 - stage: assembled_substation_network
   component: Line
   column: capital_cost
   kind: value
   ledger: DL-1
-  reason: stage-ordering artifact (anchor base-stage segment lengths); clustered ITL identical
+  reason: stage-ordering artifact (master base-stage segment lengths); clustered ITL identical
 - stage: assembled_substation_network
   component: Link
   column: capital_cost
@@ -43,7 +101,7 @@
   column: '*'
   kind: column_set
   ledger: DL-6
-  reason: anchor-only aggregate-named p_max_pu columns; content guarded by unwaived value compare on common names
+  reason: master-only aggregate-named p_max_pu columns; content guarded by unwaived value compare on common names
 - stage: '*'
   component: Generator_t.p_max_pu
   column: '*'
@@ -61,7 +119,7 @@
   column: ba_eia
   kind: column_set
   ledger: DL-6
-  reason: candidate-added schema column (metadata)
+  reason: develop-added schema column (metadata)
 - stage: '*'
   component: StorageUnit
   column: <index>
@@ -85,14 +143,14 @@
   column: Pd
   kind: value
   ledger: DL-8
-  reason: candidate conserves Pd through trafo removal, anchor static stale; Load_t.p_set finding-free
+  reason: develop conserves Pd through trafo removal, master static stale; Load_t.p_set finding-free
 - prong: 2
   stage: prong2_aggregates
   component: Generator.p_nom_by_carrier
   column: p_nom
   kind: value
   ledger: DL-9
-  reason: existing-RE silent-drop varies with cluster geometry; candidate closer to ground truth
+  reason: existing-RE silent-drop varies with cluster geometry; develop closer to ground truth
 - prong: 2
   stage: solved_network
   component: Network
@@ -144,10 +202,11 @@
   column: sub_network
   kind: value
   ledger: DL-15
+  hotfix: HF-12
   reason: pypsa v1 computes and serializes sub_network topology metadata that 0.30 left empty; no optimization input
   justification: >-
-    Candidate (pypsa 1.3) populates Bus.sub_network with the connected-component
-    label ('0','1',...); the anchor (pypsa 0.30) wrote empty strings at every
+    Develop (pypsa 1.3) populates Bus.sub_network with the connected-component
+    label ('0','1',...); the master (pypsa 0.30) wrote empty strings at every
     stage. sub_network is topology bookkeeping recomputed by determine_network_topology
     and is never read by the LOPF/expansion problem.
 - interconnect: western
@@ -156,21 +215,23 @@
   column: sub_network
   kind: value
   ledger: DL-15
+  hotfix: HF-12
   reason: pypsa v1 computes and serializes sub_network topology metadata that 0.30 left empty; no optimization input
   justification: >-
-    Same mechanism as Bus.sub_network: candidate labels every line with its
-    connected component, anchor stored empty strings. Topology bookkeeping only.
+    Same mechanism as Bus.sub_network: develop labels every line with its
+    connected component, master stored empty strings. Topology bookkeeping only.
 - interconnect: western
   stage: '*'
   component: SubNetwork
   column: <index>
   kind: row_set
   ledger: DL-15
+  hotfix: HF-12
   reason: pypsa v1 computes and serializes sub_network topology metadata that 0.30 left empty; no optimization input
   justification: >-
-    Candidate-only SubNetwork component rows (7 at assembled, 1 at every
+    Develop-only SubNetwork component rows (7 at assembled, 1 at every
     clustered-and-later stage) are the serialized form of the same
-    connected-component labelling; the anchor exported no SubNetwork rows at
+    connected-component labelling; the master exported no SubNetwork rows at
     all. Derived from Bus/Line/Link/Transformer topology that is itself
     finding-free; not an optimization input.
 - interconnect: western
@@ -179,13 +240,14 @@
   column: cyclic_state_of_charge_per_period
   kind: value
   ledger: DL-15
-  reason: attribute absent from the anchor file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
+  hotfix: HF-12
+  reason: attribute absent from the master file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
   justification: >-
-    Verified: the anchor netCDF has no storage_units_cyclic_state_of_charge_per_period
+    Verified: the master netCDF has no storage_units_cyclic_state_of_charge_per_period
     data_var at any stage (pypsa 0.30 omitted attributes left at their default),
     and the 0.30-era default was True. The harness loads both sides under pypsa
-    1.3, whose default is False, so the anchor reads back False while its actual
-    solve-time behaviour was True. The candidate stores True explicitly because
+    1.3, whose default is False, so the master reads back False while its actual
+    solve-time behaviour was True. Develop stores True explicitly because
     the migration deliberately pins the 0.30 default to preserve per-period
     cyclicity. Both sides therefore behaved identically; the comparison
     manufactures the difference on read.
@@ -195,7 +257,8 @@
   column: cyclic_state_of_charge_per_period
   kind: value
   ledger: DL-15
-  reason: attribute absent from the anchor file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
+  hotfix: HF-12
+  reason: attribute absent from the master file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
   justification: see the clustered_network entry - same absent-attribute mechanism, same stage-invariant proof
 - interconnect: western
   stage: prepared_network
@@ -203,7 +266,8 @@
   column: cyclic_state_of_charge_per_period
   kind: value
   ledger: DL-15
-  reason: attribute absent from the anchor file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
+  hotfix: HF-12
+  reason: attribute absent from the master file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
   justification: see the clustered_network entry - same absent-attribute mechanism, same stage-invariant proof
 - interconnect: western
   stage: sectored_network
@@ -211,19 +275,502 @@
   column: cyclic_state_of_charge_per_period
   kind: value
   ledger: DL-15
-  reason: attribute absent from the anchor file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
+  hotfix: HF-12
+  reason: attribute absent from the master file; the pypsa-1.3 reader backfills the NEW default False, manufacturing the diff
   justification: see the clustered_network entry - same absent-attribute mechanism, same stage-invariant proof
 - stage: '*'
   component: Bus
   column: load_weight
   kind: column_set
   ledger: DL-16
+  hotfix: HF-6
   reason: >-
-    candidate-added schema column (PyPSA#777 population-based demand
-    allocation); absent on the anchor
+    develop-added schema column (PyPSA#777 population-based demand
+    allocation); absent on the master
   justification: >-
     numerically inert for equivalence: both config.equivalence.yaml and
     config.equivalence-usa.yaml pin demand.bus_allocation to breakthrough, so
-    the column carries the anchor's legacy Breakthrough Pd weighting. Demand
+    the column carries the master's legacy Breakthrough Pd weighting. Demand
     itself stays guarded by the UNWAIVED Load / Load_t.p_set comparisons; this
     waives only the presence of the column, not its content
+# DL-18 / HF-24 - master silently drops NREL caps capacity for substations with
+# zero GODEEEP availability or no intersecting CF cell; develop retains them.
+# Measured on the western leg (smoke-western-20260915-1141, 2026-09-15): 7
+# onwind buses / 546 MW and 4 solar buses / 2,566 MW, bus 37808 being the whole
+# of cluster p87's solar. Develop's potential is therefore HIGHER, which is the
+# sign of the fix (expect_sign: '+'), and the measured rows are +0.19 % to
+# +1.15 %, an order of magnitude inside max_abs_pct: 5. Scoped to western prong
+# 2 and to the four zone keys that actually move; the usa leg must be measured
+# before it is waived there.
+- interconnect: western
+  prong: 2
+  metric: p_nom_max_by_zone_onwind
+  key: p8
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_abs_pct: 5
+  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
+- interconnect: western
+  prong: 2
+  metric: p_nom_max_by_zone_onwind
+  key: p9
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_abs_pct: 5
+  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
+- interconnect: western
+  prong: 2
+  metric: p_nom_max_by_zone_onwind
+  key: p10
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_abs_pct: 5
+  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
+- interconnect: western
+  prong: 2
+  metric: p_nom_max_by_zone_solar
+  key: p8
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_abs_pct: 5
+  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
+# The system potential itself, sum(p_nom_max). The finding's detail carries
+# `develop`, `master` and `rel_pct`, so the bounds that read it are
+# `expect_sign` (the sign of develop - master) and `max_abs_pct` (|rel_pct|) —
+# NOT the three annual-energy bounds above, which read fields this finding does
+# not have and which the well-formedness test therefore refuses here. HF-24
+# only ever ADDS potential on develop, and the measured western deltas
+# (western-p2-3h-20260915-1449) are +0.2057 % (onwind, 265,920 vs 265,374 MW)
+# and +0.1404 % (solar, 1,830,708 vs 1,828,141 MW); 0.5 % leaves headroom
+# without admitting a sign flip or a percent-scale move.
+- interconnect: western
+  prong: 2
+  stage: profile_onwind
+  component: system_potential_mw
+  column: sum(p_nom_max)
+  kind: value
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_abs_pct: 0.5
+  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
+- interconnect: western
+  prong: 2
+  stage: profile_solar
+  component: system_potential_mw
+  column: sum(p_nom_max)
+  kind: value
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_abs_pct: 0.5
+  reason: master drops NREL caps for substations with zero GODEEEP availability or no intersecting cell; develop retains them (HF-24)
+# The develop-only cluster itself. After the prong-2 rollup master has 18 onwind
+# / 19 solar clusters and develop 19 / 20: `p87 0` (96 MW onwind, 2,158 MW
+# solar) is HF-24's bus 37808, which master dropped entirely. Reported once,
+# here, instead of leaking into every pooled quantile row - the pooled profile
+# metrics are computed over the common clusters only.
+#
+# Bounded on the two things this finding actually measures. `expect_side:
+# develop` is the whole direction of HF-24: master DROPS capacity, so a cluster
+# may exist on develop alone and never on master alone - a master-only cluster
+# is capacity develop lost, the opposite phenomenon, and stays live.
+# `max_one_sided_mw: 3000` is the sum over both one-sided lists; measured 96 MW
+# (onwind) and 2,158 MW (solar) on western-p2-3h-20260915-1449. Unbounded, these two entries waived any
+# one-sided cluster set whatever: 50 GW appearing on develop, or capacity
+# vanishing on master, read exactly the same to the matcher.
+- interconnect: western
+  prong: 2
+  stage: profile_onwind
+  component: cluster_set
+  column: <index>
+  kind: row_set
+  ledger: DL-18
+  hotfix: HF-24
+  expect_side: develop
+  max_one_sided_mw: 3000
+  reason: develop-only cluster p87 0 (96 MW onwind) is HF-24's retained NREL caps capacity at bus 37808; master has no such cluster
+- interconnect: western
+  prong: 2
+  stage: profile_solar
+  component: cluster_set
+  column: <index>
+  kind: row_set
+  ledger: DL-18
+  hotfix: HF-24
+  expect_side: develop
+  max_one_sided_mw: 3000
+  reason: develop-only cluster p87 0 (2,158 MW solar) is HF-24's retained NREL caps capacity at bus 37808; master has no such cluster
+# The hourly national available power, sum_bus(profile * p_nom_max). HF-24's
+# retained capacity (450 MW onwind, 2,566 MW solar at the clusters' own CF)
+# lifts develop above master in EVERY hour the resource is producing, which is
+# what the {onwind,solar}_national_available_power figures show: a flat
+# +0.15...+0.3 % band all year, never a crossing. Measured on
+# western-p2-3h-20260915-1429 (2026-09-15):
+#   onwind  8371/8760 h mismatched, mean_rel 0.386 %, annual +0.25 %
+#           (622,371,840 vs 620,823,223 MWh)
+#   solar   4208/8760 h mismatched, mean_rel 0.984 %, annual +0.14 %
+#           (4,513,095,168 vs 4,506,760,381 MWh)
+# Bounded, because this is the finding that would CATCH a real capacity-factor
+# construction difference: the annual total must move in HF-24's direction
+# (expect_sign '+') and by no more than 0.5 %, and the per-hour mean relative
+# error by no more than 1.5 %. `worst_rel_pct` (32 % onwind, 100 % solar) is
+# NOT bounded: at dawn and dusk master's available power is a few MW, so a
+# fraction of a MW is a 100 % relative error and the number means nothing. The
+# energy-weighted mean relative error is recorded in the finding's detail
+# instead. A sign flip, a bigger annual move, or a mean relative error over
+# 1.5 % takes the finding straight back to live.
+- interconnect: western
+  prong: 2
+  stage: profile_onwind
+  component: system_available_mw
+  column: sum_bus(profile*p_nom_max)
+  kind: value
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_total_pct: 0.5
+  max_mean_rel_pct: 1.5
+  reason: HF-24's retained onwind capacity (450 MW) raises develop's available power in every producing hour; annual +0.25 %, mean hourly 0.39 %
+- interconnect: western
+  prong: 2
+  stage: profile_solar
+  component: system_available_mw
+  column: sum_bus(profile*p_nom_max)
+  kind: value
+  ledger: DL-18
+  hotfix: HF-24
+  expect_sign: '+'
+  max_total_pct: 0.5
+  max_mean_rel_pct: 1.5
+  reason: HF-24's retained solar capacity (2,566 MW) raises develop's available power in every daylight hour; annual +0.14 %, mean hourly 0.98 %
+# --- HF-26: existing capacity at the assembled stage (western prong 2)
+#
+# Measured on the assembled networks of western-p2-3h-20260915-1449 (develop
+# elec_s20_l_pp.pkl vs master elec_s20.nc):
+#
+#   HF-26 (DL-20) CREATES capacity on develop. Master's nodal
+#     attach_renewable_capacities_to_atlite drops every existing renewable plant
+#     at a substation its profile file does not cover; develop, running the same
+#     function at cluster granularity, keeps them. Always positive, and bounded
+#     just above the measured size: onwind +111.60 % system / +121.63 % p10 /
+#     +99.71 % p9, solar +16.27 % system / +18.85 % p10 / +12.75 % p9.
+#
+# HF-27 (DL-21), the per-zone RELOCATION of existing capacity, used to be waived
+# alongside it. It is not any more: it was a develop regression (plants matched
+# to cluster centroids after simplify-early), it is fixed, and its rows must now
+# come back equivalent. See the note where those three waivers used to be.
+- interconnect: western
+  prong: 2
+  metric: capacity_existing_by_carrier
+  key: onwind
+  ledger: DL-20
+  hotfix: HF-26
+  expect_sign: '+'
+  max_abs_pct: 120
+  reason: master drops existing onwind plants at substations with no profile generator (3,097.6 vs 6,554.5 MW, +111.60 %); develop attaches them at cluster granularity (HF-26)
+- interconnect: western
+  prong: 2
+  metric: capacity_existing_by_carrier
+  key: solar
+  ledger: DL-20
+  hotfix: HF-26
+  expect_sign: '+'
+  max_abs_pct: 20
+  reason: master drops existing solar plants at substations with no profile generator (26,822.8 vs 31,188.0 MW, +16.27 %); develop attaches them at cluster granularity (HF-26)
+- interconnect: western
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p10 | onwind
+  ledger: DL-20
+  hotfix: HF-26
+  expect_sign: '+'
+  max_abs_pct: 130
+  reason: HF-26's dropped onwind plants, by zone — p10 2,100.4 vs 4,655.2 MW (+121.63 %)
+- interconnect: western
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p9 | onwind
+  ledger: DL-20
+  hotfix: HF-26
+  expect_sign: '+'
+  max_abs_pct: 130
+  reason: HF-26's dropped onwind plants, by zone — p9 803.2 vs 1,604.1 MW (+99.71 %)
+- interconnect: western
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p10 | solar
+  ledger: DL-20
+  hotfix: HF-26
+  expect_sign: '+'
+  max_abs_pct: 20
+  reason: HF-26's dropped solar plants, by zone — p10 17,770.9 vs 21,120.9 MW (+18.85 %)
+- interconnect: western
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p9 | solar
+  ledger: DL-20
+  hotfix: HF-26
+  expect_sign: '+'
+  max_abs_pct: 20
+  reason: HF-26's dropped solar plants, by zone — p9 8,852.4 vs 9,980.7 MW (+12.75 %)
+# The three HF-27 waivers that stood here (p11 | solar, p8 | onwind,
+# p8 | solar) were REMOVED when the zone misassignment was fixed on develop
+# (add_electricity now matches plants to substations and maps through
+# busmap_s{simpl}). They waived a DEVELOP regression, not a master defect: the
+# reconstruction reproduces master's zone for 841 of 841 western plants, so
+# those rows must come back equivalent. If one of them differs again, it is a
+# finding — hence HF-27 is `usa_noop: true` in hotfixes.yaml and can no longer
+# explain anything.
+
+# --- HF-5 zone relabel of EXISTING CAPACITY, usa prong 2 (decided 2026-09-17: explained, develop
+# correct, no fix; bounded so the verdict reads explained). Source:
+# experiments/runs/eq-usa-80abb3bc125f/diagnosis/{conventional_zone_rows.md,waiver_rows_usa_hf5.yaml}.
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p122 | CCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 900
+  reason: Marcus Hook Energy LP (4 units, 836.1 MW) moves p126 -> p122; master's clobbered county for substation 7163 is Gloucester NJ, the polygon says Delaware PA (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p126 | CCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 900
+  reason: the p126 side of the same 836.1 MW Marcus Hook move (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p126 | OCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 700
+  reason: Bayonne Energy Center 644.0 MW p127 -> p126 plus Newman (PA) 1.8 MW p122 -> p126; master puts substation 2796 in Richmond NY, the polygon says Hudson NJ (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p127 | OCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 700
+  reason: the p127 side of the 644.0 MW Bayonne Energy Center move (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p31 | OCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 330
+  reason: Rio Grande 298.3 MW p59 -> p31; master puts substation 38886 in El Paso TX, the polygon says Dona Ana NM (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p59 | OCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 330
+  reason: the p59 side of the 298.3 MW Rio Grande move (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p122 | waste
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 100
+  reason: Covanta Delaware Valley 90.0 MW p126 -> p122 (substation 6456, master county Gloucester NJ vs polygon Delaware PA) (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p126 | waste
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 100
+  reason: the p126 side of the 90.0 MW Covanta Delaware Valley move (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p8 | battery
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 30
+  reason: Fish Springs 25.0 MW p12 -> p8; master puts substation 37808 in Washoe NV, the polygon says Lassen CA. master's side of the row is 0 MW, so the bound is MW not pct (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p12 | battery
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 30
+  reason: the p12 side of the 25.0 MW Fish Springs move (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p126 | oil
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 100
+  reason: net of Eddystone 79.6 MW p122 -> p126 and Chester 55.8 MW p126 -> p122 (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p122 | oil
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 100
+  reason: the p122 side of the Eddystone / Chester oil exchange (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p123 | OCGT
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 26
+  reason: three federal DC gas turbines (22.9 MW) move p99 -> p123; master puts the DC substations in Arlington / Alexandria VA, the polygon says District of Columbia (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p123 | biomass
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 16
+  reason: DC Water CHP 14.1 MW moves p99 -> p123 by the same DC county clobber (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p99 | biomass
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 16
+  reason: the p99 side of the 14.1 MW DC Water CHP move (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p124 | oil
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 5
+  reason: Tangier and Smith Island (3.9 MW) move p123 -> p124; substation 10310 sits in a ReEDS shape gap in Chesapeake Bay, master's county is Somerset MD, the polygon says Accomack VA (HF-5)
+# The six solar rows mix HF-26 (master drops plants at unprofiled substations,
+# reconstructed) with the HF-5 relabel; the reconstruction fails its develop gate
+# on them by exactly the relabelled MW, so they are bounded here on the WHOLE
+# delta (HF-26 dropped + HF-5 moved), ~10 % above the measured value.
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p12 | solar
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 250
+  reason: HF-26 dropped 323.0 MW minus Fish Springs solar 100.0 MW relabelled p12 -> p8 (HF-5); measured +223.0
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p8 | solar
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 110
+  reason: the p8 side of the 100.0 MW Fish Springs solar relabel (HF-5); measured +100.0
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p123 | solar
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 410
+  reason: HF-26 dropped 363.8 MW plus 9.4 MW of DC solar relabelled p99 -> p123 (HF-5); measured +373.2
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p126 | solar
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 1170
+  reason: HF-26 dropped 1,056.8 MW plus 3.0 MW relabelled into p126 (HF-5); measured +1,059.8
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p129 | solar
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 115
+  reason: HF-26 dropped 100.4 MW plus 2.0 MW relabelled p130 -> p129 (HF-5); measured +102.4
+- interconnect: usa
+  prong: 2
+  metric: p_nom_existing_by_zone_carrier
+  key: p130 | solar
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 40
+  reason: HF-26 dropped 34.9 MW minus 2.0 MW relabelled p130 -> p129 (HF-5); measured +32.9
+
+# --- HF-5 zone relabel of DEMAND, usa prong 2: the 17 downtown-DC buses carry
+# 5,767.6 MW of mean demand that master files under p99 (Virginia) and develop
+# under p123 (Maryland + DC). Bounds are ~10 % above the post-HF-28 expectation
+# (the p123 row previously netted a -2,155 MW HF-28 term that the fix removes).
+# Source: experiments/runs/eq-usa-82c25a3177d0/diagnosis/demand_by_zone.md §3.
+- interconnect: usa
+  prong: 2
+  metric: demand_by_zone
+  key: p99 | mean
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 6500
+  reason: DC core buses relabelled p99 -> p123 by master's county clobber; 5,767.6 MW mean (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: demand_by_zone
+  key: p123 | mean
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 6500
+  reason: the p123 side of the DC relabel, 5,766.0 MW mean (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: demand_by_zone
+  key: p99 | peak
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '-'
+  max_abs_delta_mw: 12000
+  reason: peak-hour counterpart of the DC relabel; measured -10,040.6 MW before HF-28 (HF-5)
+- interconnect: usa
+  prong: 2
+  metric: demand_by_zone
+  key: p123 | peak
+  ledger: DL-22
+  hotfix: HF-5
+  expect_sign: '+'
+  max_abs_delta_mw: 12000
+  reason: the p123 side of the peak-hour DC relabel (HF-5)

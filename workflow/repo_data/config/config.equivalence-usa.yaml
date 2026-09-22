@@ -1,20 +1,21 @@
-# PyPSA-USA equivalence-harness config — WHOLE-US variant (data stages only;
-# stop before solve_network). Identical to config.equivalence.yaml except the
-# footprint: interconnect usa, no reeds_state include filter. (see
+# PyPSA-USA equivalence-harness config — WHOLE-US variant (full chain through
+# solve_network, prong 2 at simpl=300). Derived from config.equivalence.yaml;
+# differs in footprint (interconnect usa, no reeds_state include filter),
+# granularity, and the national 1 Mt CO2 cap. (see
 # docs/superpowers/specs/2026-08-07-pipeline-equivalence-and-perf-design.md).
-# One shared file drives BOTH the v1-epic candidate and the anchor
-# (upstream/develop e7f8bd70) baseline builds. The harness driver passes
+# One shared file drives BOTH the develop side and the master-benchmark
+# (baseline) side. The harness driver passes
 # explicit target paths, so scenario lists here document the run shape;
 # wildcards are taken from the targets. DO NOT use as a user-facing entry.
 #
-# Keys the ANCHOR requires from the main config (its layered common lacks
+# Keys MASTER requires from the main config (its layered common lacks
 # them): co2.storage, clustering.cluster_network.feature,
-# clustering.simplify_network.feature (prong 2). v1-epic ignores the extras.
+# clustering.simplify_network.feature (prong 2). develop ignores the extras.
 #
 # DELIBERATELY NOT A SPARSE OVERLAY. Unlike config.tutorial.yaml and
-# config.test.yaml, this file must stay self-contained: the anchor checkout
+# config.test.yaml, this file must stay self-contained: the master checkout
 # does NOT auto-load config.default.yaml, so any key dropped here would be
-# supplied to the candidate and missing on the anchor.
+# supplied to develop and missing on master.
 run:
   name: "equivalence"
   disable_progressbar: true
@@ -24,11 +25,19 @@ run:
 
 foresight: 'perfect'
 
+# --- Pinned identically on BOTH sides (harness plan "What 'the same config'
+# --- means", decision 2 of 2026-09-14; see memory/plans/harness-master-vs-develop.md).
+# Newest PUDL release referenced anywhere on develop. Master's loaded
+# config.common.yaml says v2025.2.0 and develop's says v2026.8.0; snakemake
+# applies --configfile AFTER every configfile: directive, so pinning it here
+# wins on both branches and HF-1's pudl_path half stops being a difference.
+pudl_path: s3://pudl.catalyst.coop/v2026.8.0
+
 scenario:
   interconnect: [usa]
-  clusters: [4]            # reeds transport model: must equal CA's ReEDS zone count (p8-p11); plain 4 = all carriers aggregate to zones (user choice 2026-08-07)
-  simpl: ['']            # prong 1 (pass-through); prong 2 targets use s20
-  opts: [REM-3h]
+  clusters: [134]           # plain = conventional-only aggregation (renewable zones kept), user choice 2026-09-06; reeds transport model: must equal the US ReEDS zone count (134 country==USA rows in ReEDS_Constraints/membership.csv)
+  simpl: ['300']           # prong 2 production-style granularity (user choice 2026-08-31); prong 1 would use '' pass-through
+  opts: [REM-3h, 3h]       # REM-3h = national 1 Mt CO2 cap (see regional_Co2_limits below); 3h = unconstrained twin
   ll: [v1.0]
   scope: "total"
   sector: ""
@@ -44,20 +53,72 @@ model_topology:
 enable:
   build_cutout: false
 
-renewable_weather_years: [2019]
+# Historical 2012 GODEEEP CFs (user decision 2026-09-01): 2012 is the only
+# historical year PUBLISHED on Zenodo, so both sides can retrieve identical
+# bytes. Scenario/year/hub height are pinned HERE because each branch would
+# otherwise inherit them from a DIFFERENT file (develop: the auto-loaded
+# repo_data/config/config.{common,default}.yaml; master: its own layered
+# config.common.yaml) — currently equal, but nothing keeps them so.
+renewable_scenarios: ["historical"]
+renewable_weather_years: [2012]     # CF year for historical scenarios (resolve_weather_year)
+godeeep_wind_height: "_125m"
 
-# Two full Sun-Sat January weeks (D5 in the master spec).
+# Full CF-extraction window. 2012 is a leap year: fix_godeeep_time shifts the
+# raw GODEEEP time axis past Feb 29, and get_renewable_snapshots drops Feb 29
+# from the selection window (harness ledger DL-17; ported onto the baseline as a
+# commit on master-benchmark), yielding the standard 8760-hour year that maps
+# 1:1 onto the 8760 network snapshots below.
+renewable_snapshots:
+  start_month: 1
+  start_day: 1
+  end_month: 12
+  end_day: 31
+  end_inclusive: true
+
+# Full model year (user decision 2026-09-01; supersedes the two-week D5
+# window from the master spec).
 snapshots:
-  start: "2019-01-06 00:00"
-  end: "2019-01-19 23:00"
+  start: "2019-01-01 00:00"
+  end: "2019-12-31 23:00"
   inclusive: both
 
 # Non-null value hard-required by the godeeep renewable dataset on both
 # branches (build_renewable_profiles raises otherwise).
 renewable_land_access: reference
 
-# Anchor-required: parse-time read in add_extra_components input ternary.
-# Values mirror v1-epic's config.common.yaml defaults.
+# Pinned on BOTH sides so the config-equivalence gate sees no default_only
+# difference. Master has no code reading this key at all: its cluster CF comes
+# out of simplify_network, which weights substation p_max_pu by EXISTING p_nom
+# and falls back to a plain mean where a cluster carries no existing capacity.
+# "capacity" is develop's deliberate departure from that — availability-weighted
+# per substation, then p_nom_max-weighted across the cluster (hot-fix HF-25,
+# deltas ledger DL-19). Master's Snakefile does not schema-validate, so the extra
+# key is inert there.
+# Deep-merges into master's config/config.common.yaml renewable block.
+renewable:
+  godeeep_cf_weighting: capacity           # capacity | availability
+
+# Develop-only: pin GODEEEP CF retrieval to the published Zenodo records so
+# both sides read byte-identical inputs. Develop's default registry
+# (config.common.yaml) prefers the local Oak mirror, whose 2012 files are NOT
+# byte-identical to the Zenodo publication (md5 mismatch at equal size,
+# verified 2026-09-01: solar 04035cbc… vs Zenodo 53c13210…, wind a62f2442…
+# vs Zenodo 0115963d…). Lists replace wholesale in the config merge, so this
+# `sources:` drops the mirror entry. Master never reads this key — its
+# ZenodoScenarioDownloader hardcodes the SAME record ids.
+godeeep_cf_registry:
+  sources:
+    - kind: zenodo
+      datasets:
+        solar_historical_compressed:
+          record: 20127513
+          years: [2012]
+        wind_125m_historical_compressed:
+          record: 20127520
+          years: [2012]
+
+# Master-required: parse-time read in add_extra_components input ternary.
+# Values mirror develop's config.common.yaml defaults.
 co2:
   storage: false
   network:
@@ -68,6 +129,25 @@ co2:
     discount_rate: 0.07
 
 electricity:
+  # Explicit on develop, where it is the shipped default. Master has no code
+  # reading this key at all, so the pin alone could not neutralise HF-3 — the
+  # code was ported onto master-benchmark (b3afe50) and the pin records the
+  # value both sides run. Harness plan decision 2, 2026-09-14.
+  honor_planned_retirements: true
+  # Develop's config.default.yaml supplies this block and master's loaded
+  # config set does not. It looks inert — shift: 0 means no demand-response
+  # components are built — but BOTH branches guard the call with
+  # `if config["electricity"].get("demand_response", {})`, and
+  # add_demand_response adds the `demand_response` Carrier BEFORE its own
+  # `shift == 0` early return. Unpinned, develop gains a carrier the baseline
+  # never adds, and the comparison raises an unwaived Carrier row_set finding at
+  # extra_components, prepared_network and sectored_network. master-benchmark
+  # carries add_demand_response (it is master code, not a port), so pinning the
+  # same falsy-shift block on both sides makes them add the same carrier and
+  # build the same nothing else.
+  demand_response:
+    marginal_cost: 999999
+    shift: 0
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste]
   renewable_carriers: [onwind, solar, hydro]
   retirement: economic
@@ -78,7 +158,7 @@ electricity:
     Link: []
   demand:
     profile: efs
-    # pin the legacy Breakthrough Pd weight: the anchor branch has no
+    # pin the legacy Breakthrough Pd weight: master has no
     # census-population method, so equivalence requires the legacy path
     bus_allocation: breakthrough
     scenario:
@@ -92,7 +172,10 @@ electricity:
   # portfolio_standards (RPS opt) are the sibling keys read the same way.
   # Paths mirror config.default.yaml; the CSVs ship in
   # repo_data/config/policy_constraints/ in both checkouts.
-  regional_Co2_limits: 'repo_data/config/policy_constraints/regional_Co2_limits.csv'
+  # USA harness: single national 1,000,000 t cap (regions='all') instead of the
+  # state-policy CSV — the REM-3h run binds it, the 3h run never reads it.
+  # build.py syncs this harness-only CSV into the baseline worktree.
+  regional_Co2_limits: 'repo_data/config/policy_constraints/regional_Co2_limits_equivalence_usa.csv'
   technology_capacity_targets: 'repo_data/config/policy_constraints/technology_capacity_targets.csv'
   portfolio_standards: 'repo_data/config/policy_constraints/portfolio_standards.csv'
 
@@ -158,10 +241,10 @@ costs:
 clustering:
   simplify_network:
     algorithm: kmeans
-    feature: solar+onwind-time    # anchor-required key (prong 2); unused by kmeans math
+    feature: solar+onwind-time    # master-required key (prong 2); unused by kmeans math
   cluster_network:
     algorithm: kmeans
-    feature: solar+onwind-time    # anchor-required key; unused by kmeans math
+    feature: solar+onwind-time    # master-required key; unused by kmeans math
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:
@@ -212,9 +295,9 @@ solving:
       Seed: 123
       AggFill: 0
       PreDual: 0
-      # Mirrors config.default.yaml. Required explicitly here: the candidate
+      # Mirrors config.default.yaml. Required explicitly here: the develop
       # branch now auto-loads config.default.yaml as a base layer, so omitting
-      # this would hand the candidate a solver option the anchor never sees and
+      # this would hand develop a solver option master never sees and
       # break the like-for-like comparison.
       GURO_PAR_BARDENSETHRESH: 200
 

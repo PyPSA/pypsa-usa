@@ -282,6 +282,16 @@ rule build_renewable_profiles:
             if w.technology in ("onwind", "solar")
             else GEOSPATIAL + "{interconnect}/regions_offshore_s{simpl}.geojson"
         ),
+        # Pre-clustering (substation) regions from build_bus_regions. Used by
+        # renewable.godeeep_cf_weighting == "capacity" to weight GODEEEP cells
+        # availability-weighted within each substation first, then roll the
+        # substations up to the cluster by installable capacity (p_nom_max).
+        # (Master weights that second stage by existing p_nom instead; HF-25.)
+        regions_nodal=lambda w: (
+            GEOSPATIAL + "{interconnect}/regions_onshore.geojson"
+            if w.technology in ("onwind", "solar")
+            else GEOSPATIAL + "{interconnect}/regions_offshore.geojson"
+        ),
         nrel_avail=nrel_exclusion_artifact("avail"),
         nrel_caps=nrel_exclusion_artifact("caps"),
         godeeep_cf=godeeep_cf_artifact,

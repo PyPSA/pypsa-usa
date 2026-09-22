@@ -1,18 +1,18 @@
 # PyPSA-USA equivalence-harness config — Tier C (see
 # docs/superpowers/specs/2026-08-07-pipeline-equivalence-and-perf-design.md).
-# One shared file drives BOTH the v1-epic candidate and the anchor
-# (upstream/develop e7f8bd70) baseline builds. The harness driver passes
+# One shared file drives BOTH the develop side and the master-benchmark
+# (baseline) side. The harness driver passes
 # explicit target paths, so scenario lists here document the run shape;
 # wildcards are taken from the targets. DO NOT use as a user-facing entry.
 #
-# Keys the ANCHOR requires from the main config (its layered common lacks
+# Keys MASTER requires from the main config (its layered common lacks
 # them): co2.storage, clustering.cluster_network.feature,
-# clustering.simplify_network.feature (prong 2). v1-epic ignores the extras.
+# clustering.simplify_network.feature (prong 2). develop ignores the extras.
 #
 # DELIBERATELY NOT A SPARSE OVERLAY. Unlike config.tutorial.yaml and
-# config.test.yaml, this file must stay self-contained: the anchor checkout
+# config.test.yaml, this file must stay self-contained: the master checkout
 # does NOT auto-load config.default.yaml, so any key dropped here would be
-# supplied to the candidate and missing on the anchor.
+# supplied to develop and missing on master.
 run:
   name: "equivalence"
   disable_progressbar: true
@@ -22,9 +22,17 @@ run:
 
 foresight: 'perfect'
 
+# --- Pinned identically on BOTH sides (harness plan "What 'the same config'
+# --- means", decision 2 of 2026-09-14; see memory/plans/harness-master-vs-develop.md).
+# Newest PUDL release referenced anywhere on develop. Master's loaded
+# config.common.yaml says v2025.2.0 and develop's says v2026.8.0; snakemake
+# applies --configfile AFTER every configfile: directive, so pinning it here
+# wins on both branches and HF-1's pudl_path half stops being a difference.
+pudl_path: s3://pudl.catalyst.coop/v2026.8.0
+
 scenario:
   interconnect: [western]
-  clusters: [4]            # reeds transport model: must equal CA's ReEDS zone count (p8-p11); plain 4 = all carriers aggregate to zones (user choice 2026-08-07)
+  clusters: [4s]           # reeds transport model: must equal CA's ReEDS zone count (p8-p11); 4s = all carriers aggregate to zones (user choice 2026-08-07; was plain 4 before the 2026-09-06 suffix change)
   simpl: ['']            # prong 1 (pass-through); prong 2 targets use s20
   opts: [REM-3h]
   ll: [v1.0]
@@ -55,8 +63,20 @@ snapshots:
 # branches (build_renewable_profiles raises otherwise).
 renewable_land_access: reference
 
-# Anchor-required: parse-time read in add_extra_components input ternary.
-# Values mirror v1-epic's config.common.yaml defaults.
+# Pinned on BOTH sides so the config-equivalence gate sees no default_only
+# difference. Master has no code reading this key at all: its cluster CF comes
+# out of simplify_network, which weights substation p_max_pu by EXISTING p_nom
+# and falls back to a plain mean where a cluster carries no existing capacity.
+# "capacity" is develop's deliberate departure from that — availability-weighted
+# per substation, then p_nom_max-weighted across the cluster (hot-fix HF-25,
+# deltas ledger DL-19). Master's Snakefile does not schema-validate, so the extra
+# key is inert there.
+# Deep-merges into master's config/config.common.yaml renewable block.
+renewable:
+  godeeep_cf_weighting: capacity           # capacity | availability
+
+# Master-required: parse-time read in add_extra_components input ternary.
+# Values mirror develop's config.common.yaml defaults.
 co2:
   storage: false
   network:
@@ -67,6 +87,25 @@ co2:
     discount_rate: 0.07
 
 electricity:
+  # Explicit on develop, where it is the shipped default. Master has no code
+  # reading this key at all, so the pin alone could not neutralise HF-3 — the
+  # code was ported onto master-benchmark (b3afe50) and the pin records the
+  # value both sides run. Harness plan decision 2, 2026-09-14.
+  honor_planned_retirements: true
+  # Develop's config.default.yaml supplies this block and master's loaded
+  # config set does not. It looks inert — shift: 0 means no demand-response
+  # components are built — but BOTH branches guard the call with
+  # `if config["electricity"].get("demand_response", {})`, and
+  # add_demand_response adds the `demand_response` Carrier BEFORE its own
+  # `shift == 0` early return. Unpinned, develop gains a carrier the baseline
+  # never adds, and the comparison raises an unwaived Carrier row_set finding at
+  # extra_components, prepared_network and sectored_network. master-benchmark
+  # carries add_demand_response (it is master code, not a port), so pinning the
+  # same falsy-shift block on both sides makes them add the same carrier and
+  # build the same nothing else.
+  demand_response:
+    marginal_cost: 999999
+    shift: 0
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, geothermal, biomass, waste]
   renewable_carriers: [onwind, solar, hydro]
   retirement: economic
@@ -77,7 +116,7 @@ electricity:
     Link: []
   demand:
     profile: efs
-    # pin the legacy Breakthrough Pd weight: the anchor branch has no
+    # pin the legacy Breakthrough Pd weight: master has no
     # census-population method, so equivalence requires the legacy path
     bus_allocation: breakthrough
     scenario:
@@ -157,10 +196,10 @@ costs:
 clustering:
   simplify_network:
     algorithm: kmeans
-    feature: solar+onwind-time    # anchor-required key (prong 2); unused by kmeans math
+    feature: solar+onwind-time    # master-required key (prong 2); unused by kmeans math
   cluster_network:
     algorithm: kmeans
-    feature: solar+onwind-time    # anchor-required key; unused by kmeans math
+    feature: solar+onwind-time    # master-required key; unused by kmeans math
     exclude_carriers: []
     consider_efficiency_classes: false
   aggregation_strategies:
@@ -211,9 +250,9 @@ solving:
       Seed: 123
       AggFill: 0
       PreDual: 0
-      # Mirrors config.default.yaml. Required explicitly here: the candidate
+      # Mirrors config.default.yaml. Required explicitly here: the develop
       # branch now auto-loads config.default.yaml as a base layer, so omitting
-      # this would hand the candidate a solver option the anchor never sees and
+      # this would hand develop a solver option master never sees and
       # break the like-for-like comparison.
       GURO_PAR_BARDENSETHRESH: 200
 

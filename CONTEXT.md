@@ -1,24 +1,47 @@
-# CONTEXT.md — Ubiquitous language for the v1-epic pipeline-evolution work
+# CONTEXT.md — Ubiquitous language for the pipeline-evolution work
 
 Glossary of terms used across the specs, plans, tests, and change-log for the
-pipeline speed/memory work on `v1-epic`. Terms only — no implementation detail.
+pipeline speed/memory work on `develop`. Terms only — no implementation detail.
 
 ## Equivalence testing
 
-- **Anchor** — the pinned `upstream/develop` commit that model results are
-  measured against. There is exactly one current anchor at any time; moving it
-  is an explicit, recorded decision.
-- **Baseline build** — the set of pipeline artifacts produced by running the
-  anchor commit.
-- **Candidate build** — the artifacts produced by the tip of `v1-epic` (or a PR
+The four branch/change terms below are copied **verbatim** from §2 of
+`memory/PROJECT.md` in the project brain (`Refactor_PyPSA_USA`), which is their
+one home. Change them there first; the copy here exists so the repo is
+self-describing, and the two must not drift.
+
+- **`master`** — the released pypsa-usa branch; the baseline ("the old
+  version") every comparison is made against.
+- **`master-benchmark`** — a branch off `master` in `code/pypsa-usa` that is
+  the actual baseline run. It carries the fixes `master` needs to run and
+  compare (formerly patched in at build time), plus resource tweaks (memory,
+  walltime) so benchmarking is seamless. Every commit on it is listed in the
+  hot-fix ledger as "ported to master-benchmark", so a difference it removes is
+  never mistaken for a `develop` effect. Decided 2026-09-14.
+- **`develop`** — the refactored branch under test. It moves: hot-fixes land
+  on it while benchmarking is in progress, so a benchmark always records the
+  exact `develop` commit it ran.
+- **Hot-fix** — a change on `develop` relative to `master` that is *not* part
+  of the core restructuring of the snakemake workflow (a data fix, a bug fix,
+  an improved default). Every hot-fix is listed in the hot-fix ledger (§3.3)
+  so it can be cited when explaining a `master`/`develop` difference.
+
+Harness terms, local to this repository:
+
+- **Baseline build** — the set of pipeline artifacts produced by building
+  `master-benchmark` in `.worktrees/master-benchmark`, a registered git
+  worktree sitting at the sha `EQ_BASELINE_REF` resolves to. Whether it is
+  attached to the branch or detached is not forced: the branch is still being
+  built in that worktree.
+- **Develop build** — the artifacts produced by the tip of `develop` (or a PR
   branch) under the same configuration and data as the baseline build.
-- **Equivalence run** — one baseline build plus one candidate build plus the
-  comparison between them, producing a pass/fail result and a visual report.
+- **Equivalence run** — one baseline build plus one develop build plus the
+  comparison between them, producing a pass/fail result and PNG figures.
 - **Config-only determinism** — the principle that both sides of an
   equivalence run produce identical clustering from the same basic
   configuration options alone (shared, seeded clustering code), with no
-  injected fixtures and no patches to the anchor.
-- **Delta** — any difference between baseline and candidate artifacts that
+  injected fixtures and no build-time patching of either side.
+- **Delta** — any difference between the baseline and develop artifacts that
   exceeds tolerance.
 - **Waiver** — a machine-readable annotation that tells the comparison to
   accept one specific, already-signed-off delta.
@@ -34,19 +57,19 @@ pipeline speed/memory work on `v1-epic`. Terms only — no implementation detail
 - **CA harness** — the small, frequently-run equivalence harness: a
   California-only slice, two weeks of January data. Runs locally in minutes.
 - **USA harness** — the full-CONUS equivalence harness, run infrequently on
-  HPC at milestones.
+  HPC at milestones. The standing benchmark case.
 - **Tier A / Tier B / Tier C** — the test pyramid: static checks (no data),
   small integration build with artifact-shape assertions, and equivalence runs
-  against the anchor, respectively.
+  against the baseline, respectively.
 
 ## Pipeline
 
-- **Simplify-early refactor** — the v1-epic restructuring that moved substation
-  aggregation and `{simpl}` clustering ahead of the per-bus heavy rules
-  (renewable profiles, demand, electricity assembly).
+- **Simplify-early refactor** — the `develop` restructuring that moved
+  substation aggregation and `{simpl}` clustering ahead of the per-bus heavy
+  rules (renewable profiles, demand, electricity assembly).
 - **Pass-through (`simpl=""`)** — running the pipeline with no `{simpl}`
   reduction, so the network entering final clustering is at substation
-  granularity. Both the anchor and `v1-epic` support this.
+  granularity. Both `master` and `develop` support this.
 - **Change-log** — the running, human-readable record of every code/behavior
-  change on `v1-epic` relative to `develop` (distinct from the deltas ledger,
+  change on `develop` relative to `master` (distinct from the deltas ledger,
   which records accepted *result* differences).

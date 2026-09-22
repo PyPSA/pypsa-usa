@@ -1,6 +1,7 @@
 """Cluster_network aggregates the outputs of simplify_network, and transforms the network to a zonal power balance model if specified in the configuration."""
 
 import logging
+import re
 import warnings
 from functools import reduce
 
@@ -545,6 +546,45 @@ def convert_to_transport(
     return clustering
 
 
+def parse_clusters_wildcard(
+    cluster_wc: str,
+    all_carriers: set,
+    conventional_carriers: set,
+    aggregate_carriers: set,
+    n_buses: int,
+) -> tuple[int, set, set]:
+    """Resolve the ``{clusters}`` wildcard into (n_clusters, aggregate, keep).
+
+    ``aggregate_carriers`` arrives already stripped of ``exclude_carriers``.
+    Suffix semantics (default changed 2026-09-06 so that renewable resource
+    zones are preserved unless the user opts into merging them):
+
+    * ``N`` / ``Nm`` — aggregate only conventional carriers; renewables keep
+      their ``{simpl}``-level resource zones. ``m`` is an accepted alias for
+      the plain integer.
+    * ``Na`` — aggregate no carriers at all.
+    * ``Ns`` — "small": aggregate every carrier (one generator per carrier
+      and cluster bus). This was the pre-2026-09 plain-integer behaviour.
+    * ``Nc`` — aggregate all except conventional carriers.
+    * ``all`` — one cluster per bus, every carrier aggregated (no-op merge).
+    """
+    if cluster_wc == "all":
+        return n_buses, aggregate_carriers, set()
+    m = re.fullmatch(r"(\d+)([msac]?)", str(cluster_wc))
+    if m is None:
+        raise ValueError(f"unrecognised clusters wildcard {cluster_wc!r}; expected <int>[m|s|a|c] or 'all'")
+    n_clusters, suffix = int(m.group(1)), m.group(2)
+    if suffix in ("", "m"):
+        agg = conventional_carriers & aggregate_carriers
+    elif suffix == "s":
+        agg = aggregate_carriers
+    elif suffix == "c":
+        agg = aggregate_carriers - conventional_carriers
+    else:  # "a"
+        agg = set()
+    return n_clusters, agg, all_carriers - agg
+
+
 def cluster_regions(busmaps, input=None, output=None):
     """Create new geojson files for the clustered regions."""
     busmap = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
@@ -941,29 +981,13 @@ if __name__ == "__main__":
 
     # Extract cluster information from wildcards
     cluster_wc = snakemake.wildcards.get("clusters", None) or snakemake.wildcards.get("clusters_hires", None)
-
-    if cluster_wc == "all":
-        n_clusters = len(n.buses)
-        non_aggregated_carriers = set()
-    elif cluster_wc.endswith("m"):
-        # Only aggregate conventional carriers
-        n_clusters = int(cluster_wc[:-1])
-        aggregate_carriers = conventional_carriers & aggregate_carriers
-        non_aggregated_carriers = all_carriers - aggregate_carriers
-    elif cluster_wc.endswith("c"):
-        # Aggregate all except conventional carriers
-        n_clusters = int(cluster_wc[:-1])
-        aggregate_carriers = aggregate_carriers - conventional_carriers
-        non_aggregated_carriers = all_carriers - aggregate_carriers
-    elif cluster_wc.endswith("a"):
-        # Do not aggregate Any carriers
-        n_clusters = int(cluster_wc[:-1])
-        aggregate_carriers = set()
-        non_aggregated_carriers = all_carriers
-    else:
-        # Default case - just interpret as number of clusters
-        n_clusters = int(cluster_wc)
-        non_aggregated_carriers = set()
+    n_clusters, aggregate_carriers, non_aggregated_carriers = parse_clusters_wildcard(
+        cluster_wc,
+        all_carriers=all_carriers,
+        conventional_carriers=conventional_carriers,
+        aggregate_carriers=aggregate_carriers,
+        n_buses=len(n.buses),
+    )
 
     n.generators.loc[
         n.generators.carrier.isin(non_aggregated_carriers),

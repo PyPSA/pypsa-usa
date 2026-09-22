@@ -1,42 +1,160 @@
 """Artifact path map for the Tier C equivalence harness.
 
-Pairs candidate (v1-epic, category-first resources layout) artifacts with
-anchor (upstream/develop e7f8bd70, flat {interconnect}/ layout) artifacts for
-one prong of the two-prong protocol. Paths are relative to each side's
-``workflow/`` directory; the run name is fixed to ``equivalence``.
+Pairs ``develop`` artifacts (category-first resources layout) with ``master``
+artifacts (flat ``{interconnect}/`` layout) for one prong of the two-prong
+protocol. Paths are relative to each side's ``workflow/`` directory; the run
+name is fixed to ``equivalence``.
 
-Pairing facts come from the 2026-08-07 research workflow (see
-docs/superpowers/plans/2026-08-07-ca-equivalence-harness.md): the DAGs pass
-through the same logical states under different file names. Notably the
-candidate's assembled substation network is ``elec_s{simpl}_l_pp.pkl`` (dill)
-while the anchor's is ``elec_s{simpl}.nc`` (its simplify_network output);
-the anchor's own ``elec_base_network_l_pp.pkl`` is nodal and has no
-candidate counterpart.
+The baseline is the ``master-benchmark`` branch off ``master`` (see
+``memory/plans/harness-master-vs-develop.md`` in the project brain, T1), NOT a
+pinned upstream commit patched at build time. ``BASELINE_REF`` is resolved to a
+full sha at run time by ``build.resolve_baseline_sha``.
+
+Pairing facts: the two DAGs pass through the same logical states under
+different file names. Notably develop's assembled substation network is
+``elec_s{simpl}_l_pp.pkl`` (dill) while master's is ``elec_s{simpl}.nc`` (its
+simplify_network output); master's own ``elec_base_network_l_pp.pkl`` is nodal
+and has no develop counterpart.
 """
 
 from __future__ import annotations
 
 import os
+import re
+import time
 from dataclasses import dataclass
+from pathlib import Path
 
+REPO = Path(__file__).resolve().parents[2]
 RUN = "equivalence"
-INTERCONNECT = os.environ.get("EQ_INTERCONNECT", "western")
-UNTIL = os.environ.get("EQ_UNTIL", "")  # 'assembled' = stop pairs at the assembled stage
-_CONFIG_NAME = "config.equivalence.yaml" if INTERCONNECT == "western" else f"config.equivalence-{INTERCONNECT}.yaml"
-# Candidate side reads the tracked template directly (its Snakefile no longer
-# needs a config/ copy). The anchor is a pinned upstream checkout whose
-# Snakefile still expects everything under config/, and build.py copies the
-# shared harness config in there.
-CONFIGFILE = f"repo_data/config/{_CONFIG_NAME}"
-ANCHOR_CONFIGFILE = f"config/{_CONFIG_NAME}"
-CLUSTERS = "4"
-LL = "v1.0"
-OPTS = "REM-3h"
-SECTOR = "E"
-HORIZON = "2030"  # godeeep planning-horizon subdir for profiles
-
 EQ = f"resources/{RUN}"
 RES = f"results/{RUN}"
+INTERCONNECT = os.environ.get("EQ_INTERCONNECT", "western")
+UNTIL = os.environ.get("EQ_UNTIL", "")  # 'assembled' = stop pairs at the assembled stage
+# The baseline branch, resolved to a sha at run time (never pinned here).
+BASELINE_REF = os.environ.get("EQ_BASELINE_REF", "master-benchmark")
+_CONFIG_NAME = "config.equivalence.yaml" if INTERCONNECT == "western" else f"config.equivalence-{INTERCONNECT}.yaml"
+# The develop side reads the tracked template directly (its Snakefile no longer
+# needs a config/ copy). The baseline's Snakefile still expects everything
+# under config/, and build.py copies the shared harness config in there.
+CONFIGFILE = f"repo_data/config/{_CONFIG_NAME}"
+BASELINE_CONFIGFILE = f"config/{_CONFIG_NAME}"
+CLUSTERS = os.environ.get("EQ_CLUSTERS", "4")  # reeds transport: must equal the footprint's ReEDS zone count (western/CA slice 4; usa 134)
+LL = "v1.0"
+
+
+def baseline_clusters(wc: str = CLUSTERS) -> str:
+    """Translate a develop ``{clusters}`` value into the baseline's dialect.
+
+    Harness-branch commit ``8371e9d`` (2026-09-06) changed ``{clusters}``
+    semantics on develop: a plain integer now means "aggregate only
+    conventional carriers" (master's ``m`` suffix) and a trailing ``s`` means
+    "aggregate every carrier" (master's plain integer). ``master`` does not
+    carry that commit, so without this translation the two sides would build
+    *different generator sets* and the comparison would be meaningless.
+
+    Hot-fix-ledger open item 5 asks whether ``8371e9d`` belongs on develop with
+    its own HF row — a separate decision. The harness needs the translation
+    either way, and ``run_meta.json`` records the literal value each side ran.
+    """
+    if wc == "all":
+        return wc
+    if wc.endswith("s"):
+        return wc[:-1]
+    if wc[-1].isdigit():
+        return wc + "m"
+    return wc
+
+
+BASELINE_CLUSTERS = baseline_clusters()
+# Default to the emissions-UNCONSTRAINED twin. The national 1 Mt CO2 cap
+# (REM-3h) looked infeasible at USA scale on 2026-09-01 — barrier verdict
+# plus a stalled disambiguation simplex — and a failed solve aborts the
+# harness, so the run that secures the comparison goes first. REM-3h is
+# opt-in: EQ_OPTS=REM-3h. tests/equivalence/run_equivalence.sbatch carries
+# the same default; the two must agree or the sbatch and python would mint
+# different run ids.
+OPTS = os.environ.get("EQ_OPTS", "3h")
+SIMPL2 = os.environ.get("EQ_SIMPL", "20")  # prong-2 simpl granularity (prong 1 is always pass-through '')
+SECTOR = "E"
+HORIZON = "2030"  # godeeep planning-horizon subdir for profiles (future scenarios only)
+
+
+# --- One run directory per run (harness plan D5) -----------------------------
+# Every artifact of one harness invocation — run_meta.json, both manifests,
+# findings, tables/ and figures/ — lands under
+# ``workflow/results/equivalence/<run_id>/``. The id is frozen into
+# ``EQ_RUN_ID`` on first use so that every module in the process (and any
+# subprocess it spawns) resolves the SAME directory without having to be handed
+# it explicitly. Export ``EQ_RUN_ID`` yourself to name a run.
+
+_UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _slug(text: str) -> str:
+    r"""Filesystem-safe id component: no separator, no traversal, no metachars.
+
+    The result is appended to a results directory, so it must not be able to
+    climb out of it. Everything outside ``[A-Za-z0-9._-]`` collapses to ``-``
+    (which kills ``/``, ``\\`` and whitespace), and any run of dots is then
+    reduced to one, so ``..`` and ``...`` cannot survive as path traversal.
+    """
+    slug = _UNSAFE.sub("-", text)
+    slug = re.sub(r"\.{2,}", ".", slug).strip(".-")
+    return slug or "run"
+
+
+def run_id(prong: int | None = None) -> str:
+    """Resolve this run's id: ``EQ_RUN_ID``, else ``<ic>-p<prong>-<opts>-<stamp>``.
+
+    Frozen into the environment on first call, so a later call that does not
+    know the prong still resolves the id the first one minted.
+    """
+    existing = os.environ.get("EQ_RUN_ID")
+    if existing:
+        # Write the SLUG back, not the raw value. run_equivalence.sbatch slugs
+        # EQ_RUN_ID through `python -m tests.equivalence.paths --slug` before it
+        # builds the run-directory path, so the two agree by construction; this
+        # keeps that true for any other caller that sets the variable by hand.
+        slug = _slug(existing)
+        if slug != existing:
+            os.environ["EQ_RUN_ID"] = slug
+        return slug
+    part = f"-p{prong}" if prong is not None else ""
+    minted = _slug(f"{INTERCONNECT}{part}-{OPTS}-{time.strftime('%Y%m%d-%H%M')}")
+    os.environ["EQ_RUN_ID"] = minted
+    return minted
+
+
+def run_dir(prong: int | None = None) -> Path:
+    """``workflow/results/equivalence/<run_id>/`` in the develop checkout.
+
+    Both sides' artifacts are collected here: the baseline builds in its own
+    worktree but its manifest, like every other output of the comparison, is
+    written next to develop's so one directory is the whole run.
+    """
+    return REPO / "workflow" / RES / run_id(prong)
+
+
+def _profile_horizon_dir() -> str:
+    """Horizon path segment for profile artifacts, from the shared config.
+
+    Both branches emit profiles under a ``{planning_horizon}/`` subdir only
+    for GODEEEP *future* scenarios (``godeeep_planning_horizon`` in each
+    side's build_electricity.smk); historical runs emit flat paths. The
+    scenario is pinned in the shared harness config, so read it from there
+    rather than duplicating the choice here.
+    """
+    import yaml
+
+    cfg_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "workflow", CONFIGFILE
+    )
+    with open(cfg_path) as f:
+        cfg = yaml.safe_load(f)
+    scenarios = cfg.get("renewable_scenarios") or ["rcp85cooler"]
+    return "" if scenarios[0] == "historical" else f"{HORIZON}/"
+
 
 
 @dataclass(frozen=True)
@@ -44,38 +162,39 @@ class ArtifactPair:
     """One comparable artifact across the two sides."""
 
     stage: str  # short stage label used in findings/report
-    candidate: str  # path relative to candidate workflow/
-    anchor: str  # path relative to anchor worktree workflow/
+    develop: str  # path relative to the develop checkout's workflow/
+    master: str  # path relative to the baseline worktree's workflow/
     kind: str  # loader: network | network_pkl_vs_nc | profile | demand_total
     solve_stage: bool = False  # apply D7 tolerances instead of D2
 
 
 def prong_pairs(prong: int) -> list[ArtifactPair]:
-    """Comparable artifacts for prong 1 (simpl='') or prong 2 (simpl=20)."""
-    s = "" if prong == 1 else "20"
+    """Comparable artifacts for prong 1 (simpl='') or prong 2 (simpl=SIMPL2)."""
+    s = "" if prong == 1 else SIMPL2
     ic = INTERCONNECT
+    hdir = _profile_horizon_dir()  # "" for historical, f"{HORIZON}/" for future scenarios
     pairs = [
-        # NOTE: these two CSVs are keyed at different granularities (anchor is
-        # NODAL, pre-aggregation raw bus ids; candidate is substation-keyed),
+        # NOTE: these two CSVs are keyed at different granularities (master is
+        # NODAL, pre-aggregation raw bus ids; develop is substation-keyed),
         # so only the clustering-invariant system total is compared. Per-bus
         # demand equivalence is covered by the assembled substation network's
         # Load_t.p_set comparison.
         ArtifactPair(
             stage="demand",
-            candidate=f"{EQ}/demand/{ic}/power_electricity_s{s}.csv",
-            anchor=f"{EQ}/{ic}/demand/power_electricity.csv",
+            develop=f"{EQ}/demand/{ic}/power_electricity_s{s}.csv",
+            master=f"{EQ}/{ic}/demand/power_electricity.csv",
             kind="demand_total",
         ),
         ArtifactPair(
             stage="profile_onwind",
-            candidate=f"{EQ}/profiles/{ic}/{HORIZON}/profile_onwind_s{s}.nc",
-            anchor=f"{EQ}/{ic}/{HORIZON}/profile_onwind.nc",
+            develop=f"{EQ}/profiles/{ic}/{hdir}profile_onwind_s{s}.nc",
+            master=f"{EQ}/{ic}/{hdir}profile_onwind.nc",
             kind="profile",
         ),
         ArtifactPair(
             stage="profile_solar",
-            candidate=f"{EQ}/profiles/{ic}/{HORIZON}/profile_solar_s{s}.nc",
-            anchor=f"{EQ}/{ic}/{HORIZON}/profile_solar.nc",
+            develop=f"{EQ}/profiles/{ic}/{hdir}profile_solar_s{s}.nc",
+            master=f"{EQ}/{ic}/{hdir}profile_solar.nc",
             kind="profile",
         ),
     ]
@@ -86,8 +205,8 @@ def prong_pairs(prong: int) -> list[ArtifactPair]:
         pairs.append(
             ArtifactPair(
                 stage="assembled_substation_network",
-                candidate=f"{EQ}/networks/{ic}/elec_s_l_pp.pkl",
-                anchor=f"{EQ}/{ic}/elec_s.nc",
+                develop=f"{EQ}/networks/{ic}/elec_s_l_pp.pkl",
+                master=f"{EQ}/{ic}/elec_s.nc",
                 kind="network_pkl_vs_nc",
             ),
         )
@@ -95,35 +214,37 @@ def prong_pairs(prong: int) -> list[ArtifactPair]:
         return pairs
     core = f"elec_s{s}_c{CLUSTERS}"
     prepared = f"{core}_ec_l{LL}_{OPTS}"
+    mcore = f"elec_s{s}_c{BASELINE_CLUSTERS}"
+    mprepared = f"{mcore}_ec_l{LL}_{OPTS}"
     pairs += [
         ArtifactPair(
             stage="clustered_network",
-            candidate=f"{EQ}/networks/{ic}/{core}.nc",
-            anchor=f"{EQ}/{ic}/{core}.nc",
+            develop=f"{EQ}/networks/{ic}/{core}.nc",
+            master=f"{EQ}/{ic}/{mcore}.nc",
             kind="network",
         ),
         ArtifactPair(
             stage="extra_components",
-            candidate=f"{EQ}/networks/{ic}/{core}_ec.nc",
-            anchor=f"{EQ}/{ic}/{core}_ec.nc",
+            develop=f"{EQ}/networks/{ic}/{core}_ec.nc",
+            master=f"{EQ}/{ic}/{mcore}_ec.nc",
             kind="network",
         ),
         ArtifactPair(
             stage="prepared_network",
-            candidate=f"{EQ}/networks/{ic}/{prepared}.nc",
-            anchor=f"{EQ}/{ic}/{prepared}.nc",
+            develop=f"{EQ}/networks/{ic}/{prepared}.nc",
+            master=f"{EQ}/{ic}/{mprepared}.nc",
             kind="network",
         ),
         ArtifactPair(
             stage="sectored_network",
-            candidate=f"{EQ}/networks/{ic}/{prepared}_{SECTOR}.nc",
-            anchor=f"{EQ}/{ic}/{prepared}_{SECTOR}.nc",
+            develop=f"{EQ}/networks/{ic}/{prepared}_{SECTOR}.nc",
+            master=f"{EQ}/{ic}/{mprepared}_{SECTOR}.nc",
             kind="network",
         ),
         ArtifactPair(
             stage="solved_network",
-            candidate=f"{RES}/{ic}/networks/{prepared}_{SECTOR}.nc",
-            anchor=f"{RES}/{ic}/networks/{prepared}_{SECTOR}.nc",
+            develop=f"{RES}/{ic}/networks/{prepared}_{SECTOR}.nc",
+            master=f"{RES}/{ic}/networks/{mprepared}_{SECTOR}.nc",
             kind="network",
             solve_stage=True,
         ),
@@ -132,27 +253,44 @@ def prong_pairs(prong: int) -> list[ArtifactPair]:
 
 
 def final_target(prong: int, solve: bool = True) -> str:
-    """The snakemake target that forces the whole prong's chain."""
-    s = "" if prong == 1 else "20"
+    """The snakemake target that forces the whole prong's chain (develop side)."""
+    s = "" if prong == 1 else SIMPL2
     prepared = f"elec_s{s}_c{CLUSTERS}_ec_l{LL}_{OPTS}_{SECTOR}"
     if solve:
         return f"{RES}/{INTERCONNECT}/networks/{prepared}.nc"
     return f"{EQ}/networks/{INTERCONNECT}/{prepared}.nc"
 
 
-def anchor_final_target(prong: int, solve: bool = True) -> str:
-    s = "" if prong == 1 else "20"
-    prepared = f"elec_s{s}_c{CLUSTERS}_ec_l{LL}_{OPTS}_{SECTOR}"
+def baseline_final_target(prong: int, solve: bool = True) -> str:
+    """The same target in the baseline's flat layout and {clusters} dialect."""
+    s = "" if prong == 1 else SIMPL2
+    prepared = f"elec_s{s}_c{BASELINE_CLUSTERS}_ec_l{LL}_{OPTS}_{SECTOR}"
     if solve:
         return f"{RES}/{INTERCONNECT}/networks/{prepared}.nc"
     return f"{EQ}/{INTERCONNECT}/{prepared}.nc"
 
 
-def assembled_target() -> str:
-    """Candidate assembled-stage target (prong 1)."""
-    return f"{EQ}/networks/{INTERCONNECT}/elec_s_l_pp.pkl"
+def assembled_target(prong: int = 1) -> str:
+    """Develop assembled-stage target (add_electricity output)."""
+    s = "" if prong == 1 else SIMPL2
+    return f"{EQ}/networks/{INTERCONNECT}/elec_s{s}_l_pp.pkl"
 
 
-def anchor_assembled_target() -> str:
-    """Anchor assembled-stage target (its simplify output, prong 1)."""
-    return f"{EQ}/{INTERCONNECT}/elec_s.nc"
+def baseline_assembled_target(prong: int = 1) -> str:
+    """Baseline assembled-stage target (its simplify_network output)."""
+    s = "" if prong == 1 else SIMPL2
+    return f"{EQ}/{INTERCONNECT}/elec_s{s}.nc"
+
+
+if __name__ == "__main__":  # pragma: no cover - a shell entry point
+    # `python -m tests.equivalence.paths --slug "<raw>"` so the sbatch driver
+    # can apply EXACTLY this slugging rule when it builds the run-directory
+    # path, instead of a sed pipeline that would drift from _slug.
+    import argparse
+
+    _ap = argparse.ArgumentParser(description="Path helpers for the equivalence harness.")
+    _ap.add_argument("--slug", metavar="TEXT", help="print the filesystem-safe form of TEXT")
+    _args = _ap.parse_args()
+    if _args.slug is None:
+        _ap.error("nothing to do; pass --slug TEXT")
+    print(_slug(_args.slug))

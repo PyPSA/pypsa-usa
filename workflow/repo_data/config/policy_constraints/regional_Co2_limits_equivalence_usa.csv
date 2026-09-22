@@ -1,0 +1,2 @@
+name,regions,planning_horizon,limit,import_emissions_factor,notes
+USA_1Mt,all,2030,1000000,0,equivalence-harness national cap ('all' matches every bus in get_region_buses)

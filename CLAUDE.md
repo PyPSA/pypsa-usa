@@ -24,7 +24,7 @@ Useful targets:
 - `rule data_model` — build everything up to the assembled-but-unsolved network (no solver).
 - `rule all` — full pipeline including solve and figures.
 - `--until <rule>` to stop early, `-R <rule>` to force re-execution.
-- Tutorial config (`repo_data/config/config.tutorial.yaml`, CA only, simpl=75, clusters=4m, 2050) is the smallest meaningful end-to-end run.
+- Tutorial config (`repo_data/config/config.tutorial.yaml`, CA only, simpl=75, clusters=4, 2050) is the smallest meaningful end-to-end run.
 
 HPC: edit `config/config.slurm.yaml` (account/partition/email; it also holds the single per-rule `walltime:` block) and `workflow/run_slurm.sh`, then `bash workflow/run_slurm.sh`.
 
@@ -80,7 +80,7 @@ EGS gets a parallel `aggregate_egs` rule (gated on `EGS in extendable_carriers.G
 Defined in `workflow/Snakefile`:
 - `interconnect`: `usa | texas | western | eastern`
 - `simpl`: alphanumeric or `all` — pre-clustering granularity
-- `clusters`: integer optionally suffixed with `m`/`a`/`c`, or `all` — final cluster count
+- `clusters`: integer optionally suffixed with `m`/`s`/`a`/`c`, or `all` — final cluster count. A plain integer (and `m`) aggregates only conventional generators, keeping renewable resource zones at `{simpl}` resolution; `s` ("small") aggregates every carrier; `a` aggregates none. Do not add `m` to new configs — it is the default.
 - `ll`: `v|c` + number/`opt`/`all` — line-limit scenario
 - `opts`: dash/plus-separated options string (transmission, horizon discretization, etc.)
 - `sector`: `E`, `G`, or hyphenated combos
@@ -95,7 +95,7 @@ Defined in `workflow/Snakefile`:
 
 - `workflow/repo_data/config/` is canonical and is what the Snakefile loads. It is also the source for `docs/source/configtables/` documentation.
 - `repo_data/config/config.default.yaml` — the scenario base layer: every user-facing knob, with defaults. Auto-loaded, and also the file users copy as a starting scenario.
-- `repo_data/config/config.tutorial.yaml`, `config.test.yaml` — sparse overlays (only keys that differ from the base). `config.equivalence*.yaml` are deliberately self-contained because the Tier C harness replays them against a pinned upstream anchor that does not load the base.
+- `repo_data/config/config.tutorial.yaml`, `config.test.yaml` — sparse overlays (only keys that differ from the base). `config.equivalence*.yaml` are deliberately self-contained because the Tier C harness replays them against the `master-benchmark` baseline, whose Snakefile does not load the base.
 - `workflow/config/` is untracked and holds only per-user files, seeded by `init_pypsa_usa.sh`: `config.default.yaml` (your scenario starting point), `config.api.yaml`, `config.slurm.yaml`. Do not add layered configs back into it.
 - `policy_constraints/` CSVs are read straight from `repo_data/config/policy_constraints/`.
 - The merged config is validated against `workflow/schemas/config.schema.yaml` at parse time (`snakemake.utils.validate`, `set_default=False`). The top level is open (snakemake/scenarios inject keys) but `electricity:`, `model_topology:`, `clustering:`, `solving:` etc. are closed, so a typo'd key fails loudly. Adding a config key means adding it to the schema.

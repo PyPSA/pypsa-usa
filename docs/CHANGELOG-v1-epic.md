@@ -99,6 +99,27 @@ Conventions:
 
 ## On local `v1-epic`, not yet pushed
 
+- **Leap-day drop in the GODEEEP CF-selection window (DL-17)**
+  (`workflow/scripts/build_renewable_profiles.py::_drop_leap_day`; harness
+  adoption in `tests/equivalence/build.py::apply_leap_day_adoption`).
+  `get_renewable_snapshots` builds the CF-selection window with
+  `pd.date_range`, which includes Feb 29 for leap weather years, but
+  `fix_godeeep_time` shifts the raw GODEEEP time axis past the leap day,
+  so `.sel(time=...)` KeyErrors. Needed for the USA equivalence campaign's
+  switch (2026-09-01) to historical 2012 CFs — the only historical year
+  published on Zenodo, chosen so both sides retrieve byte-identical inputs
+  (the local Oak mirror's 2012 files fail an md5 check against the Zenodo
+  publication). Dropping Feb 29 yields the standard 8760-hour year, which
+  maps 1:1 onto the full-year snapshots now set in
+  `config.equivalence-usa.yaml`. *Results effect:* no-op for non-leap
+  weather years (2019 baselines, future-scenario 2030/2040/2050 horizons),
+  so recorded baselines are unaffected; for leap years it turns a crash
+  into the standard 8760 convention. Fourth ADOPTED-FIX anchor patch,
+  done by slice adoption: the region between the `# Get renewable
+  snapshots` banner and `def plot_data(` is byte-identical between
+  e7f8bd70 and the pre-fix candidate (verified 2026-09-01), so the
+  candidate's patched slice replaces the anchor's wholesale.
+
 - **Seam-plant fallback bounded to the model footprint in scoped runs
   (DL-13)** (`workflow/scripts/add_electricity.py`, commits d98cb93f and
   103f2194; harness adoption in
@@ -355,6 +376,24 @@ Conventions:
   *Results effect:* None (documentation, captions, and a local-config
   resync only).
 
+- **`{clusters}` wildcard: plain integer now keeps renewable resource zones
+  (formerly `m`); new `s` suffix for the old all-carrier aggregation** (user
+  decision 2026-09-06; `workflow/scripts/cluster_network.py::parse_clusters_wildcard`,
+  `workflow/Snakefile` wildcard regex `[0-9]+[msac]?|all`, memory formula in
+  `rules/common.smk`, docs `config-wildcards.md`, unit tests in
+  `scripts/test/test_cluster_wildcard.py`). `N` and `Nm` aggregate only
+  conventional carriers so wind/solar keep their `{simpl}`-level profiles and
+  potentials on the coarser grid; `Ns` ("small") aggregates every carrier;
+  `Na` / `Nc` / `all` unchanged. Tutorial/test configs drop the `m`. The
+  equivalence harness translates the candidate value into the pinned
+  anchor's old dialect (`paths.anchor_clusters`: `134` -> `134m`, `4s` -> `4`)
+  for its config copy and target paths; USA prong 2 moves from `134a` to
+  `134`, the CA config becomes `4s` to preserve its countersigned baseline.
+  *Results effect:* **Yes for configs that used a bare integer** — they now
+  keep per-zone renewable generators instead of one averaged generator per
+  carrier and bus (larger generator set, different RE build). Write `Ns` to
+  recover the old behaviour.
+
 - **Rename rule `cluster_simpl` -> `cluster_resources`** (user request
   2026-08-07; rule name, log path, walltime config key, living docs; the
   script file stays `workflow/scripts/cluster_simpl.py`). *Results effect:*
@@ -373,6 +412,11 @@ Conventions:
   assembled and solved stages, and a rule-grouped benchmark table.
   "candidate" renders as "V1-epic" in all user-facing text (internal keys
   unchanged). *Results effect:* None (reporting only).
+  **Retired 2026-09-06:** `report.py` and `report_sections/` deleted; the
+  harness now writes standalone PNGs via `tests/equivalence/plots.py` into
+  `results/equivalence/plots_{interconnect}/` (per-zone choropleths of RE
+  potential and potential-weighted mean CF, national available-power time
+  series). Findings JSON and manifests remain the machine-readable record.
 
 - **Fix 6.28% silent demand loss through transformer removal**
   (`workflow/scripts/aggregate_to_substations.py`). `remove_transformers`

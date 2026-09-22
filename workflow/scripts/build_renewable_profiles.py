@@ -178,6 +178,19 @@ def remap_caps_to_cluster(
 
 
 # Get renewable snapshots for a given year using month/day from config
+def _drop_leap_day(sns):
+    """Drop Feb 29 from a CF-selection window (harness ledger DL-17).
+
+    GODEEEP CF time axes never carry a Feb 29 label: ``fix_godeeep_time``
+    shifts leap-year timestamps from the leap day onward by +1 day. A
+    leap-year selection window that requests Feb 29 therefore KeyErrors in
+    ``.sel(time=...)``; dropping it yields the standard non-leap-year hour count
+    (HOURS_PER_YEAR).
+    No-op for non-leap years.
+    """
+    return sns[~((sns.month == 2) & (sns.day == 29))]
+
+
 def get_renewable_snapshots(config, year):
     ren_sns_config = config.get("renewable_snapshots", {})
 
@@ -205,7 +218,7 @@ def get_renewable_snapshots(config, year):
             f"{snapshots_config['start']} to {snapshots_config['end']} "
             f"({'inclusive' if end_inclusive else 'exclusive'} end)",
         )
-        return get_snapshots(snapshots_config)
+        return _drop_leap_day(get_snapshots(snapshots_config))
     else:
         # Old format fallback
         snapshots_config = {
@@ -214,7 +227,7 @@ def get_renewable_snapshots(config, year):
             "inclusive": "left",
         }
         logger.info(f"Using renewable snapshots for full year {year}")
-        return get_snapshots(snapshots_config)
+        return _drop_leap_day(get_snapshots(snapshots_config))
 
 
 def plot_data(data):
@@ -458,10 +471,30 @@ if __name__ == "__main__":
         # config["godeeep_cf_registry"], so this script never picks a file.
         # Capacity variables come from the NREL supply-curve rollup (caps file).
         from nrel_exclusion.aggregate_godeeep_weighted import (
+            capacity_weighted_bus_aggregation,
             fix_godeeep_time,
             get_cell_to_bus_mapping,
             weighted_bus_aggregation,
         )
+
+        # How GODEEEP cells are weighted up to the s{simpl} cluster bus:
+        #   capacity     — availability-weighted within each substation, then
+        #                  p_nom_max-weighted (installable capacity) across the
+        #                  substations of a cluster, collapsed into one pass.
+        #                  This is NOT master's weighting: master weights the
+        #                  substation CFs by EXISTING p_nom in simplify_network
+        #                  (pypsa aggregateoneport), with a plain arithmetic
+        #                  mean wherever a cluster holds no existing capacity.
+        #                  Develop departs from that on purpose — see hot-fix
+        #                  HF-25 / deltas ledger DL-19.
+        #   availability — one availability-weighted mean over all cells of the
+        #                  cluster (the simplify-early default before this key,
+        #                  i.e. develop's behaviour before 2026-09-15).
+        cf_weighting = snakemake.params.renewable.get("godeeep_cf_weighting", "capacity")
+        if cf_weighting not in ("capacity", "availability"):
+            raise ValueError(
+                f"renewable.godeeep_cf_weighting must be 'capacity' or 'availability'; got {cf_weighting!r}",
+            )
 
         logger.info(f"NREL access scenario: {access}")
         cf_filepath = snakemake.input.godeeep_cf
@@ -471,7 +504,7 @@ if __name__ == "__main__":
         ds_cf = ds_cf.rename({"XLONG": "x", "XLAT": "y"})
 
         avail = xr.open_dataarray(snakemake.input.nrel_avail)
-        caps_ds = xr.open_dataset(snakemake.input.nrel_caps)
+        caps_ds_sub = xr.open_dataset(snakemake.input.nrel_caps)
 
         # NREL caps are keyed by substation ID; remap to simpl-cluster bus IDs
         # so they intersect with the profile/region bus space.
@@ -480,18 +513,42 @@ if __name__ == "__main__":
         # Opt-in recovery of out-of-footprint caps entries (default off);
         # reaches the script the same way renewable_land_access does.
         reassign_cfg = snakemake.config.get("nrel_caps_reassign") or {}
-        caps_ds = remap_caps_to_cluster(caps_ds, busmap_s, tech=tech, reassign=reassign_cfg)
+        caps_ds = remap_caps_to_cluster(caps_ds_sub, busmap_s, tech=tech, reassign=reassign_cfg)
         logger.info(f"Remapped NREL caps to {caps_ds.sizes['bus']} cluster buses.")
 
-        mapping = get_cell_to_bus_mapping(
-            ds_cf["x"].values,
-            ds_cf["y"].values,
-            [snakemake.input.regions],
-            cache_dir=snakemake.params.mapping_cache_dir,
-        )
-        logger.info(f"Cell→bus mapping: {mapping['name'].nunique()} buses, {len(mapping)} cell rows")
+        if cf_weighting == "capacity":
+            # Cells are mapped to the NODAL (substation) regions and carried to
+            # the cluster through busmap_s, so each cell lands in the cluster of
+            # its substation. That keeps the substation-level nearest-neighbour
+            # fallback (and the cross-polygon leakage it causes) intact through
+            # the rollup rather than re-deciding it at cluster resolution.
+            mapping_sub = get_cell_to_bus_mapping(
+                ds_cf["x"].values,
+                ds_cf["y"].values,
+                [snakemake.input.regions_nodal],
+                cache_dir=snakemake.params.mapping_cache_dir,
+            )
+            logger.info(
+                f"Cell→substation mapping: {mapping_sub['name'].nunique()} substations, "
+                f"{len(mapping_sub)} cell rows",
+            )
+            agg = capacity_weighted_bus_aggregation(
+                ds_cf["capacity_factor"],
+                avail,
+                mapping_sub,
+                busmap_s,
+                caps_ds_sub["p_nom_max"],
+            )
+        else:
+            mapping = get_cell_to_bus_mapping(
+                ds_cf["x"].values,
+                ds_cf["y"].values,
+                [snakemake.input.regions],
+                cache_dir=snakemake.params.mapping_cache_dir,
+            )
+            logger.info(f"Cell→bus mapping: {mapping['name'].nunique()} buses, {len(mapping)} cell rows")
+            agg = weighted_bus_aggregation(ds_cf["capacity_factor"], avail, mapping)
 
-        agg = weighted_bus_aggregation(ds_cf["capacity_factor"], avail, mapping)
         profile = agg["profile"].sel(time=renewable_sns)
 
         capacities = caps_ds["weight"]

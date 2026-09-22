@@ -1,0 +1,622 @@
+# Hot-fix registry — the machine-readable extract of the ledger.
+#
+# PROSE HOME: `memory/plans/hotfix-ledger.md` in the project brain. That file is
+# authoritative; this one is its transcription, kept to the fields a program
+# needs. Change the ledger first, then this file.
+#
+# A hot-fix is a change on `develop` that is NOT part of the core restructuring
+# of the snakemake workflow — a data fix, a bug fix, a changed default — and
+# that could by itself move a benchmark number. This registry is the set of
+# candidate explanations for a master-vs-develop difference.
+#
+# Fields
+#   id          HF-<n>, bare (never zero-padded); the ledger's '#' column.
+#   commit      ledger 'commit' (7- or 40-char sha). Rows spanning several
+#               commits carry the first; the rest go in `notes`.
+#   pr          ledger 'PR' as an integer, or null for a harness-branch change
+#               that never had one.
+#   title       ledger 'what changed', one line.
+#   confidence  ledger 'conf.': high | medium | low | none. Confidence that it
+#               changes results ON A BENCHMARK RUN, not that the code is right.
+#   ported      true once the fix is on `master-benchmark`, i.e. BOTH sides run
+#               it. A ported row is a NEUTRALISED difference and is therefore
+#               NOT a valid explanation for a residual difference — if one
+#               traces to a ported row, the port is broken and that is a
+#               finding. `tables.comparison_table` rejects ported ids.
+#   ported_sha  the master-benchmark commit that carries it (ported rows only).
+#   usa_noop    true when the row does nothing at all under the standing
+#               whole-USA config (`interconnect: usa`, `model_topology.include:
+#               {}`, `unit_commitment: false`). Do not chase these whatever
+#               their confidence.
+#   expect      optional: globs naming the comparison-table metrics this row
+#               can move. Matched against the metric name and against
+#               `<metric>/<key>` (tables.KNOWN_METRICS lists them). A bare
+#               tolerance family is deliberately not a match: a row that
+#               claims a whole family explains every difference in it.
+#   master /    optional: the concrete value on each side, for rows that are a
+#   develop     live code difference. Copied into run_meta.json's
+#               `known_code_differences`.
+#   notes       optional free text.
+
+- id: HF-1
+  commit: 34b643f
+  pr: 801
+  title: PUDL release pin v2025.2.0 -> v2026.8.0, and data_year (EIA-923 heat-rate / fuel-cost window) 2023 -> 2025
+  confidence: high
+  ported: true
+  ported_sha: c10d60e
+  usa_noop: false
+  expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*, dispatch_by_carrier/*, capacity_factor_by_carrier/*, objective]
+  notes: >-
+    Neutralised on two axes. The pudl_path half is pinned identically in both
+    harness configs (decision 2, 2026-09-14), so there is nothing to port; the
+    data_year half is a hard-coded constant the pin cannot reach and was ported
+    as c10d60e (and again inside 93751fe). Ledger open item 1 is closed.
+
+- id: HF-2
+  commit: 34b643f
+  pr: 801
+  title: EIA nerc_region NULL on recently-filed plants imputed from state, instead of the isin() filter silently deleting them
+  confidence: high
+  ported: true
+  ported_sha: 93751fe
+  usa_noop: false
+  expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*]
+  notes: >-
+    Ported implicitly — it lives in develop's build_powerplants.py, which HF-8
+    adopts wholesale. 204 plants / 7.3 GW nationally under PUDL v2026.8.0.
+
+- id: HF-3
+  commit: 34b643f
+  pr: 801
+  title: Existing/proposed units retire on EIA planned_generator_retirement_date instead of a pinned 2100, gated on electricity.honor_planned_retirements
+  confidence: high
+  ported: true
+  ported_sha: b3afe50
+  usa_noop: false
+  expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*, dispatch_by_carrier/*, capacity_factor_by_carrier/*, objective]
+  notes: >-
+    Master carried NO code reading the key, so the config pin alone was inert on
+    the baseline; the code was ported and load_powerplants is now byte-identical
+    to develop's. Ledger open item 2 is closed.
+
+- id: HF-4
+  commit: 34b643f
+  pr: 801
+  title: planned_generator_retirement_date takes the latest filing's value as-is instead of most-recent-non-null (a newer NULL = withdrawn announcement)
+  confidence: medium
+  ported: true
+  ported_sha: 93751fe
+  usa_noop: false
+  expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*]
+  notes: Ported implicitly with HF-8's wholesale adoption of build_powerplants.py.
+
+- id: HF-5
+  commit: 34b643f
+  pr: 801
+  title: build_base_network.assign_missing_regions fills only the NaN region attributes instead of copying all seven from the nearest complete bus
+  confidence: medium
+  ported: false
+  usa_noop: false
+  expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*]
+  master: whole region-attribute row copied from the nearest complete bus
+  develop: only the NaN attributes filled
+  notes: >-
+    11 of 4,248 western buses misassigned; the Trans Bay Cable's 375 MW HVDC
+    terminal moves San Mateo -> San Francisco. The national bus set has more
+    shape gaps, not fewer; the count was not re-measured for usa.
+
+- id: HF-6
+  commit: 2bc715f
+  pr: 777
+  title: Per-bus demand weight switches from the Breakthrough Pd column to 2020 Census county population (electricity.demand.bus_allocation)
+  confidence: high
+  ported: false
+  usa_noop: false
+  expect: [demand_by_zone/*, capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*, dispatch_by_carrier/*, capacity_factor_by_carrier/*, objective]
+  master: no census-population method exists
+  develop: "population by default; the harness configs pin breakthrough"
+  notes: >-
+    Neutralised on the USA leg by the bus_allocation pin added in 00bbf2b
+    (ledger DL-16) — before that pin the two sides ran different demand
+    pipelines. Still listed because the pin, not a port, is what closes it.
+
+- id: HF-7
+  commit: 51e1719
+  pr: 794
+  title: renewable_land_access default null -> reference (NREL reV land-exclusion screening of the GODEEEP CFs)
+  confidence: high
+  ported: false
+  usa_noop: false
+  expect: [p_max_pu_quantiles_*, mean_cf_by_zone_*, p_nom_max_by_zone_*]
+  master: shipped config has null, and build_renewable_profiles raises for godeeep + null
+  develop: 'reference'
+  notes: >-
+    Neutralised on the USA leg by the explicit `renewable_land_access: reference`
+    pin in config.equivalence-usa.yaml, which both sides load. Without that pin
+    "the same config" is undefined for the renewable path, because master's
+    shipped value makes the run fail rather than differ.
+
+- id: HF-8
+  commit: 01f742f
+  pr: 775
+  title: EIA-860 SCD tables pre-aggregated to one row per plant/generator before the LEFT JOINs, instead of ~24 report_date vintages fanning out per generator
+  confidence: high
+  ported: true
+  ported_sha: 93751fe
+  usa_noop: false
+  expect: [objective, dispatch_by_carrier/*, capacity_factor_by_carrier/*]
+  notes: >-
+    Ledger DL-12. 8,231 / 10,381 / 8,380 / 13,679 differing cells in
+    powerplants.csv; without it a 2.34 % objective error remained. The port is a
+    WHOLESALE file adoption, so the same commit also carries HF-1's data_year,
+    HF-2, HF-4, HF-11 and HF-17's sanitize_uc_parameters onto the baseline
+    (ledger open item 2b).
+
+- id: HF-9
+  commit: 01f742f
+  pr: 775
+  title: Empty-county sweep restricted to the ReEDS zones present in the model_topology.include-filtered network
+  confidence: high
+  ported: true
+  ported_sha: bce8437
+  usa_noop: true
+  expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*, objective]
+  notes: >-
+    Ledger DL-11. Gated on model_topology.include being truthy; the usa config is
+    `include: {}`, so this is a no-op there. Scoped runs: regions 2,930,688 ->
+    409,842 km2, existing fleet 215.5 -> 84.5 GW, objective -91.3 %.
+
+- id: HF-10
+  commit: 01f742f
+  pr: 775
+  title: plants_must_add seam-plant fallback bounded to 100 km of the run's onshore+offshore regions in EPSG:5070
+  confidence: high
+  ported: true
+  ported_sha: d4dd4ff
+  usa_noop: true
+  expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*]
+  notes: >-
+    Ledger DL-13. Same model_topology.include gate as HF-9, so a no-op on usa.
+    23 plants / 1,887.4 MW dropped on the CA leg, objective ~+8.1 %.
+
+- id: HF-11
+  commit: 01f742f
+  pr: 775
+  title: Missing EIA-860 summer/winter derates filled with 1.0 instead of propagating NaN
+  confidence: medium
+  ported: true
+  ported_sha: 93751fe
+  usa_noop: false
+  expect: [p_max_pu_quantiles_*, mean_cf_by_zone_*, dispatch_by_carrier/*, capacity_factor_by_carrier/*, objective]
+  notes: >-
+    Ported implicitly with HF-8. The repo's own changelog asks for an explicit
+    equivalence verdict against upstream and none was ever recorded; that debt
+    survives the port (ledger open item 4).
+
+- id: HF-12
+  commit: a665dd9
+  pr: 778
+  title: PyPSA 0.30.2 -> 1.3.0, linopy -> 0.9.1, pandas -> 3.0.5, xarray -> 2026.7.0, geopandas -> 1.1.4, including pypsa's unit-commitment ramp-limit fixes
+  confidence: medium
+  ported: false
+  usa_noop: true
+  expect: [dispatch_by_carrier/*, capacity_factor_by_carrier/*, objective]
+  master: pypsa 0.30.2 / linopy 0.3.14 / pandas 2.2.2
+  develop: pypsa 1.3.0 / linopy 0.9.1 / pandas 3.0.5
+  notes: >-
+    The stack move cannot be back-ported — it IS the refactor. Result-bearing
+    only for conventional.unit_commitment: true, which the usa config leaves
+    false, so a no-op there.
+
+- id: HF-13
+  commit: a665dd9
+  pr: 778
+  title: pypsa v1 / linopy 0.9 fold the fixed-cost offset into Network.objective and leave objective_constant at 0; 0.30 reported the solver objective only
+  confidence: high
+  ported: false
+  usa_noop: false
+  expect: [objective]
+  master: objective = solver objective; objective_constant carries the offset
+  develop: objective includes the offset; objective_constant is 0
+  notes: >-
+    Ledger DL-15 class C. A REPORTING convention, not a code path, so there is
+    nothing to port: the comparator must normalise both sides to
+    `objective + objective_constant`. Measured identity on the CA leg: relative
+    difference 5.3e-07. Comparing n.objective raw manufactures a difference
+    exactly the size of the constant.
+
+- id: HF-14
+  commit: a665dd9
+  pr: 778
+  title: The two RESERVES operational constraints rewritten against pypsa 1.3 internals, plus an ERM RHS index-name fix that recovers the per-bus dual
+  confidence: medium
+  ported: false
+  usa_noop: false
+  expect: [dispatch_by_carrier/*, capacity_factor_by_carrier/*, objective]
+  master: pypsa 0.30 / linopy 0.3 constraint builder, original reserve formulation
+  develop: pypsa 1.3 / linopy 0.9 builder, re-expressed reserve constraints
+  notes: >-
+    Inseparable from HF-12. Claimed restorative but it is a re-expression, not a
+    no-op refactor; degenerate optima can flip. Check this first if only dispatch
+    shuffles at constant objective.
+
+- id: HF-15
+  commit: cc33423
+  pr: 803
+  title: GODEEEP CF retrieval becomes a config-declared registry — first source declaring the requested (dataset, year) wins, with no hub-height or nearest-year fallbacks
+  confidence: medium
+  ported: false
+  usa_noop: false
+  expect: [p_max_pu_quantiles_*, mean_cf_by_zone_*]
+  master: ZenodoScenarioDownloader with hardcoded record ids and silent nearest-year substitution
+  develop: godeeep_cf_registry; unresolvable (dataset, year) fails at parse time
+  notes: >-
+    Mitigated on the usa leg, where e1f5841 pins renewable_scenarios to
+    historical 2012 and overrides the registry sources to Zenodo-only so both
+    sides retrieve byte-identical inputs. Verify the resolved record ids match
+    before blaming anything else.
+
+- id: HF-16
+  commit: 34b643f
+  pr: 801
+  title: clustering.aggregation_strategies.generators — start_up_cost capacity_weighted_average -> sum, ramp_limit_up/down max -> capacity_weighted_average
+  confidence: medium
+  ported: false
+  usa_noop: false
+  expect: [dispatch_by_carrier/*, capacity_factor_by_carrier/*, objective]
+  master: 'start_up_cost: capacity_weighted_average; ramp_limit_up/down: max'
+  develop: 'start_up_cost: sum; ramp_limit_up/down: capacity_weighted_average'
+  notes: >-
+    Applies wherever those generator attributes are non-default, not only where
+    unit_commitment is on. Ledger open item 6: check whether ramp_limit_up/down
+    and start_up_cost are non-default on the usa elec_s{simpl} network, on the
+    POST-sanitize columns (see HF-17). All-NaN would close the row.
+
+- id: HF-17
+  commit: 34b643f
+  pr: 801
+  title: Three latent unit-commitment defects fixed (p_min_pu never passed to n.add, up_time_before=0, min_up/min_down/ramps rescaled to the {opts} resolution), plus per-carrier clamping of impossible ADS UC data
+  confidence: medium
+  ported: false
+  usa_noop: true
+  expect: [dispatch_by_carrier/*, capacity_factor_by_carrier/*, objective]
+  master: sanitize_uc_parameters present (ported); the add_electricity / prepare_network halves absent
+  develop: all three fixes live
+  notes: >-
+    PARTIALLY ported. build_powerplants.sanitize_uc_parameters / _clamp_series
+    came onto the baseline with HF-8's wholesale adoption (93751fe); the
+    add_electricity.py and prepare_network.py halves did not, so `ported: false`
+    keeps the row available as an explanation. A no-op while
+    conventional.unit_commitment is false, but note that sanitize_uc_parameters
+    writes clamped ramp_limit / min_up_time / min_down_time / start_up_cost into
+    powerplants.csv unconditionally, which is what HF-16 then aggregates.
+
+- id: HF-18
+  commit: 34b643f
+  pr: 801
+  title: build_cost_data AEO scenario fallback "Reference" -> "reference", matching PUDL's lowercase model_case_eiaaeo vocabulary
+  confidence: low
+  ported: false
+  usa_noop: true
+  expect: [objective, dispatch_by_carrier/*, capacity_factor_by_carrier/*]
+  notes: >-
+    A no-op here: the equivalence configs pin costs.aeo.scenario: reference
+    explicitly on both sides, so the fallback is never reached. On master the old
+    fallback crashed with an IndexError rather than producing wrong numbers.
+
+- id: HF-19
+  commit: 34b643f
+  pr: 801
+  title: add_elec_imports_exports county-resolution fixes — the exports call omitted zone_col, and the cost cache tested zone_outside but wrote costs[zone_inside]
+  confidence: low
+  ported: false
+  usa_noop: true
+  expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*, dispatch_by_carrier/*, capacity_factor_by_carrier/*]
+  notes: >-
+    A no-op for reeds_zone runs: the omitted zone_col defaulted to reeds_zone
+    (so the roles coincided) and the key collision is not triggered at that
+    cardinality.
+
+- id: HF-20
+  commit: 51e1719
+  pr: 794
+  title: config.default.yaml becomes a loaded base layer beneath user configs, scenario configs become sparse overlays, and the merged config is schema-validated at parse time
+  confidence: medium
+  ported: false
+  usa_noop: false
+  expect: [objective, dispatch_by_carrier/*, capacity_factor_by_carrier/*, capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*]
+  master: omitted keys fall back to each consuming script's inline default, or raise
+  develop: omitted keys resolve to the shipped config.default.yaml layer
+  notes: >-
+    Diffuse by construction. The PR's merge replay showing "no key changes value"
+    was run develop-vs-develop; master-benchmark inherits master's load order, so
+    the replay against master is still owed (ledger open item 7). THIS is the row
+    the config-equivalence gate in tests/equivalence/context.py discharges:
+    running it is the owed replay. Mitigated for the usa leg because
+    config.equivalence-usa.yaml is deliberately self-contained.
+
+- id: HF-21
+  commit: 34b643f
+  pr: 801
+  title: New capabilities shipped default-off (interface_transmission_limits, remote_contracted_resources, ambient_derate, nrel_caps_reassign, godeeep_allow_unscreened_fallback, benchmark_cpuc, demand.profile servm)
+  confidence: none
+  ported: false
+  usa_noop: true
+  expect: []
+  notes: >-
+    Also carried by cc33423 and 01f742f (PRs 803 and 775). Inert while off;
+    listed so that an accidental enable is a known suspect rather than a
+    mystery. Each becomes its own result-changing change the first time it is
+    switched on.
+
+- id: HF-22
+  commit: e1f5841
+  pr: null
+  title: build_renewable_profiles._drop_leap_day — Feb 29 dropped from the selection window so a leap weather year yields the standard 8760-hour axis
+  confidence: none
+  ported: true
+  ported_sha: 572534f
+  usa_noop: false
+  expect: [p_max_pu_quantiles_*, mean_cf_by_zone_*, dispatch_by_carrier/*, capacity_factor_by_carrier/*]
+  notes: >-
+    Ledger DL-17; a harness-branch commit, so it has no upstream PR.
+    fix_godeeep_time shifts the raw GODEEEP time axis from the leap day onward
+    by +1 day, so no CF axis ever carries a Feb 29 label and a leap-year
+    selection window KeyErrors in .sel(time=...). The usa leg runs historical
+    2012, a leap year, so this is the one ported row that is not a no-op there —
+    but it is ON the baseline, so its confidence as an explanation for a
+    master-vs-develop difference is none.
+
+- id: HF-23
+  commit: 01f742f
+  pr: 775
+  title: "workflow/rules/common.smk materialises constants.py into the snakemake source cache so upstream #764's import chain resolves under a fresh cache"
+  confidence: none
+  ported: true
+  ported_sha: f65c90c
+  usa_noop: false
+  expect: []
+  notes: >-
+    Build infrastructure: the rule either runs or it does not, there is no
+    numeric path. Master has no godeeep_cf_registry.py, so only the constants.py
+    line was ported — exactly what the retired apply_infra_patches injected.
+    Needed for a bare-master baseline to run at all from a cold cache.
+
+- id: HF-24
+  commit: 3b149ae
+  pr: null
+  title: build_renewable_profiles keeps NREL caps capacity for substations with zero GODEEEP availability or no intersecting cell, instead of silently dropping it
+  confidence: high
+  ported: false
+  usa_noop: false
+  expect: [p_nom_max_by_zone_*, mean_cf_by_zone_*, p_max_pu_quantiles_*]
+  master: substations whose GODEEEP availability is zero, or whose region intersects no CF cell, are dropped from the profile file and their NREL caps potential disappears
+  develop: those substations are retained, their MW re-weighted onto the cluster's availability-weighted CF (so the capacity enters at the cluster's mean CF, not at zero), and the NREL caps potential survives into p_nom_max
+  notes: >-
+    A master data-quality bug that develop fixes, diagnosed on smoke run
+    smoke-western-20260915-1141 (2026-09-15). Western measurement: 7 onwind
+    buses / 546 MW and 4 solar buses / 2,566 MW of NREL caps potential are
+    present on develop and absent on master; bus 37808 is the whole of cluster
+    p87's solar. Mechanism on develop:
+    capacity_weighted_bus_aggregation folds a zero-availability substation's MW
+    onto the cluster's plain availability-weighted CF (algebraically, it adds
+    P_bad / A_cluster to every row weight in that cluster), so the retained
+    capacity is dispatched at the cluster's mean capacity factor rather than at
+    zero. That shifts mean_cf_by_zone_* and p_max_pu_quantiles_* slightly as
+    well as p_nom_max_by_zone_*. A cluster that exists only on develop (western:
+    `p87 0`, bus 37808) is a cluster_set difference at the profile stage; the
+    harness reports it as a finding waived under this id. The residual shows up
+    as small POSITIVE p_nom_max deltas in zones p8/p9/p10 and in the two
+    system_potential_mw findings, and is waived against this row in
+    waivers.yaml. The commit named is the harness-branch tip the diagnosis was
+    made on, not a single isolated fix commit; the prose home is
+    memory/plans/hotfix-ledger.md in the project brain.
+
+- id: HF-25
+  commit: 3b149ae
+  pr: null
+  title: "renewable.godeeep_cf_weighting: develop weights substation capacity factors up to the s{simpl} cluster by INSTALLABLE capacity (NREL caps p_nom_max); master weights them by EXISTING p_nom and falls back to an unweighted mean where a cluster has none"
+  confidence: high
+  ported: false
+  usa_noop: false
+  expect: [objective, dispatch_by_carrier/*, capacity_factor_by_carrier/*, capacity_opt_by_carrier/*]
+  master: simplify_network hands p_max_pu to pypsa 0.30.2 clustering/spatial.py:aggregateoneport, which capacity-weighted-averages the substation profiles with weight = existing p_nom and, via normed_or_uniform, degenerates to a plain arithmetic mean over the cluster's substations whenever their p_nom sums to zero
+  develop: build_renewable_profiles aggregates in one pass — availability-weighted within each substation, then p_nom_max-weighted across the cluster's substations (renewable.godeeep_cf_weighting = capacity)
+  notes: >-
+    A develop improvement over a master defect, NOT a parity port: the code and
+    its config key stay, the earlier claim that "capacity" reproduces master's
+    math was wrong and has been removed from every docstring, comment and test
+    name (decision, orchestrator 2026-09-15). Deltas ledger DL-19.
+    Verification against master's own outputs (western, reproducer
+    $SCRATCH/eq_verify/check_master_weights.py, 2026-09-15): reconstructing
+    master's elec_s20 p_max_pu from its nodal elec_base_network_l_pp.pkl,
+    existing-p_nom weighting with the uniform fallback matches every cluster to
+    |Δ| 0.00000, while p_nom_max weighting is off by mean |Δ| 0.0966 (onwind)
+    and 0.0132 (solar). 12 of 20 western onwind clusters carry zero existing
+    p_nom, so master's cluster CF there is the unweighted mean of its
+    substations' CFs — a 1 MW polygon counts as much as a 10 GW one. Develop
+    keeps p_nom_max because it is the physically right weight for an extendable
+    resource generator.
+    NOT VISIBLE AT PRONG 2: the harness compares the PROFILE files, and
+    metrics.aggregate_profile_to_clusters rolls master's nodal file up to
+    develop's cluster bus space with p_nom_max weights — the same weights
+    develop uses — so p_max_pu_quantiles_*, mean_cf_by_zone_* and
+    p_nom_max_by_zone_* cannot see this row. It bites only at the network stages
+    (clustered p_max_pu, and the dispatch/capacity/objective that follow), which
+    prong 2 does not yet compare — a clustered-network p_max_pu comparison is
+    owed and belongs in the project backlog. Nothing is waived against this id, because
+    there is as yet no finding to waive. The commit named is the harness-branch
+    tip the diagnosis was made on, not an isolated fix commit.
+
+- id: HF-26
+  commit: a5ed78c
+  pr: null
+  title: "attach_renewable_capacities_to_atlite runs at CLUSTER granularity on develop, so existing renewable plants at substations with no profile generator keep their MW; on master the same function runs nodally and drops them"
+  confidence: high
+  ported: false
+  usa_noop: false
+  expect:
+    - capacity_existing_by_carrier/*
+    - p_nom_existing_by_zone_carrier/*
+    - objective
+    - capacity_opt_by_carrier/*
+    - dispatch_by_carrier/*
+  master: >-
+    the assembled network is nodal, so `mapped_values =
+    generators_tech.sub_assignment.map(caps_per_bus).dropna()` in
+    workflow/scripts/add_electricity.py can only land a plant's MW on a
+    substation that carries a profile-derived generator of that carrier; every
+    plant at a substation the profile file does not cover is dropped, which
+    master's own log prints as "N GW of <tech> plants that are not in the
+    network. See git issue #16"
+  develop: >-
+    simplify-early puts the same function on the s{simpl} CLUSTER bus space
+    before the fleet is attached, and a cluster carries a profile generator when
+    ANY of its substations does, so the plants master drops are attached to
+    their cluster and nothing is lost
+  notes: >-
+    The function is IDENTICAL on both branches (workflow/scripts/add_electricity.py
+    ::attach_renewable_capacities_to_atlite); what differs is the bus space it
+    runs on. Master's western profile files cover 544 of 1,972 onwind and 808 of
+    1,972 solar substations, so most of the fleet has nowhere to land.
+    Western measurement (assembled elec_s20, 2026-09-15): onwind master 3,097.6
+    vs develop 6,554.5 MW (-3,456.9 MW, 52.7 % of develop's total, across 32 of
+    61 substations); solar master 26,822.8 vs develop 31,188.0 MW (-4,365.2 MW,
+    14.0 %, 190 of 445). By ReEDS zone (develop - master): onwind p10 +121.6 %,
+    p9 +99.7 %, p8 0 -> 101.2 MW; solar p10 +18.9 %, p9 +12.7 %.
+    Same mechanism as deltas-ledger DL-9. Expected downstream effect: develop
+    starts with more existing renewable capacity, so LOWER objective, LOWER
+    extendable solar/onwind p_nom_opt, and more renewable / less gas dispatch.
+    Deltas ledger DL-20. The commit named is the harness-branch tip the
+    diagnosis was made on, not a single isolated fix commit; the prose home is
+    memory/plans/hotfix-ledger.md in the project brain.
+    figures: experiments/runs/eq-western-db47198d8592/diagnosis/fig6_by_reeds_zone.png,
+    fig5_mw_accounting.png
+
+- id: HF-27
+  commit: 382535b
+  pr: null
+  title: "plant -> bus assignment: a DEVELOP REGRESSION, now FIXED — after simplify-early develop matched plants to the {simpl} cluster CENTROIDS (median 37 km) instead of to substations (median 1.0 km, master's own bus set), putting 6.1 % of existing MW in the wrong ReEDS zone; develop now matches substations and maps through busmap_s{simpl}"
+  confidence: high
+  ported: false
+  usa_noop: true
+  expect: []
+  master: >-
+    `match_plant_to_bus` runs on the NODAL network (4,248 western buses, one per
+    substation): the nearest point is the plant's own substation, median 1.0 km
+    away, and 100.00 % of existing MW lands in the ReEDS polygon the plant's
+    lat/lon actually falls in. The zone-constrained first pass is inert on BOTH
+    branches — it keys `plants["country"]` (county codes like `p06029`) against
+    `buses.reeds_zone` (`p10`) — but on master the unconstrained fallback is
+    already right
+  develop: >-
+    the same function, but after simplify-early it saw only the 20 `{simpl}`
+    cluster centroids: median plant -> bus 37 km, 93.89 % of existing MW in the
+    right zone. FIXED on this branch: plants are matched against `bus2sub.csv`
+    (all rows — exactly master's bus set) and the matched substation is mapped
+    through `busmap_s{simpl}.csv`, reproducing master's zone for 841 of 841
+    western plants (100.00 % of MW)
+  notes: >-
+    THE EARLIER TEXT OF THIS ROW WAS WRONG. It claimed a master defect and that
+    "develop assigns by cluster region"; develop does nothing of the kind — it
+    runs the identical code on a coarser bus set. Diagnosis (architect,
+    2026-09-15; figures below, scripts $SCRATCH/eq_zones/): on western 33 plants
+    / 1,320 MW landed in the wrong zone on develop and master was right for 32
+    of them (Helms PHS 1,053 MW p9 -> p10, geothermal 84.4 MW p10 -> p9, biomass
+    97.0 MW p9 -> p8, onwind 101.2 MW p9 -> p8, ~166.6 MW of solar out of p11,
+    and tens of MW each of CCGT/OCGT/battery/oil — all netting to zero by
+    carrier, a relocation rather than a creation). USA is worse by construction
+    (s300 over 134 zones, 2.24 clusters per zone), and `clusters: 134` — one bus
+    per zone — makes the misassignment permanent.
+    EXPECTED EFFECT AFTER THE FIX: NONE. The reconstruction leaves 0 of the 11
+    non-equivalent `p_nom_existing_by_zone_carrier` rows, so this row explains
+    nothing any more and is marked `usa_noop: true` for exactly that reason: if a
+    zone row still differs, HF-27 must NOT be accepted as the story. Every HF-27
+    waiver was removed from waivers.yaml with the fix. Deltas ledger DL-21. The
+    commit named is the branch point (`wip/hf26-waivers` tip) that the corrected
+    diagnosis was written against; the fix itself is the first commit of
+    `wip/plant-match` on top of it.
+    figures: experiments/runs/eq-western-db47198d8592/diagnosis/fig8..fig11*,
+    fig6_by_reeds_zone.png, fig5_mw_accounting.png
+
+- id: HF-28
+  commit: 01f742f
+  pr: null
+  title: "demand disaggregation key: master splits EFS state demand over NODAL buses keyed on `buses.state`, develop over s{simpl} buses keyed on `buses.reeds_state`; the LAF both sides consume was normalised over a THIRD column (`full_state`), so neither conserved state demand until the renormalisation landed"
+  confidence: high
+  ported: false
+  usa_noop: false
+  expect: [demand_by_zone/*, dispatch_by_carrier/*, capacity_opt_by_carrier/*, objective]
+  master: >-
+    `WriteStrategy._get_state_zones` returns `n.buses.state` and the split runs
+    on the 82,549 NODAL buses. `state` is the geographic/power-region column
+    written by `build_base_network`
+  develop: >-
+    `_get_state_zones` returns `n.buses.reeds_state.map(CODE_2_STATE)` and the
+    split runs on the 300 `s{simpl}` cluster buses, because
+    `aggregate_to_substations` drops `state` when `topological_boundaries:
+    reeds_zone`. The two columns disagree on 547 nodal buses (LAF mass 0.582) --
+    Oregon/Washington, Missouri/Kansas, New Hampshire/Massachusetts and the
+    17 downtown-DC buses
+  notes: >-
+    TWO HALVES, AND ONLY ONE OF THEM IS PORTED.
+    (1) NON-CONSERVATION -- FIXED ON BOTH BRANCHES. `LAF_state` is normalised in
+    `build_base_network` over `full_state`, which neither consumption key
+    reproduces, so `sum(laf)` inside a demand key was not 1: 20 of 48 states on
+    master (Maryland 1.588, Virginia 1.409), 38 of 48 on develop (Maryland
+    2.008). Allocated demand exceeded the EFS state totals by +2.28 % (master)
+    and +1.85 % (develop); measured on usa s300, 2026-09-15, 470,193.2 vs
+    461,636.2 MW mean. `dissagregate_demand` now renormalises the factors within
+    the consumption key on develop (2a3adf8, guard 190029c) and on master-benchmark
+    (969ae8b, the HF-29 row), so each key is conserved exactly whatever the key is. THIS HALF
+    IS NEUTRALISED and cannot explain a residual difference.
+    (2) THE KEY COLUMN ITSELF -- NOT PORTED, hence `ported: false`. After the
+    renormalisation a bus still draws from the state its key names, so the 547
+    buses where `state != reeds_state` still move demand between zones. Expect a
+    residual, DIFFUSE `demand_by_zone` signature (43 zones on the pre-fix usa
+    run, sum|delta| 3,009 MW, national 0 after the fix) that HF-28 legitimately
+    explains. The CONCENTRATED p99/p123 signature is HF-5, not this row.
+    BOTH LEGS MUST BE REBUILT: the fix moves both sides by ~2 %, so no pre-fix
+    artifact may be compared against a post-fix one.
+    The key choice arrives with the simplify-early stack (01f742f, the `commit` above); 2a3adf8 is
+    the fix commit, not the origin. Checker:
+    tests/equivalence/diagnostics/demand_conservation.py reproduces the pre-fix
+    baseline exactly. Backlog B7 / issue #3. Prose home:
+    memory/plans/hotfix-ledger.md.
+    figures: experiments/runs/eq-usa-82c25a3177d0/diagnosis/fig4_reconstruction_and_decomposition.png,
+    fig5_state_demand_conservation.png
+
+- id: HF-29
+  commit: 2a3adf8
+  pr: null
+  title: "LAF renormalised inside the demand key at consumption time, on BOTH branches (state demand conserved: was +2.28 % master, +1.85 % develop); plus a DC-column fold into Maryland that is skipped when a bus carries the key"
+  confidence: none
+  ported: true
+  ported_sha: 969ae8b
+  usa_noop: true
+  expect: [demand_by_zone/*]
+  notes: >-
+    No bus can carry a District of Columbia key on either branch: ReEDS files DC
+    inside zone p123 with `st = MD`, and the DC buses' geographic `state`
+    resolves to Maryland (develop) or northern Virginia (master, via the HF-5
+    clobber). A demand column named `District of Columbia` therefore hit the
+    silent drop in `_disaggregate_demand_to_buses`. `DEMAND_KEY_FOLDS` in
+    build_demand.py now folds it into Maryland before the split, with a
+    logger.info naming the MW, and any demand column with no bus under the
+    current key is logged with the MW it drops.
+    `usa_noop: true` AND `confidence: none` ARE MEASURED, NOT ASSUMED: the NREL
+    EFS load profiles this benchmark reads
+    (data/nrel_efs/EFSLoadProfile_{High_Rapid,Reference_Moderate}.csv) contain 48
+    state codes and NO DC row (checked 2026-09-17), and the resolved zonal table
+    for the usa leg has 48 columns. On this config the fold is a GUARD and moves
+    nothing; the whole of the pre-fix over-allocation is HF-28's unnormalised
+    LAF. It bites for readers whose source does carry DC (EULP per-state files,
+    EER, SERVM).
+    CONSEQUENCE WORTH SAYING OUT LOUD: after HF-28 lands, DC's real electricity
+    demand is ABSENT from the model on both branches -- before the fix it was
+    accidentally present, but as a far larger phantom (+8,763 MW billed to
+    Maryland on develop, +5,656 MW to Virginia and +5,115 MW to Maryland on
+    master). Giving DC its own key end to end is the real fix and is still open.
+    Ported to master-benchmark as 969ae8b (renormalisation + fold), so both sides behave identically.
+    Backlog B7 / issue #3. Prose home: memory/plans/hotfix-ledger.md.

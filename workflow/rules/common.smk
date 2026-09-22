@@ -102,10 +102,13 @@ def memory(w):
         if m is not None:
             factor *= int(m.group(1)) / HOURS_PER_YEAR
             break
-    if w.clusters.endswith("m") or w.clusters.endswith("c"):
-        val = int(factor * (50000 + 30 * int(w.simpl) + 195 * int(w.clusters[:-1])))
-    elif w.clusters == "all":
+    m = re.fullmatch(r"(\d+)([msac]?)", w.clusters)
+    if w.clusters == "all":
         val = int(factor * (18000 + 180 * 4000))
+    elif m.group(2) == "s":
+        # every carrier aggregated: the small network
+        val = int(factor * (15000 + 195 * int(m.group(1))))
     else:
-        val = int(factor * (15000 + 195 * int(w.clusters)))
+        # plain / m / c / a keep {simpl}-level generators: scale with simpl
+        val = int(factor * (50000 + 30 * int(w.simpl) + 195 * int(m.group(1))))
     return int(val * len(config_provider("scenario", "planning_horizons")(w)))

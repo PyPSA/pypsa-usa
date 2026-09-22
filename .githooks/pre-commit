@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Tracked pre-commit hook: refuse oversized blobs, always.
+#
+# WHY THIS FILE EXISTS
+# --------------------
+# `.pre-commit-config.yaml` has carried `check-added-large-files --maxkb=10000`
+# since long before 2026-09-17, and it never once fired: `.git/hooks/` was
+# empty because nobody had run `pre-commit install`. A guard that lives only in
+# a config file is a guard that is off by default on every fresh clone, and on
+# every `git worktree add`.
+#
+# On 2026-09-17 that cost us: 662 MB of regenerable equivalence output, renamed
+# into `.trash-20260901/` to work around the cluster's `rm -rf` ban, was swept
+# into commit a7304ce9 by a `git add -A`. The 177.67 MB parquet inside it
+# exceeded GitHub's 100 MB hard limit, so NOTHING could be pushed -- for two
+# weeks, unnoticed, because the repo had no remote. Unpicking it needed a
+# scoped `git filter-repo` over 60 commits.
+#
+# This hook is tracked in the repo and armed by `git config core.hooksPath
+# .githooks` (done by init_pypsa_usa.sh). It is deliberately plain bash with no
+# dependencies, so it works before `uv sync`, before `pre-commit install`, and
+# inside a bare-bones worktree. `.github/workflows/main.yml` enforces the same
+# limit server-side, because a local hook can always be skipped with
+# `--no-verify`.
+set -uo pipefail
+
+# GitHub warns above 50 MB and hard-refuses above 100 MB. 10 MB is the limit
+# .pre-commit-config.yaml already declared; keep the two in step.
+MAX_BYTES=$((10 * 1024 * 1024))
+
+too_big=""
+while IFS= read -r path; do
+    [ -f "$path" ] || continue            # deletions, submodules, symlinks
+    size=$(git cat-file -s ":$path" 2>/dev/null) || continue
+    if [ "$size" -gt "$MAX_BYTES" ]; then
+        too_big+=$(printf '\n  %8.1f MB  %s' "$(echo "$size" | awk '{print $1/1048576}')" "$path")
+    fi
+done < <(git diff --cached --name-only --diff-filter=AM)
+
+if [ -n "$too_big" ]; then
+    cat >&2 <<EOF
+COMMIT REFUSED: file(s) over $((MAX_BYTES / 1024 / 1024)) MB are staged.$too_big
+
+Nothing regenerable belongs in git. Networks, profiles, demand tables and
+solver output are rebuilt by the workflow -- keep them in resources/,
+results/ or data/, which are already ignored, and DELETE them with 'rm -r'
+rather than renaming them aside (a rename escapes the ignore rules; that is
+exactly how 662 MB got committed on 2026-09-01).
+
+If this file genuinely is a tracked input, add it under workflow/repo_data/
+or workflow/geodata_repo/ and say so in its MANIFEST.md.
+
+Override only if you are certain:  git commit --no-verify
+EOF
+    exit 1
+fi
+
+# Delegate to the pre-commit framework when it is available, so the formatting
+# and lint hooks in .pre-commit-config.yaml still run. Absent, the size guard
+# above has already done the load-bearing part.
+if command -v pre-commit >/dev/null 2>&1; then
+    exec pre-commit run --hook-stage pre-commit
+fi
+
+exit 0

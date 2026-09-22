@@ -23,7 +23,7 @@ run:
 
 scenario:
   interconnect: [western]   # pinned: Tier B budget depends on the footprint
-  clusters: [4m]
+  clusters: [4]
   simpl: [20]
   scope: "total"
   planning_horizons: [2030]

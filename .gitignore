@@ -278,5 +278,38 @@ connect.sh
 workflow/data
 workflow/cutouts
 
-# transient equivalence-harness forced-rerun marker
-/.eq-force-rerun
+# --- guards against the 2026-09-17 incident (brain backlog B11) -------------
+#
+# The rules above ignore generated output by PATH (`results/`, `resources/`,
+# `data/`). Git ignore rules are path-based, so RENAMING those directories
+# moves 662 MB of regenerable output out from under them. That is exactly what
+# happened: a cleanup renamed them into `.trash-20260901/` -- because the
+# cluster's policy denies `rm -rf` -- a `git add -A` swept them in, and the
+# 177.67 MB parquet inside blocked every push to GitHub for two weeks until
+# the history had to be rewritten.
+#
+# So: ignore the SHAPE of the thing as well as its location. Delete
+# regenerable folders with `rm -r` (which IS permitted); never rename them
+# aside.
+.trash*/
+*.orig
+*.rej
+
+# Slurm job logs land in the repo root and were neither ignored nor committed
+# -- one careless `git add -A` from repeating the incident.
+slurm-*.out
+slurm-*.err
+
+# Bulk scientific data formats. Legitimate inputs live under
+# workflow/repo_data/ and workflow/geodata_repo/, which are re-included below;
+# anywhere else these are pipeline output and must not enter git.
+*.nc
+*.pkl
+*.parquet
+*.gpkg
+*.tif
+*.tiff
+!workflow/repo_data/**
+!workflow/geodata_repo/**
+!natura.tiff
+

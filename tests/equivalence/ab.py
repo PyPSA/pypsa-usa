@@ -1,11 +1,11 @@
 """Same-branch A/B harness for ``electricity.demand.bus_allocation``.
 
-Builds the candidate pipeline twice from configs derived off
+Builds the develop pipeline twice from configs derived off
 ``config.equivalence.yaml`` — run ``ab_pd`` pins the legacy Breakthrough
 ``Pd`` weight, run ``ab_pop`` the 2020-census population weight — then
 compares artifacts at the same relative paths under the two run prefixes.
 
-Unlike the candidate-vs-anchor equivalence run, differences here are the
+Unlike the master-vs-develop equivalence run, differences here are the
 *product*: the report characterizes how demand allocation shifts (per state /
 county / bus) and what that does to clustering and the solve. Only two things
 are hard invariants and gate the exit code:
