@@ -875,20 +875,12 @@ def export_all(
 
     objective_figure(m.get("objective"), "objective", run_dir)
     paired_bar(
-        m.get("capacity_existing_by_carrier"),
-        "existing capacity",
-        "MW",
-        "capacity_existing_by_carrier",
-        run_dir,
+        m.get("capacity_existing_by_carrier"), "existing capacity", "MW", "capacity_existing_by_carrier", run_dir
     )
     paired_bar(m.get("capacity_opt_by_carrier"), "optimised capacity", "MW", "capacity_opt_by_carrier", run_dir)
     paired_bar(m.get("dispatch_by_carrier"), "annual dispatch", "MWh", "dispatch_by_carrier", run_dir)
     paired_bar(
-        m.get("capacity_factor_by_carrier"),
-        "realised capacity factor",
-        "-",
-        "capacity_factor_by_carrier",
-        run_dir,
+        m.get("capacity_factor_by_carrier"), "realised capacity factor", "-", "capacity_factor_by_carrier", run_dir
     )
     paired_bar(m.get("demand_by_zone"), "demand by zone", "MW", "demand_zones", run_dir)
 

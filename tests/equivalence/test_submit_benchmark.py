@@ -27,7 +27,7 @@ def fake_sbatch(tmp_path: Path) -> Path:
         f"n=$(( $(grep -c '^ARGS' '{log}' 2>/dev/null || echo 0) + 1 ))\n"
         f"echo \"ARGS $*\" >> '{log}'\n"
         f"echo \"ENV EQ_INTERCONNECT=$EQ_INTERCONNECT EQ_UNTIL=$EQ_UNTIL EQ_RUN_ID=$EQ_RUN_ID EXTRA=$EQ_EXTRA_ARGS\" >> '{log}'\n"
-        'echo "1000$n"\n',
+        'echo "1000$n"\n'
     )
     shim.chmod(shim.stat().st_mode | stat.S_IEXEC)
     return log

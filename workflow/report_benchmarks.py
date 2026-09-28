@@ -129,7 +129,7 @@ agg["rec_walltime"] = agg.peak_s.map(rec_time)
 agg["peak_time"] = agg.peak_s.map(fmt_hms)
 
 print(
-    f"{'RULE':<44} {'N':>2} {'PEAK_RSS_MB':>11} {'PEAK_TIME':>10} {'LOAD%':>6}   {'REC_MEM_MB':>10} {'REC_WALLTIME':>12}",
+    f"{'RULE':<44} {'N':>2} {'PEAK_RSS_MB':>11} {'PEAK_TIME':>10} {'LOAD%':>6}   {'REC_MEM_MB':>10} {'REC_WALLTIME':>12}"
 )
 print("-" * 108)
 for name, r in agg.iterrows():

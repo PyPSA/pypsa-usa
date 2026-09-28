@@ -818,8 +818,8 @@ def compare_profiles(
                             "detail": {
                                 "hours_compared": int(n),
                                 "hours_mismatched": int(bad.sum()),
-                                "len_develop": len(sc),
-                                "len_master": len(sa),
+                                "len_develop": int(len(sc)),
+                                "len_master": int(len(sa)),
                                 # Per-hour relative errors. ``worst_rel_pct`` is
                                 # dominated by dawn/dusk hours where master is a
                                 # few MW, so a fraction of a MW reads as 100 %;

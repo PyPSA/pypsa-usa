@@ -122,7 +122,7 @@ def resolve_baseline_sha() -> str:
             "create it first (T1 of memory/plans/harness-master-vs-develop.md — "
             "`git switch -c master-benchmark master`, then port the documented "
             "commits), or set EQ_BASELINE_REF to an existing ref.\n"
-            f"git said: {(cp.stderr or cp.stdout).strip()[-500:]}",
+            f"git said: {(cp.stderr or cp.stdout).strip()[-500:]}"
         )
     return sha
 
@@ -175,7 +175,7 @@ def provision_baseline_worktree() -> Path:
             f"it points at {_foreign_gitdir(wt)}. This is a leftover from a "
             "previous checkout location — running git against it would target "
             "another repository. Remove or rename it, then re-run; refusing to "
-            "adopt it.",
+            "adopt it."
         )
 
     if key in registered:
@@ -292,14 +292,14 @@ def assert_clean_checkout(side: str, root: Path) -> list[str]:
     if os.environ.get("EQ_ALLOW_DIRTY") == "1":
         log(
             f"WARNING: {side} checkout {root} has uncommitted changes to tracked files; "
-            f"building anyway because EQ_ALLOW_DIRTY=1:\n{listing}{more}",
+            f"building anyway because EQ_ALLOW_DIRTY=1:\n{listing}{more}"
         )
         return dirt
     raise RuntimeError(
         f"{side} checkout {root} has uncommitted changes to tracked files, so the sha "
         f"its manifest records would not describe the code that ran:\n{listing}{more}\n"
         "Commit or stash them, or set EQ_ALLOW_DIRTY=1 to build anyway and have the "
-        "manifest record dirty: true.",
+        "manifest record dirty: true."
     )
 
 

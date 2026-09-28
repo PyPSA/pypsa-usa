@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cluster_network import parse_clusters_wildcard
+from cluster_network import parse_clusters_wildcard  # noqa: E402
 
 ALL = {"onwind", "solar", "CCGT", "coal", "nuclear"}
 CONV = {"CCGT", "coal", "nuclear"}

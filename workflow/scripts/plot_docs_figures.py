@@ -159,12 +159,7 @@ def _generator_legend(fig, title):
     handles = [
         plt.Line2D([], [], marker="o", linestyle="", color=GEN_COLORS["conventional"], label="conventional generator"),
         plt.Line2D(
-            [],
-            [],
-            marker="o",
-            linestyle="",
-            color=GEN_COLORS["renewable"],
-            label="renewable / other generator",
+            [], [], marker="o", linestyle="", color=GEN_COLORS["renewable"], label="renewable / other generator"
         ),
     ]
     fig.legend(handles=handles, loc="lower center", ncol=2, frameon=False, fontsize=9, title=title, title_fontsize=8)
@@ -224,7 +219,8 @@ def plot_cluster_suffixes(simpl_path, suffix_paths, shapes_path, out_path, conve
         )
 
     fig.suptitle(
-        f"The same {n_simpl_buses}-zone {{simpl}} network clustered to {len(buses)} zones by each {{clusters}} suffix",
+        f"The same {n_simpl_buses}-zone {{simpl}} network clustered to "
+        f"{len(buses)} zones by each {{clusters}} suffix",
         fontsize=11,
     )
     _generator_legend(
@@ -284,9 +280,7 @@ def plot_simpl_resolutions(panels, shapes_path, out_path, conventional_carriers=
         "The same footprint at each {simpl} resolution, clustered with the a suffix (nothing aggregated)",
         fontsize=11,
     )
-    _generator_legend(
-        fig, "marker area ∝ p_nom (capped); every generator drawn at its {simpl} zone (nothing aggregated)"
-    )
+    _generator_legend(fig, "marker area ∝ p_nom (capped); every generator drawn at its {simpl} zone (nothing aggregated)")
     fig.tight_layout(rect=(0, 0.09, 1, 0.92))
     fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
     plt.close(fig)

@@ -39,9 +39,7 @@ _CONFIG_NAME = "config.equivalence.yaml" if INTERCONNECT == "western" else f"con
 # under config/, and build.py copies the shared harness config in there.
 CONFIGFILE = f"repo_data/config/{_CONFIG_NAME}"
 BASELINE_CONFIGFILE = f"config/{_CONFIG_NAME}"
-CLUSTERS = os.environ.get(
-    "EQ_CLUSTERS", "4"
-)  # reeds transport: must equal the footprint's ReEDS zone count (western/CA slice 4; usa 134)
+CLUSTERS = os.environ.get("EQ_CLUSTERS", "4")  # reeds transport: must equal the footprint's ReEDS zone count (western/CA slice 4; usa 134)
 LL = "v1.0"
 
 
@@ -150,16 +148,13 @@ def _profile_horizon_dir() -> str:
     import yaml
 
     cfg_path = os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "..",
-        "workflow",
-        CONFIGFILE,
+        os.path.dirname(__file__), "..", "..", "workflow", CONFIGFILE
     )
     with open(cfg_path) as f:
         cfg = yaml.safe_load(f)
     scenarios = cfg.get("renewable_scenarios") or ["rcp85cooler"]
     return "" if scenarios[0] == "historical" else f"{HORIZON}/"
+
 
 
 @dataclass(frozen=True)

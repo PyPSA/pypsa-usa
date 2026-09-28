@@ -312,3 +312,4 @@ slurm-*.err
 !workflow/repo_data/**
 !workflow/geodata_repo/**
 !natura.tiff
+

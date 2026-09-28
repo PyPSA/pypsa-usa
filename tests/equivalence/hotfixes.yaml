@@ -122,7 +122,7 @@
     pipelines. Still listed because the pin, not a port, is what closes it.
 
 - id: HF-7
-  commit: .inf
+  commit: 51e1719
   pr: 794
   title: renewable_land_access default null -> reference (NREL reV land-exclusion screening of the GODEEEP CFs)
   confidence: high
@@ -319,7 +319,7 @@
     cardinality.
 
 - id: HF-20
-  commit: .inf
+  commit: 51e1719
   pr: 794
   title: config.default.yaml becomes a loaded base layer beneath user configs, scenario configs become sparse overlays, and the merged config is schema-validated at parse time
   confidence: medium
@@ -352,7 +352,7 @@
 
 - id: HF-22
   commit: e1f5841
-  pr:
+  pr: null
   title: build_renewable_profiles._drop_leap_day — Feb 29 dropped from the selection window so a leap weather year yields the standard 8760-hour axis
   confidence: none
   ported: true
@@ -385,7 +385,7 @@
 
 - id: HF-24
   commit: 3b149ae
-  pr:
+  pr: null
   title: build_renewable_profiles keeps NREL caps capacity for substations with zero GODEEEP availability or no intersecting cell, instead of silently dropping it
   confidence: high
   ported: false
@@ -415,7 +415,7 @@
 
 - id: HF-25
   commit: 3b149ae
-  pr:
+  pr: null
   title: "renewable.godeeep_cf_weighting: develop weights substation capacity factors up to the s{simpl} cluster by INSTALLABLE capacity (NREL caps p_nom_max); master weights them by EXISTING p_nom and falls back to an unweighted mean where a cluster has none"
   confidence: high
   ported: false
@@ -451,17 +451,17 @@
 
 - id: HF-26
   commit: a5ed78c
-  pr:
+  pr: null
   title: "attach_renewable_capacities_to_atlite runs at CLUSTER granularity on develop, so existing renewable plants at substations with no profile generator keep their MW; on master the same function runs nodally and drops them"
   confidence: high
   ported: false
   usa_noop: false
   expect:
-  - capacity_existing_by_carrier/*
-  - p_nom_existing_by_zone_carrier/*
-  - objective
-  - capacity_opt_by_carrier/*
-  - dispatch_by_carrier/*
+    - capacity_existing_by_carrier/*
+    - p_nom_existing_by_zone_carrier/*
+    - objective
+    - capacity_opt_by_carrier/*
+    - dispatch_by_carrier/*
   master: >-
     the assembled network is nodal, so `mapped_values =
     generators_tech.sub_assignment.map(caps_per_bus).dropna()` in
@@ -496,7 +496,7 @@
 
 - id: HF-27
   commit: 382535b
-  pr:
+  pr: null
   title: "plant -> bus assignment: a DEVELOP REGRESSION, now FIXED — after simplify-early develop matched plants to the {simpl} cluster CENTROIDS (median 37 km) instead of to substations (median 1.0 km, master's own bus set), putting 6.1 % of existing MW in the wrong ReEDS zone; develop now matches substations and maps through busmap_s{simpl}"
   confidence: high
   ported: false
@@ -542,7 +542,7 @@
 
 - id: HF-28
   commit: 01f742f
-  pr:
+  pr: null
   title: "demand disaggregation key: master splits EFS state demand over NODAL buses keyed on `buses.state`, develop over s{simpl} buses keyed on `buses.reeds_state`; the LAF both sides consume was normalised over a THIRD column (`full_state`), so neither conserved state demand until the renormalisation landed"
   confidence: high
   ported: false
@@ -589,7 +589,7 @@
 
 - id: HF-29
   commit: 2a3adf8
-  pr:
+  pr: null
   title: "LAF renormalised inside the demand key at consumption time, on BOTH branches (state demand conserved: was +2.28 % master, +1.85 % develop); plus a DC-column fold into Maryland that is skipped when a bus carries the key"
   confidence: none
   ported: true

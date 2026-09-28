@@ -568,3 +568,4 @@ def test_add_rps_constraints_zone_without_eligible_gens_does_not_stop_others(pol
     rps = [c for c in n.model.constraints if c.endswith("_rps_limit")]
     assert rps, "the non-empty zone lost its constraint"
     assert not any(c.startswith("GlobalConstraint-CA") for c in rps)
+
