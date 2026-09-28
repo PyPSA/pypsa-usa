@@ -506,6 +506,22 @@ properties:
       eia: {type: ["string", "null"]}
 
 allOf:
+# Residential and commercial sector demand profiles use 2018 weather data.
+- if:
+    properties:
+      scenario:
+        properties:
+          sector: {pattern: "(^|-)G(-|$)"}
+        required: [sector]
+    required: [scenario]
+  then:
+    properties:
+      renewable_weather_years:
+        description: >-
+          Sector-coupled runs require renewable_weather_years: [2018].
+          Residential and commercial demand profiles use 2018 weather data.
+        const: [2018]
+
 # The selected solver's options block must exist in solver_options.
 - if:
     properties:

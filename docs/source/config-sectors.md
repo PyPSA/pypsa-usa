@@ -6,6 +6,9 @@ the following configuration options are exposed to the user.
 
 ```{note}
 Only single-period studies are currently supported when running sector studies.
+Set `renewable_weather_years: [2018]` for sector-coupled runs (`G` or `E-G`):
+residential and commercial demand profiles use 2018 weather data.
+Other weather years are rejected when the workflow loads the configuration.
 ```
 
 ## Carbon Limits
