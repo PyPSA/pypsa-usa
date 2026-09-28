@@ -75,6 +75,27 @@ def test_snakemake_dryrun_resolves(configfile, target, overrides):
     )
 
 
+@pytest.mark.fast
+@pytest.mark.parametrize("sector", ["G", "E-G"])
+def test_sector_weather_year_is_checked_at_workflow_start(tmp_path, sector):
+    configfile = tmp_path / "sector.yaml"
+    configfile.write_text(f"scenario:\n  sector: {sector}\nrenewable_weather_years: [2019]\n")
+    result = subprocess.run(
+        ["snakemake", "--list", "--configfile", str(configfile)],
+        cwd=WORKFLOW_DIR,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode != 0
+    output = result.stdout + result.stderr
+    assert "Error validating config file" in output
+    assert "renewable_weather_years" in output
+    assert "Sector-coupled runs require" in output
+    assert "[2018]" in output
+    assert "[2019]" in output
+
+
 def _solve_network_inputs(overrides):
     """Return the ``solve_network`` input paths snakemake resolves in a dry run."""
     cmd = [

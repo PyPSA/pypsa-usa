@@ -129,3 +129,34 @@ def test_godeeep_requires_renewable_land_access_key(schema):
     cfg.pop("renewable_land_access")
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(cfg, schema)
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("sector", ["G", "E-G"])
+@pytest.mark.parametrize("weather_years", [[2019], [2018, 2019], []])
+def test_sector_weather_year_must_be_2018(sector, weather_years, schema):
+    cfg = _merged("config.default.yaml")
+    cfg["scenario"]["sector"] = sector
+    cfg["renewable_weather_years"] = weather_years
+    with pytest.raises(jsonschema.ValidationError) as exc_info:
+        jsonschema.validate(cfg, schema)
+    assert list(exc_info.value.path) == ["renewable_weather_years"]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("sector", ["G", "E-G"])
+def test_sector_weather_year_2018_is_supported(sector, schema):
+    cfg = _merged("config.default.yaml")
+    cfg["scenario"]["sector"] = sector
+    cfg["renewable_weather_years"] = [2018]
+    jsonschema.validate(cfg, schema)
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("sector", ["", "E"])
+@pytest.mark.parametrize("weather_years", [[2019], [2018, 2019]])
+def test_electricity_weather_years_remain_supported(sector, weather_years, schema):
+    cfg = _merged("config.default.yaml")
+    cfg["scenario"]["sector"] = sector
+    cfg["renewable_weather_years"] = weather_years
+    jsonschema.validate(cfg, schema)
