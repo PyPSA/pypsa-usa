@@ -137,16 +137,19 @@ def test_main_writes_a_png_and_its_csv_twin(tmp_path, capsys):
     make_table(tmp_path / "d.parquet", {"Maryland": 200.0, "Virginia": 150.0})
     outdir = tmp_path / "out"
 
-    assert main(
-        [
-            "--network",
-            str(tmp_path / "n.nc"),
-            "--demand-table",
-            str(tmp_path / "d.parquet"),
-            "--outdir",
-            str(outdir),
-        ],
-    ) == 0
+    assert (
+        main(
+            [
+                "--network",
+                str(tmp_path / "n.nc"),
+                "--demand-table",
+                str(tmp_path / "d.parquet"),
+                "--outdir",
+                str(outdir),
+            ],
+        )
+        == 0
+    )
 
     assert (outdir / "demand_conservation.png").exists()
     written = pd.read_csv(outdir / "demand_conservation.csv", index_col="demand_key")

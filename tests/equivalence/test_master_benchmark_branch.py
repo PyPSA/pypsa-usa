@@ -174,8 +174,7 @@ def test_ported_commits_name_a_hotfix(commits):
         hf = c["trailers"].get("Hot-fix", "")
         if not re.fullmatch(r"HF-\d+", hf):
             bad.append(
-                f"{c['sha'][:7]} {c['subject']!r}: Hot-fix={hf!r}, expected 'HF-<n>' "
-                "(bare integer, not zero-padded)",
+                f"{c['sha'][:7]} {c['subject']!r}: Hot-fix={hf!r}, expected 'HF-<n>' (bare integer, not zero-padded)",
             )
     assert not bad, "hot-fix trailer violations:\n" + "\n".join(bad)
 
@@ -283,7 +282,9 @@ def _manifest_table_shas(branch: str) -> list[str]:
     start = text.index("## Commits")
     end = text.find("\n## ", start + 1)
     table = text[start:end] if end != -1 else text[start:]
-    return [m.group(1) for line in table.splitlines() if line.lstrip().startswith("|") for m in _SHA_TOKEN.finditer(line)]
+    return [
+        m.group(1) for line in table.splitlines() if line.lstrip().startswith("|") for m in _SHA_TOKEN.finditer(line)
+    ]
 
 
 def test_branch_manifest_matches(branch, commits):

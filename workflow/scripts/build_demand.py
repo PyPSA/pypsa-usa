@@ -2117,8 +2117,7 @@ class WriteStrategy(ABC):
         if not orphans:
             return
         logger.warning(
-            "No bus carries demand key(s) %s; %.1f MW of mean demand is DROPPED. "
-            "Per key: %s.",
+            "No bus carries demand key(s) %s; %.1f MW of mean demand is DROPPED. Per key: %s.",
             sorted(orphans),
             sum(orphans.values()),
             {k: round(v, 1) for k, v in sorted(orphans.items())},

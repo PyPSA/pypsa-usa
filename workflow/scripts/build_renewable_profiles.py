@@ -529,8 +529,7 @@ if __name__ == "__main__":
                 cache_dir=snakemake.params.mapping_cache_dir,
             )
             logger.info(
-                f"Cell→substation mapping: {mapping_sub['name'].nunique()} substations, "
-                f"{len(mapping_sub)} cell rows",
+                f"Cell→substation mapping: {mapping_sub['name'].nunique()} substations, {len(mapping_sub)} cell rows",
             )
             agg = capacity_weighted_bus_aggregation(
                 ds_cf["capacity_factor"],
