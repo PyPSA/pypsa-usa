@@ -430,8 +430,7 @@ def aggregate_profile_to_clusters(
     n_dropped = int((~keep).sum())
     if n_dropped:
         logger.warning(
-            "aggregate_profile_to_clusters: %d of %d buses are absent from the busmap "
-            "and were dropped (first few: %s)",
+            "aggregate_profile_to_clusters: %d of %d buses are absent from the busmap and were dropped (first few: %s)",
             n_dropped,
             len(buses),
             ", ".join(str(b) for b in buses[~keep][:5]),
@@ -497,7 +496,7 @@ def aggregate_profile_to_clusters(
     out_ds = xr.Dataset(data_vars, coords=coords, attrs=dict(ds.attrs))
     out_ds.attrs["eq_dropped_buses"] = n_dropped
     out_ds.attrs["eq_zero_weight_clusters"] = n_zero_weight
-    out_ds.attrs["eq_aggregated_from_buses"] = int(len(buses))
+    out_ds.attrs["eq_aggregated_from_buses"] = len(buses)
     return out_ds
 
 

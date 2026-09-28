@@ -39,12 +39,12 @@
 #   notes       optional free text.
 
 - id: HF-1
-  commit: 34b643f
+  commit: '34b643f'
   pr: 801
   title: PUDL release pin v2025.2.0 -> v2026.8.0, and data_year (EIA-923 heat-rate / fuel-cost window) 2023 -> 2025
   confidence: high
   ported: true
-  ported_sha: c10d60e
+  ported_sha: 'c10d60e'
   usa_noop: false
   expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*, dispatch_by_carrier/*, capacity_factor_by_carrier/*, objective]
   notes: >-
@@ -54,12 +54,12 @@
     as c10d60e (and again inside 93751fe). Ledger open item 1 is closed.
 
 - id: HF-2
-  commit: 34b643f
+  commit: '34b643f'
   pr: 801
   title: EIA nerc_region NULL on recently-filed plants imputed from state, instead of the isin() filter silently deleting them
   confidence: high
   ported: true
-  ported_sha: 93751fe
+  ported_sha: '93751fe'
   usa_noop: false
   expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*]
   notes: >-
@@ -67,12 +67,12 @@
     adopts wholesale. 204 plants / 7.3 GW nationally under PUDL v2026.8.0.
 
 - id: HF-3
-  commit: 34b643f
+  commit: '34b643f'
   pr: 801
   title: Existing/proposed units retire on EIA planned_generator_retirement_date instead of a pinned 2100, gated on electricity.honor_planned_retirements
   confidence: high
   ported: true
-  ported_sha: b3afe50
+  ported_sha: 'b3afe50'
   usa_noop: false
   expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*, dispatch_by_carrier/*, capacity_factor_by_carrier/*, objective]
   notes: >-
@@ -81,18 +81,18 @@
     to develop's. Ledger open item 2 is closed.
 
 - id: HF-4
-  commit: 34b643f
+  commit: '34b643f'
   pr: 801
   title: planned_generator_retirement_date takes the latest filing's value as-is instead of most-recent-non-null (a newer NULL = withdrawn announcement)
   confidence: medium
   ported: true
-  ported_sha: 93751fe
+  ported_sha: '93751fe'
   usa_noop: false
   expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*]
   notes: Ported implicitly with HF-8's wholesale adoption of build_powerplants.py.
 
 - id: HF-5
-  commit: 34b643f
+  commit: '34b643f'
   pr: 801
   title: build_base_network.assign_missing_regions fills only the NaN region attributes instead of copying all seven from the nearest complete bus
   confidence: medium
@@ -107,7 +107,7 @@
     shape gaps, not fewer; the count was not re-measured for usa.
 
 - id: HF-6
-  commit: 2bc715f
+  commit: '2bc715f'
   pr: 777
   title: Per-bus demand weight switches from the Breakthrough Pd column to 2020 Census county population (electricity.demand.bus_allocation)
   confidence: high
@@ -122,7 +122,7 @@
     pipelines. Still listed because the pin, not a port, is what closes it.
 
 - id: HF-7
-  commit: 51e1719
+  commit: '51e1719'
   pr: 794
   title: renewable_land_access default null -> reference (NREL reV land-exclusion screening of the GODEEEP CFs)
   confidence: high
@@ -138,12 +138,12 @@
     shipped value makes the run fail rather than differ.
 
 - id: HF-8
-  commit: 01f742f
+  commit: '01f742f'
   pr: 775
   title: EIA-860 SCD tables pre-aggregated to one row per plant/generator before the LEFT JOINs, instead of ~24 report_date vintages fanning out per generator
   confidence: high
   ported: true
-  ported_sha: 93751fe
+  ported_sha: '93751fe'
   usa_noop: false
   expect: [objective, dispatch_by_carrier/*, capacity_factor_by_carrier/*]
   notes: >-
@@ -154,12 +154,12 @@
     (ledger open item 2b).
 
 - id: HF-9
-  commit: 01f742f
+  commit: '01f742f'
   pr: 775
   title: Empty-county sweep restricted to the ReEDS zones present in the model_topology.include-filtered network
   confidence: high
   ported: true
-  ported_sha: bce8437
+  ported_sha: 'bce8437'
   usa_noop: true
   expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*, objective]
   notes: >-
@@ -168,12 +168,12 @@
     409,842 km2, existing fleet 215.5 -> 84.5 GW, objective -91.3 %.
 
 - id: HF-10
-  commit: 01f742f
+  commit: '01f742f'
   pr: 775
   title: plants_must_add seam-plant fallback bounded to 100 km of the run's onshore+offshore regions in EPSG:5070
   confidence: high
   ported: true
-  ported_sha: d4dd4ff
+  ported_sha: 'd4dd4ff'
   usa_noop: true
   expect: [capacity_existing_by_carrier/*, capacity_opt_by_carrier/*, p_nom_existing_by_zone_carrier/*]
   notes: >-
@@ -181,12 +181,12 @@
     23 plants / 1,887.4 MW dropped on the CA leg, objective ~+8.1 %.
 
 - id: HF-11
-  commit: 01f742f
+  commit: '01f742f'
   pr: 775
   title: Missing EIA-860 summer/winter derates filled with 1.0 instead of propagating NaN
   confidence: medium
   ported: true
-  ported_sha: 93751fe
+  ported_sha: '93751fe'
   usa_noop: false
   expect: [p_max_pu_quantiles_*, mean_cf_by_zone_*, dispatch_by_carrier/*, capacity_factor_by_carrier/*, objective]
   notes: >-
@@ -195,7 +195,7 @@
     survives the port (ledger open item 4).
 
 - id: HF-12
-  commit: a665dd9
+  commit: 'a665dd9'
   pr: 778
   title: PyPSA 0.30.2 -> 1.3.0, linopy -> 0.9.1, pandas -> 3.0.5, xarray -> 2026.7.0, geopandas -> 1.1.4, including pypsa's unit-commitment ramp-limit fixes
   confidence: medium
@@ -210,7 +210,7 @@
     false, so a no-op there.
 
 - id: HF-13
-  commit: a665dd9
+  commit: 'a665dd9'
   pr: 778
   title: pypsa v1 / linopy 0.9 fold the fixed-cost offset into Network.objective and leave objective_constant at 0; 0.30 reported the solver objective only
   confidence: high
@@ -227,7 +227,7 @@
     exactly the size of the constant.
 
 - id: HF-14
-  commit: a665dd9
+  commit: 'a665dd9'
   pr: 778
   title: The two RESERVES operational constraints rewritten against pypsa 1.3 internals, plus an ERM RHS index-name fix that recovers the per-bus dual
   confidence: medium
@@ -242,7 +242,7 @@
     shuffles at constant objective.
 
 - id: HF-15
-  commit: cc33423
+  commit: 'cc33423'
   pr: 803
   title: GODEEEP CF retrieval becomes a config-declared registry — first source declaring the requested (dataset, year) wins, with no hub-height or nearest-year fallbacks
   confidence: medium
@@ -258,7 +258,7 @@
     before blaming anything else.
 
 - id: HF-16
-  commit: 34b643f
+  commit: '34b643f'
   pr: 801
   title: clustering.aggregation_strategies.generators — start_up_cost capacity_weighted_average -> sum, ramp_limit_up/down max -> capacity_weighted_average
   confidence: medium
@@ -274,7 +274,7 @@
     POST-sanitize columns (see HF-17). All-NaN would close the row.
 
 - id: HF-17
-  commit: 34b643f
+  commit: '34b643f'
   pr: 801
   title: Three latent unit-commitment defects fixed (p_min_pu never passed to n.add, up_time_before=0, min_up/min_down/ramps rescaled to the {opts} resolution), plus per-carrier clamping of impossible ADS UC data
   confidence: medium
@@ -293,7 +293,7 @@
     powerplants.csv unconditionally, which is what HF-16 then aggregates.
 
 - id: HF-18
-  commit: 34b643f
+  commit: '34b643f'
   pr: 801
   title: build_cost_data AEO scenario fallback "Reference" -> "reference", matching PUDL's lowercase model_case_eiaaeo vocabulary
   confidence: low
@@ -306,7 +306,7 @@
     fallback crashed with an IndexError rather than producing wrong numbers.
 
 - id: HF-19
-  commit: 34b643f
+  commit: '34b643f'
   pr: 801
   title: add_elec_imports_exports county-resolution fixes — the exports call omitted zone_col, and the cost cache tested zone_outside but wrote costs[zone_inside]
   confidence: low
@@ -319,7 +319,7 @@
     cardinality.
 
 - id: HF-20
-  commit: 51e1719
+  commit: '51e1719'
   pr: 794
   title: config.default.yaml becomes a loaded base layer beneath user configs, scenario configs become sparse overlays, and the merged config is schema-validated at parse time
   confidence: medium
@@ -337,7 +337,7 @@
     config.equivalence-usa.yaml is deliberately self-contained.
 
 - id: HF-21
-  commit: 34b643f
+  commit: '34b643f'
   pr: 801
   title: New capabilities shipped default-off (interface_transmission_limits, remote_contracted_resources, ambient_derate, nrel_caps_reassign, godeeep_allow_unscreened_fallback, benchmark_cpuc, demand.profile servm)
   confidence: none
@@ -351,12 +351,12 @@
     switched on.
 
 - id: HF-22
-  commit: e1f5841
+  commit: 'e1f5841'
   pr: null
   title: build_renewable_profiles._drop_leap_day — Feb 29 dropped from the selection window so a leap weather year yields the standard 8760-hour axis
   confidence: none
   ported: true
-  ported_sha: 572534f
+  ported_sha: '572534f'
   usa_noop: false
   expect: [p_max_pu_quantiles_*, mean_cf_by_zone_*, dispatch_by_carrier/*, capacity_factor_by_carrier/*]
   notes: >-
@@ -369,12 +369,12 @@
     master-vs-develop difference is none.
 
 - id: HF-23
-  commit: 01f742f
+  commit: '01f742f'
   pr: 775
   title: "workflow/rules/common.smk materialises constants.py into the snakemake source cache so upstream #764's import chain resolves under a fresh cache"
   confidence: none
   ported: true
-  ported_sha: f65c90c
+  ported_sha: 'f65c90c'
   usa_noop: false
   expect: []
   notes: >-
@@ -384,7 +384,7 @@
     Needed for a bare-master baseline to run at all from a cold cache.
 
 - id: HF-24
-  commit: 3b149ae
+  commit: '3b149ae'
   pr: null
   title: build_renewable_profiles keeps NREL caps capacity for substations with zero GODEEEP availability or no intersecting cell, instead of silently dropping it
   confidence: high
@@ -414,7 +414,7 @@
     memory/plans/hotfix-ledger.md in the project brain.
 
 - id: HF-25
-  commit: 3b149ae
+  commit: '3b149ae'
   pr: null
   title: "renewable.godeeep_cf_weighting: develop weights substation capacity factors up to the s{simpl} cluster by INSTALLABLE capacity (NREL caps p_nom_max); master weights them by EXISTING p_nom and falls back to an unweighted mean where a cluster has none"
   confidence: high
@@ -450,7 +450,7 @@
     tip the diagnosis was made on, not an isolated fix commit.
 
 - id: HF-26
-  commit: a5ed78c
+  commit: 'a5ed78c'
   pr: null
   title: "attach_renewable_capacities_to_atlite runs at CLUSTER granularity on develop, so existing renewable plants at substations with no profile generator keep their MW; on master the same function runs nodally and drops them"
   confidence: high
@@ -495,7 +495,7 @@
     fig5_mw_accounting.png
 
 - id: HF-27
-  commit: 382535b
+  commit: '382535b'
   pr: null
   title: "plant -> bus assignment: a DEVELOP REGRESSION, now FIXED — after simplify-early develop matched plants to the {simpl} cluster CENTROIDS (median 37 km) instead of to substations (median 1.0 km, master's own bus set), putting 6.1 % of existing MW in the wrong ReEDS zone; develop now matches substations and maps through busmap_s{simpl}"
   confidence: high
@@ -541,7 +541,7 @@
     fig6_by_reeds_zone.png, fig5_mw_accounting.png
 
 - id: HF-28
-  commit: 01f742f
+  commit: '01f742f'
   pr: null
   title: "demand disaggregation key: master splits EFS state demand over NODAL buses keyed on `buses.state`, develop over s{simpl} buses keyed on `buses.reeds_state`; the LAF both sides consume was normalised over a THIRD column (`full_state`), so neither conserved state demand until the renormalisation landed"
   confidence: high
@@ -588,12 +588,12 @@
     fig5_state_demand_conservation.png
 
 - id: HF-29
-  commit: 2a3adf8
+  commit: '2a3adf8'
   pr: null
   title: "LAF renormalised inside the demand key at consumption time, on BOTH branches (state demand conserved: was +2.28 % master, +1.85 % develop); plus a DC-column fold into Maryland that is skipped when a bus carries the key"
   confidence: none
   ported: true
-  ported_sha: 969ae8b
+  ported_sha: '969ae8b'
   usa_noop: true
   expect: [demand_by_zone/*]
   notes: >-
