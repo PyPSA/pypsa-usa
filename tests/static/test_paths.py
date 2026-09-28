@@ -96,9 +96,7 @@ def test_exactly_one_sbatch_driver():
 def test_sbatch_uses_the_serc_partition(sbatch_path):
     """The project's partition is serc (PROJECT.md §4), not normal."""
     source = sbatch_path.read_text()
-    assert re.search(r"^#SBATCH\s+-p\s+serc\b", source, re.MULTILINE), (
-        f"{sbatch_path.name} does not request -p serc"
-    )
+    assert re.search(r"^#SBATCH\s+-p\s+serc\b", source, re.MULTILINE), f"{sbatch_path.name} does not request -p serc"
     assert not re.search(r"^#SBATCH\s+-p\s+normal\b", source, re.MULTILINE), (
         f"{sbatch_path.name} still requests -p normal"
     )
@@ -134,9 +132,5 @@ def test_sbatch_log_directives_are_relative(sbatch_path):
     an absolute site path is one someone else will not have. Relative means the
     submit directory, which by construction exists.
     """
-    bad = [
-        line.strip()
-        for line in sbatch_path.read_text().splitlines()
-        if re.match(r"^#SBATCH\s+-[oe]\s+/", line)
-    ]
+    bad = [line.strip() for line in sbatch_path.read_text().splitlines() if re.match(r"^#SBATCH\s+-[oe]\s+/", line)]
     assert not bad, f"{sbatch_path.name} writes Slurm logs to an absolute path: {bad}"

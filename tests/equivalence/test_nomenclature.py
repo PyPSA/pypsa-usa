@@ -53,12 +53,7 @@ _SELF = Path(__file__).name
 
 
 def _scanned_files() -> list[Path]:
-    files = sorted(
-        p
-        for ext in ("py", "yaml", "sbatch")
-        for p in HARNESS.glob(f"*.{ext}")
-        if p.name != _SELF
-    )
+    files = sorted(p for ext in ("py", "yaml", "sbatch") for p in HARNESS.glob(f"*.{ext}") if p.name != _SELF)
     files += sorted((REPO / "workflow" / "repo_data" / "config").glob("config.equivalence*.yaml"))
     files.append(REPO / "CONTEXT.md")
     return [p for p in files if p.exists()]
@@ -85,10 +80,7 @@ def test_no_anchor_nomenclature():
     for lineno, line in enumerate(block.splitlines(), start=1):
         if "anchor" in _ALLOWED.sub("", line).lower():
             hits.append(f"pyproject.toml [tool.pytest.ini_options]+{lineno}: {line.strip()}")
-    assert not hits, (
-        "retired 'anchor' nomenclature found; the baseline is master-benchmark:\n"
-        + "\n".join(hits)
-    )
+    assert not hits, "retired 'anchor' nomenclature found; the baseline is master-benchmark:\n" + "\n".join(hits)
 
 
 @pytest.mark.fast
