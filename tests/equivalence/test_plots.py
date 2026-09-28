@@ -566,7 +566,7 @@ def test_the_duration_curve_plots_the_rolled_up_master_at_prong_2(tmp_path, monk
     equivalent. Here master rolls up to exactly develop, so every percentile of
     the figure's CSV twin must match — and the old code path provably would not.
     """
-    art, tech, master, develop = _prong2_profile_fixture(tmp_path, monkeypatch)
+    art, tech, master, _develop = _prong2_profile_fixture(tmp_path, monkeypatch)
     missing: list[dict] = []
     frames = plots.collect_metrics(art, missing)
     assert missing == []
