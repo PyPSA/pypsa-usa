@@ -362,8 +362,7 @@ def merged_config(side: str) -> dict:
     if not out.exists():
         tail = "\n".join((cp.stderr or cp.stdout).splitlines()[-60:])
         raise RuntimeError(
-            f"could not dump the merged config for side {side!r} from {wf} "
-            f"(snakemake exit {cp.returncode}).\n{tail}",
+            f"could not dump the merged config for side {side!r} from {wf} (snakemake exit {cp.returncode}).\n{tail}",
         )
     return json.loads(out.read_text())
 
@@ -491,8 +490,7 @@ CONFIG_DIFF_ALLOWLIST: tuple[tuple[str, str], ...] = (
     ),
     (
         "plotting",
-        "master-only plot axis limits and thresholds; no plotting rule is in the benchmark target "
-        "chain on either side",
+        "master-only plot axis limits and thresholds; no plotting rule is in the benchmark target chain on either side",
     ),
     # --- opt-gated, and this run's opts do not select them -------------------
     (
@@ -552,7 +550,7 @@ CONFIG_DIFF_ALLOWLIST: tuple[tuple[str, str], ...] = (
     ),
     (
         "run.benchmark_cpuc_horizons",
-        "read only when run.benchmark_cpuc is true, which is itself develop-only and false " "(HF-21)",
+        "read only when run.benchmark_cpuc is true, which is itself develop-only and false (HF-21)",
     ),
     # --- values that match the other side's inline fallback ------------------
     (

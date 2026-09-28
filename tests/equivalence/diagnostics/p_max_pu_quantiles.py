@@ -28,11 +28,11 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
-import pypsa  # noqa: E402
-import xarray as xr  # noqa: E402
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pypsa
+import xarray as xr
 
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
@@ -76,7 +76,9 @@ def master_own_s300(tech: str) -> pd.DataFrame:
     ts = n.generators_t.p_max_pu
     cols = [g for g in gens.index if g in ts.columns]
     log.info("master elec_s300 %s: %d generators, %d with a p_max_pu series", tech, len(gens), len(cols))
-    da = xr.DataArray(ts[cols].to_numpy().T, dims=("bus", "time"), coords={"bus": gens.loc[cols, "bus"].astype(str).values})
+    da = xr.DataArray(
+        ts[cols].to_numpy().T, dims=("bus", "time"), coords={"bus": gens.loc[cols, "bus"].astype(str).values}
+    )
     return quantiles_over_time(da)
 
 
@@ -104,7 +106,12 @@ def one_tech(tech: str, busmap: pd.Series, zones: pd.Series, out: Path) -> pd.Da
     dropped = int(ds_rec.attrs.get("eq_dropped_buses", 0))
     log.info(
         "%s: %d common clusters (develop %d, recon %d, master own %d); master nodal buses absent from busmap: %d",
-        tech, len(paired), len(q_dev), len(q_rec), len(q_own), dropped,
+        tech,
+        len(paired),
+        len(q_dev),
+        len(q_rec),
+        len(q_own),
+        dropped,
     )
 
     fig, axes = plt.subplots(3, 3, figsize=(15, 11.5), facecolor="#fcfcfb")
@@ -112,7 +119,8 @@ def one_tech(tech: str, busmap: pd.Series, zones: pd.Series, out: Path) -> pd.Da
         f"USA s300 — {tech} p_max_pu per resource cluster, master vs develop\n"
         f"paired view: master's nodal profile rolled onto develop's {len(paired)} clusters "
         f"(busmap_s300, p_nom_max-weighted = develop's rule, HF-25; HF-24-dropped substations absent)",
-        fontsize=12, color=INK,
+        fontsize=12,
+        color=INK,
     )
     summary_rows = []
     for i, q in enumerate(Q):
@@ -141,11 +149,16 @@ def one_tech(tech: str, busmap: pd.Series, zones: pd.Series, out: Path) -> pd.Da
         rmse = float(np.sqrt((d**2).mean()))
         within = int((d.abs() <= 0.005).sum())
         ax.text(
-            0.03, 0.97,
+            0.03,
+            0.97,
             f"n = {len(d)}\nmax |Δ| = {d.abs().max():.4f}\nRMSE = {rmse:.5f}\n|Δ| ≤ 0.005: {within}/{len(d)}",
-            transform=ax.transAxes, va="top", fontsize=9, color=INK,
+            transform=ax.transAxes,
+            va="top",
+            fontsize=9,
+            color=INK,
         )
-        ax.set_xlim(lim); ax.set_ylim(lim)
+        ax.set_xlim(lim)
+        ax.set_ylim(lim)
         ax.set_xlabel(f"develop p{q}", color=INK)
         ax.set_ylabel(f"master, reconstructed p{q}", color=INK)
         ax.set_title(f"p{q}: paired per cluster after reconstruction", fontsize=10, color=INK)
@@ -157,19 +170,33 @@ def one_tech(tech: str, busmap: pd.Series, zones: pd.Series, out: Path) -> pd.Da
         ax.axhspan(-0.005, 0.005, color=GRID, alpha=0.6, zorder=0)
         worst = ds.abs().sort_values(ascending=False).head(3)
         ax.text(
-            0.03, 0.97,
+            0.03,
+            0.97,
             "largest |Δ|: " + ", ".join(f"{c} ({paired.loc[c, 'reeds_zone']}) {ds[c]:+.4f}" for c in worst.index),
-            transform=ax.transAxes, va="top", fontsize=8, color=INK, wrap=True,
+            transform=ax.transAxes,
+            va="top",
+            fontsize=8,
+            color=INK,
+            wrap=True,
         )
         ax.set_xlabel("clusters, ranked by Δ", color=MUTED)
-        ax.set_ylabel(f"Δ p{q} = master recon − develop", color=INK)
+        ax.set_ylabel(f"Δ p{q} = master recon − develop", color=INK)  # noqa: RUF001 (typographic minus in a figure label)
         ax.set_title(f"p{q}: residual per cluster (band = ±0.005)", fontsize=10, color=INK)
         summary_rows.append(
-            dict(tech=tech, quantile=f"p{q}", n_clusters=len(d), max_abs_delta=float(d.abs().max()),
-                 rmse=rmse, median_abs_delta=float(d.abs().median()), n_within_0p005=within,
-                 develop_median=float(x.median()), master_recon_median=float(y.median()),
-                 master_own_s300_median=float(q_own[col].median()), master_own_n=len(q_own),
-                 master_nodal_buses_dropped=dropped)
+            dict(
+                tech=tech,
+                quantile=f"p{q}",
+                n_clusters=len(d),
+                max_abs_delta=float(d.abs().max()),
+                rmse=rmse,
+                median_abs_delta=float(d.abs().median()),
+                n_within_0p005=within,
+                develop_median=float(x.median()),
+                master_recon_median=float(y.median()),
+                master_own_s300_median=float(q_own[col].median()),
+                master_own_n=len(q_own),
+                master_nodal_buses_dropped=dropped,
+            )
         )
     for ax in axes.ravel():
         ax.set_facecolor("#fcfcfb")
