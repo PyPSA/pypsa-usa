@@ -19,10 +19,6 @@ rule plot_network_maps:
             else RESOURCES
             + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson"
         ),
-    params:
-        electricity=config["electricity"],
-        plotting=config["plotting"],
-        retirement=config["electricity"].get("retirement", "technical"),
     output:
         **{
             fig: RESULTS
@@ -36,6 +32,10 @@ rule plot_network_maps:
     resources:
         mem_mb=7000,
         walltime="00:30:00",
+    params:
+        electricity=config["electricity"],
+        plotting=config["plotting"],
+        retirement=config["electricity"].get("retirement", "technical"),
     script:
         "../scripts/plot_network_maps.py"
 
@@ -58,11 +58,6 @@ rule export_statistics:
             else RESOURCES
             + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson"
         ),
-    params:
-        electricity=config["electricity"],
-        plotting=config["plotting"],
-        retirement=config["electricity"].get("retirement", "technical"),
-        mode="export",
     output:
         statistics_summary=RESULTS
         + "{interconnect}/figures/s{simpl}_cluster_{clusters}/l{ll}_{opts}_{sector}/statistics/statistics.csv",
@@ -88,6 +83,11 @@ rule export_statistics:
     resources:
         mem_mb=20000,
         walltime="01:00:00",
+    params:
+        electricity=config["electricity"],
+        plotting=config["plotting"],
+        retirement=config["electricity"].get("retirement", "technical"),
+        mode="export",
     script:
         "../scripts/plot_statistics.py"
 
@@ -111,11 +111,6 @@ rule plot_statistics:
             + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson"
         ),
         statistics_summary=rules.export_statistics.output.statistics_summary,
-    params:
-        electricity=config["electricity"],
-        plotting=config["plotting"],
-        retirement=config["electricity"].get("retirement", "technical"),
-        mode="plot",
     output:
         **{
             fig: RESULTS
@@ -141,5 +136,10 @@ rule plot_statistics:
     resources:
         mem_mb=5000,
         walltime="02:00:00",
+    params:
+        electricity=config["electricity"],
+        plotting=config["plotting"],
+        retirement=config["electricity"].get("retirement", "technical"),
+        mode="plot",
     script:
         "../scripts/plot_statistics.py"
