@@ -49,13 +49,6 @@ def sector_input_files(wildcards):
 
 
 rule add_sectors:
-    params:
-        electricity=config["electricity"],
-        costs=config["costs"],
-        plotting=config["plotting"],
-        snapshots=config["snapshots"],
-        api=config["api"],
-        sector=config["sector"],
     input:
         unpack(sector_input_files),
     output:
@@ -68,6 +61,13 @@ rule add_sectors:
     threads: 1
     resources:
         mem_mb=4000,
+    params:
+        electricity=config["electricity"],
+        costs=config["costs"],
+        plotting=config["plotting"],
+        snapshots=config["snapshots"],
+        api=config["api"],
+        sector=config["sector"],
     script:
         "../scripts/add_sectors.py"
 
@@ -87,22 +87,18 @@ rule build_population_layouts:
         pop_layout_rural=RESOURCES + "{interconnect}/pop_layout_rural.nc",
     log:
         LOGS + "{interconnect}/build_population_layouts.log",
-    resources:
-        mem_mb=20000,
     benchmark:
         BENCHMARKS + "{interconnect}/build_population_layouts"
-    threads: 8
     conda:
         "../envs/environment.yaml"
+    threads: 8
+    resources:
+        mem_mb=20000,
     script:
         "../scripts/build_population_layouts.py"
 
 
 rule build_temperature_profiles:
-    wildcard_constraints:
-        scope="urban|rural|total",
-    params:
-        snapshots=config["snapshots"],
     input:
         pop_layout=RESOURCES + "{interconnect}/pop_layout_{scope}.nc",
         regions_onshore=RESOURCES
@@ -116,9 +112,6 @@ rule build_temperature_profiles:
         + "{interconnect}/temp_soil_{scope}_elec_s{simpl}_c{clusters}.nc",
         temp_air=RESOURCES
         + "{interconnect}/temp_air_{scope}_elec_s{simpl}_c{clusters}.nc",
-    resources:
-        mem_mb=20000,
-    threads: 8
     log:
         LOGS
         + "{interconnect}/build_temperature_profiles_{scope}_{simpl}_{clusters}.log",
@@ -127,8 +120,15 @@ rule build_temperature_profiles:
             BENCHMARKS
             + "{interconnect}/build_temperature_profiles/{scope}_s{simpl}_c{clusters}"
         )
+    wildcard_constraints:
+        scope="urban|rural|total",
     conda:
         "../envs/environment.yaml"
+    threads: 8
+    resources:
+        mem_mb=20000,
+    params:
+        snapshots=config["snapshots"],
     script:
         "../scripts/build_temperature_profiles.py"
 
@@ -150,8 +150,6 @@ rule build_clustered_population_layouts:
     log:
         LOGS
         + "{interconnect}/build_clustered_population_layouts_{simpl}_{clusters}.log",
-    resources:
-        mem_mb=50000,
     benchmark:
         (
             BENCHMARKS
@@ -159,13 +157,13 @@ rule build_clustered_population_layouts:
         )
     conda:
         "../envs/environment.yaml"
+    resources:
+        mem_mb=50000,
     script:
         "../scripts/build_clustered_population_layouts.py"
 
 
 rule build_cop_profiles:
-    params:
-        heat_pump_sink_T=config["sector"]["heating"]["heat_pump_sink_T"],
     input:
         temp_soil_total=RESOURCES
         + "{interconnect}/temp_soil_total_elec_s{simpl}_c{clusters}.nc",
@@ -192,14 +190,16 @@ rule build_cop_profiles:
         + "{interconnect}/cop_air_rural_elec_s{simpl}_c{clusters}.nc",
         cop_air_urban=RESOURCES
         + "{interconnect}/cop_air_urban_elec_s{simpl}_c{clusters}.nc",
-    resources:
-        mem_mb=20000,
     log:
         LOGS + "{interconnect}/build_cop_profiles_s{simpl}_c{clusters}.log",
     benchmark:
         BENCHMARKS + "{interconnect}/build_cop_profiles/s{simpl}_c{clusters}"
     conda:
         "../envs/environment.yaml"
+    resources:
+        mem_mb=20000,
+    params:
+        heat_pump_sink_T=config["sector"]["heating"]["heat_pump_sink_T"],
     script:
         "../scripts/build_cop_profiles.py"
 
@@ -213,9 +213,9 @@ rule build_co2_storage:
         co2_storage=RESOURCES + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv",
     log:
         LOGS + "{interconnect}/build_co2_storage_s{simpl}_{clusters}.log",
-    resources:
-        mem_mb=5000,
     conda:
         "../envs/environment.yaml"
+    resources:
+        mem_mb=5000,
     script:
         "../scripts/build_co2_storage.py"
