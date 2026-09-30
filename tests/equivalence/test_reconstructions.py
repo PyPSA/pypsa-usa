@@ -785,12 +785,16 @@ CAPS = pd.Series(
     name="p_nom_max",
 )
 BUSMAP = pd.Series({"1": "cA", "2": "cA", "3": "cB", "4": "cB"})
+#: A_s per substation. s3/s4 are the zero-availability pair master drops;
+#: s1/s2 have land. A substation absent here reads as A_s = 0 (no
+#: intersecting CF cell), which is the same mechanism.
+ZERO_AVAIL = pd.Series({"1": 0.8, "2": 0.5, "3": 0.0, "4": 0.0, "5": 0.9})
 ZONE_BY_CLUSTER = pd.Series({"cA": "pA", "cB": "pB", "cC": "pC"})
 COMMON = ["cA", "cB"]
 
 
 def test_caps_drop_is_the_caps_at_unprofiled_substations():
-    out = reconstructions.reconstruct_caps_drop(CAPS, BUSMAP, {"1.0", "2.0"}, ZONE_BY_CLUSTER, COMMON)
+    out = reconstructions.reconstruct_caps_drop(CAPS, BUSMAP, {"1.0", "2.0"}, ZONE_BY_CLUSTER, COMMON, ZERO_AVAIL)
     assert out.loc["pA", "caps_mw"] == pytest.approx(150.0)
     assert out.loc["pA", "covered_mw"] == pytest.approx(150.0)
     assert out.loc["pA", "dropped_mw"] == pytest.approx(0.0)
@@ -807,6 +811,7 @@ def test_nothing_is_dropped_when_master_profiles_every_substation():
         {"1.0", "2.0", "3.0", "4.0"},
         ZONE_BY_CLUSTER,
         COMMON,
+        ZERO_AVAIL,
     )
     assert out["dropped_mw"].abs().max() == pytest.approx(0.0)
     assert out["caps_mw"].sum() == pytest.approx(375.0)
@@ -818,7 +823,7 @@ def test_substations_outside_the_busmap_enter_neither_term():
     Counting it in ``caps_mw`` would fail gate G2 against a develop column that
     never contained it -- a harness artefact reported as a model difference.
     """
-    out = reconstructions.reconstruct_caps_drop(CAPS, BUSMAP, {"1.0", "2.0"}, ZONE_BY_CLUSTER, COMMON)
+    out = reconstructions.reconstruct_caps_drop(CAPS, BUSMAP, {"1.0", "2.0"}, ZONE_BY_CLUSTER, COMMON, ZERO_AVAIL)
     assert out["caps_mw"].sum() == pytest.approx(375.0)  # 999 MW of s5 excluded
     assert "pC" not in out.index
 
@@ -830,7 +835,7 @@ def test_clusters_outside_the_common_set_are_excluded():
     before either is summed, so a reconstruction that kept it would be predicting
     a develop column that does not exist.
     """
-    out = reconstructions.reconstruct_caps_drop(CAPS, BUSMAP, {"1.0", "2.0"}, ZONE_BY_CLUSTER, ["cA"])
+    out = reconstructions.reconstruct_caps_drop(CAPS, BUSMAP, {"1.0", "2.0"}, ZONE_BY_CLUSTER, ["cA"], ZERO_AVAIL)
     assert list(out.index) == ["pA"]
     assert out["caps_mw"].sum() == pytest.approx(150.0)
 
@@ -840,7 +845,7 @@ def test_caps_substation_ids_reconcile_across_formats():
     caps = pd.Series({"35827.0": 10.0, "35828.0": 20.0})
     busmap = pd.Series({"35827": "cA", "35828": "cA"})
     zone = pd.Series({"cA": "pA"})
-    out = reconstructions.reconstruct_caps_drop(caps, busmap, {"35827.0"}, zone, ["cA"])
+    out = reconstructions.reconstruct_caps_drop(caps, busmap, {"35827.0"}, zone, ["cA"], pd.Series({"35828": 0.0}))
     assert out.loc["pA", "caps_mw"] == pytest.approx(30.0)
     assert out.loc["pA", "covered_mw"] == pytest.approx(10.0)
     assert out.loc["pA", "dropped_mw"] == pytest.approx(20.0)
@@ -849,9 +854,10 @@ def test_caps_substation_ids_reconcile_across_formats():
 POTENTIAL_TOL = tables.tolerance_for("p_nom_max_by_zone_onwind")
 
 
-def _caps_rows(zone_values, profiled=("1.0", "2.0"), common=COMMON):
+def _caps_rows(zone_values, profiled=("1.0", "2.0"), common=COMMON, availability=None):
     """``{(metric, zone): ReconRow}`` for the onwind potential metric."""
-    recon = reconstructions.reconstruct_caps_drop(CAPS, BUSMAP, set(profiled), ZONE_BY_CLUSTER, common)
+    avail = ZERO_AVAIL if availability is None else availability
+    recon = reconstructions.reconstruct_caps_drop(CAPS, BUSMAP, set(profiled), ZONE_BY_CLUSTER, common, avail)
     rows = {}
     for zone, (master, develop) in zone_values.items():
         caps = float(recon["caps_mw"].get(zone, 0.0))
@@ -866,6 +872,7 @@ def _caps_rows(zone_values, profiled=("1.0", "2.0"), common=COMMON):
             develop,
             POTENTIAL_TOL,
             key=zone,
+            mechanism_mw=float(recon["dropped_mw_zero_avail"].get(zone, 0.0)),
         )
         rows[("p_nom_max_by_zone_onwind", row.key)] = row
     return rows
@@ -974,7 +981,14 @@ def test_nrel_caps_path_raises_when_land_access_is_unset(tmp_path):
 
 
 def test_hf24_without_the_common_cluster_set_is_an_error_not_a_guess():
-    """``art.profiles`` is only filled by ``collect_metrics`` at prong 2."""
+    """``art.profiles`` is only filled by ``collect_metrics`` at prong 2.
+
+    The MESSAGE is asserted, not merely that some error is set. The three "could
+    not run" reasons used to share one string, so a missing common cluster set
+    reported "no p_nom_max_by_zone_* metric frames in this run" — false, and it
+    would send a diagnosis after the wrong file. It fails closed either way, so
+    nothing was ever wrongly explained; it was a misdirection, not a verdict bug.
+    """
     art = SimpleNamespace(
         prong=2,
         develop_root=Path("/nonexistent/develop/workflow"),
@@ -984,7 +998,32 @@ def test_hf24_without_the_common_cluster_set_is_an_error_not_a_guess():
     )
     recon = reconstructions.hf24_nrel_caps_drop(art, {"p_nom_max_by_zone_onwind": pd.DataFrame()})
     assert recon.error
+    assert "art.profiles is empty" in recon.error
     assert recon.lookup("p_nom_max_by_zone_onwind", "pA") is None
+
+
+def test_hf24_names_which_of_the_three_reasons_it_could_not_run(monkeypatch):
+    """A profiles entry that carries no bus index is NOT "no metric frames"."""
+    frame = metrics.frame(pd.Series({"pA": 1.0}), pd.Series({"pA": 2.0}), name="zone")
+    art = SimpleNamespace(
+        prong=2,
+        develop_root=Path("/nonexistent/develop/workflow"),
+        master_root=Path("/nonexistent/master/workflow"),
+        profiles={"onwind": SimpleNamespace(master=None)},
+        zone_develop=ZONE_BY_CLUSTER,
+    )
+    monkeypatch.setattr("tests.equivalence.compare.load_busmap", lambda root, *a, **k: BUSMAP)
+    recon = reconstructions.hf24_nrel_caps_drop(art, {"p_nom_max_by_zone_onwind": frame})
+    assert recon.error, "a missing common cluster set must not silently produce rows"
+    assert "no common cluster set" in recon.error
+    assert "onwind" in recon.error
+    assert "metric frames" not in recon.error
+
+    # And the genuine no-frames case still says so, naming the techs.
+    art.profiles = {"onwind": SimpleNamespace(master=SimpleNamespace(indexes={"bus": ["cA"]}))}
+    recon = reconstructions.hf24_nrel_caps_drop(art, {})
+    assert "no p_nom_max_by_zone_* metric frames" in recon.error
+    assert "onwind" in recon.error
 
 
 def test_both_providers_are_registered():
@@ -1088,3 +1127,178 @@ def test_the_summary_columns_are_provider_neutral():
     # predicts develop 375 MW, predicts master 150 MW, dropped 225 MW.
     assert "375 MW" in md and "150 MW" in md and "225 MW" in md
     assert "0.000 MW" in md, "an exact reconstruction must not round to '0 MW'"
+
+
+# --- HF-24 gate G3: the MECHANISM gate -------------------------------------
+#
+# G1 and G2 cannot fail for the reason the waiver claims. Master's
+# profile_{tech}.nc p_nom_max is the caps file bit for bit on every substation
+# it keeps, so `covered_mw` and master's column are the same numbers summed over
+# the same set: G1 can only fail if master rescaled the caps. What G1+G2
+# establish is "delta == the caps at the substations master's profile does not
+# carry" -- a faithful decomposition, but not a test of WHY they are absent.
+# Without G3, a substation dropped by min_p_nom_max or by a low CF would be
+# signed off as HF-24 with residual exactly 0.
+
+
+def test_dropped_is_split_by_whether_the_mechanism_explains_it():
+    """`dropped_mw` = `dropped_mw_zero_avail` + `dropped_mw_other`, always."""
+    out = reconstructions.reconstruct_caps_drop(
+        CAPS,
+        BUSMAP,
+        {"1.0", "2.0"},
+        ZONE_BY_CLUSTER,
+        COMMON,
+        ZERO_AVAIL,
+    )
+    assert out.loc["pB", "dropped_mw"] == pytest.approx(225.0)
+    assert out.loc["pB", "dropped_mw_zero_avail"] == pytest.approx(225.0)
+    assert out.loc["pB", "dropped_mw_other"] == pytest.approx(0.0)
+    assert int(out.loc["pB", "n_subs_zero_avail"]) == 2
+    total = out["dropped_mw_zero_avail"] + out["dropped_mw_other"]
+    assert total.to_numpy() == pytest.approx(out["dropped_mw"].to_numpy())
+
+
+def test_a_substation_dropped_with_land_available_is_not_the_mechanism():
+    """The blank-cheque case: master dropped s3, but s3 has land.
+
+    Something other than zero availability removed it -- `min_p_nom_max`, or a
+    real low CF under a non-zero `min_p_max_pu`. The decomposition still
+    balances and the residual is still 0, so only G3 can refuse it.
+    """
+    with_land = ZERO_AVAIL.copy()
+    with_land["3"] = 0.4
+    out = reconstructions.reconstruct_caps_drop(
+        CAPS,
+        BUSMAP,
+        {"1.0", "2.0"},
+        ZONE_BY_CLUSTER,
+        COMMON,
+        with_land,
+    )
+    assert out.loc["pB", "dropped_mw"] == pytest.approx(225.0)
+    assert out.loc["pB", "dropped_mw_zero_avail"] == pytest.approx(25.0)  # s4 only
+    assert out.loc["pB", "dropped_mw_other"] == pytest.approx(200.0)  # s3's caps
+
+    rows = _caps_rows({"pB": (0.0, 225.0)}, availability=with_land)
+    row = rows[("p_nom_max_by_zone_onwind", "pB")]
+    assert row.residual_mw == pytest.approx(0.0), "the decomposition still balances"
+    assert row.master_recon_err == pytest.approx(0.0)
+    assert row.develop_recon_err == pytest.approx(0.0)
+    assert not row.ok, "only the mechanism gate stands between this and 'explained'"
+    assert "mechanism gate" in row.note
+    assert "200.0 MW" in row.note
+    assert row.unattributed_mw == pytest.approx(200.0)
+
+
+def test_the_mechanism_gate_refuses_the_row_through_the_table():
+    """End to end: G3 failing makes the row UNEXPLAINED, with the MW in the cell."""
+    with_land = ZERO_AVAIL.copy()
+    with_land["3"] = 0.4
+    zone_values = {"pB": (0.0, 225.0)}
+    out = _caps_table(zone_values, _caps_rows(zone_values, availability=with_land))
+    row = out[out["key"] == "pB"].iloc[0]
+    assert row["verdict"] == "UNEXPLAINED"
+    assert "mechanism gate" in row["hotfix"]
+
+
+def test_a_substation_with_no_intersecting_cell_is_the_mechanism_too():
+    """HF-24's other half: absent from the mapping means A_s = 0, not 'unknown'.
+
+    That is western's bus 37808 case; the USA leg has none. Reading a missing
+    substation as unexplained would fail every western HF-24 row.
+    """
+    partial = pd.Series({"1": 0.8, "2": 0.5})  # s3, s4 have no mapping rows at all
+    out = reconstructions.reconstruct_caps_drop(
+        CAPS,
+        BUSMAP,
+        {"1.0", "2.0"},
+        ZONE_BY_CLUSTER,
+        COMMON,
+        partial,
+    )
+    assert out.loc["pB", "dropped_mw_other"] == pytest.approx(0.0)
+    assert out.loc["pB", "dropped_mw_zero_avail"] == pytest.approx(225.0)
+
+
+def test_hf26_rows_carry_no_mechanism_gate():
+    """A NaN mechanism never fires: HF-26's attach drop IS its own mechanism."""
+    rows = _rows(FIVE_PLANTS, PROFILED_S1_S2, {("pB", "onwind"): (0.0, 325.0)})
+    row = rows[("p_nom_existing_by_zone_carrier", "pB | onwind")]
+    assert np.isnan(row.mechanism_mw) and np.isnan(row.unattributed_mw)
+    assert row.ok, row.note
+
+
+def test_substation_availability_is_the_workflows_own_avail_sum(tmp_path):
+    """A_s = sum over the substation's cells of avail[NS, EW], NaN read as 0.
+
+    The same `avail_sum` `weighted_bus_aggregation` computes, which is the
+    quantity whose being zero makes master's CF NaN and drops the whole bus.
+    """
+    import xarray as xr
+
+    raster = np.array([[0.5, np.nan], [0.0, 0.25]], dtype=float)
+    path = tmp_path / "avail_onwind_reference.nc"
+    xr.Dataset({"avail": (("south_north", "west_east"), raster)}).to_netcdf(path)
+    mapping = pd.DataFrame(
+        {
+            "name": ["10.0", "10.0", "20.0", "30.0"],
+            "NS": [0, 0, 1, 1],
+            "EW": [0, 1, 0, 1],
+        },
+    )
+    out = reconstructions.substation_availability(path, mapping)
+    assert out["10"] == pytest.approx(0.5), "NaN counts as 0, not as a drop"
+    assert out["20"] == pytest.approx(0.0)
+    assert out["30"] == pytest.approx(0.25)
+    assert "40" not in out.index, "a substation with no cells is absent, i.e. A_s = 0"
+
+
+def test_master_cell_to_bus_refuses_an_ambiguous_cache(tmp_path):
+    """The file name carries a bus-set hash; two of them is a question, not a guess."""
+    directory = tmp_path / f"resources/equivalence/{reconstructions.INTERCONNECT}/nrel_mapping_cache"
+    directory.mkdir(parents=True)
+    with pytest.raises(FileNotFoundError, match="cell_to_bus"):
+        reconstructions.master_cell_to_bus(tmp_path, reconstructions.INTERCONNECT)
+    frame = pd.DataFrame({"name": ["1.0"], "NS": [0], "EW": [0]})
+    frame.to_parquet(directory / "cell_to_bus_aaaa.parquet")
+    got = reconstructions.master_cell_to_bus(tmp_path, reconstructions.INTERCONNECT)
+    assert list(got["name"]) == ["1.0"]
+    frame.to_parquet(directory / "cell_to_bus_bbbb.parquet")
+    with pytest.raises(RuntimeError, match="ambiguous"):
+        reconstructions.master_cell_to_bus(tmp_path, reconstructions.INTERCONNECT)
+
+
+# --- the artifact name comes from the LAYERED config ------------------------
+
+
+def test_exclusion_config_merges_the_layers_the_snakefile_loads():
+    """The rule reads the layered config; the harness read only the scenario file.
+
+    Both agree today, so this pins the merge rather than a change in value: if a
+    base layer ever set `apply_cec_basescreen: true`, resolving from the
+    scenario file alone would open the still-existing `_reference.nc` and
+    reconstruct a quantity the run never built -- a wrong number with no symptom.
+    """
+    effective = reconstructions.exclusion_config()
+    assert set(effective) <= set(reconstructions.EXCLUSION_KEYS)
+    assert effective.get("renewable_land_access") == "reference"
+
+    # The scenario config wins over the layers under it.
+    assert reconstructions.exclusion_config({"renewable_land_access": "open"})["renewable_land_access"] == "open"
+    # And a base-layer flag is honoured when the scenario says nothing.
+    merged = reconstructions.exclusion_config({})
+    assert merged.get("renewable_land_access") == "reference"
+    assert reconstructions.BASE_CONFIG_LAYERS[-1] == "config.default.yaml", "the scenario base loads last"
+
+
+def test_avail_and_caps_paths_share_one_suffix_rule(tmp_path):
+    """One helper, two kinds -- the suffix logic cannot drift between them."""
+    cfg = {"renewable_land_access": "reference", "apply_cec_basescreen": True}
+    caps = reconstructions.nrel_caps_path(tmp_path, "onwind", cfg)
+    avail = reconstructions.nrel_avail_path(tmp_path, "onwind", cfg)
+    assert caps.name == "caps_onwind_reference_cec.nc"
+    assert avail.name == "avail_onwind_reference_cec.nc"
+    assert caps.parent == avail.parent
+    with pytest.raises(RuntimeError, match="renewable_land_access"):
+        reconstructions.nrel_avail_path(tmp_path, "onwind", {})

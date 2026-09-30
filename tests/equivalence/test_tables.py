@@ -1139,13 +1139,34 @@ def test_the_shipped_hf24_cell_waivers_are_untouched():
     ``system_potential_mw``, ``system_available_mw`` and ``cluster_set`` are
     ``compare.py`` findings; the reconstruction has nothing to say about them and
     must not have taken them with it.
+
+    "Untouched" means their BOUNDS too, not merely that three entries still
+    exist: stripping every bound off all three left this test passing, and an
+    unbounded cell waiver is the blank cheque `test_every_prong2_cell_waiver_is_bounded`
+    exists to prevent.
     """
     cells = [w for w in _real_waivers() if w.get("hotfix") == "HF-24" and not w.get("metric")]
-    assert {w.get("component") for w in cells} == {
-        "system_potential_mw",
-        "system_available_mw",
-        "cluster_set",
-    }
+    by_component = {w.get("component"): w for w in cells}
+    assert set(by_component) == {"system_potential_mw", "system_available_mw", "cluster_set"}
+
+    for component, required in compare_required_bounds().items():
+        waiver = by_component[component]
+        missing = [b for b in required if b not in waiver]
+        assert not missing, f"{component} lost bounds {missing}: {waiver}"
+    assert by_component["system_potential_mw"]["expect_sign"] == "+"
+    assert float(by_component["system_potential_mw"]["max_abs_pct"]) > 0
+    assert by_component["system_available_mw"]["expect_sign"] == "+"
+    assert float(by_component["system_available_mw"]["max_total_pct"]) > 0
+    assert float(by_component["system_available_mw"]["max_mean_rel_pct"]) > 0
+    assert by_component["cluster_set"]["expect_side"] in compare.CLUSTER_SIDES
+    assert float(by_component["cluster_set"]["max_one_sided_mw"]) > 0
+
+
+def compare_required_bounds() -> dict[str, tuple[str, ...]]:
+    """The bounds each bounded component MUST carry, from the ledger test's map."""
+    from tests.equivalence.test_waiver_ledger import REQUIRED_CELL_BOUNDS
+
+    return dict(REQUIRED_CELL_BOUNDS)
 
 
 def test_the_shipped_hf24_waiver_refuses_a_sign_flip():

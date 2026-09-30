@@ -78,6 +78,8 @@ RECON_COLUMNS: tuple[str, ...] = (
     "develop_recon_err",
     "residual_mw",
     "gate_tol_mw",
+    "mechanism_mw",
+    "unattributed_mw",
     "ok",
     "note",
 )
@@ -108,6 +110,14 @@ class ReconRow:
     gate_tol_mw: float  # the MW the gates and the residual are judged against
     ok: bool
     note: str  # "" when ok, else why not
+    #: Gate G3, the MECHANISM gate, for providers that can name WHY the MW moved.
+    #: ``mechanism_mw`` is the part of ``dropped_mw`` the provider attributes to
+    #: its own named mechanism; ``unattributed_mw`` is the rest, and a row where
+    #: it exceeds the tolerance fails. NaN on a provider that does not offer one
+    #: (HF-26: the attach drop IS the mechanism, there is nothing else it could
+    #: be), and a NaN gate never fires.
+    mechanism_mw: float = float("nan")
+    unattributed_mw: float = float("nan")
 
 
 @dataclass
@@ -339,6 +349,7 @@ def _make_row(
     develop_mw: float,
     tol: tables.Tolerance,
     key: str | None = None,
+    mechanism_mw: float | None = None,
 ) -> ReconRow:
     """One :class:`ReconRow`, gates evaluated.
 
@@ -360,6 +371,8 @@ def _make_row(
     g2 = fleet_mw - develop_mw
     residual = (develop_mw - master_mw) - dropped_mw
     gate_tol = gate_tolerance(master_mw, develop_mw, tol)
+    mechanism = float("nan") if mechanism_mw is None else _f(mechanism_mw)
+    unattributed = dropped_mw - mechanism if np.isfinite(mechanism) else float("nan")
     notes: list[str] = []
     if not np.isfinite(master_mw) or not np.isfinite(develop_mw):
         notes.append(f"table row is not finite (master {master_mw}, develop {develop_mw})")
@@ -377,6 +390,11 @@ def _make_row(
                 f"develop gate: reconstruction predicts {fleet_mw:,.1f} MW for develop, table says "
                 f"{develop_mw:,.1f} MW (off by {g2:,.1f} MW, tolerance {gate_tol:,.1f} MW)",
             )
+        if np.isfinite(unattributed) and abs(unattributed) > gate_tol:
+            notes.append(
+                f"mechanism gate: {unattributed:,.1f} MW of the {dropped_mw:,.1f} MW dropped is not "
+                f"attributable to the named mechanism (tolerance {gate_tol:,.1f} MW)",
+            )
     return ReconRow(
         metric=metric,
         key=row_key(zone, carrier) if key is None else str(key),
@@ -393,6 +411,8 @@ def _make_row(
         gate_tol_mw=gate_tol,
         ok=not notes,
         note="; ".join(notes),
+        mechanism_mw=mechanism,
+        unattributed_mw=unattributed,
     )
 
 
@@ -861,33 +881,94 @@ def hf26_existing_renewable_drop(art, frames) -> Reconstruction:
 # ---- HF-24: the NREL caps master drops with a zero-availability substation ---
 
 
-def nrel_caps_path(develop_root: Path, tech: str, config: Mapping) -> Path:
-    """The NREL caps artifact for ``tech``, named exactly as the workflow names it.
+#: The config layers ``workflow/Snakefile`` loads UNDER a scenario config, in
+#: load order. The three keys the NREL artifact name depends on are top-level
+#: scalars, so the effective value of each is simply the last layer that sets it.
+BASE_CONFIG_LAYERS: tuple[str, ...] = (
+    "config.slurm.yaml",
+    "config.common.yaml",
+    "config.plotting.yaml",
+    "config.api.yaml",
+    "config.sector.yaml",
+    "config.default.yaml",
+)
 
-    Mirrors ``build_electricity.smk::nrel_exclusion_artifact`` for
-    ``kind='caps'``::
+#: The top-level keys :func:`nrel_exclusion_path` resolves the file name from.
+EXCLUSION_KEYS: tuple[str, ...] = ("renewable_land_access", "apply_cec_basescreen", "apply_boem_osw")
 
-        data/nrel_exclusion/derived/caps_{tech}_{access}{_cec}{_boem}.nc
+
+def exclusion_config(config: Mapping | None = None) -> dict:
+    """The EFFECTIVE values of the three NREL-exclusion keys, layers included.
+
+    The Snakemake rule resolves its artifact name from the whole layered config
+    — ``repo_data/config/config.{slurm,common,plotting,api,sector,default}.yaml``
+    under the scenario file — while ``_harness_config`` reads only
+    ``config.equivalence*.yaml``. Today the two agree: nothing sets either flag
+    and both harness configs pin ``renewable_land_access: reference``. But if a
+    base layer ever set ``apply_cec_basescreen: true``, this module would resolve
+    to the still-existing ``_reference.nc``, open it without error, and
+    reconstruct a quantity the run never built — a wrong number with no symptom.
+
+    Only these three keys are merged, and only at the top level, which is exactly
+    what they are. The scenario/electricity reads elsewhere in this module keep
+    using the harness config alone, so nothing else changes behaviour.
+    """
+    import yaml
+
+    base = REPO / "workflow" / "repo_data" / "config"
+    merged: dict = {}
+    for layer in BASE_CONFIG_LAYERS:
+        path = base / layer
+        if not path.exists():
+            continue
+        loaded = yaml.safe_load(path.read_text()) or {}
+        merged.update({k: loaded[k] for k in EXCLUSION_KEYS if k in loaded})
+    scenario = _harness_config() if config is None else config
+    merged.update({k: scenario[k] for k in EXCLUSION_KEYS if k in scenario})
+    return merged
+
+
+def nrel_exclusion_path(develop_root: Path, kind: str, tech: str, config: Mapping) -> Path:
+    """The NREL exclusion artifact of ``kind``, named exactly as the workflow names it.
+
+    Mirrors ``build_electricity.smk::nrel_exclusion_artifact``::
+
+        data/nrel_exclusion/derived/{kind}_{tech}_{access}{_cec}{_boem}.nc
 
     with ``access = config['renewable_land_access']``, ``_cec`` when
     ``apply_cec_basescreen`` and the tech is onwind or solar, ``_boem`` when
-    ``apply_boem_osw`` and the tech is an offwind.
+    ``apply_boem_osw`` and the tech is an offwind. ``kind`` is ``caps`` or
+    ``avail``; the suffix rules are identical for both, which is why they live
+    here once rather than in each caller.
 
     An unset ``renewable_land_access`` RAISES. That is the atlite path, which
-    has no caps file at all, so the mechanism does not exist there and the
-    reconstruction must not hold — silently picking a default file would explain
-    rows with numbers from a run nobody made.
+    has no exclusion artifacts at all, so the mechanism does not exist there and
+    the reconstruction must not hold — silently picking a default file would
+    explain rows with numbers from a run nobody made.
+
+    ``config`` should come from :func:`exclusion_config`, not straight from the
+    scenario file.
     """
     access = (config or {}).get("renewable_land_access")
     if not access:
         raise RuntimeError(
-            "renewable_land_access is unset: this run has no NREL caps artifact "
+            "renewable_land_access is unset: this run has no NREL exclusion artifacts "
             "(the atlite path), so the HF-24 mechanism does not apply",
         )
     tech = str(tech)
     cec = "_cec" if (config.get("apply_cec_basescreen") and tech in ("onwind", "solar")) else ""
     boem = "_boem" if (config.get("apply_boem_osw") and tech.startswith("offwind")) else ""
-    return Path(develop_root) / "data" / "nrel_exclusion" / "derived" / f"caps_{tech}_{access}{cec}{boem}.nc"
+    return Path(develop_root) / "data" / "nrel_exclusion" / "derived" / f"{kind}_{tech}_{access}{cec}{boem}.nc"
+
+
+def nrel_caps_path(develop_root: Path, tech: str, config: Mapping) -> Path:
+    """The NREL supply-curve caps artifact. See :func:`nrel_exclusion_path`."""
+    return nrel_exclusion_path(develop_root, "caps", tech, config)
+
+
+def nrel_avail_path(develop_root: Path, tech: str, config: Mapping) -> Path:
+    """The NREL land-availability raster. See :func:`nrel_exclusion_path`."""
+    return nrel_exclusion_path(develop_root, "avail", tech, config)
 
 
 def load_nrel_caps(path: Path) -> pd.Series:
@@ -902,13 +983,71 @@ def load_nrel_caps(path: Path) -> pd.Series:
     return caps.astype(float)
 
 
+def master_cell_to_bus(master_root: Path, interconnect: str) -> pd.DataFrame:
+    """Master's GODEEEP cell -> substation mapping cache (``name``, ``NS``, ``EW``).
+
+    One parquet per interconnect, named with a content hash by
+    ``build_renewable_profiles``. MASTER's copy, not develop's: the question the
+    availability gate asks is which SUBSTATIONS master dropped, and develop's
+    cache is keyed by ``s{simpl}`` cluster.
+
+    More than one file in the directory is an error rather than a guess — the
+    hash names a bus set, and picking the wrong one silently answers the
+    question about a different footprint.
+    """
+    directory = Path(master_root) / f"{EQ}/{interconnect}/nrel_mapping_cache"
+    hits = sorted(directory.glob("cell_to_bus_*.parquet"))
+    if not hits:
+        raise FileNotFoundError(f"no cell_to_bus_*.parquet under {directory}")
+    if len(hits) > 1:
+        raise RuntimeError(f"ambiguous cell->bus cache in {directory}: {[p.name for p in hits]}")
+    frame = pd.read_parquet(hits[0])
+    missing = {"name", "NS", "EW"} - set(frame.columns)
+    if missing:
+        raise KeyError(f"{hits[0]} is missing columns {sorted(missing)}")
+    return frame
+
+
+def substation_availability(avail_path: Path, mapping: pd.DataFrame) -> pd.Series:
+    """``substation id -> A_s``, its summed GODEEEP land availability.
+
+    This is ``avail_sum`` as
+    ``aggregate_godeeep_weighted.weighted_bus_aggregation`` computes it: for each
+    (cell, bus) row of the mapping, the raster value at that cell, with NaN read
+    as 0, summed per bus. It is the quantity whose being zero makes master's CF
+    ``NaN`` and therefore makes the whole bus — and its caps ``p_nom_max`` —
+    leave ``profile_{tech}.nc``.
+
+    A substation with NO row in the mapping is absent from the result. Callers
+    read a missing substation as ``A_s = 0``, which is correct and is the "no
+    intersecting CF cell" half of HF-24's description (0 substations on the USA
+    leg; it was western's bus 37808).
+    """
+    import xarray as xr
+
+    with xr.open_dataset(avail_path) as ds:
+        if "avail" not in ds:
+            raise KeyError(f"{avail_path} has no avail variable")
+        raster = np.nan_to_num(ds["avail"].values.astype(float), nan=0.0)
+    ns = mapping["NS"].to_numpy(dtype=int)
+    ew = mapping["EW"].to_numpy(dtype=int)
+    weights = raster[ns, ew]
+    names = [canonical_sub_id(n) for n in mapping["name"]]
+    total = pd.Series(weights).groupby(pd.Series(names), dropna=True).sum()
+    total.index = pd.Index([str(i) for i in total.index])
+    return total
+
+
 #: Columns of :func:`reconstruct_caps_drop`'s output.
 CAPS_DROP_COLUMNS: tuple[str, ...] = (
     "caps_mw",
     "covered_mw",
     "dropped_mw",
+    "dropped_mw_zero_avail",
+    "dropped_mw_other",
     "n_subs",
     "n_subs_dropped",
+    "n_subs_zero_avail",
 )
 
 
@@ -918,8 +1057,9 @@ def reconstruct_caps_drop(
     master_profiled_subs: set[str],
     zone_by_cluster: pd.Series,
     common_clusters: Sequence[str],
+    availability: pd.Series,
 ) -> pd.DataFrame:
-    """Index zone -> caps_mw, covered_mw, dropped_mw, n_subs, n_subs_dropped.
+    """Index zone -> the caps master keeps, the caps it drops, and WHY it drops them.
 
     ``caps_mw``    caps of every substation whose busmap cluster is in
                    ``common_clusters``           (predicts DEVELOP)
@@ -927,10 +1067,30 @@ def reconstruct_caps_drop(
                                                  (predicts MASTER)
     ``dropped_mw`` ``caps_mw - covered_mw``      (predicts the DELTA)
 
-    Substations absent from ``busmap`` are excluded from BOTH terms, not just
-    from one: the caps file is rolled up against the national substation
+    and then the part of ``dropped_mw`` the NAMED MECHANISM accounts for:
+
+    ``dropped_mw_zero_avail``  dropped at substations whose summed GODEEEP land
+                               availability ``A_s`` is zero — HF-24's mechanism
+    ``dropped_mw_other``       dropped for some OTHER reason
+
+    That third term is what stops this from being a blank cheque. ``caps_mw``,
+    ``covered_mw`` and ``dropped_mw`` alone decompose the delta faithfully, but
+    they do not test WHY master lacks those substations: master's profile
+    ``p_nom_max`` is the caps file bit for bit on every substation it keeps, so
+    the master gate can only fail if master rescaled the caps, never because the
+    mechanism is wrong. A substation dropped by ``min_p_nom_max``, or by a
+    genuinely low CF under a non-zero ``min_p_max_pu``, would land in
+    ``dropped_mw`` with residual exactly 0 and be signed off as HF-24. It now
+    lands in ``dropped_mw_other`` and fails the row instead.
+
+    ``availability`` is :func:`substation_availability`. A substation absent from
+    it has ``A_s = 0``: it has no intersecting CF cell at all, which is the other
+    half of HF-24's description and is equally the named mechanism.
+
+    Substations absent from ``busmap`` are excluded from every term, not just
+    one: the caps file is rolled up against the national substation
     tessellation, so in a footprint-scoped run most of its entries are outside
-    the model and belong in neither column. (On the USA leg that set is empty.)
+    the model and belong in no column. (On the USA leg that set is empty.)
 
     Restricting to ``common_clusters`` mirrors ``metrics.common_cluster_subset``,
     which the metric itself applies before either side is summed. A develop-only
@@ -971,11 +1131,27 @@ def reconstruct_caps_drop(
     df["covered"] = df["sub_id"].isin(covered)
     df["covered_mw"] = df["caps_mw"].where(df["covered"], 0.0)
 
+    # A_s for each substation; absent from `availability` means no intersecting
+    # CF cell, i.e. A_s = 0, which is the mechanism too.
+    avail = pd.Series(availability, dtype=float) if availability is not None else pd.Series(dtype=float)
+    a_s = df["sub_id"].map(avail).fillna(0.0)
+    df["zero_avail"] = (~df["covered"]) & (a_s <= 0.0)
+    df["dropped_mw_zero_avail"] = df["caps_mw"].where(df["zero_avail"], 0.0)
+    df["dropped_mw_all"] = df["caps_mw"].where(~df["covered"], 0.0)
+
     grouped = df.groupby("zone", sort=True)
-    out = grouped.agg(caps_mw=("caps_mw", "sum"), covered_mw=("covered_mw", "sum"), n_subs=("sub_id", "nunique"))
+    out = grouped.agg(
+        caps_mw=("caps_mw", "sum"),
+        covered_mw=("covered_mw", "sum"),
+        dropped_mw_zero_avail=("dropped_mw_zero_avail", "sum"),
+        n_subs=("sub_id", "nunique"),
+    )
     dropped_subs = df[~df["covered"]].groupby("zone", sort=True)["sub_id"].nunique()
     out["n_subs_dropped"] = dropped_subs.reindex(out.index).fillna(0).astype(int)
+    zero_subs = df[df["zero_avail"]].groupby("zone", sort=True)["sub_id"].nunique()
+    out["n_subs_zero_avail"] = zero_subs.reindex(out.index).fillna(0).astype(int)
     out["dropped_mw"] = out["caps_mw"] - out["covered_mw"]
+    out["dropped_mw_other"] = out["dropped_mw"] - out["dropped_mw_zero_avail"]
     out.index.name = "zone"
     return out[list(CAPS_DROP_COLUMNS)]
 
@@ -1024,9 +1200,27 @@ def hf24_nrel_caps_drop(art, frames) -> Reconstruction:
     defined.
 
     Same shape as HF-26 — master drops, develop keeps, delta >= 0 — but the
-    inputs are three small files and the residual is exactly 0. ``fleet_mw``
-    here is the caps of every in-footprint substation of the common clusters
-    (gate G2, develop); ``profiled_mw`` is the part master kept (gate G1).
+    inputs are small files and the residual is exactly 0. ``fleet_mw`` here is
+    the caps of every in-footprint substation of the common clusters (gate G2,
+    develop); ``profiled_mw`` is the part master kept (gate G1).
+
+    **Three gates, not two.** G1 and G2 cannot fail for the reason the waiver
+    claims: master's ``profile_{tech}.nc`` ``p_nom_max`` is the caps file bit for
+    bit on every substation it keeps, so ``profiled_mw`` and master's column are
+    the same numbers summed over the same set, and G1 can only fail if master
+    rescaled the caps. Together they establish "delta == the caps at the
+    substations master's profile does not carry" — a faithful decomposition, but
+    NOT a test of why those substations are absent. A substation dropped by
+    ``min_p_nom_max``, or by a genuinely low CF under a non-zero
+    ``min_p_max_pu``, would satisfy both gates with residual exactly 0 and be
+    signed off as HF-24, which is the blank cheque this whole design exists to
+    prevent, arriving by a subtler route than a loose percentage.
+
+    So gate G3 asserts the MECHANISM: every substation counted in ``dropped_mw``
+    must have zero summed GODEEEP land availability in
+    ``avail_{tech}_{access}.nc`` (or no intersecting cell at all). The part that
+    does not is ``unattributed_mw``, and a row carrying more of it than its own
+    tolerance fails with the MW named.
     """
     name = "hf24_nrel_caps_drop"
     try:
@@ -1036,6 +1230,7 @@ def hf24_nrel_caps_drop(art, frames) -> Reconstruction:
         develop_root = Path(art.develop_root)
         master_root = Path(art.master_root)
         prong = int(getattr(art, "prong", 2))
+        interconnect = str(INTERCONNECT)
         cfg = _harness_config()
 
         busmap = load_busmap(develop_root)
@@ -1058,20 +1253,31 @@ def hf24_nrel_caps_drop(art, frames) -> Reconstruction:
                 frame=empty_recon_frame(),
                 error="art.profiles is empty; the common cluster set is only built by collect_metrics at prong 2",
             )
+        exclusion = exclusion_config(cfg)
+        mapping = master_cell_to_bus(master_root, interconnect)
+        # Each of the three "could not run" reasons says WHICH one it was. They
+        # used to share one message, so forcing the common cluster set to None
+        # reported "no p_nom_max_by_zone_* metric frames", which is false and
+        # would send a diagnosis after the wrong file.
+        no_frames: list[str] = []
+        no_common: list[str] = []
         for tech in techs:
             metric = f"p_nom_max_by_zone_{tech}"
             table = frames.get(metric)
             if table is None or len(table) == 0:
+                no_frames.append(tech)
                 continue
             common = _common_clusters(art, tech)
             if common is None:
+                no_common.append(tech)
                 continue
             recon = reconstruct_caps_drop(
-                load_nrel_caps(nrel_caps_path(develop_root, tech, cfg)),
+                load_nrel_caps(nrel_caps_path(develop_root, tech, exclusion)),
                 busmap,
                 profiled.get(tech, set()),
                 zone_by_cluster,
                 common,
+                substation_availability(nrel_avail_path(develop_root, tech, exclusion), mapping),
             )
             tol = tables.tolerance_for(metric)
             values = _carrier_values(table)  # the frame is keyed by zone alone
@@ -1079,13 +1285,33 @@ def hf24_nrel_caps_drop(art, frames) -> Reconstruction:
                 caps = _f(recon["caps_mw"].get(zone, 0.0))
                 covered = _f(recon["covered_mw"].get(zone, 0.0))
                 master, develop = values.get(zone, (0.0, 0.0))
-                row = _make_row(metric, zone, tech, caps, covered, master, develop, tol, key=zone)
+                row = _make_row(
+                    metric,
+                    zone,
+                    tech,
+                    caps,
+                    covered,
+                    master,
+                    develop,
+                    tol,
+                    key=zone,
+                    mechanism_mw=_f(recon["dropped_mw_zero_avail"].get(zone, 0.0)),
+                )
                 rows[(metric, row.key)] = row
         if not rows:
+            if no_common:
+                return Reconstruction(
+                    name=name,
+                    frame=empty_recon_frame(),
+                    error=(
+                        f"no common cluster set for {sorted(no_common)}: art.profiles[tech].master carries no "
+                        "bus index, so the reconstruction and the table row would cover different populations"
+                    ),
+                )
             return Reconstruction(
                 name=name,
                 frame=empty_recon_frame(),
-                error="no p_nom_max_by_zone_* metric frames in this run",
+                error=f"no p_nom_max_by_zone_* metric frames in this run (techs without one: {sorted(no_frames)})",
             )
         return Reconstruction(name=name, frame=rows_frame(rows), rows=rows)
     except Exception as exc:  # deliberately broad: failing closed is the whole point

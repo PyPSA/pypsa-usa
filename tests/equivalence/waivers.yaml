@@ -307,6 +307,18 @@
 # part master kept (predicting master), and requires their difference to equal
 # develop - master within the row's own tolerance.
 #
+# THREE gates, because two are not enough here. Master's profile p_nom_max is
+# the caps file bit for bit on every substation it keeps, so the master gate can
+# only fail if master rescaled the caps, never because the mechanism is wrong.
+# The first two gates therefore establish "delta == the caps at the substations
+# master's profile does not carry" -- a faithful decomposition, but not a test of
+# WHY they are absent. A substation dropped by min_p_nom_max, or by a genuinely
+# low CF under a non-zero min_p_max_pu, would satisfy both with residual exactly
+# 0 and be signed off as HF-24. So the third gate reads
+# avail_{tech}_{access}.nc and requires every dropped substation to have zero
+# summed GODEEEP land availability (or no intersecting cell at all); the MW that
+# does not is reported as `unattributed_mw` and fails the row.
+#
 # This REPLACES four hand-measured `max_abs_pct: 5` rows scoped
 # `interconnect: western, prong: 2` (p_nom_max_by_zone_onwind p8/p9/p10 and
 # p_nom_max_by_zone_solar p8). They are deleted rather than kept beside the
@@ -329,7 +341,7 @@
   ledger: DL-18
   hotfix: HF-24
   expect_sign: '+'
-  reason: master drops the NREL caps p_nom_max of substations with zero GODEEEP land availability; the dropped MW is reconstructed per zone and must equal develop - master
+  reason: master drops the NREL caps p_nom_max of substations with zero GODEEEP land availability (or no intersecting CF cell); the dropped MW is reconstructed per zone, every dropped substation is checked against the availability raster, and the total must equal develop - master
 - metric: p_nom_max_by_zone_solar
   reconstruction: hf24_nrel_caps_drop
   ledger: DL-18

@@ -846,18 +846,63 @@ def test_hf26_map_residual_ratio_makes_a_small_failure_visible(tmp_path):
     """
     zones = _point_zones(names=("p129", "p10"))
     rows = {
-        ("p129", "solar"): (100.0, 100.0, 100.0, 102.0),  # residual +2, gate 1.0 (atol)
+        # master 10,000 -> gate 50 MW; a 60 MW residual is 1.2 gates. Deliberately
+        # NOT a row whose gate is the 1 MW atol floor: there ratio == residual, so
+        # the test would pass with `_residual_ratio` replaced by the raw residual
+        # and would be pinning nothing.
+        ("p129", "solar"): (10_000.0, 10_000.0, 10_000.0, 10_060.0),
         ("p10", "solar"): (21000.0, 17700.0, 17700.0, 21000.0),  # exact, gate 88.5
     }
     _png, csv = plots.reconstruction_map_figure(zones, _recon(rows), "hf26_map_ratio", tmp_path)
     frame = pd.read_csv(csv).set_index(["zone", "carrier"])
-    assert frame.loc[("p129", "solar"), "gate_tol_mw"] == pytest.approx(1.0)
-    assert frame.loc[("p129", "solar"), "residual_over_gate"] == pytest.approx(2.0)
+    assert frame.loc[("p129", "solar"), "gate_tol_mw"] == pytest.approx(50.0)
+    assert frame.loc[("p129", "solar"), "residual_mw"] == pytest.approx(60.0)
+    assert frame.loc[("p129", "solar"), "residual_over_gate"] == pytest.approx(1.2)
     assert not bool(frame.loc[("p129", "solar"), "ok"])
     # The big zone is exact, so it sits at the neutral middle of the same scale.
     assert frame.loc[("p10", "solar"), "residual_over_gate"] == pytest.approx(0.0)
     assert bool(frame.loc[("p10", "solar"), "ok"])
-    assert abs(2.0) < plots.RECON_RESIDUAL_RATIO_MAX, "the failure must be inside the drawn range"
+    assert 1.2 < plots.RECON_RESIDUAL_RATIO_MAX, "the failure must be inside the drawn range"
+
+
+def test_zone_panel_outlines_the_failing_zones(tmp_path):
+    """A gate failure is hatched, not left to colour alone.
+
+    On a continuous diverging scale a reader cannot tell 1.0 gates from 1.2 by
+    eye, so pass/fail has to be carried by a second channel. Dropping the
+    outline passed every other map test.
+    """
+    zones = _point_zones(names=("p1", "p2", "p3"))
+    values = pd.Series({"p1": 1.2, "p2": -0.1, "p3": 0.0})
+    fig, (plain, marked, none_failed) = plt.subplots(1, 3)
+    plots._zone_panel(fig, plain, zones, values, "RdBu_r", -3, 3, "plain", colorbar=False)
+    plots._zone_panel(
+        fig,
+        marked,
+        zones,
+        values,
+        "RdBu_r",
+        -3,
+        3,
+        "marked",
+        colorbar=False,
+        outline=pd.Series({"p1": True, "p2": False, "p3": False}),
+    )
+    plots._zone_panel(
+        fig,
+        none_failed,
+        zones,
+        values,
+        "RdBu_r",
+        -3,
+        3,
+        "none failed",
+        colorbar=False,
+        outline=pd.Series({"p1": False, "p2": False, "p3": False}),
+    )
+    assert len(marked.collections) == len(plain.collections) + 1, "the failing zone gets its own artist"
+    assert len(none_failed.collections) == len(plain.collections), "no failures, no extra artist"
+    plt.close(fig)
 
 
 def test_hf26_map_figure_is_skipped_without_zones(tmp_path):
@@ -914,7 +959,7 @@ def test_reconstruction_figure_labels_come_from_the_provider(tmp_path):
         assert recon_name in plots.RECON_LABELS, recon_name
 
 
-def test_reconstruction_figure_has_a_dedicated_dropped_panel(tmp_path):
+def test_reconstruction_figure_has_a_dedicated_dropped_panel(tmp_path, monkeypatch):
     """Three panels per carrier: totals, dropped, residual.
 
     The stacked totals panel is only legible when the drop is a large fraction
@@ -926,10 +971,30 @@ def test_reconstruction_figure_has_a_dedicated_dropped_panel(tmp_path):
         # A 0.14 %-scale drop, the HF-24 shape.
         ("pA", "onwind"): (1_000_000.0, 998_600.0, 998_600.0, 1_000_000.0),
         ("pB", "onwind"): (500_000.0, 499_900.0, 499_900.0, 500_000.0),
+        ("pA", "solar"): (900.0, 400.0, 400.0, 900.0),
     }
+    # save_figure closes the figure, so capture it on the way past: asserting the
+    # CSV alone would pass on a two-panel stub, which is the layout this test
+    # exists to rule out.
+    seen: dict = {}
+    real = plots.save_figure
+
+    def spy(fig, data, name, outdir):
+        seen["xlabels"] = [ax.get_xlabel() for ax in fig.axes]
+        seen["n_axes"] = len(fig.axes)
+        return real(fig, data, name, outdir)
+
+    monkeypatch.setattr(plots, "save_figure", spy)
     png, csv = plots.reconstruction_zone_figure(_recon(rows), "hf24_caps_drop_by_zone", tmp_path)
     assert png.exists() and csv.exists()
-    fig = plt.figure()
-    plt.close(fig)
+
+    assert seen["n_axes"] == 6, "two carriers x three panels (totals, dropped, residual)"
+    labels = seen["xlabels"]
+    assert labels.count("residual [MW]") == 2
+    # One panel per carrier carries the DROPPED quantity on its own axis...
+    assert sum("dropped by master" in lab for lab in labels) == 2
+    # ...and one carries the provider's totals quantity.
+    assert labels.count("existing capacity [MW]") == 2
+
     frame = pd.read_csv(csv)
-    assert frame["dropped_mw"].tolist() == [1400.0, 100.0]
+    assert frame[frame["carrier"] == "onwind"]["dropped_mw"].tolist() == [1400.0, 100.0]
