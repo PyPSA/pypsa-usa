@@ -1233,6 +1233,15 @@ def hf24_nrel_caps_drop(art, frames) -> Reconstruction:
         interconnect = str(INTERCONNECT)
         cfg = _harness_config()
 
+        # The in-memory precondition first: with no profiles there is nothing to
+        # reconstruct, and saying so beats a message about a file never needed.
+        techs = sorted(getattr(art, "profiles", None) or {})
+        if not techs:
+            return Reconstruction(
+                name=name,
+                frame=empty_recon_frame(),
+                error="art.profiles is empty; the common cluster set is only built by collect_metrics at prong 2",
+            )
         busmap = load_busmap(develop_root)
         if busmap is None or len(busmap) == 0:
             return Reconstruction(
@@ -1246,15 +1255,11 @@ def hf24_nrel_caps_drop(art, frames) -> Reconstruction:
         profiled = master_profiled_subs(master_root, prong)
 
         rows: dict[tuple[str, str], ReconRow] = {}
-        techs = sorted(getattr(art, "profiles", None) or {})
-        if not techs:
-            return Reconstruction(
-                name=name,
-                frame=empty_recon_frame(),
-                error="art.profiles is empty; the common cluster set is only built by collect_metrics at prong 2",
-            )
         exclusion = exclusion_config(cfg)
-        mapping = master_cell_to_bus(master_root, interconnect)
+        # Master's cell->bus cache is read only once a tech has both a metric
+        # frame and a common cluster set, so a run missing either reports THAT
+        # reason rather than a FileNotFoundError about a file it never needed.
+        mapping: pd.DataFrame | None = None
         # Each of the three "could not run" reasons says WHICH one it was. They
         # used to share one message, so forcing the common cluster set to None
         # reported "no p_nom_max_by_zone_* metric frames", which is false and
@@ -1271,6 +1276,8 @@ def hf24_nrel_caps_drop(art, frames) -> Reconstruction:
             if common is None:
                 no_common.append(tech)
                 continue
+            if mapping is None:
+                mapping = master_cell_to_bus(master_root, interconnect)
             recon = reconstruct_caps_drop(
                 load_nrel_caps(nrel_caps_path(develop_root, tech, exclusion)),
                 busmap,
