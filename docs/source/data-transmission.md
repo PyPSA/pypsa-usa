@@ -10,9 +10,9 @@ PyPSA-USA offers a unique capability by integrating two options of transmission 
 
 We integrate networks at three spatial scales (County, Balance Area, and FERC 1000) derived from the North American Renewable Integration Study ([NARIS](https://www.nrel.gov/analysis/naris.html)) network. These zonal networks are derived from the non-public NARIS nodal network for the US electricity system, by the authors in [Brown et. al.](https://arxiv.org/abs/2308.03612) and [Sergi et. al.](https://research-hub.nrel.gov/en/publications/transmission-interface-limits-for-high-spatial-resolution-capacit). These networks are calculated to be N-1 contingency compliant zonal transfer capacity limits. We describe how these networks can be meshed together to create custom network topologies on the `Spatial Configuration` page.
 
-- **County ITLs**: For higher resolution models that focus on limited spatial scopes, we integrate the county level ITLs which contain 3143 zones across the United States.
-- **ReEDS Balancing Authorities**: The ReEDS balancing authority (BA) network has 137 zones across the United States boundaries and can be mapped to balancing authorities, NERC regions, and RTOs/ISOs. Smaller Balancing authorities are not individually represented in this network. For example, BANC is combined into the CAISO north region.
-- **FERC 1000 Planning Regions**: The FERC 1000 network splits up FERC 1000 transmission planning regions in to 18 sub-regions and nodes for the United States. These 18 regions are supersets of the ReEDS Balancing Authorities, and respect state borders to enable enforcement of regional policy constraints.
+- **County ITLs**: For higher resolution models that focus on limited spatial scopes, we integrate the county level ITLs which contain 3,108 zones across the United States.
+- **ReEDS Balancing Authorities**: The ReEDS balancing authority (BA) network has 134 zones across the United States boundaries (133 of which appear in the shipped BA interface table) and can be mapped to balancing authorities, NERC regions, and RTOs/ISOs. Smaller Balancing authorities are not individually represented in this network. For example, BANC is combined into the CAISO north region.
+- **FERC 1000 Planning Regions**: The FERC 1000 network splits up FERC 1000 transmission planning regions in to 17 sub-regions and nodes for the United States. These 17 regions are supersets of the ReEDS Balancing Authorities, and respect state borders to enable enforcement of regional policy constraints.
 
 
 ![ReEDS_topology](./_static/networks/ReEDS_Topology.png)
@@ -42,8 +42,9 @@ See the [Spatial Configuration](./config-spatial.md) page for information on how
 
 The path-by-path ratings above are complemented by **interface** limits: aggregate MW caps on
 the total simultaneous flow across a bundle of paths. PyPSA-USA ships the CPUC RESOLVE
-interface table at `config/policy_constraints/transmission_interface_limits.csv`, which rates
-the CAISO import/export capability against the rest of WECC:
+interface table at `workflow/repo_data/config/policy_constraints/transmission_interface_limits.csv`,
+which rates the CAISO import/export capability against the rest of WECC. Override it with
+`electricity: transmission_interface_limits`:
 
 | Interface | `region_1` (inside) | `region_2` (outside) | `flow_12` (MW) | `flow_21` (MW) |
 | --- | --- | --- | --- | --- |

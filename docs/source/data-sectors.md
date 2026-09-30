@@ -68,10 +68,10 @@ Capacity constraints limit how much energy can be delivered through demand respo
     &\ \hspace{1cm} t\in T \hspace{1cm} \text{Set of snapshots} \\
     &\ \hspace{1cm} n\in N \hspace{1cm} \text{Set of buses} \\
     &\ \hspace{1cm} d_{n,t} = \text{Load at time } t \text{ and bus } n \\
-    &\ \hspace{1cm} s_{n,t} = \text{Allowable shiftable load per unit of } d_{n,t} \\
+    &\ \hspace{1cm} s_{n,t} = \text{Allowable shiftable load as a percentage (0-100) of } d_{n,t} \\
     &\ \hspace{1cm} dr_{n,t} = \text{Discharge of demand response at time } t \text{ and bus } n \\
     &\ s.t. \\
-    &\ \hspace{1cm} d_{n,t} \times s_{n,t} \geq dr_{n,t} \hspace{0.5cm} \forall_{\text{n,t}}\\
+    &\ \hspace{1cm} d_{n,t} \times \frac{s_{n,t}}{100} \geq dr_{n,t} \hspace{0.5cm} \forall_{\text{n,t}}\\
 \end{align*}
 
 #### Transport Demand Response Capacity Constraint
@@ -84,10 +84,10 @@ Within the transport sector, demand response is applied to the aggregation bus d
     &\ \hspace{1cm} n\in N \hspace{1cm} \text{Set of buses} \\
     &\ \hspace{1cm} v\in V \hspace{1cm} \text{Set of electric vehicle links} \\
     &\ \hspace{1cm} p_{n,t,v} = \text{Flow at time } t \text{ and bus } n \text{ and link } v \\
-    &\ \hspace{1cm} s_{n,t} = \text{Allowable shiftable load per unit of } d_{n,t} \\
+    &\ \hspace{1cm} s_{n,t} = \text{Allowable shiftable load as a percentage (0-100) of } d_{n,t} \\
     &\ \hspace{1cm} dr_{n,t} = \text{Discharge of demand response at time } t \text{ and bus } n \\
     &\ s.t. \\
-    &\ \hspace{1cm}  \sum_{v}(p_{n,t,v}) \times s_{n,t} - dr_{n,t} \geq 0 \hspace{0.5cm} \forall_{\text{n,t}}\\
+    &\ \hspace{1cm}  \sum_{v}(p_{n,t,v}) \times \frac{s_{n,t}}{100} - dr_{n,t} \geq 0 \hspace{0.5cm} \forall_{\text{n,t}}\\
 \end{align*}
 
 (workflow-sector)=

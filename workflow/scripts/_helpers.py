@@ -510,12 +510,25 @@ def update_config_from_wildcards(config, w, inplace=True):
         co2l_enable, co2l_value = find_opt(opts, "Co2L")
         if co2l_enable:
             config["electricity"]["co2limit_enable"] = True
+            if "Co2L" in opts:
+                # bare token: find_opt would otherwise read the "2" in the
+                # token name as the factor
+                co2l_value = None
             if co2l_value is not None:
-                config["electricity"]["co2limit"] = co2l_value * config["electricity"]["co2base"]
+                co2base = config["electricity"].get("co2base")
+                if co2base is None:
+                    raise ValueError(
+                        "`Co2L<x>` scales `electricity: co2base` (tCO2/yr), which is "
+                        "not set in any config layer; set it, or set "
+                        "`electricity: co2limit` directly and use a bare `Co2L`.",
+                    )
+                config["electricity"]["co2limit"] = co2l_value * co2base
 
         gasl_enable, gasl_value = find_opt(opts, "CH4L")
         if gasl_enable:
             config["electricity"]["gaslimit_enable"] = True
+            if "CH4L" in opts:
+                gasl_value = None  # bare token: the "4" is part of the name
             if gasl_value is not None:
                 config["electricity"]["gaslimit"] = gasl_value * 1e6
 

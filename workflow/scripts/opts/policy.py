@@ -292,6 +292,8 @@ def _process_reeds_data(filepath, carriers, value_col):
             var_name="planning_horizon",
             value_name=value_col,
         )
+        # melted column headers are strings; the horizon filter compares against ints
+        reeds["planning_horizon"] = reeds["planning_horizon"].astype(int)
 
     # Standardize column names
     reeds = reeds.rename(
@@ -374,7 +376,7 @@ def add_RPS_constraints(n, config, snakemake=None):
     # Concatenate all portfolio standards
     portfolio_standards = _collapse_portfolio_standards(
         n,
-        snakemake.params.planning_horizons,
+        list(n.investment_periods),
         portfolio_standards,
         rps_reeds,
         ces_reeds,
@@ -409,7 +411,11 @@ def add_RPS_constraints(n, config, snakemake=None):
         region_gens_eligible = region_gens[region_gens.carrier.isin(carriers)]
 
         if region_gens_eligible.empty:
-            return
+            logger.warning(
+                f"RPS constraint '{rec_trading_zone}' for {planning_horizon} skipped: "
+                f"no generators with carriers {carriers} in the zone.",
+            )
+            continue
 
         # Eligible generation
         p_eligible = n.model["Generator-p"].sel(
@@ -485,7 +491,7 @@ def add_RPS_constraints_sector(n, config, snakemake=None):
     # Concatenate all portfolio standards
     portfolio_standards = _collapse_portfolio_standards(
         n,
-        snakemake.params.planning_horizons,
+        list(n.investment_periods),
         portfolio_standards,
         rps_reeds,
         ces_reeds,

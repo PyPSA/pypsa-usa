@@ -71,10 +71,7 @@ def make_network(
     sns = n.snapshots
     if solved:
         gen_p = pd.DataFrame(
-            {
-                name: np.full(len(sns), 10.0 * (i + 1) * scale)
-                for i, name in enumerate(n.generators.index)
-            },
+            {name: np.full(len(sns), 10.0 * (i + 1) * scale) for i, name in enumerate(n.generators.index)},
             index=sns,
         )
         n.generators_t["p"] = gen_p

@@ -37,6 +37,24 @@ for f in "${user_files[@]}"; do
     fi
 done
 
+# Arm the tracked git hooks. `.pre-commit-config.yaml` has declared a
+# check-added-large-files guard for a long time, but it never ran: nothing
+# installed it into .git/hooks, so every fresh clone and every `git worktree
+# add` started unguarded. That is how 662 MB of renamed, regenerable output
+# (incl. a 177.67 MB parquet) reached the history on 2026-09-01 and blocked
+# every push for two weeks. core.hooksPath points at a TRACKED directory, so
+# the guard travels with the repo instead of living in untracked local state.
+if git rev-parse --git-dir >/dev/null 2>&1; then
+    git config core.hooksPath .githooks
+    echo "armed    .githooks (core.hooksPath) - commits over 10 MB will be refused"
+    if command -v pre-commit >/dev/null 2>&1; then
+        pre-commit install --install-hooks >/dev/null 2>&1 \
+            && echo "armed    pre-commit framework hooks"
+    else
+        echo "note     pre-commit not on PATH; the size guard still runs, lint hooks do not"
+    fi
+fi
+
 echo
 echo "Done ($created file(s) created)."
 echo "Edit $destination/config.default.yaml (or copy it to"

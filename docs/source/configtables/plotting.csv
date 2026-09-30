@@ -1,5 +1,3 @@
 ,Unit,Values,Description
-map,,,
--- boundaries,°,"[x1,x2,y1,y2]",Boundaries of the map plots in degrees latitude (y) and longitude (x)
 tech_colors,--,carrier -> HEX colour code,Mapping from network `carrier` to a colour ([HEX colour code](https://en.wikipedia.org/wiki/Web_colors#Hex_triplet)).
 nice_names,--,str -> str,Mapping from network `carrier` to a more readable name.

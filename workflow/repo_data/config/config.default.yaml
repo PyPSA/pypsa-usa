@@ -185,16 +185,15 @@ electricity:
   SAFE_reservemargin: 0.14                 # SAFE planning reserve margin (fraction of peak load); used with SAFE opt
   SAFE_regional_reservemargins:   'repo_data/config/policy_constraints/SAFE_regional_prm.csv'
 
-  operational_reserve:                     # GenX-style reserve requirement; only active when activate=true
-    activate: false
-    epsilon_load: 0.02                     # share of total load held as reserve
-    epsilon_vres:  0.02                    # share of VRE supply held as reserve
-    contingency: 4000                      # fixed reserve floor in MW
-
   erm:                                     # Energy Reserve Margin — only consumed when the ERM opt is enabled
     all: 0.15                              # default ERM applied to every region (fraction of annual energy)
 
   # ---------------- Policy & emissions ----------------
+  # co2base: 2.4e9                       # OPTIONAL: reference CO2 budget (tCO2/yr) scaled by the Co2L<x> opt; required by Co2L<x>
+  # co2limit_enable: false               # OPTIONAL: system-wide CO2 cap on/off (a bare Co2L opt sets it true)
+  # co2limit: 1.0e9                      # OPTIONAL: the cap itself (tCO2/yr); Co2L<x> computes it as x * co2base
+  # gaslimit_enable: false               # OPTIONAL: gas-fired primary-energy cap on/off (a bare CH4L opt sets it true)
+  # gaslimit: 2.0e8                      # OPTIONAL: the cap itself (MWh thermal/yr); CH4L<x> sets x * 1e6
   regional_Co2_limits:            'repo_data/config/policy_constraints/regional_Co2_limits.csv'           # per-region CO2 caps (tCO2/yr)
   technology_capacity_targets:    'repo_data/config/policy_constraints/technology_capacity_targets.csv'   # forced min/max build by tech & region
   portfolio_standards:            'repo_data/config/policy_constraints/portfolio_standards.csv'           # RPS/CES fractions by region
@@ -228,6 +227,7 @@ electricity:
   # neighbors using historical EIA interchange data.
   imports:
     enable: false
+    representation: store                  # store = priced links off a bottomless Store; generator = priced generator (+ CPUC contracted units) behind an unpriced interface link
     costs: wholesale                       # wholesale | carrier | float — how imported energy is priced
     co2_emissions: 0.428                   # tCO2/MWh assigned to imported energy
     capacity_limit: true                   # cap import power to historical maxima

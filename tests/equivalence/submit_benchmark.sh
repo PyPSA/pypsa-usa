@@ -48,9 +48,11 @@ SMOKE_SIMPL="${EQ_SMOKE_SIMPL:-20}"
 SMOKE_CLUSTERS="${EQ_SMOKE_CLUSTERS:-4}"
 SMOKE_PRONG="${EQ_SMOKE_PRONG:-2}"
 SMOKE_UNTIL="${EQ_SMOKE_UNTIL:-assembled}"
-SMOKE_TIME="${EQ_SMOKE_TIME:-03:00:00}"
-SMOKE_CPUS="${EQ_SMOKE_CPUS:-8}"
-SMOKE_MEM="${EQ_SMOKE_MEM:-64GB}"
+# Sized from the western smoke runs of 2026-09-14..18: 2-20 min wall, peak
+# RSS 15 GB once (43580538), 2 GB typically. Sherlock bills 1/CPU + 0.25/GB.
+SMOKE_TIME="${EQ_SMOKE_TIME:-01:00:00}"
+SMOKE_CPUS="${EQ_SMOKE_CPUS:-4}"
+SMOKE_MEM="${EQ_SMOKE_MEM:-24GB}"
 
 # --- full stage knobs: the driver's own defaults unless overridden ----------
 FULL_INTERCONNECT="${EQ_INTERCONNECT:-usa}"

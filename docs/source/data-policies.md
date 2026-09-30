@@ -23,7 +23,8 @@ key at your own CSV to explore new policy pathways.
   NREL ReEDS model inputs (`reeds/rps_fraction.csv`), covering roughly 30 states with annual
   fractions from 2010 through 2050, including solar- and wind-specific carve-outs. Custom
   region/carrier targets can be added through `portfolio_standards.csv`; compliance is grouped
-  by REC trading zones.
+  by REC trading zones (mapped on the [portfolio standards](model-constraints.md#portfolio-standards-rps)
+  page).
 - **Clean Energy Standards (CES)**: State CES trajectories from the ReEDS inputs
   (`reeds/ces_fraction.csv`) for 16 states (CA, CO, CT, IL, MA, ME, MI, MN, NC, NE, NM, NV,
   NY, OR, VA, WA), with annual fractions through 2050.

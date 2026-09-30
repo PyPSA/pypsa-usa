@@ -1,4 +1,21 @@
+# Kept deliberately small: ruff owns linting, formatting, import sorting and
+# pyupgrade-style rewrites (pyproject.toml [tool.ruff]); snakefmt owns Snakefiles.
+# The same checks run in CI (.github/workflows/main.yml, fast-tests job), so a
+# green pre-commit run locally means a green lint step there.
+#
+# Removed 2026-09-28 and why:
+#   add-trailing-comma  – fought ruff-format (each rewrote the other's output)
+#   pyupgrade           – redundant with ruff's UP rules, and pinned py39 vs py311
+#   blackdoc            – crashed on non-Python snippets inside docstrings
+#   pretty-format-yaml  – rewrote unquoted git shas such as 51e1719 as `.inf`
+#   jupyter-notebook-cleanup – no notebooks are linted; kept out to stay small
+
 exclude: "LICENSE*|repo_data/"
+
+ci:
+  # Never push autofix commits into contributors' branches; report only.
+  autofix_prs: false
+  autoupdate_schedule: quarterly
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -6,50 +23,21 @@ repos:
   hooks:
   - id: trailing-whitespace
   - id: end-of-file-fixer
-  - id: debug-statements
   - id: mixed-line-ending
+  - id: debug-statements
+  - id: check-yaml
   - id: check-added-large-files
     args: ['--maxkb=10000']
 
-- repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-  rev: v2.16.0
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.15.0   # keep in step with RUFF_VERSION in .github/workflows/main.yml
   hooks:
-  - id: pretty-format-yaml
-    args: [--autofix, --indent, "2", --preserve-quotes]
-
-- repo: https://github.com/asottile/add-trailing-comma
-  rev: v4.0.0
-  hooks:
-  - id: add-trailing-comma
-
-- repo: https://github.com/asottile/pyupgrade
-  rev: v3.21.2
-  hooks:
-  - id: pyupgrade
-    args: [--py39-plus]
-
-- repo: https://github.com/aflc/pre-commit-jupyter
-  rev: v1.2.1
-  hooks:
-  - id: jupyter-notebook-cleanup
-    exclude: examples/solve-on-remote.ipynb
+  - id: ruff-check
+    args: ["--config=pyproject.toml", "--fix"]
+  - id: ruff-format
+    args: ["--config=pyproject.toml"]
 
 - repo: https://github.com/snakemake/snakefmt
   rev: v0.11.3
   hooks:
   - id: snakefmt
-
-- repo: https://github.com/keewis/blackdoc
-  rev: v0.4.6
-  hooks:
-  - id: blackdoc
-    # additional_dependencies:
-    # - black==23.12.1
-
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.15.0  # Check for the latest version
-  hooks:
-  - id: ruff
-    args: ["--config=pyproject.toml", "--fix"]
-  - id: ruff-format
-    args: ["--config=pyproject.toml"]

@@ -19,9 +19,15 @@
 #
 #SBATCH -J eq
 #SBATCH -p serc
-#SBATCH --time=20:00:00
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=160GB
+#SBATCH --time=12:00:00
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64GB
+# Sized from the seven USA runs of 2026-09-14..18 (sacct): peak RSS 36 GB,
+# 15.7 core-h of CPU over a 5.4 h wall (EQ_JOBS=8 caps parallelism anyway),
+# longest run 5.4 h. Sherlock bills 1/CPU + 0.25/GB, so the old 16 CPU /
+# 160 GB request cost 56 units/h for ~10 in use; 8 / 64 costs 24. Raise with
+# EQ_FULL_MEM / EQ_FULL_CPUS / EQ_FULL_TIME on submit_benchmark.sh if a run
+# is ever killed for memory (exit 137 / oom-kill in the .err log).
 #SBATCH --signal=B:TERM@180
 # Mail on end or failure so completion reaches a human without polling. Slurm
 # uses the submitting account's address when --mail-user is unset.
@@ -88,8 +94,8 @@ if [ -z "${EQ_TIMEOUT:-}" ]; then
         EQ_TIMEOUT=$(( (remaining - 900) / 2 ))
         echo "[driver] EQ_TIMEOUT derived from the job's remaining time: ${EQ_TIMEOUT}s per side"
     else
-        # --time is 20:00:00 = 72000 s; same arithmetic as the derived branch.
-        EQ_TIMEOUT=$(( (72000 - 900) / 2 ))
+        # --time is 12:00:00 = 43200 s; same arithmetic as the derived branch.
+        EQ_TIMEOUT=$(( (43200 - 900) / 2 ))
         echo "[driver] EQ_TIMEOUT could not be derived; using ${EQ_TIMEOUT}s per side"
     fi
 fi

@@ -33,6 +33,14 @@ jobs:
       run: sudo apt-get update -qq && sudo apt-get install -y -qq glpk-utils
     - name: Install test extras
       run: pip install -e '.[test]'
+    - name: Lint (ruff check + ruff format --check; same pins as .pre-commit-config.yaml)
+      env:
+        RUFF_VERSION: 0.15.0
+      run: |
+        pip install "ruff==$RUFF_VERSION"
+        ruff --version
+        ruff check --config=pyproject.toml .
+        ruff format --config=pyproject.toml --check .
     - name: Run Tier A (static checks)
       run: pytest -m fast --tb=short -ra
 

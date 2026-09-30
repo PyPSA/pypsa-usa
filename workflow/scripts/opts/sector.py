@@ -3,6 +3,7 @@ from typing import Any
 
 import pandas as pd
 import pypsa
+import xarray as xr
 from constants import NG_MWH_2_MMCF
 from eia import Trade
 
@@ -221,17 +222,52 @@ def add_cooling_heat_pump_constraints(n, config):
     - Constrains the total generation of Heating and Cooling HPs at each time slice
     to be less than or equal to the max generation of the heating HP. Note, that both
     the cooling and heating HPs have the same COP
+
+    Cooling HPs are named after the heating HP they are derived from, with a ``-cool``
+    suffix (``build_heat.add_service_heat_pumps_cooling``).
     """
+
+    def get_hp_pairs(n, hp_type):
+        """
+        Heating heat pump links and their cooling twins, in matching order.
+
+        ``build_heat.add_service_heat_pumps_cooling`` names each cooling link after
+        its heating link with a ``-cool`` suffix. Deriving the cooling names from the
+        heating ones (rather than filtering ``n.links`` a second time) guarantees the
+        two indices line up element by element, which is what the constraints below
+        rely on: linopy combines two variable selections by position, not by label.
+        """
+        heating_hps = n.links[n.links.index.str.endswith(hp_type)].index
+        cooling_hps = pd.Index([f"{x}-cool" for x in heating_hps], name=heating_hps.name)
+        return heating_hps, cooling_hps
+
+    def get_cop(n, links):
+        """
+        COP profiles of ``links`` as a (snapshot, link) array on the model's index.
+
+        ``n.links_t["efficiency"]`` is indexed by the snapshots MultiIndex, whose
+        ``period``/``timestep`` levels do not broadcast onto a variable that has no
+        snapshot dimension (``Link-p_nom``). Building the array on the model's own
+        snapshot index keeps both sides of the constraint aligned, and follows the
+        model when it is built over a subset of the snapshots.
+        """
+        snapshots = n.model.variables["Link-p"].indexes["snapshot"]
+        link_dim = n.model.variables["Link-p_nom"].dims[0]
+        cop = n.links_t["efficiency"].reindex(index=snapshots)[links]
+        return xr.DataArray(
+            cop.to_numpy(),
+            dims=("snapshot", link_dim),
+            coords={"snapshot": snapshots, link_dim: links},
+        )
 
     def add_hp_capacity_constraint(n, hp_type):
         assert hp_type in ("ashp", "gshp")
 
-        heating_hps = n.links[n.links.index.str.endswith(hp_type)].index
+        heating_hps, cooling_hps = get_hp_pairs(n, hp_type)
         if heating_hps.empty:
             return
-        cooling_hps = n.links[n.links.index.str.endswith(f"{hp_type}-cool")].index
 
-        assert len(heating_hps) == len(cooling_hps)
+        assert cooling_hps.isin(n.links.index).all()
 
         lhs = n.model["Link-p_nom"].loc[heating_hps] - n.model["Link-p_nom"].loc[cooling_hps]
         rhs = 0
@@ -239,16 +275,15 @@ def add_cooling_heat_pump_constraints(n, config):
         n.model.add_constraints(lhs == rhs, name=f"Link-{hp_type}_cooling_capacity")
 
     def add_hp_generation_constraint(n, hp_type):
-        heating_hps = n.links[n.links.index.str.endswith(hp_type)].index
+        heating_hps, cooling_hps = get_hp_pairs(n, hp_type)
         if heating_hps.empty:
             return
-        cooling_hps = n.links[n.links.index.str.endswith(f"{hp_type}-cooling")].index
 
         heating_hp_p = n.model["Link-p"].loc[:, heating_hps]
         cooling_hp_p = n.model["Link-p"].loc[:, cooling_hps]
 
-        heating_hps_cop = n.links_t["efficiency"][heating_hps]
-        cooling_hps_cop = n.links_t["efficiency"][cooling_hps]
+        heating_hps_cop = get_cop(n, heating_hps)
+        cooling_hps_cop = get_cop(n, cooling_hps)
 
         heating_hps_gen = heating_hp_p.mul(heating_hps_cop)
         cooling_hps_gen = cooling_hp_p.mul(cooling_hps_cop)

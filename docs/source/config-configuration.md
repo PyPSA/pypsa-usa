@@ -29,7 +29,10 @@ across layers.
 
 The one value that does not come from a file at all is the EIA API key: `workflow/Snakefile`
 reads `$EIA_API_KEY` from the environment and it takes precedence over `api: eia:` in
-`config/config.api.yaml`, which keeps the secret out of the checkout entirely.
+`config/config.api.yaml`, which keeps the secret out of the checkout entirely. The key is
+optional: a default power-only run never calls the EIA API. It is only required for dynamic
+fuel prices (`conventional: dynamic_fuel_price: enable: true`), sector-coupled/AEO-scaled
+demand, trade cost lookups and the validation plots.
 
 ## Validation
 

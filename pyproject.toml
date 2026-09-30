@@ -141,7 +141,6 @@ extend-ignore = [
     "TD002", # Ignore: TODO comments should have an author name (e.g., "# TODO (John): Fix this").
     "TD003", # Ignore: TODO comments should have a specific issue/task reference.
     "PD010", # Ignore: `df.isna().sum()` should be replaced with `df.isnull().sum()` (allows both styles).
-    "PD901", # Ignore: Avoid using `df` as a variable name for Pandas DataFrames (allows using `df`).
     "C901",  # Prevents Ruff from auto-fixing overly complex functions.
     "N802",  # Function naming lower case
     "E501"

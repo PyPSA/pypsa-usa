@@ -105,9 +105,19 @@ is already installed with the environment — and simply drop the
 Snakemake's internal job scheduler, not the optimization solver).
 ```
 
-## Step 5: Get an EIA API Key
+## Step 5 (optional): Get an EIA API Key
 
-The PyPSA-USA workflow leverages the EIA API in several steps. The default configuration activates dynamic fuel-cost prices, which requires EIA API key. You can quickly get your key by completing this [form](https://www.eia.gov/opendata/register.php).
+A default power-only run does **not** need an EIA API key — `conventional:
+dynamic_fuel_price: enable` is `false` in `config.default.yaml`, and with it off
+the workflow makes no EIA request at all. The key is only needed for the parts
+of the workflow that read the EIA API directly:
+
+- dynamic fuel prices (`conventional: dynamic_fuel_price: enable: true`),
+- sector-coupled and AEO-scaled demand (`build_demand` with EIA/AEO scenarios),
+- trade cost lookups (`imports`/`exports`: `costs: wholesale`),
+- the historical-validation plots (`plot_validation_*`).
+
+If you need any of those, you can quickly get a key by completing this [form](https://www.eia.gov/opendata/register.php).
 
 The API key will be emailed to you. Paste it into `workflow/config/config.api.yaml`, or
 export it as the `EIA_API_KEY` environment variable — the environment variable takes
