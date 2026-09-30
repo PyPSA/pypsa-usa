@@ -205,6 +205,12 @@ WAIVER_SCOPE_FIELDS = ("interconnect", "prong")
 TABLE_BOUND_FIELDS = tuple(tables.WAIVER_BOUND_KEYS)
 CELL_BOUND_FIELDS = tuple(compare.CELL_BOUND_KEYS)
 WAIVER_BOUND_FIELDS = tuple(dict.fromkeys(TABLE_BOUND_FIELDS + CELL_BOUND_FIELDS))
+#: Bounds whose value is the NAME of a computed check rather than a number or a
+#: direction. They are bounds in every other sense -- a waiver carrying one is
+#: bounded, and ``_bounds_violation`` enforces it -- but ``float()`` on them is
+#: nonsense, so they are held out of :data:`NUMERIC_BOUNDS` and validated
+#: against the reconstruction registry instead.
+WAIVER_COMPUTED_FIELDS = tuple(tables.WAIVER_COMPUTED_KEYS)
 #: Bounds that belong to exactly one kind. ``expect_sign`` and ``max_abs_pct``
 #: are shared: on a table waiver they are the sign and size of the row's delta,
 #: on a cell waiver the sign and size of whatever that component measures.
@@ -213,7 +219,7 @@ CELL_ONLY_BOUNDS = tuple(k for k in CELL_BOUND_FIELDS if k not in TABLE_BOUND_FI
 #: Bounds whose value is a direction, not a magnitude.
 DIRECTION_BOUNDS = ("expect_sign", "expect_side")
 #: Numeric bounds, which must parse and be strictly positive.
-NUMERIC_BOUNDS = tuple(k for k in WAIVER_BOUND_FIELDS if k not in DIRECTION_BOUNDS)
+NUMERIC_BOUNDS = tuple(k for k in WAIVER_BOUND_FIELDS if k not in DIRECTION_BOUNDS + WAIVER_COMPUTED_FIELDS)
 #: The bounds a cell waiver on each bounded component MUST carry. Anything a
 #: component's registry entry allows but this map omits is optional
 #: (``max_one_sided_pct``: a relative cap on top of the absolute MW one).
@@ -311,6 +317,26 @@ def test_every_table_waiver_is_bounded(waivers):
         if _is_table_waiver(w) and not any(k in w for k in TABLE_BOUND_FIELDS)
     ]
     assert not unbounded, f"table waivers with no {'/'.join(TABLE_BOUND_FIELDS)}: {unbounded}"
+
+
+def test_every_reconstruction_waiver_names_a_known_reconstruction(waivers):
+    """A ``reconstruction:`` value that resolves to nothing is an unbounded waiver.
+
+    ``_bounds_violation`` refuses an unresolvable reconstruction at run time, so
+    the failure mode is a row that stays UNEXPLAINED for 20 hours with no hint
+    that the waiver's own name was the typo. Catch it here, in a fast test.
+    """
+    from tests.equivalence import reconstructions
+
+    unknown = sorted(
+        {
+            str(w["reconstruction"])
+            for w in waivers
+            if w.get("reconstruction") and str(w["reconstruction"]) not in reconstructions.RECONSTRUCTIONS
+        },
+    )
+    known = sorted(reconstructions.RECONSTRUCTIONS)
+    assert not unknown, f"waivers naming unknown reconstructions: {unknown}; known: {known}"
 
 
 def test_every_bounded_component_is_decided_here():

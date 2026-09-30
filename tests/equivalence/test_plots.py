@@ -734,3 +734,267 @@ def test_load_artifacts_reads_the_assembled_pair(tmp_path, monkeypatch):
     assert art.assembled_master is not None
     assert set(loaded) == {dp, mp}
     assert dp.suffix == ".pkl" and mp.suffix == ".nc"
+
+
+# ---------------------------------------------------------------------------
+# HF-26 reconstruction figures.
+
+
+def _recon(rows: dict[tuple[str, str], tuple[float, float, float, float]], error: str | None = None):
+    """A :class:`reconstructions.Reconstruction` from (fleet, profiled, master, develop)."""
+    from tests.equivalence import reconstructions, tables
+
+    tol = tables.tolerance_for("p_nom_existing_by_zone_carrier")
+    made = {}
+    for (zone, carrier), (fleet, profiled, master, develop) in rows.items():
+        row = reconstructions._make_row(
+            "p_nom_existing_by_zone_carrier",
+            zone,
+            carrier,
+            fleet,
+            profiled,
+            master,
+            develop,
+            tol,
+        )
+        made[("p_nom_existing_by_zone_carrier", row.key)] = row
+    return reconstructions.Reconstruction(
+        name="hf26_existing_renewable_drop",
+        frame=reconstructions.rows_frame(made),
+        rows=made,
+        error=error,
+    )
+
+
+def test_hf26_figure_writes_png_and_full_csv(tmp_path):
+    """The plot caps at ``cap`` zones; the CSV twin keeps every one of them.
+
+    The cap exists because the USA leg has 134 ReEDS zones. A capped CSV would
+    make the figure's own data table disagree with the national totals in its
+    title, which is the one thing the CSV twin is for.
+    """
+    rows = {(f"p{i}", "onwind"): (100.0 + i, 50.0, 50.0, 100.0 + i) for i in range(8)}
+    rows[("p0", "solar")] = (900.0, 400.0, 400.0, 900.0)
+    png, csv = plots.reconstruction_zone_figure(_recon(rows), "hf26_dropped_mw_by_zone", tmp_path, cap=3)
+    assert png.exists() and csv.exists()
+    frame = pd.read_csv(csv)
+    # Every zone, uncapped, both carriers.
+    assert len(frame) == len(rows)
+    assert set(frame["zone"]) == {f"p{i}" for i in range(8)}
+    assert set(frame["carrier"]) == {"onwind", "solar"}
+    assert {"dropped_mw", "residual_mw", "gate_tol_mw"} <= set(frame.columns)
+
+
+def test_hf26_figure_is_a_placeholder_when_the_reconstruction_failed(tmp_path):
+    png, csv = plots.reconstruction_zone_figure(
+        _recon({}, error="FileNotFoundError: elec_base_network.nc"),
+        "hf26_dropped_mw_by_zone",
+        tmp_path,
+    )
+    assert png.exists() and csv.exists()
+    png, _ = plots.reconstruction_zone_figure(None, "hf26_none", tmp_path)
+    assert png.exists()
+
+
+def test_hf26_map_figure_writes_png_and_csv(tmp_path):
+    """The CSV twin is per zone AND carrier, and carries the gate as well as the residual.
+
+    Summing the residual over carriers, which an earlier version did, lets a
+    +X onwind / -X solar zone cancel to exactly zero and draw as perfect.
+    """
+    zones = _point_zones(names=("p0", "p1", "p2"))
+    rows = {
+        ("p0", "onwind"): (300.0, 100.0, 100.0, 300.0),
+        ("p1", "onwind"): (50.0, 50.0, 50.0, 50.0),
+        ("p0", "solar"): (900.0, 400.0, 400.0, 900.0),
+    }
+    png, csv = plots.reconstruction_map_figure(zones, _recon(rows), "hf26_dropped_mw_map", tmp_path)
+    assert png.exists() and csv.exists()
+    frame = pd.read_csv(csv)
+    assert {"zone", "carrier", "dropped_mw", "residual_mw", "gate_tol_mw", "residual_over_gate", "ok"} <= set(
+        frame.columns,
+    )
+    assert len(frame) == len(rows)
+    onwind_p0 = frame[(frame["zone"] == "p0") & (frame["carrier"] == "onwind")].iloc[0]
+    assert onwind_p0["dropped_mw"] == pytest.approx(200.0)
+    assert onwind_p0["residual_over_gate"] == pytest.approx(0.0)
+
+
+def test_hf26_map_residual_is_not_summed_across_carriers(tmp_path):
+    """+100 onwind and -100 solar in one zone must NOT cancel to zero."""
+    zones = _point_zones(names=("p0", "p1"))
+    rows = {
+        # fleet, profiled, master, develop -> residual = (dev-mas) - (fleet-profiled)
+        ("p0", "onwind"): (500.0, 500.0, 500.0, 600.0),  # residual +100
+        ("p0", "solar"): (500.0, 500.0, 500.0, 400.0),  # residual -100
+    }
+    _png, csv = plots.reconstruction_map_figure(zones, _recon(rows), "hf26_map_signs", tmp_path)
+    frame = pd.read_csv(csv).set_index(["zone", "carrier"])
+    assert frame.loc[("p0", "onwind"), "residual_mw"] == pytest.approx(100.0)
+    assert frame.loc[("p0", "solar"), "residual_mw"] == pytest.approx(-100.0)
+    # Both fail their own gate, and the figure says so per carrier.
+    assert not bool(frame.loc[("p0", "onwind"), "ok"])
+    assert not bool(frame.loc[("p0", "solar"), "ok"])
+
+
+def test_hf26_map_residual_ratio_makes_a_small_failure_visible(tmp_path):
+    """A 2 MW residual against a 1 MW gate must read as a failure, not as noise.
+
+    This is the USA ``p129 | solar`` shape. Beside a zone holding 20,000 MW, a
+    raw-MW scale drew it at under 10 % of the ramp; in units of its own gate it
+    is 2.0, i.e. twice the band edge.
+    """
+    zones = _point_zones(names=("p129", "p10"))
+    rows = {
+        # master 10,000 -> gate 50 MW; a 60 MW residual is 1.2 gates. Deliberately
+        # NOT a row whose gate is the 1 MW atol floor: there ratio == residual, so
+        # the test would pass with `_residual_ratio` replaced by the raw residual
+        # and would be pinning nothing.
+        ("p129", "solar"): (10_000.0, 10_000.0, 10_000.0, 10_060.0),
+        ("p10", "solar"): (21000.0, 17700.0, 17700.0, 21000.0),  # exact, gate 88.5
+    }
+    _png, csv = plots.reconstruction_map_figure(zones, _recon(rows), "hf26_map_ratio", tmp_path)
+    frame = pd.read_csv(csv).set_index(["zone", "carrier"])
+    assert frame.loc[("p129", "solar"), "gate_tol_mw"] == pytest.approx(50.0)
+    assert frame.loc[("p129", "solar"), "residual_mw"] == pytest.approx(60.0)
+    assert frame.loc[("p129", "solar"), "residual_over_gate"] == pytest.approx(1.2)
+    assert not bool(frame.loc[("p129", "solar"), "ok"])
+    # The big zone is exact, so it sits at the neutral middle of the same scale.
+    assert frame.loc[("p10", "solar"), "residual_over_gate"] == pytest.approx(0.0)
+    assert bool(frame.loc[("p10", "solar"), "ok"])
+    assert 1.2 < plots.RECON_RESIDUAL_RATIO_MAX, "the failure must be inside the drawn range"
+
+
+def test_zone_panel_outlines_the_failing_zones(tmp_path):
+    """A gate failure is hatched, not left to colour alone.
+
+    On a continuous diverging scale a reader cannot tell 1.0 gates from 1.2 by
+    eye, so pass/fail has to be carried by a second channel. Dropping the
+    outline passed every other map test.
+    """
+    zones = _point_zones(names=("p1", "p2", "p3"))
+    values = pd.Series({"p1": 1.2, "p2": -0.1, "p3": 0.0})
+    fig, (plain, marked, none_failed) = plt.subplots(1, 3)
+    plots._zone_panel(fig, plain, zones, values, "RdBu_r", -3, 3, "plain", colorbar=False)
+    plots._zone_panel(
+        fig,
+        marked,
+        zones,
+        values,
+        "RdBu_r",
+        -3,
+        3,
+        "marked",
+        colorbar=False,
+        outline=pd.Series({"p1": True, "p2": False, "p3": False}),
+    )
+    plots._zone_panel(
+        fig,
+        none_failed,
+        zones,
+        values,
+        "RdBu_r",
+        -3,
+        3,
+        "none failed",
+        colorbar=False,
+        outline=pd.Series({"p1": False, "p2": False, "p3": False}),
+    )
+    assert len(marked.collections) == len(plain.collections) + 1, "the failing zone gets its own artist"
+    assert len(none_failed.collections) == len(plain.collections), "no failures, no extra artist"
+    plt.close(fig)
+
+
+def test_hf26_map_figure_is_skipped_without_zones(tmp_path):
+    rows = {("p0", "onwind"): (300.0, 100.0, 100.0, 300.0)}
+    png, csv = plots.reconstruction_map_figure(None, _recon(rows), "hf26_map_none", tmp_path)
+    assert png.exists() and csv.exists()
+    assert pd.read_csv(csv).empty
+
+
+def test_hf26_figure_states_what_it_did_not_draw(tmp_path):
+    """The capped remainder is accounted for in words, not as a pooled bar.
+
+    A pooled bar worked at four zones and destroyed the figure at 134: on the
+    HF-24 metric it was 7.9 million MW against individual zones of 2e5, so every
+    bar the figure exists to show collapsed to a hairline, and its "gate
+    tolerance" band was the sum of 109 unrelated gates.
+    """
+    rows = {(f"p{i}", "onwind"): (100.0 + i, 50.0, 50.0, 100.0 + i) for i in range(8)}
+    shown, note = plots._recon_plot_rows(plots._recon_frame(_recon(rows))[0], cap=3)
+    assert len(shown) == 3
+    assert "top 3 of 8 zones" in note
+    assert "5 hold" in note
+    assert "max |residual|" in note
+    # No synthetic pooled row is drawn.
+    assert not any(str(z).startswith("other") for z in shown["zone"])
+
+    # Under the cap there is nothing to say.
+    shown, note = plots._recon_plot_rows(plots._recon_frame(_recon(rows))[0], cap=25)
+    assert len(shown) == 8
+    assert note == ""
+
+
+def test_reconstruction_figure_labels_come_from_the_provider(tmp_path):
+    """HF-26 draws existing capacity; HF-24 draws installable potential.
+
+    One hard-coded axis label is a lie on one of them — and the lie that was
+    there read 9.7 million MW of HF-24 onwind POTENTIAL as "existing capacity",
+    which is exactly the misreading a reader validating from the PNG would make.
+    """
+    from tests.equivalence import reconstructions
+
+    hf26 = plots._recon_labels(reconstructions.Reconstruction("hf26_existing_renewable_drop", pd.DataFrame()))
+    hf24 = plots._recon_labels(reconstructions.Reconstruction("hf24_nrel_caps_drop", pd.DataFrame()))
+    assert hf26.quantity == "existing capacity [MW]"
+    assert hf24.quantity == "installable potential p_nom_max [MW]"
+    assert hf26.fleet != hf24.fleet
+    assert "HF-26" in hf26.headline and "HF-24" in hf24.headline
+    # An unknown provider gets a neutral label, never HF-26's.
+    other = plots._recon_labels(reconstructions.Reconstruction("something_new", pd.DataFrame()))
+    assert "existing" not in other.quantity and "fleet" not in other.fleet
+
+    # Every provider that gets a figure has labels of its own.
+    for recon_name, _stem, _metric in plots.RECON_FIGURES:
+        assert recon_name in plots.RECON_LABELS, recon_name
+
+
+def test_reconstruction_figure_has_a_dedicated_dropped_panel(tmp_path, monkeypatch):
+    """Three panels per carrier: totals, dropped, residual.
+
+    The stacked totals panel is only legible when the drop is a large fraction
+    of the total. HF-26 moves 14-112 % and reads well; HF-24 moves 0.14 %, so
+    all three totals bars render identically and the hatched segment is
+    sub-pixel. The middle panel gives the explained quantity its own axis.
+    """
+    rows = {
+        # A 0.14 %-scale drop, the HF-24 shape.
+        ("pA", "onwind"): (1_000_000.0, 998_600.0, 998_600.0, 1_000_000.0),
+        ("pB", "onwind"): (500_000.0, 499_900.0, 499_900.0, 500_000.0),
+        ("pA", "solar"): (900.0, 400.0, 400.0, 900.0),
+    }
+    # save_figure closes the figure, so capture it on the way past: asserting the
+    # CSV alone would pass on a two-panel stub, which is the layout this test
+    # exists to rule out.
+    seen: dict = {}
+    real = plots.save_figure
+
+    def spy(fig, data, name, outdir):
+        seen["xlabels"] = [ax.get_xlabel() for ax in fig.axes]
+        seen["n_axes"] = len(fig.axes)
+        return real(fig, data, name, outdir)
+
+    monkeypatch.setattr(plots, "save_figure", spy)
+    png, csv = plots.reconstruction_zone_figure(_recon(rows), "hf24_caps_drop_by_zone", tmp_path)
+    assert png.exists() and csv.exists()
+
+    assert seen["n_axes"] == 6, "two carriers x three panels (totals, dropped, residual)"
+    labels = seen["xlabels"]
+    assert labels.count("residual [MW]") == 2
+    # One panel per carrier carries the DROPPED quantity on its own axis...
+    assert sum("dropped by master" in lab for lab in labels) == 2
+    # ...and one carries the provider's totals quantity.
+    assert labels.count("existing capacity [MW]") == 2
+
+    frame = pd.read_csv(csv)
+    assert frame[frame["carrier"] == "onwind"]["dropped_mw"].tolist() == [1400.0, 100.0]
