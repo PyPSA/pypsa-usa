@@ -30,7 +30,7 @@ repos:
     args: ['--maxkb=10000']
 
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.15.0   # keep in step with RUFF_VERSION in .github/workflows/main.yml
+  rev: v0.16.10   # keep in step with RUFF_VERSION in .github/workflows/main.yml
   hooks:
   - id: ruff-check
     args: ["--config=pyproject.toml", "--fix"]
@@ -38,6 +38,6 @@ repos:
     args: ["--config=pyproject.toml"]
 
 - repo: https://github.com/snakemake/snakefmt
-  rev: v0.11.3
+  rev: v2.0.3
   hooks:
   - id: snakefmt
