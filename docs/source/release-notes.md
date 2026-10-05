@@ -1,12 +1,12 @@
 (release-notes)=
 # Release Notes
 
-## Upcoming release (v1 line, in development)
+## v1.0.0 (2026-10-05)
 
-The v1 development line restructures the workflow around **early spatial
+v1.0.0 restructures the workflow around **early spatial
 aggregation** ("simplify-early") and modernizes the repository layout. If you are
-migrating a workflow or custom configuration from an earlier checkout, these are the
-changes you will notice:
+migrating a workflow or custom configuration from v0.9.0 or an earlier checkout, these
+are the changes you will notice:
 
 ### Workflow restructuring
 
