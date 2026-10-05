@@ -103,6 +103,46 @@ rule retrieve_eer_demand_data:
         "../scripts/retrieve_eer_data.py"
 
 
+CPUC_SERVM_URL = "https://files.cpuc.ca.gov/energy/modeling/2026_servm_updates/"
+
+
+rule retrieve_cpuc_servm_load:
+    wildcard_constraints:
+        servm_year="2026|2028|2030|2032|2035|2037|2040|2042|2045",
+    params:
+        url=lambda wildcards: CPUC_SERVM_URL
+        + f"HourlyLoad_CA_Regions_V2025E_2224_Mon_{wildcards.servm_year}.csv",
+    output:
+        DATA + "cpuc/servm/HourlyLoad_CA_Regions_V2025E_2224_Mon_{servm_year}.csv",
+    resources:
+        mem_mb=5000,
+    log:
+        "logs/retrieve/retrieve_cpuc_servm_load_{servm_year}.log",
+    retries: 2
+    script:
+        "../scripts/retrieve_cpuc_data.py"
+
+
+rule retrieve_cpuc_baseline_generators:
+    params:
+        url=CPUC_SERVM_URL + "BaselineGeneratorList_CAISO.xlsx",
+    output:
+        DATA + "cpuc/BaselineGeneratorList_CAISO.xlsx",
+    resources:
+        mem_mb=5000,
+    log:
+        "logs/retrieve/retrieve_cpuc_baseline_generators.log",
+    retries: 2
+    script:
+        "../scripts/retrieve_cpuc_data.py"
+
+
+# RESERVED (phase 2): `retrieve_cpuc_thermal_derate` will pull the CPUC SERVM
+# unit-specific ambient-temperature derate profiles that back the
+# `conventional.ambient_derate` config hook. Until it lands, enabling that key
+# raises NotImplementedError in add_electricity.
+
+
 sector_datafiles = [
     # heating sector
     "population/DECENNIALDHC2020.P1-Data.csv",
@@ -299,6 +339,39 @@ rule retrieve_nrel_exclusion_artifact:
         mem_mb=2000,
     script:
         "../scripts/retrieve_nrel_exclusion.py"
+
+
+# GODEEEP climate scenarios; the scenario is a directory/record component, never
+# part of the CF file name (see godeeep_cf_registry.cf_filename).
+GODEEEP_SCENARIOS = (
+    "historical",
+    "rcp45cooler",
+    "rcp45hotter",
+    "rcp85cooler",
+    "rcp85hotter",
+)
+
+
+rule retrieve_godeeep_cf:
+    """
+    Place one compressed GODEEEP capacity-factor file where
+    build_renewable_profiles expects it. The source (local mirror or Zenodo
+    record) is declared per (dataset key, year) in the `godeeep_cf_registry`
+    config block; an undeclared dataset/year raises instead of falling back to
+    another year, hub height or screening variant.
+    """
+    wildcard_constraints:
+        scenario="|".join(GODEEEP_SCENARIOS),
+        cf_file=r"(solar|wind)_gen_cf_\d{4}(_\d+m)?_compressed",
+    output:
+        DATA + "godeeep/{scenario}/{cf_file}.nc",
+    log:
+        LOGS + "retrieve/godeeep_cf_{scenario}_{cf_file}.log",
+    resources:
+        walltime="01:00:00",
+        mem_mb=2000,
+    script:
+        "../scripts/retrieve_godeeep_cf.py"
 
 
 if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:

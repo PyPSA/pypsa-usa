@@ -7,6 +7,9 @@ import pypsa
 
 logger = logging.getLogger(__name__)
 
+# unlimited trade can lead to degenerate solutions
+DEFAULT_VOLUME_LIMIT_PCT = 10
+
 
 def get_import_export_limit(n: pypsa.Network, timesteps_in_period: pd.Series) -> float:
     """Get the import or export limit for the network."""
@@ -46,23 +49,11 @@ def get_periods(n: pypsa.Network) -> pd.Series:
 
 def add_interchange_constraints(n, config, direction, sector=False):
     """Adds constraints for inter-regional energy flow."""
-    assert direction in ["imports", "exports"], f"direction must be either imports or exports; received: {direction}"
-
-    def _get_elec_import_links(n: pypsa.Network) -> list[str]:
-        """Get all links for elec trade."""
-        return n.links[n.links.carrier == "imports"].index.tolist()
-
-    def _get_elec_export_links(n: pypsa.Network) -> list[str]:
-        """Get all links for elec trade."""
-        return n.links[n.links.carrier == "exports"].index.tolist()
-
-    # default to 10% as unlimited exports can lead to weird behaviour
-    if direction == "imports":
-        volume_limit = config["electricity"].get("imports", {}).get("volume_limit", 10)
-    elif direction == "exports":
-        volume_limit = config["electricity"].get("exports", {}).get("volume_limit", 10)
-    else:
+    if direction not in ("imports", "exports"):
         raise ValueError(f"direction must be either imports or exports; received: {direction}")
+
+    trade_config = config["electricity"].get(direction, {})
+    volume_limit = trade_config.get("volume_limit", DEFAULT_VOLUME_LIMIT_PCT)
 
     if isinstance(volume_limit, str):
         if volume_limit == "inf":
@@ -77,19 +68,8 @@ def add_interchange_constraints(n, config, direction, sector=False):
         raise ValueError(f"volume_limit must be a number or 'inf'; received: {volume_limit}")
 
     weights = n.snapshot_weightings.objective
-    period = n.snapshots.get_level_values("period").unique().tolist()
-
-    if direction == "imports":
-        balancing_period = config["electricity"]["imports"].get("balancing_period", "month")
-    elif direction == "exports":
-        balancing_period = config["electricity"]["exports"].get("balancing_period", "month")
-    else:
-        raise ValueError(f"direction must be either imports or exports; received: {direction}")
-
-    if direction == "imports":
-        links = _get_elec_import_links(n)
-    else:
-        links = _get_elec_export_links(n)
+    balancing_period = trade_config.get("balancing_period", "month")
+    links = n.links[n.links.carrier == direction].index.tolist()
 
     periods = get_periods(n)
 
@@ -109,7 +89,7 @@ def add_interchange_constraints(n, config, direction, sector=False):
             lhs = (
                 n.model["Link-p"]
                 .mul(weights)
-                .sel(period=year, Link=links)
+                .sel(period=year, name=links)
                 .sel(timestep=timesteps_in_period)  # Seperate cause slicing on multi-index is not supported
                 .sum()
             )
@@ -124,7 +104,7 @@ def add_interchange_constraints(n, config, direction, sector=False):
                 demand = (
                     n.model["Link-p"]
                     .mul(weights)
-                    .sel(period=year, Link=demand_links)
+                    .sel(period=year, name=demand_links)
                     .sel(timestep=timesteps_in_period)  # Seperate cause slicing on multi-index is not supported
                     .sum()
                 )

@@ -1,0 +1,8 @@
+servm_region,eia_ba_code,benchmark_region,note
+PGE,CISO,CAISO,EIA reports every CAISO plant under the single BA code CISO; PGE/SCE/SDGE cannot be split without geography
+SCE,CISO,CAISO,rolled into CAISO for the same reason
+SDGE,CISO,CAISO,rolled into CAISO for the same reason
+LADWP,LDWP,LADWP,
+IID,IID,IID,
+NCNC,BANC,NCNC,Balancing Authority of Northern California
+NCNC,TIDC,NCNC,Turlock Irrigation District

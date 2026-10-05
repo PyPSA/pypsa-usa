@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# Server-side size guard. The local hook in .githooks/pre-commit can be skipped
+# with `--no-verify`, and it is absent entirely on any clone where
+# init_pypsa_usa.sh has not been run -- which was the state of the world on
+# 2026-09-01, when 662 MB of renamed, regenerable equivalence output (incl. a
+# 177.67 MB parquet) was committed and then blocked every push to GitHub for
+# two weeks. This job cannot be bypassed from a workstation.
+#
+# Deliberately NOT part of ci.yml: that workflow only triggers on master,
+# develop and v1-epic, so it would never have seen the feature branch where
+# this actually happened. This one runs on EVERY branch, and is cheap enough
+# (a checkout and some arithmetic) to do so.
+
+name: large files
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  size-guard:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Refuse files over 10 MB
+      shell: bash
+      run: |
+        set -uo pipefail
+        MAX_BYTES=$((10 * 1024 * 1024))
+
+        # Which commits are new on this ref?
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          base="${{ github.event.pull_request.base.sha }}"
+        else
+          base="${{ github.event.before }}"
+        fi
+
+        if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
+           || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+          # New branch, or a force-push: fall back to whatever is not already
+          # on the default branch.
+          base=$(git merge-base origin/${{ github.event.repository.default_branch }} HEAD 2>/dev/null || echo "")
+        fi
+
+        if [ -z "$base" ]; then
+          echo "Cannot determine a base commit; checking the whole tree instead."
+          files=$(git ls-files)
+        else
+          echo "Comparing $base..HEAD"
+          files=$(git diff --name-only --diff-filter=AM "$base" HEAD)
+        fi
+
+        fail=0
+        while IFS= read -r path; do
+          [ -n "$path" ] || continue
+          [ -f "$path" ] || continue
+          size=$(stat -c%s "$path")
+          if [ "$size" -gt "$MAX_BYTES" ]; then
+            printf '::error file=%s::%s is %.1f MB, over the 10 MB limit\n' \
+              "$path" "$path" "$(awk -v s="$size" 'BEGIN{print s/1048576}')"
+            fail=1
+          fi
+        done <<< "$files"
+
+        if [ "$fail" -ne 0 ]; then
+          cat >&2 <<'MSG'
+
+        Nothing regenerable belongs in git. Networks, profiles, demand tables
+        and solver output are rebuilt by the workflow: keep them in resources/,
+        results/ or data/ (already ignored) and DELETE them with 'rm -r' rather
+        than renaming them aside -- a rename escapes the path-based ignore
+        rules, which is precisely how this happened before.
+
+        A genuine tracked input belongs under workflow/repo_data/ or
+        workflow/geodata_repo/, with a MANIFEST.md entry describing it.
+        MSG
+          exit 1
+        fi
+
+        echo "No file over 10 MB added or modified."

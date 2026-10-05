@@ -1,0 +1,120 @@
+(model-components)=
+# Networks & Components
+
+A PyPSA-USA model is a [PyPSA](https://pypsa.readthedocs.io/en/latest/) network. PyPSA
+defines the component classes — buses, generators, lines, links, storage — and their
+optimization semantics; PyPSA-USA populates them with US data and conventions. This
+page explains how each component is used here and how the model's spatial and temporal
+resolution is put together. The authoritative reference for component attributes and
+equations is the
+[PyPSA components documentation](https://pypsa.readthedocs.io/en/latest/user-guide/components.html);
+the custom columns PyPSA-USA adds on top are cataloged in {doc}`model-network-schema`.
+
+## How PyPSA components are used
+
+| PyPSA component | Use in PyPSA-USA |
+|-----------------|------------------|
+| `Bus` | A network zone (a clustered group of substations). Every bus carries geographic memberships — state, county, balancing authority, REeDS zone, NERC region — that policy constraints and reporting aggregate over. |
+| `Carrier` | Technology/fuel labels (`solar`, `onwind`, `OCGT`, `coal`, `battery` durations, ...) plus emissions intensities used by CO2 accounting. |
+| `Generator` | The existing thermal, hydro, and renewable fleet (from PUDL/EIA data) and candidate expansion capacity (`extendable_carriers`). Variable renewables carry per-snapshot capacity-factor profiles (`p_max_pu`); fuel-burning units carry marginal costs built from fuel prices and heat rates. |
+| `Line` | AC transmission between zones, with impedance and thermal ratings aggregated through clustering. Expansion is controlled by the `{ll}` wildcard. |
+| `Link` | HVDC ties in the power model; in sector-coupled runs, also every conversion process (heat pumps, electrolysis, EV charging, gas furnaces, ...). |
+| `StorageUnit` | Power-sector storage with fixed energy/power ratio: battery storage at 2-10 hour durations and pumped hydro at 8-12 hours. |
+| `Store` | Sector-coupled energy carriers (natural gas storage, CO2 accounting, fuel inventories) where energy and power are sized independently. |
+| `Load` | Zonal electricity demand (and sector demands in sector-coupled runs), attached per bus and snapshot. |
+| `GlobalConstraint` | System-wide limits such as emissions caps produced by the `{opts}` tokens and policy constraints ({doc}`model-constraints`). |
+
+## Spatial structure
+
+PyPSA-USA models one of four footprints, chosen by the `{interconnect}` wildcard:
+`western`, `eastern`, `texas`, or `usa`. Within that footprint the model resolves
+space at two configurable levels:
+
+1. **`{simpl}` — the data resolution.** The nodal transmission network (~3,000-80,000
+   buses depending on interconnect) is aggregated to substations and then clustered to
+   `{simpl}` zones early in the pipeline. Renewable profiles, demand, and the
+   generator fleet are all built at this resolution ({doc}`model-workflow`).
+2. **`{clusters}` — the transmission resolution.** The final clustering step reduces
+   the network to `{clusters}` zones, which is what the optimization sees. A letter
+   suffix on the wildcard controls which *generator carriers* are aggregated into the
+   cluster buses: a plain integer aggregates all of them (one generator per carrier and
+   bus); `m` aggregates only the conventional carriers, so renewable generators move
+   onto the cluster bus but keep their distinct `{simpl}`-level resource zones; `c`
+   aggregates everything *except* the conventional carriers; and `a` aggregates none, so
+   every generator keeps its `{simpl}`-level resolution. Carriers listed under
+   `clustering: cluster_network: exclude_carriers` are never aggregated. See
+   {ref}`the clusters wildcard <clusters>`.
+
+:::{figure} _static/generated/network_aggregation.png
+:width: 100%
+:alt: The same network at nodal, simpl, and clusters resolution
+
+The two-stage spatial aggregation on a California test system: the nodal base network
+(left) is clustered to 20 `{simpl}` zones (center), at which resolution demand,
+renewable profiles, and generators are built, and finally to 4 `{clusters}` zones
+(right) for the optimization. Regenerate with `snakemake docs_figures`.
+:::
+
+:::{figure} _static/generated/cluster_suffixes.png
+:width: 100%
+:alt: The same clustered network with each of the four clusters-wildcard suffixes, generators drawn as markers
+
+What the `{clusters}` suffix changes. All four panels are the same `{simpl}` network
+reduced to the same cluster buses and branches; only the generators differ. Each marker
+is one generator, coloured by whether its carrier is conventional or renewable/other and
+sized by `p_nom`. An aggregated carrier has one generator per cluster bus and is drawn
+there; a carrier that was not aggregated keeps one generator per `{simpl}` resource zone
+(its `land_region`) and is drawn at that zone, even though it is electrically attached to
+the cluster bus. With a plain integer (left) every carrier collapses onto the four buses.
+With `m` the renewables stay spread over their 74 `{simpl}` zones while the conventional
+plants collapse; `c` is the mirror image; `a` aggregates nothing and both groups keep
+`{simpl}` resolution. Regenerate with `snakemake docs_figures`.
+:::
+
+:::{figure} _static/generated/simpl_resolutions.png
+:width: 100%
+:alt: The same footprint at numeric, county and identity simpl resolution, each clustered with the a suffix
+
+What the `{simpl}` value changes, with `a` clustering so nothing is aggregated and every
+generator sits at its `{simpl}` zone. A number (left) k-means the substation network to
+that many resource zones (75 requested, 74 delivered here). `county` (centre) uses the
+county FIPS partition as the busmap — one zone per county — and requires
+`model_topology: topological_boundaries: county`, which in turn pins `{clusters}` to one
+per county (58 in California), so this panel is `58a`. The empty string (right) is the
+identity pass-through: every substation bus is its own resource zone (1,976 here), the
+finest resolution the workflow supports. Regenerate with `snakemake docs_simpl_resolutions`;
+the county panel is picked up from a sibling run named `<run.name>County` built with the
+county boundaries, and is omitted if none exists.
+:::
+
+Clustering respects administrative boundaries: with
+`model_topology: topological_boundaries` set to `county`, `reeds_zone`, or `state`, no
+cluster crosses a boundary of that type. This is what lets
+state-level policies (RPS, emissions caps) and zonal interface limits stay well-defined
+on the clustered network: every bus belongs unambiguously to a state, REeDS zone, and
+balancing authority, recorded as bus attributes ({doc}`model-network-schema`).
+
+## Temporal structure
+
+- **Snapshots.** A model year is an hourly (8,760-snapshot) series, configured under
+  `snapshots:`. Weather- and demand-data years are aligned by configuration
+  (`renewable_weather_years`, demand profile selection — {doc}`data-demand`).
+- **Temporal resolution.** Hourly snapshots can be coarsened — averaged to n-hourly
+  (`3h`) or clustered into representative segments (`nSEG`) — either via
+  `clustering: temporal:` in configuration or per-run with `{opts}` tokens
+  ({doc}`config-wildcards`).
+- **Planning horizons and foresight.** `scenario: planning_horizons:` selects the
+  investment year(s). A single horizon gives a static expansion plan; multiple
+  horizons run either with perfect foresight (one optimization over all years) or
+  myopically (sequential years, each seeing only itself), set by `foresight:`
+  ({doc}`config-configuration`).
+
+## Investment and dispatch
+
+In capacity-expansion mode, carriers listed under `electricity: extendable_carriers`
+may build new capacity (`p_nom_opt` ≥ existing), with annualized capital costs from
+the NREL ATB ({doc}`data-costs`) and operating costs from fuel prices and heat rates.
+Everything else is dispatch-only. In production-cost mode no investment is allowed and
+the existing fleet is dispatched against demand. The optimization itself — objective,
+nodal balance, flow physics — is standard PyPSA; PyPSA-USA's additions are the custom
+constraints documented in {doc}`model-constraints`.

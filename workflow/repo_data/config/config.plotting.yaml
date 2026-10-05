@@ -1,11 +1,4 @@
 plotting:
-  costs_max: 800
-  costs_threshold: 1
-
-  energy_max: 15000.
-  energy_min: -10000.
-  energy_threshold: 50.
-
   tech_colors:
     "onwind": "#235ebc"
     "wind": "#235ebc"

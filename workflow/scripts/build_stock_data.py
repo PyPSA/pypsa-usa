@@ -401,33 +401,6 @@ def _already_retired(build_year: int, lifetime: int, year: int) -> bool:
         return False
 
 
-def _get_marginal_cost(
-    n: pypsa.Network,
-    names: list[str],
-    fuel: str | None = None,
-) -> float | pd.DataFrame:
-    """
-    Gets marginal cost from the investable link.
-
-    If dyanmic costs are applied, returns the marginal cost dataframe.
-    Else, returns the static cost associated with the first name in the
-    list
-    """
-    df = pd.DataFrame(index=n.links_t.marginal_cost.index)
-
-    try:
-        for name in names:
-            df[name] = n.links_t.marginal_cost[name]
-        return df
-    except KeyError:
-        logger.info(f"No dynamic cost found for {name}")
-        if fuel:
-            return n.links.at[fuel, "marginal_cost"]
-        else:
-            logger.warning(f"No fuel costs applied for {name}")
-            return 0
-
-
 ###
 # Public methods
 ###
@@ -808,7 +781,7 @@ def add_road_transport_brownfield(
             vehicles["p_nom"] = vehicles.p_nom.mul(percent).round(2)
             vehicles = vehicles.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 vehicles.index,
                 bus0=vehicles.bus0,
@@ -882,8 +855,6 @@ def add_road_transport_brownfield(
         df["ratio"] = ratios.at["lpg", ratio_name]
         df["p_nom"] = df.p_max.mul(df.ratio).div(100).div(efficiency).round(2)  # div to convert from %
 
-        # marginal_cost = _get_marginal_cost(n, df.bus1.to_list())
-
         # roll back vehicle stock in 5 year segments
         step = 5  # years
         periods = int(lifetime // step)
@@ -904,7 +875,7 @@ def add_road_transport_brownfield(
             vehicles["p_nom"] = vehicles.p_nom.mul(percent).round(2)
             vehicles = vehicles.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 vehicles.index,
                 bus0=vehicles.bus0,
@@ -1028,7 +999,7 @@ def add_service_brownfield(
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 furnaces.index,
                 bus0=furnaces.bus0,
@@ -1092,7 +1063,7 @@ def add_service_brownfield(
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 furnaces.index,
                 bus0=furnaces.bus0,
@@ -1151,7 +1122,7 @@ def add_service_brownfield(
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 furnaces.index,
                 bus0=furnaces.bus0,
@@ -1216,7 +1187,7 @@ def add_service_brownfield(
             aircon["p_nom"] = aircon.p_nom.mul(percent).div(100).round(2)
             aircon = aircon.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 aircon.index,
                 bus0=aircon.bus0,
@@ -1294,7 +1265,7 @@ def add_service_brownfield(
             heater["p_nom"] = heater.p_nom.mul(percent).div(100).div(efficiency).round(2)
             heater = heater.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 heater.index,
                 suffix="-discharger",
@@ -1373,7 +1344,7 @@ def add_service_brownfield(
             heater["p_nom"] = heater.p_nom.mul(percent).div(100).round(2)
             heater = heater.set_index("name")
 
-            n.madd(
+            n.add(
                 "Store",
                 heater.index,
                 bus=heater.bus,
@@ -1500,7 +1471,7 @@ def add_industrial_brownfield(
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 furnaces.index,
                 bus0=furnaces.bus0,
@@ -1563,7 +1534,7 @@ def add_industrial_brownfield(
             furnaces["p_nom"] = furnaces.p_nom.mul(percent).div(100).round(2)
             furnaces = furnaces.set_index("name")
 
-            n.madd(
+            n.add(
                 "Link",
                 furnaces.index,
                 bus0=furnaces.bus0,

@@ -1,8 +1,10 @@
 Characteristic,Data Source,Spatial Scale,Temporal Scale
 Nameplate Capacity,EIA860,Unit Level,-
-Capacity Factor Profiles,Atlite (ERA5),30 km,Hourly (1940 - present)
+Capacity Factor Profiles,GODEEEP (PNNL),12 km,Hourly (2012 + RCP4.5/8.5 scenarios for 2030/2040/2050)
+,Atlite (ERA5),30 km,Hourly (1940 - present)
 Hydro Profiles,BE/TAMU,Unit Level,Hourly (2019)
-Technical Potential,CEC Wind and Solar Screens,Variable (< 30 km),-
+Technical Potential,NREL reV Land-Access Scenarios,12 km,-
+,CEC Wind and Solar Screens,Variable (< 30 km),-
 ,Copernicus Land-Sat,,-
 ,GEBCO Bathymetry,,-
 ,BOEM Planning Areas,,-

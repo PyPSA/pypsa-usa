@@ -11,8 +11,12 @@ dconf
 *.dot
 *.tar.gz
 
-# configuration files
-config/
+# per-user configuration files, seeded by init_pypsa_usa.sh. The canonical
+# templates live in workflow/repo_data/config/ and ARE tracked — the old
+# bare `config/` pattern matched that directory too and forced every template
+# edit through `git add -f`.
+/workflow/config/*
+!/workflow/config/.gitkeep
 
 # generated files
 results/
@@ -266,6 +270,45 @@ TSWLatexianTemp*
 
 # Exceptions to gitignore
 connect.sh
-/workflow/config/config.cluster.yaml
 /workflow/repo_data/dag.png
 !.pre-commit-config.yaml
+
+# machine-local equivalence-harness scaffolding (symlinks into the main checkout)
+.worktrees/
+workflow/data
+workflow/cutouts
+
+# --- guards against the 2026-09-17 incident (brain backlog B11) -------------
+#
+# The rules above ignore generated output by PATH (`results/`, `resources/`,
+# `data/`). Git ignore rules are path-based, so RENAMING those directories
+# moves 662 MB of regenerable output out from under them. That is exactly what
+# happened: a cleanup renamed them into `.trash-20260901/` -- because the
+# cluster's policy denies `rm -rf` -- a `git add -A` swept them in, and the
+# 177.67 MB parquet inside blocked every push to GitHub for two weeks until
+# the history had to be rewritten.
+#
+# So: ignore the SHAPE of the thing as well as its location. Delete
+# regenerable folders with `rm -r` (which IS permitted); never rename them
+# aside.
+.trash*/
+*.orig
+*.rej
+
+# Slurm job logs land in the repo root and were neither ignored nor committed
+# -- one careless `git add -A` from repeating the incident.
+slurm-*.out
+slurm-*.err
+
+# Bulk scientific data formats. Legitimate inputs live under
+# workflow/repo_data/ and workflow/geodata_repo/, which are re-included below;
+# anywhere else these are pipeline output and must not enter git.
+*.nc
+*.pkl
+*.parquet
+*.gpkg
+*.tif
+*.tiff
+!workflow/repo_data/**
+!workflow/geodata_repo/**
+!natura.tiff

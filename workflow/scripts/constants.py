@@ -14,9 +14,6 @@ GPS_CRS = "EPSG:4326"
 # General Constants
 ###################
 
-# convert euros to USD
-EUR_2_USD = 1.07  # taken on 12-12-2023
-
 # number of hours in a non-leap year
 HOURS_PER_YEAR = 8760
 
@@ -37,150 +34,6 @@ COAL_dol_ton_2_MWHthermal = LBS_TON**-1 * COAL_BTU_LB * 1000**-1 * MMBTU_MWHthem
 
 # (TBTU) (1e6 MMBTU / TBTU) (MWh / MMBTU)
 TBTU_2_MWH = 1e6 * (1 / MMBTU_MWHthemal)
-
-################################
-# Constants for ADS WECC mapping
-################################
-
-# maps ADS tech name to PyPSA name
-ADS_TECH_MAPPER = {
-    "Solar_Tracking": "solar-utility",
-    "NG_Industrial": "OCGT",
-    "NG_Areo": "OCGT",
-    "Wind_Onshore": "onwind",
-    "Geo_Binary": "geothermal",
-    "Solar_CSP6": "central solar thermal",
-    "NG_Single shaft": "OCGT",
-    "Solar_CSP0": "central solar thermal",
-    "Geo_Double flash": "geothermal",
-    "Solar_Photovoltaic": "solar-utility",
-    "Natural Gas_Steam Turbine": "CCGT",
-    "Subbituminous Coal_Steam Turbine": "coal",
-    "Water_Hydraulic Turbine": "hydro",
-    "Natural Gas_Gas Turbine": "OCGT",
-    "Wind_Wind Turbine": "onwind",
-    "MWH_Battery Storage": "battery storage",
-    "Nuclear_Nuclear": "nuclear",
-    "Solar_NonTracking": "solar-utility",
-    "Landfill Gas_Internal Combustion": "other",
-    "Electricity_Battery Storage": "battery storage",
-    "Solar_Non-Tracking": "solar-utility",
-    "DFO_ICE": "oil",
-    "OBG_GT-NG": "other",
-    "DFO_ST": "oil",
-    "WDS_ST": "biomass",
-    "Solar_Fixed": "solar-utility",
-    "NG_Aero": "OCGT",
-    "Biomass Waste_Internal Combustion": "biomass",
-    "OBG_ICE": "other",
-    "LFG_ICE": "waste",
-    "NG_GT-NG": "OCGT",
-    "Wind_WT": "onwind",
-    "Natural Gas_Combined Cycle": "CCGT",
-    "Uranium_Nuclear": "nuclear",
-    "Electricity_Non-Tracking": "battery storage",
-}
-
-# maps ADS sub-type tech name to PyPSA name
-ADS_SUB_TYPE_TECH_MAPPER = {
-    "SolarPV-Tracking": "solar-utility",
-    "CT-NatGas-Industrial": "OCGT",
-    "CT-NatGas-Aero": "OCGT",
-    "Hydro": "hydro",
-    "Bio-ICE": "biomass",
-    "PS-Hydro": "hydro",
-    "SolarPV-NonTracking": "solar-utility",
-    "WT-Onshore": "onwind",
-    "Bio-ST": "CCGT",
-    "ST-WasteHeat": "CCGT",
-    "Geo-BinaryCycle": "geothermal",
-    "ST-NatGas": "CCGT",
-    "SolarThermal-CSP6": "central solar thermal",
-    "CCWhole-NatGas-SingleShaft": "CCGT",
-    "ICE-NatGas": "OCGT",
-    "HydroRPS": "hydro",
-    "ST-Nuclear": "nuclear",
-    "Bio-CT": "biomass",
-    "ST-Other": "CCGT",
-    "CT-OilDistillate": "oil",
-    "ST-Coal": "coal",
-    "CCWhole-NatGas-Aero": "CCGT",
-    "Bio-CC": "biomass",
-    "CCWhole-NatGas-Industrial": "CCGT",
-    "SolarThermal-CSP0": "central solar thermal",
-    "PS-HydroRPS": "hydro",
-    "Battery Storage": "battery storage",
-    "Geo-DoubleFlash": "geothermal",
-    "ICE-OilDistillate": "oil",
-    "HYDRO": "hydro",
-    "CT-Aero": "OCGT",
-    "DR": "demand response",
-    "MotorLoad": "other",
-    "DG-BTM": "solar-rooftop",
-    "CT-AB-Cogen": "OCGT",
-    "CCPart-Steam": "CCGT",
-    "CC-AB-Cogen": "CCGT",
-    "UnknownPwrFloMdl": "other",
-    "hydro": "hydro",
-    "DC-Intertie": "other",
-    "VAR-Device": "other",
-}
-
-# maps ADS carrier names to PyPSA name
-ADS_CARRIER_NAME = {
-    "Solar": "solar",
-    "NG": "gas",
-    "Water": "hydro",
-    "Bio": "biomass",
-    "Wind": "wind",
-    "WH": "waste",
-    "Geo": "geothermal",
-    "Uranium": "nuclear",
-    "Petroleum Coke": "oil",
-    "Coal": "coal",
-    "NatGas": "gas",
-    "Oil": "oil",
-    "Electricity": "battery",
-    "Natural Gas": "gas",
-    "Subbituminous Coal": "coal",
-    "Combined Cycle": "gas",
-    "MWH": "battery",
-    "Nuclear": "nuclear",
-    "Landfill Gas": "waste",
-    "DFO": "oil",
-    "OBG": "other",
-    "WDS": "biomass",
-    "Biomass Waste": "waste",
-    "LFG": "waste",
-}
-
-# maps ADS fuel name to PyPSA name
-ADS_FUEL_MAPPER = {
-    "Solar": "Solar",
-    "NG": "Gas",
-    "Water": "Hydro",
-    "Bio": "Biomass",
-    "Wind": "Wind",
-    "WH": "Waste",  # TODO: #33 add waste into cost data
-    "Geo": "Geothermal",
-    "Uranium": "Nuclear",
-    "Petroleum Coke": "Oil",
-    "Coal": "Coal",
-    "NatGas": "Gas",
-    "Oil": "Oil",
-    "Electricity": "Battery",
-    "Natural Gas": "Gas",
-    "Subbituminous Coal": "Coal",
-    "Combined Cycle": "Gas_CC",
-    "MWH": "Battery",
-    "Nuclear": "Nuclear",
-    "Landfill Gas": "Waste",
-    "DFO": "Oil",
-    "OBG": "Other",
-    "WDS": "Biomass",
-    "Biomass Waste": "Biomass",
-    "LFG": "Waste",
-}
 
 
 ###############################
@@ -620,14 +473,6 @@ REC_TRADING_ZONE_MAPPER = {
     "TX": "ERCOT",
 }
 ################################
-# Constants for Breakthrough mapping
-################################
-
-BREAKTHROUGH_TECH_MAPPER = {
-    "wind_offshore": "offwind",
-    "wind": "onwind",
-}
-################################
 # Constants for NREL ATB mapping
 ################################
 """
@@ -824,73 +669,6 @@ CAPEX_LOCATIONAL_MULTIPLIER = {
 ###########################################
 # Constants for NREL Locational Multipliers
 ###########################################
-
-EIA_FUEL_MAPPER = {
-    "ANT": "coal",
-    "BIT": "coal",
-    "LIG": "coal",
-    "SGC": "coal",
-    "SUB": "coal",
-    "WC": "coal",
-    "RC": "coal",
-    "DFO": "oil",
-    "JF": "oil",
-    "KER": "oil",
-    "PC": "oil",
-    "PG": "oil",
-    "RFO": "oil",
-    "SGP": "oil",
-    "WO": "oil",
-    "BFG": "gas",
-    "NG": "gas",
-    "H2": "gas",
-    "OG": "gas",
-    "AB": "waste",
-    "MSW": "waste",
-    "OBS": "waste",
-    "WDS": "waste",
-    "OBL": "biomass",
-    "SLW": "biomass",
-    "BLQ": "biomass",
-    "WDL": "biomass",
-    "LFG": "biomass",
-    "OBG": "biomass",
-    "SUN": "solar",
-    "WND": "onwind",
-    "GEO": "geothermal",
-    "WAT": "hydro",
-    "NUC": "nuclear",
-    "PUR": "other",
-    "WH": "other",
-    "TDF": "other",
-    "MWH": "battery",
-    "OTH": "other",
-    "HPS": "hydro",
-    "PEL": "oil",
-    "PET": "oil",
-    "WNT": "onwind",
-    "NGO": "gas",
-    "COW": "coal",
-    "BIS": "coal",
-    "HYC": "hydro",
-    "BIO": "biomass",
-    "ALL": "other",
-    "SPV": "solar",
-    "FOS": "other",
-    "AOR": "other",
-    "MLG": "waste",
-    "STH": "other",
-    "WAS": "biomass",
-    "COL": "coal",
-    "WWW": "biomass",
-    "OB2": "biomass",
-    "ORW": "other",
-    "MSB": "biomass",
-    "WOO": "oil",
-    "OOG": "other",
-    "OBW": "biomass",
-    "WOC": "coal",
-}
 
 EIA_FUEL_MAPPER_2 = {
     "Coal": "coal",

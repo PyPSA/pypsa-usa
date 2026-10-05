@@ -181,7 +181,6 @@ def _get_opt_pwr_capacity_per_node(
     n: pypsa.Network,
     group_existing: bool = True,
     state: str | None = None,
-    **kwargs,
 ) -> pd.Series:
     links = _filter_link_on_sector(n, "pwr")
     gens = _filter_gens_on_sector(n, "pwr")
@@ -249,7 +248,6 @@ def _get_total_capacity_per_node(
 def _get_total_pwr_capacity_per_node(
     n: pypsa.Network,
     state: str | None = None,
-    **kwargs,
 ) -> pd.DataFrame:
     links = _filter_link_on_sector(n, "pwr")
     gens = _filter_gens_on_sector(n, "pwr")
@@ -280,7 +278,6 @@ def _get_total_pwr_capacity_per_node(
 def _get_brownfield_pwr_capacity_per_node(
     n: pypsa.Network,
     state: str | None = None,
-    **kwargs,
 ) -> pd.DataFrame:
     links = _filter_link_on_sector(n, "pwr")
     gens = _filter_gens_on_sector(n, "pwr")
@@ -386,20 +383,10 @@ def get_capacity_per_node(
     **kwargs,
 ) -> pd.DataFrame:
     if sector == "pwr":
-        total = _get_total_pwr_capacity_per_node(
-            n,
-            sector=sector,
-            state=state,
-        )
-        opt = _get_opt_pwr_capacity_per_node(n, sector=sector, state=state).to_frame()
-        brwn = _get_brownfield_pwr_capacity_per_node(n, sector=sector, state=state)
-    elif sector == "trn":
-        total = _get_total_capacity_per_node(n, sector=sector, state=state)
-        opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()
-        brwn = _get_brownfield_capacity_per_node(n, sector=sector, state=state)
+        total = _get_total_pwr_capacity_per_node(n, state=state)
+        opt = _get_opt_pwr_capacity_per_node(n, state=state).to_frame()
+        brwn = _get_brownfield_pwr_capacity_per_node(n, state=state)
     else:
-        if sector == "res" and state == "VT":
-            pass
         total = _get_total_capacity_per_node(n, sector=sector, state=state)
         opt = _get_opt_capacity_per_node(n, sector=sector, state=state).to_frame()
         brwn = _get_brownfield_capacity_per_node(n, sector=sector, state=state)
@@ -425,7 +412,7 @@ def get_sector_production_timeseries(
     Rememeber units! Transport will be in units of kVMT or similar.
 
     Note: can not use statistics module as multi-output links for co2 tracking
-    > n.statistics.supply("Link", nice_names=False, aggregate_time=False).T
+    > n.statistics.supply("Link", nice_names=False, groupby_time=False).T
     """
     links = _filter_link_on_sector(n, sector).index.to_list()
 
@@ -461,7 +448,7 @@ def get_power_production_timeseries(
     Rememeber units! Transport will be in units of kVMT or similar.
 
     Note: can not use statistics module as multi-output links for co2 tracking
-    > n.statistics.supply("Link", nice_names=False, aggregate_time=False).T
+    > n.statistics.supply("Link", nice_names=False, groupby_time=False).T
     """
     links = _filter_link_on_sector(n, "pwr").index.to_list()
     gens = _filter_gens_on_sector(n, "pwr").index.to_list()

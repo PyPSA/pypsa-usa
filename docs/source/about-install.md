@@ -20,8 +20,14 @@ git clone git@github.com:PyPSA/pypsa-usa.git
 
 ## Step 2. Initialize Configuration files
 
-From the command line, run the script `init_pypsa_usa.sh` to copy configuration file
-templates into the `workflow/config` folder.
+From the command line, run the script `init_pypsa_usa.sh` to seed the per-user
+configuration files into the `workflow/config` folder.
+
+Only three files are copied — `config.default.yaml` (a starting point for your own
+scenario config), `config.api.yaml` (API keys) and `config.slurm.yaml` (HPC account
+settings). Every other configuration file is read by the workflow directly from the
+tracked `workflow/repo_data/config/` templates, so it can never fall out of sync with
+your checkout. The script is safe to re-run: existing files are left untouched.
 
 ```console
 bash init_pypsa_usa.sh
@@ -29,7 +35,11 @@ bash init_pypsa_usa.sh
 
 ## Step 3: Set-up Environment (mamba or UV)
 
-PyPSA-USA can be managed though either [`UV`](https://github.com/astral-sh/uv) or [`mamba`](https://github.com/mamba-org/mamba). Users only need to install one, not both!
+PyPSA-USA can be managed through either [`UV`](https://github.com/astral-sh/uv) or [`mamba`](https://github.com/mamba-org/mamba). Users only need to install one, not both!
+
+PyPSA-USA requires **Python 3.11** (`>=3.11, <3.12`). Core dependencies are pinned
+(`pypsa==1.3.0`, `atlite==0.3.0`, `linopy==0.9.1`, `pandas==3.0.5`), so please install from the
+lock files below rather than upgrading packages manually.
 
 ```{seealso}
 If you are planning to develop `PyPSA-USA`, please see our [contribution guidelines](./contributing.md#code-contributions) for installing additional dependencies.
@@ -37,17 +47,24 @@ If you are planning to develop `PyPSA-USA`, please see our [contribution guideli
 
 ### Step 3a: `uv` installation
 
-[`UV`](https://docs.astral.sh/uv/) is a new python package managment tool from [`Astral`](https://astral.sh/), the creators of [`ruff`](https://github.com/astral-sh/ruff). It replaces `mamba`, `conda`, and `pip` commands for one package and virtual environment managment tool. Instructions for installing `UV` can be found [here](https://docs.astral.sh/uv/getting-started/installation/).
+[`UV`](https://docs.astral.sh/uv/) is a new python package management tool from [`Astral`](https://astral.sh/), the creators of [`ruff`](https://github.com/astral-sh/ruff). It replaces `mamba`, `conda`, and `pip` commands for one package and virtual environment management tool. Instructions for installing `UV` can be found [here](https://docs.astral.sh/uv/getting-started/installation/).
 
-Once `UV` is installed, you can activate the environemnt with:
+Once `UV` is installed, create the Python 3.11 environment, activate it, and install the
+pinned dependencies with:
 
 ```console
-uv venv
+uv venv --python 3.11
 source .venv/bin/activate
+uv sync
 ```
 
+If Python 3.11 is not available on your system, `UV` can install it for you with
+`uv python install 3.11`. Prefixing commands with `uv run` (as shown on the
+[usage page](https://pypsa-usa.readthedocs.io/en/latest/about-usage.html)) also keeps the
+environment in sync automatically.
+
 ```{warning}
-If you are migrating from `mamba`/`conda`, you may need to install system level dependencies that conda has previously handeled. These include, `HDF5` and `GDAL>=3.1` libraries.
+If you are migrating from `mamba`/`conda`, you may need to install system level dependencies that conda has previously handled. These include the `HDF5` and `GDAL>=3.1` libraries.
 ```
 
 ### Step 3b: `mamba` Installation
@@ -78,8 +95,30 @@ and the non-free, commercial software (for some of which free academic licenses 
 - [Gurobi](https://www.gurobi.com/documentation/quickstart.html)
 - [CPLEX](https://www.ibm.com/products/ilog-cplex-optimization-studio)
 
-## Step 5: Get an EIA API Key
+```{note}
+`config/config.default.yaml` is set up for Gurobi (`solving: solver: name: gurobi`), and the
+example commands on the [usage page](https://pypsa-usa.readthedocs.io/en/latest/about-usage.html)
+pass `--scheduler-ilp-solver GUROBI_CMD`. If you do not have a Gurobi license, set
+`solving: solver: name: highs` in your configuration — the HiGHS python package (`highspy`)
+is already installed with the environment — and simply drop the
+`--scheduler-ilp-solver GUROBI_CMD` flag from your `snakemake` commands (it only configures
+Snakemake's internal job scheduler, not the optimization solver).
+```
 
-The PyPSA-USA workflow leverages the EIA API in several steps. The default configuration activates dynamic fuel-cost prices, which requires EIA API key. You can quickly get your key by completing this [form](https://www.eia.gov/opendata/register.php).
+## Step 5 (optional): Get an EIA API Key
 
-The API key will be emailed to you, and you can copy the key into the `config.api.yaml` file.
+A default power-only run does **not** need an EIA API key — `conventional:
+dynamic_fuel_price: enable` is `false` in `config.default.yaml`, and with it off
+the workflow makes no EIA request at all. The key is only needed for the parts
+of the workflow that read the EIA API directly:
+
+- dynamic fuel prices (`conventional: dynamic_fuel_price: enable: true`),
+- sector-coupled and AEO-scaled demand (`build_demand` with EIA/AEO scenarios),
+- trade cost lookups (`imports`/`exports`: `costs: wholesale`),
+- the historical-validation plots (`plot_validation_*`).
+
+If you need any of those, you can quickly get a key by completing this [form](https://www.eia.gov/opendata/register.php).
+
+The API key will be emailed to you. Paste it into `workflow/config/config.api.yaml`, or
+export it as the `EIA_API_KEY` environment variable — the environment variable takes
+precedence over the YAML value, which keeps the key out of your files entirely.

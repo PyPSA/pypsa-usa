@@ -12,10 +12,84 @@ import pandas as pd
 import pypsa
 import requests
 import yaml
-from constants import HOURS_PER_YEAR
 from snakemake.utils import update_config
 
+# pandas 3 infers `str` dtype for string data; pypsa (until 2.0) converts
+# network frames back to numpy object dtype on import. Pin the legacy
+# behavior explicitly so every script that imports _helpers is consistent
+# and the per-import FutureWarning is silenced.
+# Guarded because this module is also imported at DAG-construction time by
+# rules/common.smk, which runs under the snakemake launcher's interpreter --
+# that may still carry pypsa <1.0, where `pypsa.options` does not exist.
+if hasattr(pypsa, "options"):
+    pypsa.options.api.legacy_string_dtype = True
+
 REGION_COLS = ["geometry", "name", "x", "y", "country"]
+
+logger = logging.getLogger(__name__)
+
+
+def _derive_geojson_plot_path(geojson_path: str) -> str | None:
+    """Map a geospatial resources path to its results-folder plot path.
+
+    Convention:
+      resources/<RDIR>/geospatial/<interconnect>/<name>.geojson
+      → results/<RDIR>/<interconnect>/geospatial/<name>.png
+    """
+    parts = list(Path(geojson_path).parts)
+    if "resources" not in parts or "geospatial" not in parts:
+        return None
+    res_i = parts.index("resources")
+    geo_i = parts.index("geospatial", res_i)
+    if geo_i + 1 >= len(parts) - 1:
+        return None
+    rdir = parts[res_i + 1 : geo_i]
+    interconnect = parts[geo_i + 1]
+    name = Path(parts[-1]).stem
+    return str(Path("results", *rdir, interconnect, "geospatial", f"{name}.png"))
+
+
+def plot_geojson(
+    geojson_path: str,
+    plot_path: str | None = None,
+    title: str | None = None,
+    color: str = "lightgray",
+    edgecolor: str = "black",
+) -> str | None:
+    """Render a quick overview PNG for a geojson file.
+
+    If ``plot_path`` is None, derive it from the standard layout
+    (see :func:`_derive_geojson_plot_path`). Silently skips when the
+    path cannot be derived or the file is missing/unreadable, so callers
+    can treat plotting as best-effort instrumentation.
+    """
+    import geopandas as gpd
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    if plot_path is None:
+        plot_path = _derive_geojson_plot_path(geojson_path)
+        if plot_path is None:
+            logger.warning("plot_geojson: cannot derive plot path for %s", geojson_path)
+            return None
+
+    try:
+        gdf = gpd.read_file(geojson_path)
+    except Exception as e:
+        logger.warning("plot_geojson: failed to read %s: %s", geojson_path, e)
+        return None
+
+    Path(plot_path).parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(10, 10))
+    if not gdf.empty:
+        gdf.plot(ax=ax, color=color, edgecolor=edgecolor, linewidth=0.3)
+    ax.set_title(title or Path(geojson_path).stem)
+    ax.set_axis_off()
+    fig.savefig(plot_path, dpi=120, bbox_inches="tight")
+    plt.close(fig)
+    return plot_path
 
 
 def configure_logging(snakemake, skip_handlers=False):
@@ -62,79 +136,70 @@ def configure_logging(snakemake, skip_handlers=False):
     logging.basicConfig(**kwargs)
 
 
-def setup_custom_logger(name):
-    formatter = logging.Formatter(
-        fmt="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
-    )
+def log_network_schema(
+    n: "pypsa.Network",
+    stage: str,
+    baseline: dict[str, dict] | None = None,
+) -> dict[str, dict]:
+    """Log column schema of each PyPSA component on a network.
 
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
+    Call at script entry (stage="entry") right after pypsa.Network(...).
+    Capture the return value and pass it as baseline= to a later call
+    at script exit (stage="exit") right before export_to_netcdf — this
+    emits row-count and column-set deltas instead of full column lists.
 
-    logger = logging.getLogger(name)
-    # logger.setLevel(logging.DEBUG)
-    logger.addHandler(handler)
-    return logger
-
-
-def load_network(import_name=None, custom_components=None):
-    """
-    Helper for importing a pypsa.Network with additional custom components.
-
-    Parameters
-    ----------
-    import_name : str
-        As in pypsa.Network(import_name)
-    custom_components : dict
-        Dictionary listing custom components.
-        For using ``snakemake.config['override_components']``
-        in ``config.yaml`` define:
-
-        .. code:: yaml
-
-            override_components:
-                ShadowPrice:
-                    component: ["shadow_prices","Shadow price for a global constraint.",np.nan]
-
-    Attributes
-    ----------
-                    name: ["string","n/a","n/a","Unique name","Input (required)"]
-                    value: ["float","n/a",0.,"shadow value","Output"]
+    Empty components are skipped. Column lists are sorted for stable
+    output. Logging only — no asserts, no behavior change.
 
     Returns
     -------
-    pypsa.Network
+    dict[str, dict]
+        Mapping of component name -> {"cols": [...], "rows": int}.
+        Pass this back as baseline= on the matching exit call.
     """
-    from pypsa.descriptors import Dict
+    snapshot: dict[str, dict] = {}
+    for component in n.components:
+        df = component.static
+        if df.empty:
+            continue
+        snapshot[component.name] = {
+            "cols": sorted(df.columns.tolist()),
+            "rows": len(df),
+        }
 
-    override_components = None
-    override_component_attrs = None
-
-    if custom_components is not None:
-        override_components = pypsa.components.components.copy()
-        override_component_attrs = Dict(
-            {k: v.copy() for k, v in pypsa.components.component_attrs.items()},
-        )
-        for k, v in custom_components.items():
-            override_components.loc[k] = v["component"]
-            override_component_attrs[k] = pd.DataFrame(
-                columns=["type", "unit", "default", "description", "status"],
+    if baseline is None:
+        for name, info in snapshot.items():
+            logger.info(
+                "[schema %s] %s: %d rows, %d cols: %s",
+                stage,
+                name,
+                info["rows"],
+                len(info["cols"]),
+                info["cols"],
             )
-            for attr, val in v["attributes"].items():
-                override_component_attrs[k].loc[attr] = val
+        return snapshot
 
-    return pypsa.Network(
-        import_name=import_name,
-        override_components=override_components,
-        override_component_attrs=override_component_attrs,
-    )
-
-
-def pdbcast(v, h):
-    return pd.DataFrame(
-        v.values.reshape((-1, 1)) * h.values,
-        index=v.index,
-        columns=h.index,
-    )
+    for name, info in snapshot.items():
+        base = baseline.get(name, {"cols": [], "rows": 0})
+        added = sorted(set(info["cols"]) - set(base["cols"]))
+        removed = sorted(set(base["cols"]) - set(info["cols"]))
+        if info["rows"] != base["rows"]:
+            logger.info(
+                "[schema %s] %s: %d -> %d rows",
+                stage,
+                name,
+                base["rows"],
+                info["rows"],
+            )
+        if added or removed:
+            logger.info(
+                "[schema %s] %s: +cols=%s, -cols=%s",
+                stage,
+                name,
+                added,
+                removed,
+            )
+    return snapshot
 
 
 def calculate_annuity(n, r):
@@ -196,39 +261,6 @@ def load_costs(tech_costs: str, costs_config: dict | None = None) -> pd.DataFram
     return combined.pivot(index="pypsa-name", columns="parameter", values="value").fillna(0)
 
 
-def load_network_for_plots(fn, tech_costs, config, combine_hydro_ps=True):
-    import pypsa
-    from add_electricity import load_costs, update_transmission_costs
-
-    n = pypsa.Network(fn)
-
-    n.loads["carrier"] = n.loads.bus.map(n.buses.carrier) + " load"
-    n.stores["carrier"] = n.stores.bus.map(n.buses.carrier)
-
-    n.links["carrier"] = n.links.bus0.map(n.buses.carrier) + "-" + n.links.bus1.map(n.buses.carrier)
-    n.lines["carrier"] = "AC line"
-    n.transformers["carrier"] = "AC transformer"
-
-    n.lines["s_nom"] = n.lines["s_nom_min"]
-    n.links["p_nom"] = n.links["p_nom_min"]
-
-    if combine_hydro_ps:
-        n.storage_units.loc[
-            n.storage_units.carrier.isin({"PHS", "hydro"}),
-            "carrier",
-        ] = "hydro+PHS"
-
-    # if the carrier was not set on the heat storage units
-    # bus_carrier = n.storage_units.bus.map(n.buses.carrier)
-    # n.storage_units.loc[bus_carrier == "heat","carrier"] = "water tanks"
-
-    num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / HOURS_PER_YEAR
-    costs = load_costs(tech_costs, config["costs"], config["electricity"], num_years)
-    update_transmission_costs(n, costs)
-
-    return n
-
-
 def is_transport_model(transmission_network):
     match transmission_network:
         case "reeds":
@@ -247,91 +279,7 @@ def update_p_nom_max(n):
     # the installed capacity might exceed the expansion limit.
     # Hence, we update the assumptions.
 
-    n.generators.p_nom_max = n.generators[["p_nom_min", "p_nom_max"]].max(1)
-
-
-def aggregate_p_nom(n):
-    return pd.concat(
-        [
-            n.generators.groupby("carrier").p_nom_opt.sum(),
-            n.storage_units.groupby("carrier").p_nom_opt.sum(),
-            n.links.groupby("carrier").p_nom_opt.sum(),
-            n.loads_t.p.groupby(n.loads.carrier, axis=1).sum().mean(),
-        ],
-    )
-
-
-def aggregate_p(n):
-    return pd.concat(
-        [
-            n.generators_t.p.sum().groupby(n.generators.carrier).sum(),
-            n.storage_units_t.p.sum().groupby(n.storage_units.carrier).sum(),
-            n.stores_t.p.sum().groupby(n.stores.carrier).sum(),
-            -n.loads_t.p.sum().groupby(n.loads.carrier).sum(),
-        ],
-    )
-
-
-def aggregate_e_nom(n):
-    return pd.concat(
-        [
-            (n.storage_units["p_nom_opt"] * n.storage_units["max_hours"]).groupby(n.storage_units["carrier"]).sum(),
-            n.stores["e_nom_opt"].groupby(n.stores.carrier).sum(),
-        ],
-    )
-
-
-def aggregate_p_curtailed(n):
-    return pd.concat(
-        [
-            (
-                (n.generators_t.p_max_pu.sum().multiply(n.generators.p_nom_opt) - n.generators_t.p.sum())
-                .groupby(n.generators.carrier)
-                .sum()
-            ),
-            ((n.storage_units_t.inflow.sum() - n.storage_units_t.p.sum()).groupby(n.storage_units.carrier).sum()),
-        ],
-    )
-
-
-def aggregate_costs(n, flatten=False, opts=None, existing_only=False):
-    components = dict(
-        Link=("p_nom", "p0"),
-        Generator=("p_nom", "p"),
-        StorageUnit=("p_nom", "p"),
-        Store=("e_nom", "p"),
-        Line=("s_nom", None),
-        Transformer=("s_nom", None),
-    )
-
-    costs = {}
-    for c, (p_nom, p_attr) in zip(
-        n.iterate_components(components.keys(), skip_empty=False),
-        components.values(),
-    ):
-        if c.df.empty:
-            continue
-        if not existing_only:
-            p_nom += "_opt"
-        costs[(c.list_name, "capital")] = (c.df[p_nom] * c.df.capital_cost).groupby(c.df.carrier).sum()
-        if p_attr is not None:
-            p = c.pnl[p_attr].sum()
-            if c.name == "StorageUnit":
-                p = p.loc[p > 0]
-            costs[(c.list_name, "marginal")] = (p * c.df.marginal_cost).groupby(c.df.carrier).sum()
-    costs = pd.concat(costs)
-
-    if flatten:
-        assert opts is not None
-        conv_techs = opts["conv_techs"]
-
-        costs = costs.reset_index(level=0, drop=True)
-        costs = costs["capital"].add(
-            costs["marginal"].rename({t: t + " marginal" for t in conv_techs}),
-            fill_value=0.0,
-        )
-
-    return costs
+    n.generators.p_nom_max = n.generators[["p_nom_min", "p_nom_max"]].max(axis=1)
 
 
 def progress_retrieve(url, file):
@@ -345,23 +293,6 @@ def progress_retrieve(url, file):
         pbar.update(int(count * block_size * 100 / total_size))
 
     urllib.request.urlretrieve(url, file, reporthook=dlProgress)
-
-
-def get_aggregation_strategies(aggregation_strategies):
-    # default aggregation strategies that cannot be defined in .yaml format must be specified within
-    # the function, otherwise (when defaults are passed in the function's definition) they get lost
-    # when custom values are specified in the config.
-
-    import numpy as np
-    from pypsa.clustering.spatial import _make_consense
-
-    bus_strategies = dict(country=_make_consense("Bus", "country"))
-    bus_strategies.update(aggregation_strategies.get("buses", {}))
-
-    generator_strategies = {"build_year": lambda x: 0, "lifetime": lambda x: np.inf}
-    generator_strategies.update(aggregation_strategies.get("generators", {}))
-
-    return bus_strategies, generator_strategies
 
 
 def export_network_for_gis_mapping(n, output_path):
@@ -411,7 +342,7 @@ def mock_snakemake(rulename, **wildcards):
 
     import snakemake as sm
     from packaging.version import Version, parse
-    from pypsa.descriptors import Dict
+    from pypsa.definitions.structures import Dict
     from snakemake.script import Snakemake
 
     script_dir = Path(__file__).parent.resolve()
@@ -579,12 +510,25 @@ def update_config_from_wildcards(config, w, inplace=True):
         co2l_enable, co2l_value = find_opt(opts, "Co2L")
         if co2l_enable:
             config["electricity"]["co2limit_enable"] = True
+            if "Co2L" in opts:
+                # bare token: find_opt would otherwise read the "2" in the
+                # token name as the factor
+                co2l_value = None
             if co2l_value is not None:
-                config["electricity"]["co2limit"] = co2l_value * config["electricity"]["co2base"]
+                co2base = config["electricity"].get("co2base")
+                if co2base is None:
+                    raise ValueError(
+                        "`Co2L<x>` scales `electricity: co2base` (tCO2/yr), which is "
+                        "not set in any config layer; set it, or set "
+                        "`electricity: co2limit` directly and use a bare `Co2L`.",
+                    )
+                config["electricity"]["co2limit"] = co2l_value * co2base
 
         gasl_enable, gasl_value = find_opt(opts, "CH4L")
         if gasl_enable:
             config["electricity"]["gaslimit_enable"] = True
+            if "CH4L" in opts:
+                gasl_value = None  # bare token: the "4" is part of the name
             if gasl_value is not None:
                 config["electricity"]["gaslimit"] = gasl_value * 1e6
 
@@ -865,4 +809,4 @@ def get_multiindex_snapshots(
         sns = sns.append(
             get_snapshots(sns_config).map(lambda x: x.replace(year=year)),
         )
-    return pd.MultiIndex.from_arrays([sns.year, sns])
+    return pd.MultiIndex.from_arrays([sns.year, sns], names=["period", "timestep"])

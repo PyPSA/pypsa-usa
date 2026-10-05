@@ -4,86 +4,110 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-PyPSA-USA is a Snakemake workflow that builds and solves PyPSA energy-system optimization models of the US bulk power system (and optional sector coupling). Everything runs out of `workflow/` — `cd workflow` before invoking `snakemake`. Python is pinned to 3.11; dependencies are pinned exactly in `pyproject.toml` / `uv.lock`.
+PyPSA-USA is a Snakemake-orchestrated PyPSA workflow for capacity expansion, production-cost simulation, and power-flow analysis of the US bulk transmission system. Configuration is layered YAML; intermediate and final artifacts are netCDF/CSV/GeoJSON files produced by rules in `workflow/rules/*.smk` and Python scripts in `workflow/scripts/`.
 
-## Common commands
+## Branch policy: work against `develop`, not `master`
 
-All snakemake commands run from `workflow/`. Choose ONE env manager (mamba or uv) — not both.
+`develop` is the integration branch and is often well ahead of `master`. Any work on the model — code changes, config changes, reviews, audits, or analysis of "current state" — MUST reference `origin/develop`, not `master` or whatever the working tree happens to have checked out. Before drawing conclusions about how something works or proposing changes, run `git fetch origin develop` and check the file's state on `origin/develop` (`git show origin/develop:<path>` or check out a branch based on it). Base all feature branches and PRs on `develop`; never target `master` directly.
+
+## Running the workflow
+
+**All `snakemake` invocations run from `workflow/`** — `cd workflow/` first. `workflow/Snakefile` auto-loads the whole layered base out of the tracked templates: `repo_data/config/config.{slurm,common,plotting,api,sector,default}.yaml`, then the optional per-user overlays `config/config.api.yaml` and `config/config.slurm.yaml`, then whatever is passed via `--configfile`. Because `config.default.yaml` is a loaded layer, a scenario config is a sparse **overlay** — it only needs the keys it changes (nested mappings merge; lists and scalars are replaced wholesale).
 
 ```bash
-# First-time setup: copy config templates into workflow/config/
-bash init_pypsa_usa.sh
-
-# Full pipeline (solves + plots)
+cd workflow
 uv run snakemake -j1 --configfile config/config.default.yaml --scheduler-ilp-solver GUROBI_CMD
-# or: mamba activate pypsa-usa && snakemake -j1 --configfile config/config.default.yaml
-
-# Build only the input data model (network .nc, no solve)
-uv run snakemake data_model -j1 --configfile config/config.default.yaml
-
-# Force-rerun a subset, stopping at a target rule
-snakemake -j4 -R build_shapes --until build_base_network
-
-# DAG of the workflow
-snakemake --rulegraph all | sed -n "/digraph/,\$p" | dot -Tjpg -o repo_data/dag.jpg
-
-# Wipe resources/ and results/ (keeps data/)
-snakemake clean
-
-# HPC (SLURM)
-bash run_slurm.sh   # edit --configfile inside the script first
+# or under mamba: snakemake -j1 --configfile config/config.default.yaml
 ```
 
-Tests (pytest) live in `workflow/scripts/test/` and use the GLPK solver. Run from that directory or with that as cwd:
+Useful targets:
+- `rule data_model` — build everything up to the assembled-but-unsolved network (no solver).
+- `rule all` — full pipeline including solve and figures.
+- `--until <rule>` to stop early, `-R <rule>` to force re-execution.
+- Tutorial config (`repo_data/config/config.tutorial.yaml`, CA only, simpl=75, clusters=4, 2050) is the smallest meaningful end-to-end run.
 
-```bash
-cd workflow/scripts/test && pytest -v
-pytest test_reserves.py::test_erm_peak_demand_hour -v
-pytest -v -k "storage"
+HPC: edit `config/config.slurm.yaml` (account/partition/email; it also holds the single per-rule `walltime:` block) and `workflow/run_slurm.sh`, then `bash workflow/run_slurm.sh`.
+
+## Tests and lint
+
+- Unit tests live in `workflow/scripts/test/` (covers constraint/helper logic only — `test_land.py`, `test_policy.py`, `test_reserves.py`). They are not end-to-end pipeline tests.
+  ```bash
+  cd workflow/scripts && pytest test/
+  pytest test/test_policy.py::test_name  # single test
+  ```
+- `conftest.py` provides a `base_network` PyPSA fixture (3-bus network with wind/solar/gas) — extend it rather than building fresh networks per test.
+- Pre-commit hooks (snakefmt, ruff, ruff format, blackdoc, pyupgrade, pretty-format-yaml, add-trailing-comma, jupyter-notebook-cleanup) run on `git commit`. Hooks modify files on first run; re-stage and re-commit. **Do not bypass with `--no-verify`.**
+- `.github/workflows/main.yml` runs two jobs on every push/PR to `master`/`develop`/`v1-epic`: `fast-tests` (`pytest -m fast`, Tier A static checks) and `e2e-tests` (`pytest -m integration`, Tier B build under micromamba with cached `data/` and `cutouts/`). A scheduled Tuesday job (`upstream-regression`) re-runs the whole suite against upstream PyPSA/atlite/linopy master.
+
+## Architecture: the DAG and the resources/ layout
+
+The workflow was recently refactored (the "simplify-early" stack) so that topology aggregation and `{simpl}` kmeans clustering happen **before** the per-bus heavy rules. The clustered network is the input to demand/RE/electricity assembly, not the substation-level network. This is the load-bearing fact about the rule graph:
+
+```
+build_base_network → build_bus_regions
+  → aggregate_to_substations (elec_b.nc, busmap_b.csv)        # topology only
+  → cluster_resources            (elec_s{simpl}.nc, regions_*_s{simpl}.geojson, busmap_s{simpl}.csv)
+  → build_renewable_profiles (profile_{tech}_s{simpl}.nc)
+  → build_*_demand           (demand outputs keyed to cluster bus)
+  → add_demand               (elec_s{simpl}_dem.nc)
+  → add_electricity          (elec_s{simpl}_l_pp.pkl)         # dill pickle
+  → cluster_network          (elec_s{simpl}_c{clusters}.nc)
+  → add_extra_components → prepare_network → solve_network
 ```
 
-Lint/format with ruff (config in `pyproject.toml`, line-length 120, py311 target):
+EGS gets a parallel `aggregate_egs` rule (gated on `EGS in extendable_carriers.Generator`) that remaps NREL substation-keyed supply curves through `busmap_s{simpl}.csv` before they reach `add_electricity`. HAC clustering has been removed entirely; only `kmeans` and `modularity` are supported in `cluster_network`.
 
-```bash
-ruff check --fix workflow/scripts
-ruff format workflow/scripts
-pre-commit run --all-files
-```
+### Category-first resources/ layout
 
-## Architecture
+`workflow/Snakefile` defines category constants — **always use them, never hard-code `RESOURCES + "{interconnect}/foo.nc"`**:
 
-### Snakemake is the orchestrator
-- `workflow/Snakefile` is the entrypoint. It loads layered config (`config.cluster.yaml` → `config.common.yaml` → `config.plotting.yaml` → `config.api.yaml` → `config.sector.yaml`) and then any user `--configfile`, then `include:`s rule files from `workflow/rules/*.smk`.
-- Rule files group the pipeline stages: `retrieve.smk` (downloads), `build_electricity.smk` (network construction), `build_sector.smk` (sector coupling), `solve_electricity.smk`, `postprocess.smk` / `postprocess_sector.smk`, `validate.smk`, and `common.smk` (shared helpers).
-- Each rule's `script:` points at a Python file in `workflow/scripts/`. Scripts read inputs/outputs/params via the injected `snakemake` object — they aren't standalone CLIs.
-- Two convenience entrypoints: `rule all` (figures, the default) and `rule data_model` (build the prepared network `.nc` without solving).
+| Constant | Path | What goes here |
+|----------|------|----------------|
+| `NETWORKS` | `resources/networks/` | `.nc` and `.pkl` networks (`elec_base_network.nc`, `elec_b.nc`, `elec_s{simpl}.nc`, `elec_s{simpl}_dem.nc`, `elec_s{simpl}_l_pp.pkl`, `elec_s{simpl}_c{clusters}.nc`) |
+| `BUSMAPS` | `resources/busmaps/` | `bus2sub.csv`, `sub.csv`, `busmap_b.csv`, `busmap_s{simpl}.csv`, `busmap_s{simpl}_{clusters}.csv`, `linemap_*.csv` |
+| `PROFILES` | `resources/profiles/` | `profile_{tech}_s{simpl}.nc`, `specs_EGS_s{simpl}.nc`, `profile_EGS_s{simpl}.nc`, NREL mapping cache |
+| `GEOSPATIAL` | `resources/geospatial/` | All `*_shapes.geojson`, `regions_*.geojson`, `reeds_shapes.geojson` |
+| `COSTS` | `resources/costs/` | `costs_{year}.csv`, `sector_costs_{year}.csv` |
+| `PRICES` | `resources/prices/` | Fuel-price CSVs |
+| `DEMAND` | `resources/demand/` | Per-end-use demand CSVs and pickles |
+| `POWERPLANTS` | `resources/powerplants/` | `powerplants.csv` (literal path, not under `RDIR`, intentionally shared across runs) |
+| `HEATING_COP`, `TEMPERATURE`, `POPULATION`, `CO2` | similarly named subdirs | Sector-coupling intermediates |
 
-### Wildcards thread through filenames
-Wildcard constraints declared in `Snakefile`:
-- `interconnect`: `usa|texas|western|eastern`
-- `simpl`: simplification suffix (e.g. number of pre-clustering nodes)
-- `clusters`: `[0-9]+m?+a?+c?|all` — `m`/`c` suffixes change memory scaling in `common.smk:memory()`
-- `ll`: line-limit code, e.g. `v1.25`, `copt`, `vall`
-- `opts`: dash-separated option flags consumed by scripts (e.g. `Co2L-3h-25seg`)
-- `sector`: dash-joined letters from `{E, G}` (electricity, natural gas). Auto-prefixed with `E-` if missing.
+`RESOURCES` itself = `resources/` + `RDIR` (where `RDIR = run.name + "/"` unless `shared_resources: true`).
 
-The canonical output filename pattern is:
-`elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc` (data model) and similar under `results/{interconnect}/...`.
+### Wildcards
 
-### Resources layout is category-first
-`Snakefile` defines top-level path constants — files are grouped by *what they are*, not by interconnect:
-`NETWORKS`, `BUSMAPS`, `PROFILES`, `GEOSPATIAL`, `COSTS`, `PRICES`, `POWERPLANTS`, `DEMAND`, `HEATING_COP`, `TEMPERATURE`, `POPULATION`, `CO2` — each is `RESOURCES + "<name>/"`. When adding a new output, route it through one of these constants (or add a new category) instead of inventing an ad-hoc path. `RESOURCES` itself toggles between shared and per-run based on `run.shared_resources`.
+Defined in `workflow/Snakefile`:
+- `interconnect`: `usa | texas | western | eastern`
+- `simpl`: alphanumeric or `all` — pre-clustering granularity
+- `clusters`: integer optionally suffixed with `m`/`s`/`a`/`c`, or `all` — final cluster count. A plain integer (and `m`) aggregates only conventional generators, keeping renewable resource zones at `{simpl}` resolution; `s` ("small") aggregates every carrier; `a` aggregates none. Do not add `m` to new configs — it is the default.
+- `ll`: `v|c` + number/`opt`/`all` — line-limit scenario
+- `opts`: dash/plus-separated options string (transmission, horizon discretization, etc.)
+- `sector`: `E`, `G`, or hyphenated combos
 
-### Config provider pattern (common.smk)
-Rules don't read `config[...]` directly. They use `config_provider("key1", "key2", default=...)` from `workflow/rules/common.smk`. If `run.scenarios.enable` is true, this resolves config dynamically per `wildcards.run` via a scenarios file; otherwise it's a static lookup with wildcard interpolation. When adding rule params, follow this pattern so scenario overrides keep working.
+### Script conventions
 
-### Pipeline stages (high level)
-1. **Retrieve** (`retrieve.smk`) — pull Zenodo bundles, EIA, PUDL, NREL exclusion, EGS, gridemissions, etc.
-2. **Build base network** — shapes → bus regions → base network → cost data → powerplants → renewable profiles → demand.
-3. **Simplify & cluster** — `cluster_simpl.py` then `cluster_network.py` reduce nodes per `simpl`/`clusters` wildcards.
-4. **Add components** — `add_electricity.py`, `add_extra_components.py`, `add_demand.py`, `add_sectors.py`.
-5. **Prepare & solve** — `prepare_network.py` applies `opts` modifiers, `solve_network.py` calls the solver. Optional add-on constraints live in `workflow/scripts/opts/` (`reserves.py`, `policy.py`, `land.py`, `interchange.py`, `bidirectional_link.py`, `sector.py`).
-6. **Postprocess** — `summary*.py`, `plot_*.py` produce figures organized by category (maps / emissions / production / system / validate).
+- Scripts in `workflow/scripts/` access inputs/outputs/params/config via the `snakemake` global (`snakemake.input.X`, `snakemake.output.X`, `snakemake.params.X`, `snakemake.config[...]`). Paths are passed in by the rule — scripts are layout-agnostic.
+- `_helpers.py` is the shared utility module; many scripts add `..` to `sys.path` and import from it.
+- Networks are loaded with `pypsa.Network(path)` for `.nc` and `dill.load(open(path, "rb"))` for `.pkl` (the `add_electricity` output is pickled).
 
-### Solver
-Default is Gurobi (pinned `gurobipy==11.0.3`); HiGHS and GLPK also supported. Tests use GLPK. The EIA API key (required by default config for dynamic fuel prices) goes in `config/config.api.yaml`.
+## Configs
+
+- `workflow/repo_data/config/` is canonical and is what the Snakefile loads. It is also the source for `docs/source/configtables/` documentation.
+- `repo_data/config/config.default.yaml` — the scenario base layer: every user-facing knob, with defaults. Auto-loaded, and also the file users copy as a starting scenario.
+- `repo_data/config/config.tutorial.yaml`, `config.test.yaml` — sparse overlays (only keys that differ from the base). `config.equivalence*.yaml` are deliberately self-contained because the Tier C harness replays them against the `master-benchmark` baseline, whose Snakefile does not load the base.
+- `workflow/config/` is untracked and holds only per-user files, seeded by `init_pypsa_usa.sh`: `config.default.yaml` (your scenario starting point), `config.api.yaml`, `config.slurm.yaml`. Do not add layered configs back into it.
+- `policy_constraints/` CSVs are read straight from `repo_data/config/policy_constraints/`.
+- The merged config is validated against `workflow/schemas/config.schema.yaml` at parse time (`snakemake.utils.validate`, `set_default=False`). The top level is open (snakemake/scenarios inject keys) but `electricity:`, `model_topology:`, `clustering:`, `solving:` etc. are closed, so a typo'd key fails loudly. Adding a config key means adding it to the schema.
+
+## Things to know before changing rules
+
+- The `{simpl}` wildcard is now load-bearing on most rule outputs downstream of `cluster_resources`. Adding a new per-bus rule? Its inputs and outputs should both carry `_s{simpl}` and consume `NETWORKS + "{interconnect}/elec_s{simpl}.nc"` (or `_dem.nc` / `_l_pp.pkl` depending on stage), not `elec_base_network.nc`.
+- When adding precomputed substation-level data (like EGS), pattern after `aggregate_egs`: take the rule's input keyed by `sub_id`, remap through `busmap_s{simpl}.csv` (capacity-weighted means for intensive quantities, sums for extensive), output keyed by cluster bus.
+- `bus_strategies` for clustering: `Pd` sums, `reeds_zone`/`county`/`balancing_area` take `first` of the cluster (representative). If new downstream code needs the full many-to-one mapping, read `busmap_*.csv` directly rather than relying on the representative attribute.
+- Custom busmaps must now key on `cluster_resources`-output bus IDs, not raw substation IDs.
+
+## Environment
+
+- `pypsa==1.3.0`, `linopy==0.9.1`, `pandas==3.0.5`, `xarray==2026.7.0`, `geopandas==1.1.4`, `atlite==0.3.0`, numpy held at `1.26.0` (rasterio/atlite ABI), Python `>=3.11, <3.12` (conda) / `>=3.11` (uv). Dependency pins in both `pyproject.toml` and `workflow/envs/environment.yaml` — keep them in sync if you bump. Migration notes: `docs/pypsa-v1-migration.md`.
+- Gurobi is the default ILP scheduler. `highspy` is in deps as a fallback solver.

@@ -8,6 +8,10 @@ Zenodo-preprocessed ERA5/Atlite file:
     weight          - layout weight per bus (MW), used for aggregation
     average_distance- capacity-weighted mean haversine distance from bus center
                       to supply-curve sites in that bus (km)
+    x, y            - per-bus entry coordinates (lon/lat): capacity-weighted
+                      site centroid, bus-polygon centroid when no capacity.
+                      Consumed by the opt-in `nrel_caps_reassign` recovery in
+                      build_renewable_profiles.py (footprint-scoped runs).
 
 Supply-curve points are spatial-joined to bus polygons. Points outside any bus
 (e.g. offshore sites for onshore-only buses) are dropped. Each row in the CSV
@@ -238,6 +242,8 @@ def rollup_supply_curve(
             "weight": (("bus",), empty()),
             "average_distance": (("bus",), empty()),
             "avg_cf": (("bus",), empty()),
+            "x": (("bus",), empty()),
+            "y": (("bus",), empty()),
         }
         if offshore_eez_shape is not None:
             data_vars["underwater_fraction"] = (("bus",), empty())
@@ -310,12 +316,28 @@ def rollup_supply_curve(
         f"mean avg_cf = {rollup['avg_cf'].mean():.3f}",
     )
 
+    # Per-entry coordinates (lon/lat): capacity-weighted site centroid, falling
+    # back to the bus-polygon centroid when a bus has zero surviving capacity.
+    # Downstream, footprint-scoped runs use these to reassign out-of-footprint
+    # entries to the nearest in-footprint bus (config key `nrel_caps_reassign`
+    # read by build_renewable_profiles.remap_caps_to_cluster). Caps files
+    # written before this change lack x/y, and enabling the reassignment flag
+    # against them raises a config error pointing back here.
+    site_x = rollup["site_lon"].to_numpy(dtype=np.float64)
+    site_y = rollup["site_lat"].to_numpy(dtype=np.float64)
+    fallback_x = rollup["name"].map(bus_lon).to_numpy(dtype=np.float64)
+    fallback_y = rollup["name"].map(bus_lat).to_numpy(dtype=np.float64)
+    entry_x = np.where(np.isfinite(site_x), site_x, fallback_x)
+    entry_y = np.where(np.isfinite(site_y), site_y, fallback_y)
+
     data_vars = {
         "p_nom_max": (("bus",), rollup["p_nom_max"].values.astype(np.float32)),
         "potential": (("bus",), rollup["p_nom_max"].values.astype(np.float32)),
         "weight": (("bus",), rollup["weight"].values.astype(np.float32)),
         "average_distance": (("bus",), rollup["average_distance"].values.astype(np.float32)),
         "avg_cf": (("bus",), rollup["avg_cf"].values.astype(np.float32)),
+        "x": (("bus",), entry_x.astype(np.float32)),
+        "y": (("bus",), entry_y.astype(np.float32)),
     }
 
     # underwater_fraction: fraction of the hypothetical DC line from the

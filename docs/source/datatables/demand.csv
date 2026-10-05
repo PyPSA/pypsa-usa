@@ -1,3 +1,4 @@
 Characteristic,Data Source,Spatial Scale,Temporal Scale
 Historical Demand,GridEmissions (EIA930),Balancing Area,Hourly (2018- 2023)
 Future Demand,NREL Electrification Futures Study (EFS),States,"Hourly (2030, 2040, 2050)"
+Future Demand (California),CPUC SERVM 2026 IRP Hourly Load,Six California load regions (PGE/SCE/SDGE/IID/LADWP/NCNC),"Hourly (2026, 2028, 2030, 2032, 2035, 2037, 2040, 2042, 2045; weather years 2000-2024)"

@@ -75,11 +75,11 @@ def _capacity_by_bus_carrier(
     Mirrors `summary.get_capacity_brownfield` but filters by activity in `horizon`.
     """
     parts = []
-    for c in n.iterate_components(["Generator", "StorageUnit", "Link"]):
-        mask = _active_mask(c.df, horizon)
+    for c in (n.components[name] for name in ["Generator", "StorageUnit", "Link"]):
+        mask = _active_mask(c.static, horizon)
         if not mask.any():
             continue
-        df = c.df.loc[mask]
+        df = c.static.loc[mask]
         if c.name == "Link":
             parts.append(df[attr].groupby([df.bus0, df.carrier]).sum().rename_axis(index={"bus0": "bus"}))
             parts.append(df[attr].groupby([df.bus1, df.carrier]).sum().rename_axis(index={"bus1": "bus"}))
@@ -220,9 +220,11 @@ def plot_emissions_map(
 
     emissions = (
         get_node_emissions_timeseries(n)
-        .groupby(level=0, axis=1)  # group columns
+        # pandas 3 removed groupby(axis=1); transpose-group-transpose groups
+        # the columns while preserving the (snapshots x bus) orientation.
+        .T.groupby(level=0)  # group columns
         .sum()
-        .sum()  # collaps rows
+        .T.sum()  # collaps rows
         .mul(1e-6)  # T -> MT
     )
     emissions = remove_sector_buses(emissions.T).T
@@ -512,8 +514,12 @@ def plot_capacity_map_by_horizon(
         elif kind == "new":
             # Restrict to assets vintaged to this horizon: built_year == horizon.
             parts = []
-            for c in n.iterate_components(["Generator", "StorageUnit", "Link"]):
-                df = c.df[c.df.get("build_year") == horizon] if "build_year" in c.df.columns else c.df.iloc[0:0]
+            for c in (n.components[name] for name in ["Generator", "StorageUnit", "Link"]):
+                df = (
+                    c.static[c.static.get("build_year") == horizon]
+                    if "build_year" in c.static.columns
+                    else c.static.iloc[0:0]
+                )
                 if df.empty:
                     continue
                 if c.name == "Link":
@@ -852,37 +858,6 @@ def plot_renewable_potential(
     plt.close()
 
 
-def plot_lmp_map(network: pypsa.Network, save: str, **wildcards):
-    _, ax = plt.subplots(
-        subplot_kw={"projection": ccrs.PlateCarree()},
-        figsize=(8, 8),
-    )
-
-    lmps = n.buses_t.marginal_price.mean()
-
-    plt.hexbin(
-        network.buses.x,
-        network.buses.y,
-        gridsize=40,
-        C=lmps,
-        cmap=plt.cm.bwr,
-        zorder=3,
-    )
-    network.plot(ax=ax, line_widths=pd.Series(0.5, network.lines.index), bus_sizes=0)
-
-    cb = plt.colorbar(
-        location="bottom",
-        pad=0.01,
-    )  # Adjust the pad value to move the color bar closer
-    cb.set_label("LMP ($/MWh)")
-    plt.title(create_title("Locational Marginal Price [$/MWh]", **wildcards))
-    plt.tight_layout(
-        rect=[0, 0, 1, 0.95],
-    )  # Adjust the rect values to make the layout tighter
-    plt.savefig(save)
-    plt.close()
-
-
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -903,9 +878,6 @@ if __name__ == "__main__":
     onshore_regions = gpd.read_file(snakemake.input.regions_onshore)
 
     sanitize_carriers(n, snakemake.config)
-
-    # mappers
-    generating_link_carrier_map = {"fuel cell": "H2", "battery discharger": "battery"}
 
     # carriers to plot
     carriers = (

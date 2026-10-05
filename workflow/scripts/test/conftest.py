@@ -16,6 +16,26 @@ import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from _helpers import get_multiindex_snapshots
 
+# Keep network frames on numpy object dtype under pandas 3 (matches _helpers).
+pypsa.options.api.legacy_string_dtype = True
+
+# pypsa >=1.0 (still present in 1.3.0): Network.copy() drops the hidden
+# ``name="snapshot"`` attribute of the snapshots MultiIndex on multi-period
+# networks. The optimizer's xarray accessors (c.da) then see a 'dim_0'
+# dimension instead of 'snapshot' and model creation fails. Re-setting the
+# snapshots restores the attribute. netCDF round-trips are unaffected, so this
+# only matters for the in-memory copies made throughout these tests.
+_network_copy = pypsa.Network.copy
+
+
+def _copy_with_snapshot_name(self, *args, **kwargs):
+    m = _network_copy(self, *args, **kwargs)
+    m.set_snapshots(m.snapshots)
+    return m
+
+
+pypsa.Network.copy = _copy_with_snapshot_name
+
 
 @pytest.fixture
 def base_network():

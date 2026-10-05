@@ -12,6 +12,7 @@ as.
 """
 
 import logging
+import re
 
 import numpy as np
 import pandas as pd
@@ -20,6 +21,7 @@ from _helpers import (
     configure_logging,
     is_transport_model,
     load_costs,
+    log_network_schema,
     set_scenario_config,
     update_config_from_wildcards,
 )
@@ -146,7 +148,7 @@ def set_transmission_limit(n, ll_type, factor):
 
 def average_every_nhours(n, offset):
     logger.info(f"Resampling the network to {offset}")
-    m = n.copy(with_time=False)
+    m = n.copy(snapshots=[])
 
     def resample_multi_index(df, offset, func):
         sw = []
@@ -168,12 +170,69 @@ def average_every_nhours(n, offset):
     m.snapshot_weightings = snapshot_weightings
     m.investment_periods = n.investment_periods
 
-    for c in n.iterate_components():
+    for c in n.components:
         pnl = getattr(m, c.list_name + "_t")
-        for k, df in c.pnl.items():
+        for k, df in c.dynamic.items():
             if not df.empty:
                 pnl[k] = resample_multi_index(df, offset, "mean")
+
+    rescale_uc_attrs_to_resolution(m, offset)
     return m
+
+
+def _hours_per_snapshot(offset: str) -> int:
+    """Number of hours collapsed into one snapshot by an ``Nh`` resample offset."""
+    match = re.fullmatch(r"(\d*)h", offset.strip().lower())
+    if not match:
+        raise ValueError(f"Cannot read an hourly step out of resample offset {offset!r}")
+    return int(match.group(1) or 1)
+
+
+def rescale_uc_attrs_to_resolution(n, offset: str) -> None:
+    """
+    Convert the unit-commitment attributes from hourly to snapshot units.
+
+    ``build_powerplants`` writes ``min_up_time`` / ``min_down_time`` in HOURS and
+    ``ramp_limit_up`` / ``ramp_limit_down`` per-unit per HOUR, because that is how
+    WECC ADS reports them. PyPSA instead reads ``min_up_time`` / ``min_down_time``
+    in SNAPSHOTS and the ramp limits per SNAPSHOT. At native hourly resolution the
+    two coincide, but under an ``Nh`` option (California runs ``REM-3h``) they
+    diverge by exactly N: a 6 h minimum up time would be enforced as 18 h, and a
+    50 %/h ramp would be enforced as 50 % per 3 h.
+
+    Rescaling is applied only when the network actually has committable
+    generators, so runs with ``conventional.unit_commitment: false`` — where the
+    UC attributes are PyPSA defaults and the ramp limits are the only affected
+    column — keep their previous behavior exactly.
+    """
+    gens = n.generators
+    if "committable" not in gens or not gens.committable.any():
+        return
+
+    nhours = _hours_per_snapshot(offset)
+    if nhours == 1:
+        return
+
+    com = gens.index[gens.committable.fillna(False).astype(bool)]
+
+    for col in ("min_up_time", "min_down_time"):
+        if col not in gens:
+            continue
+        hours = pd.to_numeric(gens.loc[com, col], errors="coerce").fillna(0.0)
+        # Round up: a 2 h minimum up time still blocks the whole 3 h snapshot.
+        n.generators.loc[com, col] = np.ceil(hours / nhours).astype(int)
+
+    for col in ("ramp_limit_up", "ramp_limit_down"):
+        if col not in gens:
+            continue
+        per_hour = pd.to_numeric(gens.loc[com, col], errors="coerce")
+        n.generators.loc[com, col] = (per_hour * nhours).clip(upper=1.0)
+
+    logger.info(
+        "Rescaled unit-commitment attributes of %d committable generators from hourly to %d-hour snapshots.",
+        len(com),
+        nhours,
+    )
 
 
 def is_leap_year(year: int) -> bool:
@@ -195,8 +254,8 @@ def apply_time_segmentation(n, segments, solver_name="cbc"):
     # get all time-dependent data
     columns = pd.MultiIndex.from_tuples([], names=["component", "key", "asset"])
     raw = pd.DataFrame(index=n.snapshots, columns=columns)
-    for c in n.iterate_components():
-        for attr, pnl in c.pnl.items():
+    for c in n.components:
+        for attr, pnl in c.dynamic.items():
             # exclude e_min_pu which is used for SOC of EVs in the morning
             if not pnl.empty and attr != "e_min_pu":
                 df = pnl.copy()
@@ -289,6 +348,7 @@ if __name__ == "__main__":
     transport_model = is_transport_model(params.transmission_network)
 
     n = pypsa.Network(snakemake.input[0])
+    schema_entry = log_network_schema(n, stage="entry")
     num_years = n.snapshot_weightings.loc[n.investment_periods[0]].objective.sum() / HOURS_PER_YEAR
     costs = load_costs(snakemake.input.tech_costs, params.costs)
     # Set Investment Period Year Weightings
@@ -309,7 +369,9 @@ if __name__ == "__main__":
     time_resolution = params.time_resolution
     is_string = isinstance(time_resolution, str)
     if is_string and time_resolution.lower().endswith("h"):
-        n = average_every_nhours(n, time_resolution)
+        # pandas 3 only accepts the lowercase 'h' offset alias, and this config
+        # knob is documented as "int H", so normalise before resampling.
+        n = average_every_nhours(n, time_resolution.lower())
 
     # segments with package tsam
 
@@ -343,4 +405,5 @@ if __name__ == "__main__":
     )
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    log_network_schema(n, stage="exit", baseline=schema_entry)
     n.export_to_netcdf(snakemake.output[0])

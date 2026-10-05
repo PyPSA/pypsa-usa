@@ -35,6 +35,49 @@ model_topology:
 
 Alternatively, you can use the code reeds_state: 'CA' option to achieve the same result by specifying the entire state.
 
+A complete, maintained California configuration ships with the repository as
+`workflow/repo_data/config/config.california.yaml`. It pairs the footprint below with CPUC
+SERVM demand, the RESOLVE CAISO interface limits, and enabled imports/exports:
+
+```yaml
+scenario:
+   interconnect: [western]
+   planning_horizons: [2030, 2035, 2040, 2045]  # CPUC SERVM forecast years
+   clusters: [4]                                # p8, p9, p10, p11
+   simpl: [75]
+
+model_topology:
+   transmission_network: 'reeds'
+   topological_boundaries: 'reeds_zone'
+   interface_transmission_limits: true          # RESOLVE CAISO interface caps
+   include:
+      reeds_state: ['CA']
+```
+
+`clusters` is pinned to 4 because the ReEDS zonal backbone cannot be clustered below the
+number of zones in the footprint, and California holds exactly four.
+
+To run the same footprint at **county resolution**, switch `topological_boundaries` to
+`county` and raise `clusters` to 58 — the number of California counties, and the number of
+`p06xxx` nodes in the county NARIS interface table. `simpl: ['county']` selects the
+county-FIPS fast path in `cluster_simpl`, so the resource layer is built directly on county
+boundaries (a numeric `simpl` of at least 58 also works if you want more resource zones than
+transmission nodes):
+
+```yaml
+scenario:
+   clusters: [58]        # 58 California counties
+   simpl: ['county']     # county-FIPS fast path
+
+model_topology:
+   topological_boundaries: 'county'
+```
+
+`add_extra_components` switches from the balancing-area NARIS flowgate file to the county one
+(`transmission_capacity_init_AC_county_NARIS2024.csv`) automatically when
+`topological_boundaries` is `county` — no other key needs changing. `config.california.yaml`
+carries this same block as a commented alternative.
+
 In addition to filtering by `reeds_zone` and `reeds_state`, you can filter by `reeds_ba`, `trans_reg`, and `nerc_reg` shown graphically below.
 
 
@@ -60,7 +103,15 @@ In addition to filtering by `reeds_zone` and `reeds_state`, you can filter by `r
 ```
 
 ## Configuring Resource Resolution
-PyPSA-USA allows you to independently configure the resolution of resource zones from the transmission network. You can control this using the simpl and clusters parameters in the configuration file.
+PyPSA-USA allows you to configure the resolution at which resources are built independently
+from the resolution of the final transmission network, using the `simpl` and `clusters`
+wildcards in the configuration file.
+
+- `{simpl}` sets the number of zones the network is clustered to early in the workflow (rule
+  `cluster_resources`). Demand, renewable profiles, and generators are all built at this
+  resolution.
+- `{clusters}` sets the final transmission resolution (rule `cluster_network`), which
+  aggregates the `{simpl}`-resolution network down to the zones the optimization runs on.
 
 For example, if you want a transmission network with 10 nodes and a resource model with 100 nodes, you would configure it as follows:
 
@@ -70,7 +121,7 @@ scenario:
    simpl: [100]
 ```
 
-This setup, using an `m` after the `clusters` wildcard, results in a model with 10 transmission nodes and 100 distinct renewable resource zones, allowing for more granular modeling of renewable resource distribution while keeping the transmission network simplified. If you use a `c` after the `clusters` wildcard, all conventional resources from the `simpl` step will not be clustered. If you input an `a` after the `clusters` wildcard, all resources will not be clustered beyond the `simpl` level.
+This setup, using an `m` after the `clusters` wildcard, results in a model with 10 transmission nodes and 100 distinct renewable resource zones, allowing for more granular modeling of renewable resource distribution while keeping the transmission network simplified: only conventional generators are aggregated to the 10 transmission zones, while renewable resources remain at the 100 `simpl` zones. If you use a `c` after the `clusters` wildcard, the reverse applies — conventional resources from the `simpl` step will not be clustered, while all other resources are. If you input an `a` after the `clusters` wildcard, no resources will be clustered beyond the `simpl` level.
 
 ## Configuring Transmission Resolution
 
@@ -80,11 +131,11 @@ You can specify the transmission network you want to use by setting the `model_t
 - 'reeds': The ReEDS NARIS networks.
 - 'tamu': The synthetic BE-TAMU nodal network.
 
-When selecting between the three ReEDS NARIS networks, you will need to also specify the `model_topology: topological_boundaries:`. Currently you can set either `county` or `reeds_zone`. To use the FERC 1000 regions, you will need to use the custom network topologies described in the example below.
+When selecting between the ReEDS NARIS networks, you will need to also specify the `model_topology: topological_boundaries:`. Currently you can set `county`, `reeds_zone`, or `state` (note that `state` does not support `model_topology: include:` regional filtering). To use the FERC 1000 regions, you will need to use the custom network topologies described in the example below.
 
 ### Transmission Network Resolution
 
-IF you are using the TAMU/BE network, you can flexibly set an arbitrary number of clusters between the min and max number of nodes. If using a ReEDS NARIS network, you need to specify the minimum number of clusters (nodes) for your modeled interconnection. The number of nodes for each zone is **detailed in the table below**.
+If you are using the TAMU/BE network, you can flexibly set an arbitrary number of clusters between the min and max number of nodes. If using a ReEDS NARIS network, you need to specify the minimum number of clusters (nodes) for your modeled interconnection. The number of nodes for each zone is **detailed in the table below**.
 
 If you're working with custom configurations, PyPSA-USA will notify you during the cluster_network stage, indicating the correct number of nodes to set in the clusters configuration.
 

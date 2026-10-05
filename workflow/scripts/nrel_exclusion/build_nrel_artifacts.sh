@@ -34,7 +34,7 @@ OUT="$REPO/data/nrel_exclusion/derived"
 # identical across (scenario, year, tech). Solar/2030 is a convenient pick.
 GODEEEP_REF="${GODEEEP_REF:-/scratch/groups/iazevedo/asia/godeeep/aggregate_by_county/solar_rcp45cooler_2020_2059/solar_gen_cf_2030.nc}"
 
-BUS_DIR="$REPO/resources/godeeep/$BUS_SUBDIR/$INTERCONNECT/Geospatial"
+BUS_DIR="$REPO/resources/godeeep/geospatial/$BUS_SUBDIR/$INTERCONNECT"
 ONSHORE_SHAPES="$BUS_DIR/regions_onshore.geojson"
 OFFSHORE_SHAPES="$BUS_DIR/regions_offshore.geojson"
 OFFSHORE_EEZ="$BUS_DIR/offshore_shapes.geojson"

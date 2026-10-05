@@ -1,4 +1,19 @@
-# holds user api keys
+# ====================================================================
+# PyPSA-USA — API keys
+# ====================================================================
+# This tracked template only defines the key with a null value, so the
+# workflow always resolves `config["api"]["eia"]`. Supply the real key
+# either way:
+#
+#   1. Environment (preferred — keeps the secret out of the checkout):
+#        export EIA_API_KEY=<your key>
+#      workflow/Snakefile reads $EIA_API_KEY and it WINS over the yaml.
+#
+#   2. YAML: run `bash init_pypsa_usa.sh`, then paste the key into your
+#      own gitignored copy at workflow/config/config.api.yaml.
+#
+# Register for a free key at https://www.eia.gov/opendata/register.php
+# ====================================================================
 
 api:
-  eia: 
+  eia:

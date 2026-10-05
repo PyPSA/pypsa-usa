@@ -78,7 +78,7 @@ def _build_co2_bus(n: pypsa.Network, states: list[str], sectors: list[str]):
     df = pd.DataFrame(itertools.product(states, sectors), columns=["state", "sector"])
     df.index = df.state + " " + df.sector
 
-    n.madd("Bus", df.index, suffix="-co2", carrier="co2", STATE=df.state)
+    n.add("Bus", df.index, suffix="-co2", carrier="co2", STATE=df.state)
 
 
 def _build_co2_store(n: pypsa.Network, states: list[str], sectors: list[str]):
@@ -86,7 +86,7 @@ def _build_co2_store(n: pypsa.Network, states: list[str], sectors: list[str]):
     df = pd.DataFrame(itertools.product(states, sectors), columns=["state", "sector"])
     df.index = df.state + " " + df.sector
 
-    n.madd(
+    n.add(
         "Store",
         df.index,
         suffix="-co2",
@@ -122,7 +122,7 @@ def _build_ch4_bus(n: pypsa.Network, states: list[str]):
     df = pd.DataFrame(states, columns=["state"])
     df.index = df.state
 
-    n.madd("Bus", df.index, suffix=" gas-ch4", carrier="ch4", STATE=df.state)
+    n.add("Bus", df.index, suffix=" gas-ch4", carrier="ch4", STATE=df.state)
 
 
 def _build_ch4_store(n: pypsa.Network, states: list[str]):
@@ -130,7 +130,7 @@ def _build_ch4_store(n: pypsa.Network, states: list[str]):
     df = pd.DataFrame(states, columns=["state"])
     df.index = df.state
 
-    n.madd(
+    n.add(
         "Store",
         df.index,
         suffix=" gas-ch4",

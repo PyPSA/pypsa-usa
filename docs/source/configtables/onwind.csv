@@ -1,14 +1,18 @@
 ,Unit,Values,Description
-cutout,--,Should be a folder listed in the configuration ``atlite: cutouts:`` (e.g. 'europe-2013-era5') or reference an existing folder in the directory ``cutouts``. Source module must be ERA5.,Specifies the directory where the relevant weather data ist stored.
+cutout,--,"Name of a source defined under ``atlite: cutouts:`` (e.g. ``era5``).","Selects the weather-data source for this technology. Combined with the weather year to pick the cutout file ``cutouts/usa_{cutout}_{year}.nc`` (e.g. ``usa_era5_2019.nc``)."
 resource,,,
-method,--,Must be 'wind',A superordinate technology type.
-turbine,--,One of turbine types included in (atlite)[https://github.com/PyPSA/atlite/tree/master/atlite/resources/windturbine],Specifies the turbine type and its characteristic power curve.
+-- method,--,Must be 'wind',A superordinate technology type.
+-- turbine,--,One of the turbine types included in `atlite <https://github.com/PyPSA/atlite/tree/master/atlite/resources/windturbine>`__,Specifies the turbine type and its characteristic power curve.
+-- add_cutout_windspeed,bool,"{true, false}",Store the raw hub-height windspeeds in the profile output (used by the GODEEEP scaling workflow).
 capacity_per_sqkm,:math:`MW/km^2`,float,Allowable density of wind turbine placement.
+correction_factor,--,float,Correction factor for capacity factor time series (e.g. wake losses).
 corine,,,
-grid codes,--,Any subset of the Copornicus Land Cover code list (see assumptions).,Specifies areas according to Land Cover codes which are generally eligible for wind turbine placement.
-distance,m,float,Distance to keep from areas specified in ``distance_grid_codes``
-distance_grid_codes,--,Any subset of the Copornicus Land Cover code list (see assumptions).,Specifies areas according to Land Cover codes which are generally eligible for wind turbine placement.
+-- grid_codes,--,Any subset of the Copernicus Land Cover code list (see assumptions).,Specifies areas according to Land Cover codes which are generally eligible for wind turbine placement.
+-- distance,km,float,Distance to keep from areas specified in ``distance_grid_codes``
+-- distance_grid_codes,--,Any subset of the Copernicus Land Cover code list (see assumptions).,Specifies areas according to Land Cover codes to which the exclusion buffer ``distance`` is applied (e.g. urban areas).
 natura,bool,"{true, false}",Switch to exclude Protected Planet natural protection areas. Area is excluded if ``true``.
-potential,--,"One of {'simple', 'conservative'}",Method to compute the maximal installable potential for a node
+cec,bool,"{true, false}",Switch to apply the California Energy Commission Wind BaseScreen inside California (no effect elsewhere).
+potential,--,"One of {'simple', 'conservative'}",Method to compute the maximal installable potential for a node.
 clip_p_max_pu,p.u.,float,To avoid too small values in the renewables` per-unit availability time series values below this threshold are set to zero.
-correction_factor,--,float,Correction factor for capacity factor time series.
+extendable,bool,"{true, false}",Whether the technology is eligible for capacity expansion.
+note,,,"The ``corine``, ``natura``, and ``cec`` land screens apply only when ``renewable: dataset: atlite``; with ``dataset: godeeep`` they are bypassed in favor of the NREL ``renewable_land_access`` exclusions."

@@ -44,8 +44,6 @@ rule plot_natural_gas:
     input:
         network=RESULTS
         + "{interconnect}/networks/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc",
-    params:
-        plotting=config["plotting"],
     output:
         **{
             fig: RESULTS
@@ -163,7 +161,7 @@ rule plot_sankey_carbon:
         RESULTS
         + "{interconnect}/figures/s{simpl}_c{clusters}/l{ll}_{opts}_{sector}/system/sankey/carbon.html",
     log:
-        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_energy_sankey.log",
+        "logs/plot_figures/{interconnect}_s{simpl}_c{clusters}_l{ll}_{opts}_{sector}_carbon_sankey.log",
     threads: 1
     resources:
         mem_mb=5000,

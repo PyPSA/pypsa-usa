@@ -31,11 +31,13 @@ import pypsa
 import yaml
 from _helpers import (
     configure_logging,
+    log_network_schema,
     update_config_from_wildcards,
 )
 from constants import HOURS_PER_YEAR
 from opts.bidirectional_link import add_bidirectional_link_constraints
 from opts.interchange import add_interchange_constraints
+from opts.interfaces import add_interface_transmission_limits
 from opts.land import add_land_use_constraints
 from opts.policy import (
     add_regional_co2limit,
@@ -46,7 +48,6 @@ from opts.policy import (
 )
 from opts.reserves import (
     add_ERM_constraints,
-    add_operational_reserve_margin,
     store_ERM_duals,
 )
 from opts.sector import (
@@ -65,7 +66,7 @@ logger_gurobi = logging.getLogger("gurobipy")
 logger_gurobi.propagate = False
 
 logger = logging.getLogger(__name__)
-pypsa.pf.logger.setLevel(logging.WARNING)
+logging.getLogger("pypsa.network.power_flow").setLevel(logging.WARNING)
 
 
 def prepare_network(n, solve_opts=None):
@@ -94,7 +95,7 @@ def prepare_network(n, solve_opts=None):
             # TODO: do not scale via sign attribute (use Eur/MWh instead of Eur/kWh)
             load_shedding = 1e2  # Eur/kWh
 
-        n.madd(
+        n.add(
             "Generator",
             buses_i,
             " load",
@@ -106,12 +107,12 @@ def prepare_network(n, solve_opts=None):
         )
 
     if solve_opts.get("noisy_costs"):  ##random noise to costs of generators
-        for t in n.iterate_components():
-            if "marginal_cost" in t.df:
-                t.df["marginal_cost"] += 1e-2 + 2e-3 * (np.random.random(len(t.df)) - 0.5)
+        for t in n.components:
+            if "marginal_cost" in t.static:
+                t.static["marginal_cost"] += 1e-2 + 2e-3 * (np.random.random(len(t.static)) - 0.5)
 
-        for t in n.iterate_components(["Line", "Link"]):
-            t.df["capital_cost"] += (1e-1 + 2e-2 * (np.random.random(len(t.df)) - 0.5)) * t.df["length"]
+        for t in (n.components[c] for c in ["Line", "Link"]):
+            t.static["capital_cost"] += (1e-1 + 2e-2 * (np.random.random(len(t.static)) - 0.5)) * t.static["length"]
 
     if solve_opts.get("nhours"):
         nhours = solve_opts["nhours"]
@@ -181,11 +182,6 @@ def extra_functionality(n, snapshots):
     # Always apply bidirectional link constraints
     add_bidirectional_link_constraints(n)
 
-    # Apply operational reserve if configured
-    reserve = config["electricity"].get("operational_reserve", {})
-    if reserve.get("activate"):
-        add_operational_reserve_margin(n, snapshots, config)
-
     # Apply demand response if configured
     dr_config = config["electricity"].get("demand_response", {})
     if dr_config:
@@ -200,6 +196,10 @@ def extra_functionality(n, snapshots):
     if config["electricity"].get("exports", {}).get("enable", False):
         if config["electricity"].get("exports", {}).get("volume_limit", False):
             add_interchange_constraints(n, config, "exports", sector_enabled)
+
+    # Apply aggregate interface transmission limits if configured
+    if config["model_topology"].get("interface_transmission_limits", False):
+        add_interface_transmission_limits(n, global_snakemake.input.interface_limits)
 
     # Apply sector-specific constraints if sector is enabled
     if sector_enabled:
@@ -259,59 +259,62 @@ def run_optimize(n, rolling_horizon, skip_iterations, cf_solving, **kwargs):
 def _stash_original_nominal(n: pypsa.Network) -> None:
     """Snapshot the pre-solve p_nom / e_nom into `*_initial` once, on first call.
 
-    PyPSA's statistics use `n.df(c)[p_nom]` as the "installed" baseline. The
+    PyPSA's statistics use `n.components[c].static[p_nom]` as the "installed" baseline. The
     myopic freeze loop overwrites p_nom with p_nom_opt between horizons, which
     erases the original baseline. Stashing it lets us restore it after the
     final horizon so downstream tools can recover (p_nom_opt - p_nom_initial)
     as "what was actually built across all horizons".
     """
-    for c in n.iterate_components(["Generator", "Link", "StorageUnit", "Store"]):
+    for c in (n.components[name] for name in ["Generator", "Link", "StorageUnit", "Store"]):
         attr = "e_nom" if c.name == "Store" else "p_nom"
         col = f"{attr}_initial"
-        if col not in c.df.columns:
-            c.df[col] = c.df[attr]
+        if col not in c.static.columns:
+            c.static[col] = c.static[attr]
 
 
 def _restore_original_nominal(n: pypsa.Network) -> None:
     """Restore stashed pre-solve p_nom / e_nom so statistics see original baseline."""
-    for c in n.iterate_components(["Generator", "Link", "StorageUnit", "Store"]):
+    for c in (n.components[name] for name in ["Generator", "Link", "StorageUnit", "Store"]):
         attr = "e_nom" if c.name == "Store" else "p_nom"
         col = f"{attr}_initial"
-        if col in c.df.columns:
-            c.df[attr] = c.df[col]
+        if col in c.static.columns:
+            c.static[attr] = c.static[col]
 
 
 def freeze_prior_periods(n: pypsa.Network, prior_period: int):
     renewable_carriers = set(n.config["electricity"].get("renewable_carriers", []))
-    for c in n.iterate_components(["Generator", "Link", "StorageUnit", "Store"]):
+    for c in (n.components[name] for name in ["Generator", "Link", "StorageUnit", "Store"]):
+        # empty components carry an int64 index under pypsa v1, which breaks .str
+        if c.static.empty:
+            continue
         attr = "e_nom" if c.name == "Store" else "p_nom"
 
-        prior = c.df.build_year <= prior_period
+        prior = c.static.build_year <= prior_period
         # Only assets explicitly tagged "existing" in their name (split out by
         # attach_multihorizon_existing_generators in add_extra_components.py) AND
         # not on a renewable carrier are eligible for economic retirement. Renewables
         # attrite via lifetime, not economics, so they're excluded even if their name
         # happens to match.
-        existing = c.df.index.str.contains("existing", case=False, na=False)
-        not_renewable = ~c.df["carrier"].isin(renewable_carriers)
+        existing = c.static.index.str.contains("existing", case=False, na=False)
+        not_renewable = ~c.static["carrier"].isin(renewable_carriers)
         retirable = prior & existing & not_renewable
 
         # lock in the optimized capacity from the prior period as the starting point
         # for the next period — without this, p_nom still holds the pre-solve value
         # (e.g. 0 for a new-build), so the next period's dispatch constraints would
         # see the wrong installed capacity
-        c.df.loc[prior, attr] = c.df.loc[prior, attr + "_opt"]
+        c.static.loc[prior, attr] = c.static.loc[prior, attr + "_opt"]
 
         # freeze all prior-period assets by default; the optimizer cannot add more
         # capacity through assets that have already been built
-        c.df.loc[prior, attr + "_extendable"] = False
+        c.static.loc[prior, attr + "_extendable"] = False
 
         # "existing" vintage assets carry p_nom_min=0 already (set by the split in
         # add_extra_components.py), so flipping them back to extendable lets the
         # optimizer retire them by shrinking p_nom toward zero; p_nom_max is capped
         # at the locked-in capacity so no new capacity can be added through this asset
-        c.df.loc[retirable, attr + "_extendable"] = True
-        c.df.loc[retirable, attr + "_max"] = c.df.loc[retirable, attr]
+        c.static.loc[retirable, attr + "_extendable"] = True
+        c.static.loc[retirable, attr + "_max"] = c.static.loc[retirable, attr]
 
 
 def solve_network(n, config, solving, opts="", **kwargs):
@@ -405,6 +408,7 @@ if __name__ == "__main__":
     np.random.seed(solve_opts.get("seed", 123))
 
     n = pypsa.Network(snakemake.input.network)
+    schema_entry = log_network_schema(n, stage="entry")
 
     n = prepare_network(
         n,
@@ -423,6 +427,7 @@ if __name__ == "__main__":
         store_ERM_duals(n)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    log_network_schema(n, stage="exit", baseline=schema_entry)
     n.export_to_netcdf(snakemake.output[0])
     with open(snakemake.output.config, "w") as file:
         yaml.dump(

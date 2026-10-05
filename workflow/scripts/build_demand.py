@@ -5,6 +5,7 @@
 
 import calendar
 import logging
+import re
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -28,6 +29,32 @@ CODE_2_STATE = const.CODE_2_STATE
 STATE_TIMEZONE = const.STATE_2_TIMEZONE
 TBTU_2_MWH = const.TBTU_2_MWH
 
+#: Demand-table columns folded into another column before disaggregation, because
+#: no bus ever carries the source key (HF-29).
+#:
+#: No bus can carry a District of Columbia key: ReEDS puts DC in zone p123 with
+#: ``st = MD``, and the geographic ``state`` of the DC buses comes out Maryland
+#: or Virginia. A demand table that has a DC column therefore loses it in
+#: silence while DC's load-allocation mass is spent on its neighbours' demand.
+#:
+#: Measured 2026-09-17: the NREL EFS load profiles
+#: (``data/nrel_efs/EFSLoadProfile_*.csv``) hold **48 state codes and no DC**,
+#: so on the EFS path this map is a GUARD, not a correction -- the whole of the
+#: +1.85 % over-allocation there is the unnormalised LAF (HF-28), and after that
+#: fix DC's real demand is simply absent from the model on both branches. The
+#: fold bites for readers whose source does carry DC (EULP per-state files, EER,
+#: SERVM). Both the full-name and the two-letter spelling are listed because
+#: readers differ in which one they emit (``ReadEfs``/``ReadEer``/``ReadEulp``
+#: map through ``CODE_2_STATE``; a reader that does not would leave the code).
+DEMAND_KEY_FOLDS = {
+    "District of Columbia": "Maryland",
+    "DC": "MD",
+}
+
+#: Buses with a load allocation factor below this are dropped from the
+#: allocation by ``WriteStrategy._disaggregate_demand_to_buses``.
+LAF_DROP_THRESHOLD = 0.000001
+
 
 class Context:
     """The Context defines the interface of interest to clients."""
@@ -36,38 +63,58 @@ class Context:
         """(read_strategy: ReadStrategy, write_strategy: WriteStrategy)."""
         self._read_strategy = read_strategy
         self._write_strategy = write_strategy
+        self._zonal_demand = None
 
     @property
     def read_strategy(self):  # returns ReadStrategy:
         """The Context maintains a reference to the Strategy objects."""
         return self._read_strategy
 
-    @read_strategy.setter
-    def strategy(self, strategy) -> None:  # arg is ReadStrategy
-        """Usually, the Context allows replacing a Strategy object at runtime."""
-        self._read_strategy = strategy
-
     @property
     def write_strategy(self):  # returns WriteStrategy:
         """The Context maintains a reference to the Strategy objects."""
         return self._write_strategy
 
-    @write_strategy.setter
-    def strategy(self, strategy) -> None:  # arg is WriteStrategy  # noqa: F811
-        """Usually, the Context allows replacing a Strategy object at runtime."""
-        self._write_strategy = strategy
+    @property
+    def zonal_demand(self):
+        """
+        The zonal (pre-disaggregation) demand read during the last prepare_* call.
+
+        This is the reader's own output: hourly demand indexed by
+        (snapshot, sector, subsector, fuel) with one column per source zone.
+        It is kept so the rule can persist a component-resolved zonal artifact
+        without re-reading the (large) source files. ``None`` until a
+        ``prepare_*`` method has run.
+        """
+        return self._zonal_demand
 
     def _read(self) -> pd.DataFrame:
         """Delegate reading to the strategy."""
-        return self._read_strategy.read_demand()
+        demand = self._read_strategy.read_demand()
+        self._zonal_demand = demand
+        return demand
 
     def _write(self, demand: pd.DataFrame, zone: str, **kwargs) -> pd.DataFrame:
         """Delegate writing to the strategy."""
         return self._write_strategy.dissagregate_demand(demand, zone, **kwargs)
 
+    def _apply_default_subsector(self, kwargs: dict) -> dict:
+        """Let a read strategy nominate which subsector is the modeled load.
+
+        Readers that resolve demand into several components (SERVM) keep every
+        component on the ``subsector`` index level, but only one of them is the
+        load the model should see. Defaulting it here keeps ``main()`` generic;
+        an explicit ``subsector=`` argument still wins.
+        """
+        default_subsector = getattr(self._read_strategy, "default_subsector", None)
+        if default_subsector is not None:
+            kwargs.setdefault("subsector", default_subsector)
+        return kwargs
+
     def prepare_demand(self, **kwargs) -> pd.DataFrame:
         """Read in and dissagregate demand."""
         demand = self._read()
+        kwargs = self._apply_default_subsector(kwargs)
         return self._write(demand, self._read_strategy.zone, **kwargs)
 
     def prepare_multiple_demands(
@@ -81,6 +128,7 @@ class Context:
             fuels = [fuels]
 
         demand = self._read()
+        kwargs = self._apply_default_subsector(kwargs)
 
         data = {}
         for fuel in fuels:
@@ -106,12 +154,13 @@ class ReadStrategy(ABC):
     of some algorithm.
     """
 
+    # Subsector holding the modeled load, for readers that resolve demand into
+    # several components. ``None`` means the reader emits a single component
+    # and the caller should not filter on the subsector level.
+    default_subsector: ClassVar[str | None] = None
+
     def __init__(self, filepath: str | list[str] | None = None) -> None:
         self.filepath = filepath
-
-    @property
-    def units():  # noqa: D102
-        return "MW"
 
     @abstractmethod
     def _read_data(self, **kwargs) -> Any:
@@ -405,44 +454,6 @@ class ReadEfs(ReadStrategy):
         df["time"] = time
         return df.drop(columns=["Year", "UtcHourID", "hoy"])
 
-    def get_growth_rate(self):
-        """
-        Public method to get yearly energy totals.
-
-        Yearly values are linearlly interpolated between EFS planning years
-
-        Returns
-        -------
-        |      | State 1 | State 2 | ... | State n |
-        |----- |---------|---------|-----|---------|
-        | 2018 |  ###    |   ###   |     |   ###   |
-        | 2019 |  ###    |   ###   |     |   ###   |
-        | 2020 |  ###    |   ###   |     |   ###   |
-        | 2021 |  ###    |   ###   |     |   ###   |
-        | 2022 |  ###    |   ###   |     |   ###   |
-        | ...  |         |         |     |   ###   |
-        | 2049 |  ###    |   ###   |     |   ###   |
-        | 2050 |  ###    |   ###   |     |   ###   |
-        """
-        # extract efs provided data
-        efs_years = self._read_data()[["Year", "State", "LoadMW"]]
-        efs_years = efs_years.groupby(["Year", "State"]).sum().reset_index()
-        efs_years = efs_years.pivot(index="Year", columns="State", values="LoadMW")
-        efs_years.index = pd.to_datetime(efs_years.index, format="%Y")
-
-        # interpolate in between years
-        new_index = pd.date_range(
-            str(efs_years.index.min()),
-            str(efs_years.index.max()),
-            freq="YS",
-        )
-        all_years = efs_years.reindex(efs_years.index.union(new_index)).interpolate(
-            method="linear",
-        )
-        all_years.index = all_years.index.year
-
-        return all_years
-
 
 class ReadEer(ReadStrategy):
     """Reads state-level EER electricity demand profiles."""
@@ -581,6 +592,339 @@ class ReadEer(ReadStrategy):
         df["subsector"] = "all"
         df = df.set_index([df.index, "sector", "subsector", "fuel"])
         return df
+
+
+class ReadServm(ReadStrategy):
+    """Reads CPUC SERVM hourly load for the six California load regions.
+
+    The CPUC publishes one CSV per forecast year
+    (``HourlyLoad_CA_Regions_V2025E_2224_Mon_{year}.csv``). Each file stacks 25
+    weather years (2000-2024) of a full year of hourly values for every
+    (region, component) pair, in fixed Pacific Standard Time with no DST.
+
+    Only ``Net Load`` is the load the model dispatches against, but every
+    published component (``Load``, ``BTMPV``, ``EV``, ``DATA_CEN``, ...) is
+    carried through on the ``subsector`` index level so the zonal artifact
+    stays component-resolved. ``default_subsector`` selects ``Net Load`` at
+    disaggregation time.
+    """
+
+    MODEL_YEARS: ClassVar[tuple[int, ...]] = (
+        2026,
+        2028,
+        2030,
+        2032,
+        2035,
+        2037,
+        2040,
+        2042,
+        2045,
+    )
+    WEATHER_YEARS: ClassVar[tuple[int, ...]] = tuple(range(2000, 2025))
+    REGIONS: ClassVar[tuple[str, ...]] = ("IID", "LADWP", "NCNC", "PGE", "SCE", "SDGE")
+
+    # First seven columns are the (Weather Year, Season, Month, Day,
+    # Day of Month, Hour, Hour of Day) calendar block. They must be selected
+    # positionally: "Hour of Day" carries the stray upper-level labels
+    # ('Region', 'Unit Type'), so testing the upper levels for blankness
+    # misses it.
+    INDEX_COLUMNS: ClassVar[int] = 7
+    INDEX_NAMES: ClassVar[tuple[str, ...]] = (
+        "Weather Year",
+        "Season",
+        "Month",
+        "Day",
+        "Day of Month",
+        "Hour",
+        "Hour of Day",
+    )
+    WEATHER_YEAR_COLUMN: ClassVar[str] = "Weather Year"
+    LOAD_COMPONENT: ClassVar[str] = "Net Load"
+    default_subsector: ClassVar[str | None] = "Net Load"
+
+    HOURS_PER_YEAR: ClassVar[int] = const.HOURS_PER_YEAR
+    # SERVM strips are fixed PST (UTC-8) with no daylight-saving transition.
+    # Verified empirically against the BTMPV solar-noon centroid, which sits at
+    # hour 12.5 in December and 12.7 in July - a DST-observing series would move
+    # by a full hour between the two.
+    PST_TO_UTC_SHIFT: ClassVar[int] = 8
+
+    # The forecast year is the trailing "_YYYY" of the basename. Anchoring on
+    # the extension keeps the vintage tag ("V2025E") out of the match.
+    FILENAME_YEAR: ClassVar[str] = r"_(\d{4})\.csv$"
+
+    def __init__(
+        self,
+        filepath: str | list[str] | None = None,
+        planning_horizons: list[int] | None = None,
+        servm_weather_years: list[int] | None = None,
+        renewable_weather_years: list[int] | None = None,
+        snapshots: pd.MultiIndex | pd.DatetimeIndex | None = None,
+    ) -> None:
+        super().__init__(filepath)
+        self._zone = "servm"
+        self.planning_horizons = self._validate_planning_horizons(planning_horizons)
+        self.weather_year = self._validate_weather_years(
+            servm_weather_years,
+            renewable_weather_years,
+        )
+        self.period_snapshots = self._validate_snapshots(snapshots)
+        self.files = self._index_files_by_year(filepath)
+
+    @property
+    def zone(self):  # noqa: D102
+        return self._zone
+
+    @classmethod
+    def _validate_planning_horizons(
+        cls,
+        planning_horizons: list[int] | None,
+    ) -> list[int]:
+        if not planning_horizons:
+            raise ValueError("SERVM demand requires scenario.planning_horizons.")
+
+        years = [int(year) for year in planning_horizons]
+        invalid_years = sorted(set(years) - set(cls.MODEL_YEARS))
+        if invalid_years:
+            raise ValueError(
+                f"SERVM demand supports planning_horizons {cls.MODEL_YEARS}; "
+                f"received unsupported year(s): {invalid_years}.",
+            )
+        return years
+
+    @classmethod
+    def _validate_weather_years(
+        cls,
+        servm_weather_years: list[int] | None,
+        renewable_weather_years: list[int] | None = None,
+    ) -> int:
+        if not servm_weather_years:
+            raise ValueError(
+                "SERVM demand requires electricity.demand.scenario.servm_weather_years with exactly one weather year.",
+            )
+
+        years = [int(year) for year in servm_weather_years]
+        if len(years) > 1:
+            raise NotImplementedError(
+                "multiple electricity.demand.scenario.servm_weather_years requires "
+                "stochastic scenarios (phase 3); the electrical demand output path is "
+                f"not weather-year specific, so only one entry can be built. Received {years}.",
+            )
+
+        weather_year = years[0]
+        if weather_year not in cls.WEATHER_YEARS:
+            raise ValueError(
+                f"SERVM demand supports weather years {cls.WEATHER_YEARS}; received {weather_year}.",
+            )
+
+        if renewable_weather_years:
+            renewable = {int(year) for year in renewable_weather_years}
+            if renewable != {weather_year}:
+                logger.warning(
+                    "SERVM weather year %s does not match renewable_weather_years %s. "
+                    "Load and renewable profiles will be drawn from different weather "
+                    "years; set them equal unless the mismatch is intentional.",
+                    weather_year,
+                    sorted(renewable),
+                )
+
+        return weather_year
+
+    def _validate_snapshots(
+        self,
+        snapshots: pd.MultiIndex | pd.DatetimeIndex | None,
+    ) -> dict[int, pd.DatetimeIndex]:
+        """Group the network snapshots by investment period.
+
+        SERVM strips carry no usable absolute calendar of their own (see
+        :meth:`_assign_snapshots`), so the model's own snapshots are the only
+        source of timestamps and are therefore required.
+        """
+        if snapshots is None or len(snapshots) == 0:
+            raise ValueError(
+                "SERVM demand requires the network snapshots to map its hourly strips onto; none were provided.",
+            )
+
+        if isinstance(snapshots, pd.MultiIndex):
+            periods = np.asarray(snapshots.get_level_values(0))
+            stamps = pd.DatetimeIndex(snapshots.get_level_values(-1))
+        else:
+            stamps = pd.DatetimeIndex(snapshots)
+            periods = np.asarray(stamps.year)
+
+        by_period = {}
+        for period in pd.unique(periods):
+            by_period[int(period)] = stamps[periods == period]
+
+        missing = sorted(set(self.planning_horizons) - set(by_period))
+        if missing:
+            raise ValueError(
+                f"Network snapshots contain no timesteps for planning horizon(s) {missing}; "
+                f"found periods {sorted(by_period)}.",
+            )
+        return by_period
+
+    def _index_files_by_year(self, filepath: str | list[str] | None) -> dict[int, str]:
+        """Map each input file to the forecast year parsed out of its basename.
+
+        Indexing on the parsed year rather than on list order keeps the reader
+        correct however snakemake happens to order ``demand_files``.
+        """
+        if not filepath:
+            raise ValueError("Must provide filepath(s) for SERVM data.")
+
+        files = [filepath] if isinstance(filepath, str) else list(filepath)
+
+        indexed: dict[int, str] = {}
+        for f in files:
+            match = re.search(self.FILENAME_YEAR, Path(f).name)
+            if not match:
+                raise ValueError(
+                    f"Cannot parse a forecast year out of SERVM filename '{Path(f).name}'; "
+                    "expected it to end in '_YYYY.csv'.",
+                )
+            year = int(match.group(1))
+            if year in indexed and indexed[year] != f:
+                raise ValueError(
+                    f"Two SERVM files claim forecast year {year}: {indexed[year]} and {f}.",
+                )
+            indexed[year] = f
+
+        missing = sorted(set(self.planning_horizons) - set(indexed))
+        if missing:
+            raise ValueError(
+                f"No SERVM load file provided for planning horizon(s) {missing}; "
+                f"the supplied files cover {sorted(indexed)}.",
+            )
+        return indexed
+
+    def _read_data(self) -> dict[int, pd.DataFrame]:
+        """Reads SERVM profiles for each requested model year."""
+        logger.info(
+            f"Building Load Data using CPUC SERVM demand for weather year {self.weather_year}",
+        )
+        return {year: self._read_model_year(year) for year in self.planning_horizons}
+
+    @staticmethod
+    def _normalize_column(column: tuple) -> tuple[str, str, str]:
+        """Blank out pandas' placeholder labels for empty header cells."""
+        return tuple("" if str(level).startswith("Unnamed:") else str(level).strip() for level in column)
+
+    def _split_header(self, raw: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Split the three-row header into the calendar block and the data block."""
+        index_block = raw.iloc[:, : self.INDEX_COLUMNS].copy()
+        index_names = [str(column[-1]).strip() for column in index_block.columns]
+        if tuple(index_names) != self.INDEX_NAMES:
+            raise ValueError(
+                f"SERVM index columns changed: expected {self.INDEX_NAMES}, found {tuple(index_names)}.",
+            )
+        index_block.columns = index_names
+
+        data_block = raw.iloc[:, self.INDEX_COLUMNS :].copy()
+        data_block.columns = pd.MultiIndex.from_tuples(
+            [self._normalize_column(column) for column in data_block.columns],
+            names=["region", "unit_type", "component"],
+        )
+        return index_block, data_block
+
+    def _validate_components(self, columns: pd.MultiIndex, filepath: str) -> None:
+        """Every modeled region must publish the modeled load component."""
+        available = set(zip(columns.get_level_values("region"), columns.get_level_values("component"), strict=True))
+        missing = [
+            (region, self.LOAD_COMPONENT) for region in self.REGIONS if (region, self.LOAD_COMPONENT) not in available
+        ]
+        if missing:
+            raise ValueError(
+                f"SERVM file '{filepath}' is missing the '{self.LOAD_COMPONENT}' column for "
+                f"region(s) {[region for region, _ in missing]}. The published column layout "
+                "has changed; the reader must be updated before these results can be trusted.",
+            )
+
+    def _read_model_year(self, model_year: int) -> pd.DataFrame:
+        """Read one forecast year and cut out the configured weather year."""
+        filepath = self.files[model_year]
+        raw = pd.read_csv(filepath, header=[0, 1, 2], low_memory=False)
+        index_block, data_block = self._split_header(raw)
+        self._validate_components(data_block.columns, filepath)
+
+        weather_years = pd.to_numeric(
+            index_block[self.WEATHER_YEAR_COLUMN],
+            errors="coerce",
+        )
+        block = data_block.loc[(weather_years == self.weather_year).to_numpy()]
+        if len(block) != self.HOURS_PER_YEAR:
+            raise ValueError(
+                f"SERVM file '{filepath}' holds {len(block)} rows for weather year "
+                f"{self.weather_year}; expected {self.HOURS_PER_YEAR}.",
+            )
+
+        block = block.astype(float)
+        rolled = pd.DataFrame(
+            np.roll(block.to_numpy(), self.PST_TO_UTC_SHIFT, axis=0),
+            columns=block.columns,
+        )
+        rolled.index = self._assign_snapshots(model_year)
+        return self._to_long_format(rolled)
+
+    def _assign_snapshots(self, model_year: int) -> pd.DatetimeIndex:
+        """Map the hourly strip positionally onto this period's snapshots.
+
+        The strip is assigned by position rather than by rebuilding a calendar,
+        because neither calendar is the model's. ``get_snapshots`` drops
+        February 29 from leap planning horizons, so a synthesised
+        ``date_range(f"{year}-01-01", periods=HOURS_PER_YEAR)`` would run one day
+        short of the network's own December 31 for 2028/2032/2040. Two calendar
+        misalignments are accepted as a consequence, and are immaterial for an
+        hourly capacity-expansion model:
+
+        1. SERVM lays its hours on a synthetic Monday-start calendar, so
+           weekday-versus-weekend hours do not line up with the real weekdays of
+           the planning horizon.
+        2. For a leap *weather* year the strip contains February 29 and omits
+           December 31, while the model snapshots do the opposite. Every hour
+           after February therefore lands one calendar day earlier than it sat
+           in the source file.
+        """
+        snapshots = self.period_snapshots[model_year]
+        if len(snapshots) != self.HOURS_PER_YEAR:
+            raise ValueError(
+                f"Planning horizon {model_year} has {len(snapshots)} snapshots; SERVM "
+                f"demand needs a full {self.HOURS_PER_YEAR}-hour year to map onto.",
+            )
+        return pd.DatetimeIndex(snapshots, name="snapshot")
+
+    def _to_long_format(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Move the component level onto the index, keeping regions as columns."""
+        components = list(dict.fromkeys(df.columns.get_level_values("component")))
+
+        frames = {}
+        for component in components:
+            subset = df.loc[:, df.columns.get_level_values("component") == component]
+            subset.columns = pd.Index(subset.columns.get_level_values("region"), name=None)
+            if subset.columns.has_duplicates:
+                duplicates = sorted(subset.columns[subset.columns.duplicated()].unique())
+                raise ValueError(
+                    f"SERVM component '{component}' appears more than once for region(s) {duplicates}.",
+                )
+            frames[component] = subset
+
+        # Components missing for a region (EV and friends exist only for
+        # PGE/SCE/SDGE) align to NaN, which is the honest reading of "not
+        # published" and never reaches the model: only LOAD_COMPONENT, present
+        # everywhere, is disaggregated.
+        long = pd.concat(frames, names=["subsector"])
+        return long.reorder_levels(["snapshot", "subsector"]).sort_index()
+
+    def _format_data(self, data: dict[int, pd.DataFrame]) -> pd.DataFrame:
+        """Formats raw SERVM data to the demand strategy contract."""
+        df = pd.concat(data.values()).reset_index()
+        # snapshots are taken from the network, so they are datetimes already;
+        # _format_snapshot_index() cannot be used here because MultiIndex
+        # set_levels() requires unique level values.
+        df["snapshot"] = pd.to_datetime(df["snapshot"])
+        df["sector"] = "all"
+        df["fuel"] = "electricity"
+        return df.set_index(["snapshot", "sector", "subsector", "fuel"]).sort_index()
 
 
 class ReadEulp(ReadStrategy):
@@ -1060,7 +1404,7 @@ class ReadCliu(ReadStrategy):
         mecs = mecs.dropna(axis=0).drop("Subsector and Industry", axis=1)
         mecs["NAICS"] = mecs.NAICS.astype(int)
         mecs = mecs.set_index(["Region", "NAICS"], drop=True).replace({"*": "0", "Q": "0", "W": "0"}).astype(float)
-        assert not (mecs == np.NaN).any().any()
+        assert not mecs.isna().any().any()
         return mecs
 
     def _apply_mecs(
@@ -1605,7 +1949,7 @@ class WriteStrategy(ABC):
         df: pd.DataFrame
             Demand dataframe
         zone: str
-            Zones of demand ('ba', 'state', 'reeds')
+            Zones of demand ('ba', 'state', 'reeds', 'servm')
         sector: Optional[str | List[str]] = None,
             Sectors to group
         subsector: Optional[str | List[str]] = None,
@@ -1627,7 +1971,7 @@ class WriteStrategy(ABC):
         """
         # 'state' is states based on power regions
         # 'full_state' is actual geographic boundaries
-        assert zone in ("ba", "state", "reeds")
+        assert zone in ("ba", "state", "reeds", "servm")
         self._check_datastructure(df)
 
         # get zone area demand for specific sector and fuel
@@ -1639,6 +1983,10 @@ class WriteStrategy(ABC):
         # assign buses to dissagregation zone
         dissagregation_zones = self._get_load_dissagregation_zones(zone)
 
+        # fold demand keys that no bus carries (HF-29); a key some bus DOES
+        # carry is left alone, so the fold cannot defeat a future DC key
+        demand = self._fold_demand_keys(demand, zone, bus_keys=dissagregation_zones)
+
         # get implementation specific dissgregation factors
         laf = self._get_load_allocation_factor(df=dissagregation_zones, zone=zone)
 
@@ -1646,7 +1994,134 @@ class WriteStrategy(ABC):
         zone_data = dissagregation_zones.to_frame(name="zone").join(
             laf.to_frame(name="laf"),
         )
+        # HF-28: the factors are normalised upstream over a DIFFERENT column
+        # than the one demand is keyed on, so renormalise them here.
+        zone_data = self._normalize_laf_within_zone(zone_data, demand)
+        self._log_unallocated_demand(demand, zone_data)
         return self._disaggregate_demand_to_buses(demand, zone_data)
+
+    @staticmethod
+    def _fold_demand_keys(
+        demand: pd.DataFrame,
+        zone: str,
+        bus_keys: pd.Series | None = None,
+    ) -> pd.DataFrame:
+        """Merge demand columns that no bus key carries (HF-29).
+
+        ``bus_keys`` is the per-bus disaggregation key; a source column that
+        any bus carries is NOT folded (the guard must never override a real
+        key). The EFS demand tables carry a ``District of Columbia`` column, but no
+        bus carries that key: ReEDS files DC inside zone p123 with ``st = MD``,
+        and the geographic ``state`` of the DC buses resolves to Maryland or
+        Virginia. Left alone the column is silently dropped -- a GW of real
+        demand that never reaches the model, while DC's load-allocation mass is
+        billed against its neighbours' demand. Folding it into Maryland before
+        disaggregation keeps the energy in the system. Interim measure: the
+        real fix is for DC to keep its own key end to end.
+        """
+        if zone != "state":
+            return demand
+
+        carried = set() if bus_keys is None else set(pd.Series(bus_keys).dropna().astype(str))
+        folded = demand
+        for source, target in DEMAND_KEY_FOLDS.items():
+            if source not in folded.columns:
+                continue
+            if source in carried:
+                logger.info(
+                    "Demand key '%s' is carried by %d buses; not folding it into '%s'.",
+                    source,
+                    int((pd.Series(bus_keys).astype(str) == source).sum()),
+                    target,
+                )
+                continue
+            if folded is demand:
+                folded = demand.copy()
+            moved = folded[source].astype(float)
+            folded[target] = folded[target].astype(float) + moved if target in folded.columns else moved
+            folded = folded.drop(columns=[source])
+            logger.info(
+                "Folding demand key '%s' into '%s': %.1f MW mean, %.1f MW peak. "
+                "No bus carries '%s' under the '%s' disaggregation key.",
+                source,
+                target,
+                float(moved.mean()),
+                float(moved.max()),
+                source,
+                zone,
+            )
+        return folded
+
+    @staticmethod
+    def _normalize_laf_within_zone(
+        zone_data: pd.DataFrame,
+        demand: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """Rescale load allocation factors to sum to one inside each demand key (HF-28).
+
+        ``build_base_network`` normalises ``LAF_state`` over ``full_state``,
+        a column no demand key reproduces (it separates the District of
+        Columbia), and the population/industrial factors are normalised over
+        whatever zone mapping they were built with. The consumption key here --
+        ``state``, ``ba``, ``reeds`` -- is a different column, so ``sum(laf)``
+        inside a key is not 1 and the allocated demand does not equal the
+        demand table's column for that key (USA 2026-09-15: +2.28 % on master,
+        +1.85 % on develop). Renormalising within the key that demand is
+        actually indexed by makes the allocation conserving whatever the key is.
+
+        A key whose factors sum to zero gets 0, never NaN, and is logged with
+        the demand it cannot place.
+
+        The rescale runs twice. ``_disaggregate_demand_to_buses`` drops every
+        bus below ``LAF_DROP_THRESHOLD``, so the first pass is followed by
+        zeroing those buses and rescaling the survivors; the second pass can
+        only raise a share (it divides by a total <= 1), so nothing new falls
+        under the threshold and the downstream drop cannot leak demand.
+        """
+        normalized = zone_data.copy()
+        laf = pd.to_numeric(normalized["laf"], errors="coerce").fillna(0.0)
+        zones = normalized["zone"]
+
+        def rescale(values: pd.Series) -> tuple[pd.Series, pd.Series]:
+            totals = values.groupby(zones).sum()
+            per_bus = pd.to_numeric(zones.map(totals), errors="coerce")
+            return values.div(per_bus).where(per_bus > 0, 0.0).astype(float), totals
+
+        shares, zone_totals = rescale(laf)
+        shares, _ = rescale(shares.where(shares >= LAF_DROP_THRESHOLD, 0.0))
+        normalized["laf"] = shares
+
+        empty_zones = [z for z, total in zone_totals.items() if not total > 0]
+        if empty_zones:
+            unplaced = {str(z): float(demand[z].mean()) for z in empty_zones if z in demand.columns}
+            logger.warning(
+                "Zero load allocation factor mass in zone(s) %s; their allocation is set to 0. "
+                "Unplaced demand: %s (%.1f MW mean in total).",
+                sorted(str(z) for z in empty_zones),
+                {k: round(v, 1) for k, v in sorted(unplaced.items())},
+                sum(unplaced.values()),
+            )
+        return normalized
+
+    @staticmethod
+    def _log_unallocated_demand(demand: pd.DataFrame, zone_data: pd.DataFrame) -> None:
+        """Warn loudly about demand columns that no bus carries.
+
+        Demand for a key absent from the bus mapping is silently discarded by
+        ``_disaggregate_demand_to_buses`` (it only warns the other way round,
+        about buses whose key has no demand). That is how the District of
+        Columbia's load went missing unnoticed, so say it out loud with the MW.
+        """
+        keys = set(zone_data["zone"].dropna().unique())
+        orphans = {str(column): float(demand[column].mean()) for column in demand.columns if column not in keys}
+        if not orphans:
+            return
+        logger.warning(
+            "No bus carries demand key(s) %s; %.1f MW of mean demand is DROPPED. Per key: %s.",
+            sorted(orphans),
+            sum(orphans.values()),
+            {k: round(v, 1) for k, v in sorted(orphans.items())},
+        )
 
     def _get_load_dissagregation_zones(self, zone: str) -> pd.Series:
         """Map each bus to the load dissagregation zone (states, ba, ...)."""
@@ -1730,7 +2205,7 @@ class WriteStrategy(ABC):
 
         for load_zone in laf.zone.unique():
             load = laf[laf.zone == load_zone]
-            load = load[~(load.laf < 0.000001)].copy()  # drop any buses that have zero load
+            load = load[~(load.laf < LAF_DROP_THRESHOLD)].copy()  # drop any buses that have zero load
             if load_zone not in demand:
                 # occurs if laf overlaps with a neighbouring interconnect
                 # to replicate, run only 'AR' and 'Texas' will be a Key Error
@@ -1774,7 +2249,7 @@ class WriteStrategy(ABC):
 
     def _get_state_zones(self) -> pd.Series:
         n = self.n
-        return n.buses.state
+        return n.buses.reeds_state.map(CODE_2_STATE)
 
     def _get_reeds_zones(self) -> pd.Series:
         n = self.n
@@ -1787,7 +2262,12 @@ class WriteStrategy(ABC):
 
 
 class WritePopulation(WriteStrategy):
-    """Based on Population Density from Breakthrough Energy."""
+    """
+    Based on the per-bus demand-allocation weight from build_base_network.
+
+    ``n.buses.load_weight`` is census county population or legacy Breakthrough
+    Energy nominal demand, per ``electricity.demand.bus_allocation``.
+    """
 
     def __init__(self, n: pypsa.Network) -> None:
         super().__init__(n)
@@ -1799,15 +2279,105 @@ class WritePopulation(WriteStrategy):
         **kwargs,
     ) -> pd.Series:
         """Pulls weighting from 'build_base_network'."""
-        logger.info("Setting load allocation factors based on BE population density")
+        logger.info("Setting load allocation factors based on bus load_weight")
         n = self.n
         if zone == "state":
             return n.buses.LAF_state.fillna(0)
         else:
-            n.buses.Pd = n.buses.Pd.fillna(0)
-            bus_load = n.buses.Pd.to_frame(name="Pd").join(df.to_frame(name="zone"))
-            zone_loads = bus_load.groupby("zone")["Pd"].transform("sum")
-            return bus_load.Pd / zone_loads
+            n.buses.load_weight = n.buses.load_weight.fillna(0)
+            bus_load = n.buses.load_weight.to_frame(name="load_weight").join(
+                df.to_frame(name="zone"),
+            )
+            zone_loads = bus_load.groupby("zone")["load_weight"].transform("sum")
+            return bus_load.load_weight / zone_loads
+
+
+class WriteServm(WritePopulation):
+    """
+    Disaggregates SERVM regional demand with the precomputed allocation weights.
+
+    ``build_servm_load_weights`` writes a long table of (bus, servm_region, laf)
+    shares that already sum to 1.0 within every region. Because a cluster bus can
+    straddle two SERVM regions, a bus may appear under more than one region, so
+    the allocation cannot be expressed as the one-zone-per-bus mapping the base
+    class builds. Pivoting the table to a (region x bus) matrix and taking the
+    matrix product against the (snapshot x region) demand handles straddling
+    buses exactly: each bus receives the sum of its share of every region it
+    overlaps.
+    """
+
+    def __init__(self, n: pypsa.Network, filepath: str) -> None:
+        super().__init__(n)
+        self.filepath = filepath
+        self.weights = self._read_weights(filepath)
+
+    def _read_weights(self, filepath: str) -> pd.DataFrame:
+        """Read the weights table and pivot it to a (region x bus) matrix."""
+        if isinstance(filepath, list | tuple):
+            if len(filepath) != 1:
+                raise ValueError(
+                    f"SERVM disaggregation needs exactly one weights file; received {list(filepath)}.",
+                )
+            filepath = filepath[0]
+
+        df = pd.read_csv(filepath)
+        missing_columns = {"bus", "servm_region", "laf"}.difference(df.columns)
+        if missing_columns:
+            raise ValueError(
+                f"SERVM weights file '{filepath}' is missing column(s) {sorted(missing_columns)}.",
+            )
+
+        df["bus"] = df.bus.astype(str)
+        unknown = sorted(set(df.bus) - set(self.n.buses.index.astype(str)))
+        if unknown:
+            raise ValueError(
+                f"SERVM weights file '{filepath}' allocates demand to {len(unknown)} bus(es) that "
+                f"are not in the network: {unknown[:10]}. The weights were built against a "
+                "different network than the one demand is being attached to.",
+            )
+
+        weights = df.pivot_table(
+            index="servm_region",
+            columns="bus",
+            values="laf",
+            aggfunc="sum",
+            fill_value=0.0,
+        )
+        logger.info(
+            "Allocating SERVM demand over %d buses from %d regions.",
+            weights.shape[1],
+            weights.shape[0],
+        )
+        return weights.astype(float)
+
+    def dissagregate_demand(
+        self,
+        df: pd.DataFrame,
+        zone: str,
+        sector: str | list[str] | None = None,
+        subsector: str | list[str] | None = None,
+        fuel: str | list[str] | None = None,
+        sns: pd.DatetimeIndex | None = None,
+    ) -> pd.DataFrame:
+        """Allocate regional demand to buses via the weights matrix product."""
+        assert zone == "servm"
+        self._check_datastructure(df)
+
+        demand = self._filter_demand(df, sector, subsector, fuel, sns)
+        demand = self._group_demand(demand)
+        if demand.empty:
+            demand = self._make_empty_demand(columns=df.columns)
+        demand = demand.astype(float)
+
+        weights = self.weights.reindex(index=demand.columns, fill_value=0.0)
+        unweighted = weights.index[~weights.index.isin(self.weights.index)]
+        if len(unweighted):
+            logger.warning(
+                "No bus weights found for SERVM region(s) %s; their demand is dropped.",
+                sorted(unweighted),
+            )
+
+        return demand.dot(weights)
 
 
 class WriteIndustrial(WriteStrategy):
@@ -1828,7 +2398,7 @@ class WriteIndustrial(WriteStrategy):
         elif zone == "reeds":
             return self._dissagregate_on_reeds()
         elif zone == "ba":
-            # return self._dissagregate_on_ba()
+            # BA-level industrial LAFs are not implemented; state-level is used as a proxy
             return self._dissagregate_on_state()
         else:
             raise NotImplementedError
@@ -1858,9 +2428,6 @@ class WriteIndustrial(WriteStrategy):
         laf_all_buses[laf_load_buses.index] = laf_load_buses
 
         return laf_all_buses
-
-    def _dissagregate_on_ba(self) -> pd.Series:
-        raise NotImplementedError
 
     def _dissagregate_on_reeds(self) -> pd.Series:
         raise NotImplementedError
@@ -1913,11 +2480,12 @@ class WriteIndustrial(WriteStrategy):
         """
         Gets a list of load buses, indexed by county.
 
-        Note, load buses follow BE mapping of Pd
+        Note, load buses are those carrying demand-allocation weight
+        (``n.buses.load_weight``).
         """
         n = self.n
-        buses_per_county = n.buses[["Pd", "county"]].fillna(0)
-        buses_per_county = buses_per_county[buses_per_county.Pd != 0]
+        buses_per_county = n.buses[["load_weight", "county"]].fillna(0)
+        buses_per_county = buses_per_county[buses_per_county.load_weight != 0]
 
         mapper = {}
 
@@ -2357,6 +2925,11 @@ def get_demand_params(
                 scaling_method = "aeo_electricity"
             elif demand_profile == "eer":
                 scaling_method = None
+            elif demand_profile == "servm":
+                # SERVM publishes one file per forecast year, so no scaling is
+                # needed; its regions are their own disaggregation zone.
+                demand_disaggregation = "servm"
+                scaling_method = None
             else:
                 logger.warning(
                     f"No scaling method available for {demand_profile} profile. Setting to 'aeo_electricity'",
@@ -2542,6 +3115,16 @@ if __name__ == "__main__":
         )
         sns = n.snapshots.get_level_values(1)
 
+    elif demand_profile == "servm":
+        reader = ReadServm(
+            demand_files,
+            planning_horizons=planning_horizons,
+            servm_weather_years=snakemake.params.get("servm_weather_years", None),
+            renewable_weather_years=snakemake.params.get("renewable_weather_years", None),
+            snapshots=n.snapshots,
+        )
+        sns = n.snapshots.get_level_values(1)
+
     elif demand_profile == "ferc":
         assert profile_year in range(2018, 2024)
 
@@ -2602,6 +3185,8 @@ if __name__ == "__main__":
     elif demand_disaggregation == "cliu":
         cliu_file = snakemake.input.dissagregate_files
         writer = WriteIndustrial(n, cliu_file)
+    elif demand_disaggregation == "servm":
+        writer = WriteServm(n, snakemake.input.dissagregate_files)
     else:
         raise NotImplementedError
 
@@ -2620,6 +3205,16 @@ if __name__ == "__main__":
             fuels,
             sns=sns,
         )  # dict[str, pd.DataFrame]
+
+    # persist the reader's own zonal, component-resolved demand before it is
+    # disaggregated onto buses. For single-component profiles (efs, eer, ...)
+    # this is simply the subsector='all' slice, so no profile needs special
+    # casing here.
+    zonal_output = snakemake.output.get("zonal_components", None)
+    if zonal_output:
+        zonal_demand = demand_converter.zonal_demand
+        assert zonal_demand is not None, "no zonal demand captured during read"
+        zonal_demand.astype(float).round(4).to_parquet(zonal_output)
 
     # scale demand and align snapshots. this is outside the main read/write
     # strategy as extra arguments are required to fill in data

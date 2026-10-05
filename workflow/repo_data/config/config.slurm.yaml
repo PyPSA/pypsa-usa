@@ -1,0 +1,61 @@
+# ====================================================================
+# PyPSA-USA — SLURM / HPC execution settings
+# ====================================================================
+# Renamed from config.cluster.yaml, whose name collided with the
+# `{clusters}` wildcard and the `clustering:` config section while having
+# nothing to do with either — it has always been about the job scheduler.
+#
+# This file is used in two ways:
+#
+#   1. `--cluster-config config/config.slurm.yaml` (see workflow/run_slurm.sh)
+#      resolves `{cluster.account}`, `{cluster.partition}`, `{cluster.email}`,
+#      `{cluster.output}` and `{cluster.error}` from `__default__` below.
+#      Fill those in with your institution's values in YOUR copy under
+#      workflow/config/ (seeded by init_pypsa_usa.sh); the tracked template
+#      here stays blank.
+#
+#   2. It is a `configfile:` layer, which is what puts `walltime:` into the
+#      merged config. That block is THE single source of per-rule wall times:
+#      rules read it as `config_provider("walltime", "<rule>")` and pass the
+#      result to `resources: walltime=`, which run_slurm.sh forwards to sbatch
+#      as `--time {resources.walltime}`. It used to be duplicated - partly in
+#      config.default.yaml under `walltime:` (the values the rules actually
+#      read) and partly here as per-rule `{rule}: {walltime: ...}` blocks that
+#      nothing read, because run_slurm.sh takes the time from resources rather
+#      than from `{cluster.walltime}`.
+#
+# `solving.walltime` and `solving.mem` in config.default.yaml are a different
+# concern: they are the solver's own limits, not the scheduler's.
+# ====================================================================
+
+# sbatch defaults consumed via {cluster.*} under --cluster-config.
+__default__:
+  account:
+  partition:
+  email:
+  walltime: 00:30:00   # fallback job time limit for {cluster.walltime}
+  cpus_per_task: 1     # number of cores per job
+  chdir:
+  output: logs/{rule}/log-%j.out
+  error: logs/{rule}/errlog-%j.err
+
+
+# ====================================================================
+# WALLTIME — per-rule wall times requested from the scheduler
+# ====================================================================
+# Rules not listed here fall back to the per-rule defaults declared inline in
+# workflow/rules/*.smk. Local (non-HPC) runs ignore these values entirely.
+# docs : WALLTIME
+walltime:
+  build_renewable_profiles: '04:00:00'
+  build_fuel_prices:        '00:20:00'
+  add_demand:               '02:00:00'
+  add_electricity:          '04:00:00'
+  aggregate_to_substations: '02:00:00'
+  aggregate_egs:            '01:00:00'
+  cluster_resources:        '05:00:00'
+  cluster_network:          '04:00:00'
+  solve_network:            '20:00:00'
+  solve_network_validation: '09:00:00'
+
+# docs : end

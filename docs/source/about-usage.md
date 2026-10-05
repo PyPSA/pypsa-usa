@@ -7,7 +7,16 @@
 
 ## Set Configuration
 
-To start, you'll want to set the proper network configuration for your studies purpose. The default configuration in `config/config.default.yaml` using the `western` interconnect and 30 nodes is a good place to start!
+To start, you'll want to set the proper network configuration for your studies purpose. The
+default configuration in `config/config.default.yaml` (seeded from the tracked template by
+`init_pypsa_usa.sh`) using the `western` interconnect and 33 nodes is a good place to start!
+
+Your config file only needs to carry the keys you actually change: the workflow always
+loads `repo_data/config/config.default.yaml` and the other layered files underneath it, and
+your `--configfile` is merged on top. So there are two equally valid ways to set up a run —
+copy the seeded `config/config.default.yaml` to `config/config.<scenario>.yaml` and edit it,
+or write a short file holding only your overrides. Nested mappings merge key by key, but
+lists and scalars are **replaced wholesale**, so any list you change must be restated in full.
 
 You can find more information on each configuration setting on the [configurations page](https://pypsa-usa.readthedocs.io/en/latest/config-configuration.html).
 
@@ -29,7 +38,7 @@ snakemake -j1 --configfile config/config.default.yaml
 
 ### Generate Data Model
 
-To generate the data model only, specify the rule `data_model` in the `snakemake` call. The `data_model` rule generates the network file that is passed into the `solve_network` rule. This network will **not** include any additional policy constraints and only includes input data (ie. the network is not solved). The network is available in the `resources/` folder.
+To generate the data model only, specify the rule `data_model` in the `snakemake` call. The `data_model` rule builds the network file that is passed into the `solve_network` rule, so it already carries everything `prepare_network` applies — the `{ll}` transmission limit and any `Co2L`/`CH4L`/`Ep` options in the `{opts}` wildcard. What it does **not** carry are the solve-time policy constraints (`RPS`, `REM`, `ERM`, `TCT`), and the network is not solved. It is written to `resources/{run name}/networks/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc` (the `{run name}/` segment is dropped when `run: shared_resources: true`).
 
 UV:
 ```console
@@ -45,21 +54,64 @@ snakemake data_model -j1 --configfile config/config.default.yaml
 
 ## Running on HPC Cluster
 
-If you are running the workflow on an High-Performance Compute (HPC) cluster, you will first need to update the configuration settings in `config.cluster.yaml`. Update the account, partition, email, and chdir fields to match the information of your institutions cluster.
+On a High-Performance Compute (HPC) cluster, `workflow/run_slurm.sh` runs one or more scenario
+overlays, submitting each snakemake rule to Slurm as its own job via `workflow/slurm_submit.sh`.
+The script itself must run **inside a compute job or an interactive shell** (`sh_dev` on Sherlock),
+never on a login node.
 
-Next, identify the name of the configuration file you would like to run by editing the `run_slurm.sh` script. The default value is the `--configfile config/config.default.yaml`.
-
-To run, open a terminal within a login node of your cluster and run the script included in the `workflow` directory:
+Each overlay is a small config file in `workflow/config/weather_years/`, and that directory's
+`manifest.tsv` maps an overlay filename to its run name and build target (tab-separated,
+three columns). Both are yours to create. Overlay filenames are passed as positional arguments,
+and each is layered on top of `repo_data/config/config.california.yaml`:
 
 ```console
-bash run_slurm.sh
+bash run_slurm.sh ca2040_wy2019_z4.yaml ca2040_wy2019_county.yaml
 ```
 
-We have included settings in the Snakemake workflow to dynamically request reasources from an HPC cluster based on the size of the pypsa-usa model you decide to run. To modify these resource selections checkout the `memory` and `threads` fields in individual snakemake rules.
+Cluster settings come from the environment, not from a config file. `PARTITION` and `EMAIL` are
+exported to the `sbatch` wrapper; `JOBS` (rule-jobs in flight per overlay), `CONCURRENCY`
+(overlays at a time) and `RESTART_TIMES` tune the scheduling:
+
+```console
+PARTITION=<partition> EMAIL=<you@example.edu> JOBS=20 bash run_slurm.sh ca2040_wy2019_z4.yaml
+```
+
+Driver logs land in `workflow/logs/drivers/`, per-rule Slurm logs in `workflow/logs/slurm/`.
+Resource requests are computed per rule from the input size; to change them, edit the
+`resources: mem_mb:` / `walltime:` and `threads:` fields of the individual snakemake rules.
 
 ## Examine Results
 
-Result plots and images are automatically built in the `workflow/results` folder. To further analyze the results of a solved network, you can use pypsa to analyze the `elec_s_{clusters}_ec_l{l}_{opts}.nc` file in the `results/{interconnect}/networks/` folder. (Tutorial juyper notebook is on the way!)
+### After the run: where outputs land
+
+All outputs are written to `workflow/results/{run name}/{interconnect}/`, where `{run name}`
+is the `run: name:` field of your configuration file (`Default` in
+`config/config.default.yaml`). Inside you will find three folders: `networks/` holds the
+solved network files, `figures/` holds automatically generated maps and plots along with
+summary CSVs (capacities, generation, statistics) in its `statistics/` subfolders, and
+`configs/` holds a snapshot of the configuration used for the run. A good first stop is the
+`figures/` folder to sanity-check the system maps and statistics before diving into the
+network file itself.
+
+### Analyzing a solved network
+
+To further analyze the results of a solved network, you can use pypsa to open the
+`elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc` file in the
+`results/{run name}/{interconnect}/networks/` folder. With the default configuration this is
+`results/Default/western/networks/elec_s75_c33_ec_lv1.0_REM-3h_E.nc`.
+
+The filename encodes the scenario. Each component is described briefly below; see the
+[wildcards page](https://pypsa-usa.readthedocs.io/en/latest/config-wildcards.html) for full
+details:
+
+| Component | Example | Meaning |
+|-----------|---------|---------|
+| `s{simpl}` | `s75` | Number of buses after pre-clustering simplification |
+| `c{clusters}` | `c33` | Final number of clustered buses (zones) |
+| `ec` | `ec` | Fixed marker: extra components (e.g. storage) have been added |
+| `l{ll}` | `lv1.0` | Transmission expansion limit (`v`olume or `c`ost, factor or `opt`) |
+| `{opts}` | `REM-3h` | Dash-separated options (here: regional emissions limit, 3-hourly resolution) |
+| `{sector}` | `E` | Sectors included (`E` = electricity only, `E-G` adds natural gas) |
 
 (troubleshooting)=
 ## Troubleshooting:
@@ -67,6 +119,12 @@ Result plots and images are automatically built in the `workflow/results` folder
 To force the execution of a portion of the workflow up to a given rule, cd to the `workflow` directory and run:
 
 ```console
-snakemake -j4 -R build_shapes  --until build_base_network
+uv run snakemake -j4 -R build_shapes --until build_base_network --configfile config/config.default.yaml
 ```
 where `build_shapes` is forced to run, and `build_base_network` is the last rule you would like to run.
+
+```{note}
+`--configfile` is optional: the Snakefile loads `repo_data/config/config.default.yaml` as
+the base layer, so omitting it simply runs the shipped defaults under `run: name: "Default"`.
+Pass `--configfile` to select your own scenario and give it its own `run: name:`.
+```

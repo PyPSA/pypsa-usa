@@ -1,0 +1,240 @@
+# BY PyPSA-USA Authors
+"""Aggregates the bare topology network to substation level and normalizes to one voltage.
+
+First stage of the topology-aggregation pipeline. Consumes ``elec_base_network.nc``
+(buses, lines, transformers only — no generators, loads, or storage attached) and
+reduces it to one bus per substation via:
+
+1. Converting line parameters to a single voltage base (230 kV).
+2. Removing transformers, collapsing voltage layers into a single bus per
+   substation.
+3. Aggregating buses by ``sub_id``.
+
+The downstream ``cluster_simpl`` rule may then optionally apply k-means
+clustering to ``{simpl}`` clusters before any per-bus heavy data (renewable
+profiles, demand) is built.
+"""
+
+import logging
+
+import numpy as np
+import pandas as pd
+import pypsa
+from _helpers import configure_logging, log_network_schema
+from pypsa.clustering.spatial import get_clustering_from_busmap
+
+logger = logging.getLogger(__name__)
+
+
+def convert_to_per_unit(df):
+    df["base_impedance"] = df["v_nom"] ** 2 / df["s_nom"]
+    df["base_susceptance"] = 1 / df["base_impedance"]
+    df["resistance_pu"] = df["r"] / df["base_impedance"]
+    df["reactance_pu"] = df["x"] / df["base_impedance"]
+    df["susceptance_pu"] = df["b"] / df["base_susceptance"]
+    df = df.drop(["base_impedance", "base_susceptance"], axis=1)
+    return df
+
+
+def convert_to_voltage_level(n, new_voltage):
+    """Convert network.lines parameters to a given voltage."""
+    df = convert_to_per_unit(n.lines.copy())
+    df["new_base_impedance"] = new_voltage**2 / df["s_nom"]
+    df["r"] = df["resistance_pu"] * df["new_base_impedance"]
+    df["x"] = df["reactance_pu"] * df["new_base_impedance"]
+    df["b"] = df["susceptance_pu"] / df["new_base_impedance"]
+    df.v_nom = new_voltage
+    df = df.drop(
+        ["new_base_impedance", "resistance_pu", "reactance_pu", "susceptance_pu"],
+        axis=1,
+    )
+    df.type = "Al/St 240/40 2-bundle 220.0"
+    n.buses["v_nom"] = new_voltage
+    n.lines = df
+    return n
+
+
+def remove_transformers(n):
+    trafo_map = pd.Series(n.transformers.bus1.values, index=n.transformers.bus0.values)
+    trafo_map = trafo_map[~trafo_map.index.duplicated(keep="first")]
+    several_trafo_b = trafo_map.isin(trafo_map.index)
+    trafo_map.loc[several_trafo_b] = trafo_map.loc[several_trafo_b].map(trafo_map)
+    missing_buses_i = n.buses.index.difference(trafo_map.index)
+    missing = pd.Series(missing_buses_i, missing_buses_i)
+    trafo_map = pd.concat([trafo_map, missing])
+    trafo_map = trafo_map.reindex(n.buses.index)
+
+    for c in n.one_port_components | n.branch_components:
+        df = n.components[c].static
+        for col in df.columns:
+            if col.startswith("bus"):
+                df[col] = df[col].map(trafo_map)
+
+    # Transfer additive bus statics (Pd, load_weight, LAF_state) from the
+    # buses about to be removed onto their surviving mapped bus, so demand
+    # weight is conserved. min_count=1 keeps all-NaN groups NaN (the base
+    # network carries LAF_state only on weight-bearing buses) instead of
+    # coercing them to 0.
+    for col in ("Pd", "load_weight", "LAF_state"):
+        if col in n.buses.columns:
+            transferred = n.buses[col].groupby(trafo_map).sum(min_count=1)
+            n.buses.loc[transferred.index, col] = transferred
+
+    n.remove("Transformer", n.transformers.index)
+    n.remove("Bus", n.buses.index.difference(trafo_map))
+    return n, trafo_map
+
+
+def aggregate_to_substations(
+    network: pypsa.Network,
+    busmap,
+    topological_boundaries: str,
+    aggregation_strategies=dict(),
+):
+    logger.info("Aggregating buses to substation level...")
+
+    generator_strategies = aggregation_strategies.get("generators", dict())
+
+    clustering = get_clustering_from_busmap(
+        network,
+        busmap,
+        aggregate_generators_weighted=True,
+        aggregate_one_ports=["Load", "StorageUnit"],
+        line_length_factor=1.0,
+        bus_strategies={
+            "type": "max",
+            "Pd": "sum",
+            "load_weight": "sum",
+            "LAF_state": "sum",
+        },
+        generator_strategies=generator_strategies,
+    )
+
+    bus_attrs_by_sub = network.buses[
+        [
+            "sub_id",
+            "interconnect",
+            "state",
+            "country",
+            "county",
+            "balancing_area",
+            "reeds_zone",
+            "reeds_ba",
+            "reeds_state",
+            "x",
+            "y",
+        ]
+    ]
+    bus_attrs_by_sub = bus_attrs_by_sub.drop_duplicates(subset=["sub_id"])
+    bus_attrs_by_sub.sub_id = bus_attrs_by_sub.sub_id.astype(int).astype(str)
+    bus_attrs_by_sub.index = bus_attrs_by_sub.sub_id
+
+    match topological_boundaries:
+        case "county":
+            zone = bus_attrs_by_sub.county
+        case "reeds_zone":
+            zone = bus_attrs_by_sub.reeds_zone
+        case "state":
+            zone = bus_attrs_by_sub.reeds_state
+        case _:
+            raise ValueError(
+                "model_topology.topological_boundaries must be one of 'county', "
+                f"'reeds_zone', 'state'; got {topological_boundaries!r}",
+            )
+
+    network_s = clustering.n
+
+    network_s.buses["interconnect"] = bus_attrs_by_sub.interconnect
+    network_s.buses["x"] = bus_attrs_by_sub.x
+    network_s.buses["y"] = bus_attrs_by_sub.y
+    network_s.buses["substation_lv"] = True
+    network_s.buses["country"] = zone  # `country` field drives pypsa aggregation grouping
+
+    network_s.lines["type"] = np.nan
+
+    if topological_boundaries == "reeds_zone" or topological_boundaries == "county":
+        cols2drop = [
+            "balancing_area",
+            "substation_off",
+            "sub_id",
+            "state",
+        ]
+    elif topological_boundaries == "state":
+        cols2drop = [
+            "balancing_area",
+            "substation_off",
+            "sub_id",
+            "county",
+            "reeds_zone",
+            "reeds_ba",
+            "nerc_reg",
+            "trans_reg",
+            "trans_grp",
+            "state",
+        ]
+
+    cols2drop = [col for col in cols2drop if col in network_s.buses.columns]
+    network_s.buses = network_s.buses.drop(columns=cols2drop)
+    return network_s, clustering.busmap
+
+
+def assign_line_lengths(n, line_length_factor):
+    """Assign line lengths to network using haversine."""
+    logger.info("Assigning line lengths using haversine function...")
+    n.lines.length = pypsa.geo.haversine_pts(
+        n.buses.loc[n.lines.bus0][["x", "y"]],
+        n.buses.loc[n.lines.bus1][["x", "y"]],
+    )
+    n.lines.length *= line_length_factor
+
+    n.links.length = pypsa.geo.haversine_pts(
+        n.buses.loc[n.links.bus0][["x", "y"]],
+        n.buses.loc[n.links.bus1][["x", "y"]],
+    )
+    n.links.length *= line_length_factor
+
+    return n
+
+
+if __name__ == "__main__":
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+
+        snakemake = mock_snakemake(
+            "aggregate_to_substations",
+            interconnect="texas",
+        )
+    configure_logging(snakemake)
+    params = snakemake.params
+
+    topological_boundaries = snakemake.params.topological_boundaries
+
+    n = pypsa.Network(snakemake.input.network)
+    schema_entry = log_network_schema(n, stage="entry")
+
+    n = convert_to_voltage_level(n, 230)
+    n, trafo_map = remove_transformers(n)
+
+    busmap_to_sub = n.buses.sub_id.astype(int).astype(str).to_frame()
+
+    n = assign_line_lengths(n, 1.25)
+    n.links["underwater_fraction"] = 0
+    n.buses.drop(columns=["substation_off"], inplace=True)
+
+    n, busmap = aggregate_to_substations(
+        n,
+        busmap_to_sub.sub_id,
+        topological_boundaries,
+        params.aggregation_strategies,
+    )
+
+    if topological_boundaries in ["reeds_zone", "state"] and "county" in n.buses.columns:
+        n.buses = n.buses.drop(columns=["county"])
+
+    # `busmap` keys the post-trafo-removal buses only; compose with trafo_map
+    # so the exported busmap covers every original base-network bus.
+    busmap = trafo_map.map(busmap).rename_axis(busmap.index.name)
+
+    log_network_schema(n, stage="exit", baseline=schema_entry)
+    n.export_to_netcdf(snakemake.output.network)
+    busmap.to_csv(snakemake.output.busmap, header=["sub_id"])

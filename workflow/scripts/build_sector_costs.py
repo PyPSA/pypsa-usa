@@ -8,7 +8,7 @@ https://data.nrel.gov/submissions/78
 from abc import ABC, abstractmethod
 
 import pandas as pd
-from constants import TBTU_2_MWH, MMBTU_MWHthemal
+from constants import MMBTU_MWHthemal
 
 # Vehicle life assumptions for getting $/VMT capital cost
 # From https://atb.nrel.gov/transportation/2022/definitions
@@ -284,12 +284,6 @@ class EfsBevTransportationData(EfsSectorData):
         df = self._correct_efficiency_units(df)
         return self.expand_data(df)
 
-    # def get_fixed_costs(self):
-    #     df = self.get_capex()
-    #     df["parameter"] = "FOM"
-    #     df = df.rename(columns={"value": "capex"})
-    #     return self._calculate_fom(df)
-
     def get_fixed_costs(self):  # noqa: D102
         df = self.get_capex()
         df["parameter"] = "FOM"
@@ -313,15 +307,6 @@ class EfsBevTransportationData(EfsSectorData):
         corrected["value"] = corrected.value.mul(1 / self.wh_per_gallon).mul(1e6)
         corrected["unit"] = "miles/MWh"
         return corrected
-
-    def _calculate_fom(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Converts $/mile costs to %/year."""
-        corrected = df.copy()
-        corrected["value"] = corrected.technology.map(assign_vehicle_type)
-        corrected["value"] = corrected.value.map(self.fixed_cost)
-        corrected["value"] = (1 / corrected.capex).mul(corrected.value).mul(100)
-        corrected["unit"] = "%/year"
-        return corrected.drop(columns=["capex"])
 
 
 class EfsIceTransportationData:
@@ -432,12 +417,6 @@ class EfsIceTransportationData:
         df = self._correct_efficiency_units(df)
         return self._expand_data(df)[self.columns]
 
-    # def get_fixed_costs(self):
-    #     df = self.get_capex()
-    #     df["parameter"] = "FOM"
-    #     df["capex"] = df.value
-    #     return self._correct_fom_units(df)
-
     def _get_fixed_costs(self):
         df = self._get_capex()
         df["parameter"] = "FOM"
@@ -454,15 +433,6 @@ class EfsIceTransportationData:
         corrected["value"] = corrected.value.div(corrected.miles)
         corrected["unit"] = "$/mile"
         return corrected.drop(columns=["miles"])
-
-    def _correct_fom_units(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Converts $/mile costs to %/year."""
-        corrected = df.copy()
-        corrected["fixed"] = corrected.technology.map(assign_vehicle_type)
-        corrected["fixed"] = corrected.fixed.map(self.fixed_cost)
-        corrected["value"] = (1 / corrected.capex).mul(corrected.fixed).mul(100)
-        corrected["unit"] = "%/year"
-        return corrected.drop(columns=["capex", "fixed"])
 
     def _correct_efficiency_units(self, df: pd.DataFrame) -> pd.DataFrame:
         """Coverts MPGe into per Miles/MWh."""
@@ -575,9 +545,6 @@ class EiaBuildingData:
     All data originates from this document:
         https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
     """
-
-    kbtu_2_tbtu = 1e9
-    tbtu_2_mwh = TBTU_2_MWH
 
     columns = COLUMN_ORDER
 

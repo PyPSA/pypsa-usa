@@ -1,0 +1,44 @@
+# ====================================================================
+# PyPSA-USA — Test Configuration (Tier B integration harness)
+# ====================================================================
+# Builds to `cluster_network` on a minimal CA-only Western slice in
+# <5 minutes. DO NOT use as a user-facing entry point.
+#
+# This is a SPARSE OVERLAY. `workflow/Snakefile` already loads the
+# layered base (config.slurm / config.common / config.plotting /
+# config.api / config.sector / config.default) underneath it, so only
+# keys that DIFFER from that merged base belong here.
+#
+# `scenario.interconnect` is pinned deliberately even though it happens
+# to match config.default.yaml: the Tier B time budget depends on it,
+# and it must not follow a future change to the default scenario.
+#
+# NB: lists are REPLACED wholesale by the merge, never merged element-
+# wise, so any list that differs must be restated in full.
+# ====================================================================
+
+run:
+  name: "test"
+  disable_progressbar: true
+
+scenario:
+  interconnect: [western]   # pinned: Tier B budget depends on the footprint
+  clusters: [4]
+  simpl: [20]
+  scope: "total"
+  planning_horizons: [2030]
+
+model_topology:
+  include:
+    reeds_state: ['CA']
+
+snapshots:
+  start: "2019-01-01 00:00"
+  end: "2019-01-01 23:00"
+  inclusive: both
+
+electricity:
+  renewable_carriers: [onwind, solar, hydro]
+  extendable_carriers:
+    Generator: [solar, onwind, OCGT, CCGT]
+    StorageUnit: [4hr_battery_storage]

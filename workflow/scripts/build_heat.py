@@ -11,8 +11,6 @@ from constants_sector import SecCarriers, SecNames
 
 logger = logging.getLogger(__name__)
 
-VALID_HEAT_SYSTEMS = ("urban", "rural", "total")
-
 
 def build_heat(
     n: pypsa.Network,
@@ -443,7 +441,7 @@ def add_air_cons(
     acs["carrier"] = f"{sector}-{heat_system}-air-con"
     acs.index = acs.bus0
 
-    n.madd(
+    n.add(
         "Link",
         acs.index,
         suffix=f" {sector}-{heat_system}-air-con",
@@ -507,7 +505,7 @@ def add_service_heat_pumps_cooling(
     build_year = n.investment_periods[0]
 
     # use suffix to retain COP profiles
-    n.madd(
+    n.add(
         "Link",
         cool_links.index,
         bus0=cool_links.bus0,
@@ -559,7 +557,7 @@ def _split_urban_rural_load(
         # strip out the 'res-heat' and 'com-heat' to add in 'rural' and 'urban'
         new_buses.index = new_buses.index.str.rstrip(f" {sector}-{fuel}")
 
-        n.madd(
+        n.add(
             "Bus",
             new_buses.index,
             suffix=f" {sector}-{system}-{fuel}",
@@ -579,7 +577,7 @@ def _split_urban_rural_load(
         )
         loads_t = loads_t.mul(ratios[f"{system}_fraction"])
 
-        n.madd(
+        n.add(
             "Load",
             new_buses.index,
             suffix=f" {sector}-{system}-{fuel}",
@@ -589,8 +587,8 @@ def _split_urban_rural_load(
         )
 
     # remove old combined loads from the network
-    n.mremove("Load", load_names)
-    n.mremove("Bus", load_names)
+    n.remove("Load", load_names)
+    n.remove("Bus", load_names)
 
 
 def _format_total_load(
@@ -617,7 +615,7 @@ def _format_total_load(
     # strip out the 'res-heat' and 'com-heat' to add in 'rural' and 'urban'
     new_buses.index = new_buses.index.str.rstrip(f" {sector}-{fuel}")
 
-    n.madd(
+    n.add(
         "Bus",
         new_buses.index,
         suffix=f" {sector}-total-{fuel}",
@@ -636,7 +634,7 @@ def _format_total_load(
         columns={x: x.rstrip(f" {sector}-{fuel}") for x in loads_t.columns},
     )
 
-    n.madd(
+    n.add(
         "Load",
         new_buses.index,
         suffix=f" {sector}-total-{fuel}",
@@ -646,8 +644,8 @@ def _format_total_load(
     )
 
     # remove old combined loads from the network
-    n.mremove("Load", load_names)
-    n.mremove("Bus", load_names)
+    n.remove("Load", load_names)
+    n.remove("Bus", load_names)
 
 
 def add_service_furnace(
@@ -726,7 +724,7 @@ def add_service_furnace(
         df["efficiency2"] = costs.at[fuel, "co2_emissions"]
 
     if fuel == "elec":
-        n.madd(
+        n.add(
             "Link",
             df.index,
             suffix=f" {new_carrier}",
@@ -740,7 +738,7 @@ def add_service_furnace(
             build_year=build_year,
         )
     else:
-        n.madd(
+        n.add(
             "Link",
             df.index,
             suffix=f" {new_carrier}",
@@ -819,7 +817,7 @@ def add_heat_dr(
 
     # two buses for forward and backwards load shifting
 
-    n.madd(
+    n.add(
         "Bus",
         df.index,
         suffix="-fwd-dr",
@@ -831,7 +829,7 @@ def add_heat_dr(
         STATE_NAME=df.STATE_NAME,
     )
 
-    n.madd(
+    n.add(
         "Bus",
         df.index,
         suffix="-bck-dr",
@@ -845,7 +843,7 @@ def add_heat_dr(
 
     # seperate charging/discharging links to follow conventions
 
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix="-fwd-dr-charger",
@@ -858,7 +856,7 @@ def add_heat_dr(
         build_year=build_year,
     )
 
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix="-fwd-dr-discharger",
@@ -871,7 +869,7 @@ def add_heat_dr(
         build_year=build_year,
     )
 
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix="-bck-dr-charger",
@@ -884,7 +882,7 @@ def add_heat_dr(
         build_year=build_year,
     )
 
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix="-bck-dr-discharger",
@@ -900,12 +898,13 @@ def add_heat_dr(
     # backward stores have positive marginal cost storage and postive e
     # forward stores have negative marginal cost storage and negative e
 
-    n.madd(
+    n.add(
         "Store",
         df.index,
         suffix="-bck-dr",
         bus=df.index + "-bck-dr",
         e_cyclic=True,
+        e_cyclic_per_period=True,  # pypsa v1 flipped this default to False
         e_nom_extendable=False,
         e_nom=1e9,
         e_min_pu=0,
@@ -917,12 +916,13 @@ def add_heat_dr(
         build_year=build_year,
     )
 
-    n.madd(
+    n.add(
         "Store",
         df.index,
         suffix="-fwd-dr",
         bus=df.index + "-fwd-dr",
         e_cyclic=True,
+        e_cyclic_per_period=True,  # pypsa v1 flipped this default to False
         e_nom_extendable=False,
         e_nom=1e9,
         e_min_pu=-1,
@@ -1031,7 +1031,7 @@ def add_service_water_store(
     build_year = n.investment_periods[0]
 
     buses = df.copy().set_index("bus1")
-    n.madd(
+    n.add(
         "Bus",
         buses.index,
         x=buses.x,
@@ -1042,7 +1042,7 @@ def add_service_water_store(
 
     # limitless one directional link from primary energy to water store
     if fuel == "elec":
-        n.madd(
+        n.add(
             "Link",
             df.index,
             suffix=f"-{fuel}-heater-charger",
@@ -1057,7 +1057,7 @@ def add_service_water_store(
             build_year=build_year,
         )
     else:  # emission tracking
-        n.madd(
+        n.add(
             "Link",
             df.index,
             suffix=f"-{fuel}-heater-charger",
@@ -1075,7 +1075,7 @@ def add_service_water_store(
         )
 
     # limitless one directional link from water store to water demand
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix=f"-{fuel}-heater-discharger",
@@ -1090,12 +1090,13 @@ def add_service_water_store(
     )
 
     # limitless water store.
-    n.madd(
+    n.add(
         "Store",
         df.index,
         suffix=f"-{fuel}-heater",
         bus=df.bus1,
         e_cyclic=True,
+        e_cyclic_per_period=True,  # pypsa v1 flipped this default to False
         e_nom_extendable=extendable,
         carrier=df.carrier,
         standing_loss=standing_loss,
@@ -1182,7 +1183,7 @@ def add_service_heat_pumps(
     build_year = n.investment_periods[0]
 
     # use suffix to retain COP profiles
-    n.madd(
+    n.add(
         "Link",
         hps.index,
         # suffix=suffix,
@@ -1234,7 +1235,7 @@ def add_industrial_gas_furnace(
     else:
         mc = 0
 
-    n.madd(
+    n.add(
         "Link",
         furnaces.index,
         suffix="-gas-furnace",  # 'ind' included in index already
@@ -1293,7 +1294,7 @@ def add_industrial_coal_furnace(
     else:
         mc = 0
 
-    n.madd(
+    n.add(
         "Link",
         furnace.index,
         suffix="-coal-furnace",  # 'ind' included in index already
@@ -1335,7 +1336,7 @@ def add_indusrial_heat_pump(
     hp["carrier"] = f"{sector}-heat-pump"
     hp.index = hp.index.map(lambda x: x.split("-heat")[0])
 
-    n.madd(
+    n.add(
         "Link",
         hp.index,
         suffix="-heat-pump",  # 'ind' included in index already

@@ -10,12 +10,6 @@ import sys
 import numpy as np
 import pandas as pd
 import pytest
-from pypsa.descriptors import (
-    get_activity_mask,
-)
-from pypsa.descriptors import (
-    get_switchable_as_dense as get_as_dense,
-)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from opts.reserves import add_ERM_constraints, store_ERM_duals
@@ -97,7 +91,7 @@ def test_erm_constraint_binding(reserve_margin_network):
     nodal_reserve_requirement = nodal_demand * (1.0 + erm_value)
 
     nodal_generator_capacity = (
-        (n.generators.p_nom_opt * get_as_dense(n, "Generator", "p_max_pu", n.snapshots))
+        (n.generators.p_nom_opt * n.get_switchable_as_dense("Generator", "p_max_pu", n.snapshots))
         .T.groupby(n.generators.bus)
         .sum()
         .T
@@ -105,7 +99,7 @@ def test_erm_constraint_binding(reserve_margin_network):
     nodal_storage_capacity = (
         (
             n.storage_units.p_nom_opt
-            * get_as_dense(n, "StorageUnit", "p_max_pu", n.snapshots)
+            * n.get_switchable_as_dense("StorageUnit", "p_max_pu", n.snapshots)
             * n.storage_units.efficiency_store
         )
         .T.groupby(n.storage_units.bus)
@@ -353,7 +347,7 @@ def test_multi_period_erm_activity_masking(multi_period_reserve_network):
     # n._multi_invest must be True for get_activity_mask to use build_year/lifetime logic;
     # it is normally set by n.optimize(multi_investment_periods=True).
     n._multi_invest = True
-    activity = get_activity_mask(n, "Generator", n.snapshots)
+    activity = n.components["Generator"].get_activity_mask(n.snapshots)
     period_2030_mask = n.snapshots.get_level_values(0) == 2030
     period_2040_mask = n.snapshots.get_level_values(0) == 2040
 

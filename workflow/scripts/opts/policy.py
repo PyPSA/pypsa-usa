@@ -10,7 +10,6 @@ from opts._helpers import (
     get_model_horizon,
     get_region_buses,
 )
-from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ def add_technology_capacity_target_constraints(n, config):
     Add minimum or maximum levels of generator nominal capacity per carrier for individual regions.
     Each constraint can be designated for a specified planning horizon in multi-period models.
     Opts and path for technology_capacity_targets.csv must be defined in config.yaml.
-    Default file is available at config/policy_constraints/technology_capacity_targets.csv.
+    Default file is available at repo_data/config/policy_constraints/technology_capacity_targets.csv.
 
     Parameters
     ----------
@@ -46,7 +45,7 @@ def add_technology_capacity_target_constraints(n, config):
     scenario:
         opts: [Co2L-TCT-24H]
     electricity:
-        technology_capacity_target: config/policy_constraints/technology_capacity_target.csv
+        technology_capacity_target: repo_data/config/policy_constraints/technology_capacity_target.csv
     """
     tct_data = pd.read_csv(config["electricity"]["technology_capacity_targets"], comment="#")
     if tct_data.empty:
@@ -122,7 +121,7 @@ def add_technology_capacity_target_constraints(n, config):
                 [lhs_gens_ext.bus.map(n.buses.country), lhs_gens_ext.carrier],
                 axis=1,
             ).rename_axis(
-                "Generator-ext",
+                "name",
             )
             lhs_g = n.model["Generator-p_nom"].loc[lhs_gens_ext.index].groupby(grouper_g).sum().rename(bus="country")
         else:
@@ -133,7 +132,7 @@ def add_technology_capacity_target_constraints(n, config):
                 [lhs_storage_ext.bus.map(n.buses.country), lhs_storage_ext.carrier],
                 axis=1,
             ).rename_axis(
-                "StorageUnit-ext",
+                "name",
             )
             lhs_s = n.model["StorageUnit-p_nom"].loc[lhs_storage_ext.index].groupby(grouper_s).sum()
         else:
@@ -144,7 +143,7 @@ def add_technology_capacity_target_constraints(n, config):
                 [lhs_link_ext.bus1.map(n.buses.country), lhs_link_ext.carrier],
                 axis=1,
             ).rename_axis(
-                "Link-ext",
+                "name",
             )
             lhs_l = n.model["Link-p_nom"].loc[lhs_link_ext.index].groupby(grouper_l).sum()
         else:
@@ -153,9 +152,9 @@ def add_technology_capacity_target_constraints(n, config):
         if lhs_g is None and lhs_s is None and lhs_l is None:
             continue
         else:
-            gen = lhs_g.sum() if lhs_g else 0
-            lnk = lhs_l.sum() if lhs_l else 0
-            sto = lhs_s.sum() if lhs_s else 0
+            gen = lhs_g.sum() if lhs_g is not None else 0
+            lnk = lhs_l.sum() if lhs_l is not None else 0
+            sto = lhs_s.sum() if lhs_s is not None else 0
 
         lhs = gen + lnk + sto
 
@@ -293,6 +292,8 @@ def _process_reeds_data(filepath, carriers, value_col):
             var_name="planning_horizon",
             value_name=value_col,
         )
+        # melted column headers are strings; the horizon filter compares against ints
+        reeds["planning_horizon"] = reeds["planning_horizon"].astype(int)
 
     # Standardize column names
     reeds = reeds.rename(
@@ -375,7 +376,7 @@ def add_RPS_constraints(n, config, snakemake=None):
     # Concatenate all portfolio standards
     portfolio_standards = _collapse_portfolio_standards(
         n,
-        snakemake.params.planning_horizons,
+        list(n.investment_periods),
         portfolio_standards,
         rps_reeds,
         ces_reeds,
@@ -410,12 +411,16 @@ def add_RPS_constraints(n, config, snakemake=None):
         region_gens_eligible = region_gens[region_gens.carrier.isin(carriers)]
 
         if region_gens_eligible.empty:
-            return
+            logger.warning(
+                f"RPS constraint '{rec_trading_zone}' for {planning_horizon} skipped: "
+                f"no generators with carriers {carriers} in the zone.",
+            )
+            continue
 
         # Eligible generation
         p_eligible = n.model["Generator-p"].sel(
             period=planning_horizon,
-            Generator=region_gens_eligible.index,
+            name=region_gens_eligible.index,
         )
         renewable_gen = zone_constraints.rps_rhs.sum()
         lhs = p_eligible.sum() - renewable_gen
@@ -442,12 +447,12 @@ def _get_state_generation(n, planning_horizon, state, carriers):
         n.model["Generator-p"]
         .sel(
             period=planning_horizon,
-            Generator=state_gens.index,
+            name=state_gens.index,
         )
         .sum()
     )
     links_demand = (
-        n.model["Link-p"].sel(period=planning_horizon, Link=state_links.index).mul(state_links.efficiency).sum()
+        n.model["Link-p"].sel(period=planning_horizon, name=state_links.index).mul(state_links.efficiency).sum()
     )
 
     return gens_demand + links_demand
@@ -486,7 +491,7 @@ def add_RPS_constraints_sector(n, config, snakemake=None):
     # Concatenate all portfolio standards
     portfolio_standards = _collapse_portfolio_standards(
         n,
-        snakemake.params.planning_horizons,
+        list(n.investment_periods),
         portfolio_standards,
         rps_reeds,
         ces_reeds,
@@ -568,8 +573,7 @@ def add_regional_co2limit(n, config):
         if planning_horizon not in model_horizon:
             continue
 
-        efficiency = get_as_dense(
-            n,
+        efficiency = n.get_switchable_as_dense(
             "Generator",
             "efficiency",
             inds=region_gens_em.index,

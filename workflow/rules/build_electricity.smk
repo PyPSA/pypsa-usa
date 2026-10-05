@@ -2,6 +2,17 @@
 
 from itertools import chain
 
+# rules/common.smk materializes godeeep_cf_registry.py into the source-cache
+# dir it puts on sys.path, so the CF registry is importable at parse time —
+# where its validation belongs.
+from godeeep_cf_registry import (
+    cf_filename,
+    godeeep_tech_spec,
+    resolve_scenario,
+    resolve_weather_year,
+    validate_godeeep_cf_config,
+)
+
 
 rule build_shapes:
     params:
@@ -16,14 +27,16 @@ rule build_shapes:
         offshore_shapes_eez=DATA + "eez/conus_eez.shp",
         county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
     output:
-        country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
-        onshore_shapes=RESOURCES + "{interconnect}/Geospatial/onshore_shapes.geojson",
-        offshore_shapes=RESOURCES + "{interconnect}/Geospatial/offshore_shapes.geojson",
-        state_shapes=RESOURCES + "{interconnect}/Geospatial/state_boundaries.geojson",
-        reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
-        county_shapes=RESOURCES + "{interconnect}/Geospatial/county_shapes.geojson",
+        country_shapes=GEOSPATIAL + "{interconnect}/country_shapes.geojson",
+        onshore_shapes=GEOSPATIAL + "{interconnect}/onshore_shapes.geojson",
+        offshore_shapes=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
+        state_shapes=GEOSPATIAL + "{interconnect}/state_boundaries.geojson",
+        reeds_shapes=GEOSPATIAL + "{interconnect}/reeds_shapes.geojson",
+        county_shapes=GEOSPATIAL + "{interconnect}/county_shapes.geojson",
     log:
         "logs/build_shapes/{interconnect}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_shapes"
     threads: 1
     resources:
         walltime=config_provider("walltime", "build_shapes", default="00:30:00"),
@@ -32,34 +45,48 @@ rule build_shapes:
         "../scripts/build_shapes.py"
 
 
+def bus_allocation_data(wildcards):
+    """2020 census county populations, only when bus_allocation=population."""
+    method = config["electricity"]["demand"].get("bus_allocation", "population")
+    if method == "population":
+        return {"county_population": DATA + "population/DECENNIALDHC2020.P1-Data.csv"}
+    return {}
+
+
 rule build_base_network:
     params:
         build_offshore_network=config_provider("offshore_network"),
+        bus_allocation=config_provider(
+            "electricity", "demand", "bus_allocation", default="population"
+        ),
         model_topology=config_provider("model_topology", "include"),
         topological_boundaries=config_provider(
             "model_topology", "topological_boundaries"
         ),
         length_factor=config["lines"]["length_factor"],
     input:
+        unpack(bus_allocation_data),
         buses=DATA + "breakthrough_network/base_grid/bus.csv",
         lines=DATA + "breakthrough_network/base_grid/branch.csv",
         links=DATA + "breakthrough_network/base_grid/dcline.csv",
         bus2sub=DATA + "breakthrough_network/base_grid/bus2sub.csv",
         sub=DATA + "breakthrough_network/base_grid/sub.csv",
-        onshore_shapes=RESOURCES + "{interconnect}/Geospatial/onshore_shapes.geojson",
-        offshore_shapes=RESOURCES + "{interconnect}/Geospatial/offshore_shapes.geojson",
-        state_shapes=RESOURCES + "{interconnect}/Geospatial/state_boundaries.geojson",
-        reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
-        county_shapes=RESOURCES + "{interconnect}/Geospatial/county_shapes.geojson",
+        onshore_shapes=GEOSPATIAL + "{interconnect}/onshore_shapes.geojson",
+        offshore_shapes=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
+        state_shapes=GEOSPATIAL + "{interconnect}/state_boundaries.geojson",
+        reeds_shapes=GEOSPATIAL + "{interconnect}/reeds_shapes.geojson",
+        county_shapes=GEOSPATIAL + "{interconnect}/county_shapes.geojson",
         reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
     output:
-        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
-        sub=RESOURCES + "{interconnect}/sub.csv",
-        bus_gis=RESOURCES + "{interconnect}/bus_gis.csv",
-        lines_gis=RESOURCES + "{interconnect}/lines_gis.csv",
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
+        sub=BUSMAPS + "{interconnect}/sub.csv",
+        bus_gis=GEOSPATIAL + "{interconnect}/bus_gis.csv",
+        lines_gis=GEOSPATIAL + "{interconnect}/lines_gis.csv",
+        network=NETWORKS + "{interconnect}/elec_base_network.nc",
     log:
         "logs/create_network/{interconnect}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_base_network"
     threads: 1
     resources:
         mem_mb=5000,
@@ -73,23 +100,26 @@ rule build_bus_regions:
         topological_boundaries=config_provider(
             "model_topology", "topological_boundaries"
         ),
-        focus_weights=config_provider("focus_weights"),
+        model_topology_include=config_provider(
+            "model_topology", "include", default=None
+        ),
     input:
-        country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
-        county_shapes=RESOURCES + "{interconnect}/Geospatial/county_shapes.geojson",
-        state_shapes=RESOURCES + "{interconnect}/Geospatial/state_boundaries.geojson",
-        ba_region_shapes=RESOURCES + "{interconnect}/Geospatial/onshore_shapes.geojson",
-        reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
-        offshore_shapes=RESOURCES + "{interconnect}/Geospatial/offshore_shapes.geojson",
-        base_network=RESOURCES + "{interconnect}/elec_base_network.nc",
-        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
-        sub=RESOURCES + "{interconnect}/sub.csv",
+        country_shapes=GEOSPATIAL + "{interconnect}/country_shapes.geojson",
+        county_shapes=GEOSPATIAL + "{interconnect}/county_shapes.geojson",
+        state_shapes=GEOSPATIAL + "{interconnect}/state_boundaries.geojson",
+        ba_region_shapes=GEOSPATIAL + "{interconnect}/onshore_shapes.geojson",
+        reeds_shapes=GEOSPATIAL + "{interconnect}/reeds_shapes.geojson",
+        offshore_shapes=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
+        base_network=NETWORKS + "{interconnect}/elec_base_network.nc",
+        bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
+        sub=BUSMAPS + "{interconnect}/sub.csv",
     output:
-        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore.geojson",
+        regions_onshore=GEOSPATIAL + "{interconnect}/regions_onshore.geojson",
+        regions_offshore=GEOSPATIAL + "{interconnect}/regions_offshore.geojson",
     log:
         "logs/build_bus_regions/{interconnect}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_bus_regions"
     threads: 1
     resources:
         mem_mb=3000,
@@ -109,10 +139,12 @@ rule build_cost_data:
         egs_costs="repo_data/costs/egs_costs.csv",
         additional_costs="repo_data/costs/additional_costs.csv",
     output:
-        tech_costs=RESOURCES + "costs/costs_{year}.csv",
-        sector_costs=RESOURCES + "costs/sector_costs_{year}.csv",
+        tech_costs=COSTS + "costs_{year}.csv",
+        sector_costs=COSTS + "sector_costs_{year}.csv",
     log:
         LOGS + "costs_{year}.log",
+    benchmark:
+        BENCHMARKS + "build_cost_data_{year}"
     threads: 1
     resources:
         mem_mb=5000,
@@ -131,10 +163,8 @@ if config["enable"].get("build_cutout", False):
             cutouts=config_provider("atlite", "cutouts"),
             interconnects=config_provider("atlite", "interconnects"),
         input:
-            regions_onshore=RESOURCES
-            + "{interconnect}/Geospatial/country_shapes.geojson",
-            regions_offshore=RESOURCES
-            + "{interconnect}/Geospatial/offshore_shapes.geojson",
+            regions_onshore=GEOSPATIAL + "{interconnect}/country_shapes.geojson",
+            regions_offshore=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
         output:
             protected("cutouts/" + CDIR + "{interconnect}_{cutout}.nc"),
         log:
@@ -149,11 +179,73 @@ if config["enable"].get("build_cutout", False):
             "../scripts/build_cutout.py"
 
 
-# Only use planning_horizon for GoDEEEP future scenarios
+# Resolve every configured (scenario, year, technology) CF request now, so a
+# registry that cannot serve the run dies here — with one aggregated message
+# naming each dataset key, the requested year and the available years — instead
+# of hundreds of DAG nodes later. A non-godeeep config is a no-op.
+validate_godeeep_cf_config(config)
+
+# Only use planning_horizon for GoDEEEP future scenarios. `and` short-circuits,
+# so an atlite run never needs renewable_scenarios, and a godeeep run missing it
+# gets the registry's error rather than a bare KeyError.
 godeeep_planning_horizon = (
     config.get("renewable", {}).get("dataset") == "godeeep"
-    and config["renewable_scenarios"][0] != "historical"
+    and resolve_scenario(config) != "historical"
 )
+
+
+def godeeep_cf_artifact(wildcards):
+    """Input function for the GODEEEP capacity-factor file of a technology.
+
+    The file is retrieved by ``rule retrieve_godeeep_cf`` rather than downloaded
+    inside ``build_renewable_profiles``. Returns no input unless the CF dataset
+    is ``godeeep``. Future scenarios take the CF year from the
+    ``{planning_horizon}`` wildcard, historical ones from
+    ``renewable_weather_years[0]``; both the year and the file name come from
+    ``godeeep_cf_registry`` so the rule, the retrieval and the parse-time
+    validation cannot drift apart.
+    """
+    if config.get("renewable", {}).get("dataset") != "godeeep":
+        return []
+    spec = godeeep_tech_spec(wildcards.technology, config)
+    scenario = resolve_scenario(config)
+    year = resolve_weather_year(
+        config,
+        int(wildcards.planning_horizon) if godeeep_planning_horizon else None,
+    )
+    filename = cf_filename(spec.technology, spec.wind_height, scenario, year)
+    return DATA + f"godeeep/{scenario}/{filename}"
+
+
+def nrel_exclusion_artifact(kind):
+    """Input function for the NREL exclusion artifact of the given ``kind``.
+
+    ``kind`` is either ``avail`` or ``caps``; the artifact is named
+    ``{kind}_{tech}_{access}{_cec}{_boem}.nc``. Returns no input when
+    ``renewable_land_access`` is unset.
+    """
+
+    def _inner(w):
+        access = config.get("renewable_land_access")
+        if not access:
+            return []
+        cec = (
+            "_cec"
+            if config.get("apply_cec_basescreen")
+            and w.technology in ("onwind", "solar")
+            else ""
+        )
+        boem = (
+            "_boem"
+            if config.get("apply_boem_osw") and w.technology.startswith("offwind")
+            else ""
+        )
+        return (
+            DATA
+            + f"nrel_exclusion/derived/{kind}_{w.technology}_{access}{cec}{boem}.nc"
+        )
+
+    return _inner
 
 
 rule build_renewable_profiles:
@@ -164,7 +256,7 @@ rule build_renewable_profiles:
             int(w.planning_horizon) if godeeep_planning_horizon else None
         ),
         renewable_scenarios=config_provider("renewable_scenarios"),
-        mapping_cache_dir=RESOURCES + "{interconnect}/nrel_mapping_cache",
+        mapping_cache_dir=PROFILES + "{interconnect}/nrel_mapping_cache",
     input:
         corine=ancient(
             DATA
@@ -180,58 +272,29 @@ rule build_renewable_profiles:
                 else []
             )
         ),
-        country_shapes=RESOURCES + "{interconnect}/Geospatial/country_shapes.geojson",
-        offshore_shapes=RESOURCES + "{interconnect}/Geospatial/offshore_shapes.geojson",
+        country_shapes=GEOSPATIAL + "{interconnect}/country_shapes.geojson",
+        offshore_shapes=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
         cec_onwind="repo_data/geospatial/CEC_GIS/CEC_Wind_BaseScreen_epsg3310.tif",
         cec_solar="repo_data/geospatial/CEC_GIS/CEC_Solar_BaseScreen_epsg3310.tif",
         boem_osw="repo_data/geospatial/boem_osw_planning_areas.tif",
         regions=lambda w: (
-            RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson"
+            GEOSPATIAL + "{interconnect}/regions_onshore_s{simpl}.geojson"
             if w.technology in ("onwind", "solar")
-            else RESOURCES + "{interconnect}/Geospatial/regions_offshore.geojson"
+            else GEOSPATIAL + "{interconnect}/regions_offshore_s{simpl}.geojson"
         ),
-        nrel_avail=lambda w: (
-            DATA
-            + "nrel_exclusion/derived/avail_{tech}_{acc}{cec}{boem}.nc".format(
-                tech=w.technology,
-                acc=config["renewable_land_access"],
-                cec=(
-                    "_cec"
-                    if config.get("apply_cec_basescreen")
-                    and w.technology in ("onwind", "solar")
-                    else ""
-                ),
-                boem=(
-                    "_boem"
-                    if config.get("apply_boem_osw")
-                    and w.technology.startswith("offwind")
-                    else ""
-                ),
-            )
-            if config.get("renewable_land_access")
-            else []
+        # Pre-clustering (substation) regions from build_bus_regions. Used by
+        # renewable.godeeep_cf_weighting == "capacity" to weight GODEEEP cells
+        # availability-weighted within each substation first, then roll the
+        # substations up to the cluster by installable capacity (p_nom_max).
+        # (Master weights that second stage by existing p_nom instead; HF-25.)
+        regions_nodal=lambda w: (
+            GEOSPATIAL + "{interconnect}/regions_onshore.geojson"
+            if w.technology in ("onwind", "solar")
+            else GEOSPATIAL + "{interconnect}/regions_offshore.geojson"
         ),
-        nrel_caps=lambda w: (
-            DATA
-            + "nrel_exclusion/derived/caps_{tech}_{acc}{cec}{boem}.nc".format(
-                tech=w.technology,
-                acc=config["renewable_land_access"],
-                cec=(
-                    "_cec"
-                    if config.get("apply_cec_basescreen")
-                    and w.technology in ("onwind", "solar")
-                    else ""
-                ),
-                boem=(
-                    "_boem"
-                    if config.get("apply_boem_osw")
-                    and w.technology.startswith("offwind")
-                    else ""
-                ),
-            )
-            if config.get("renewable_land_access")
-            else []
-        ),
+        nrel_avail=nrel_exclusion_artifact("avail"),
+        nrel_caps=nrel_exclusion_artifact("caps"),
+        godeeep_cf=godeeep_cf_artifact,
         cutout=lambda wildcards: (
             expand(
                 "cutouts/"
@@ -245,30 +308,37 @@ rule build_renewable_profiles:
             if config["renewable"]["dataset"] == "atlite"
             else []
         ),
+        busmap_s=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
     output:
         profile=(
-            RESOURCES + "{interconnect}/{planning_horizon}/profile_{technology}.nc"
+            PROFILES
+            + "{interconnect}/{planning_horizon}/profile_{technology}_s{simpl}.nc"
             if godeeep_planning_horizon
-            else RESOURCES + "{interconnect}/profile_{technology}.nc"
+            else PROFILES + "{interconnect}/profile_{technology}_s{simpl}.nc"
         ),
     log:
         LOGS
-        + "{interconnect}/build_renewable_profile_{technology}_{planning_horizon}.log"
+        + "{interconnect}/build_renewable_profile_{technology}_{planning_horizon}_s{simpl}.log"
         if godeeep_planning_horizon
-        else LOGS + "{interconnect}/build_renewable_profile_{technology}.log",
+        else LOGS + "{interconnect}/build_renewable_profile_{technology}_s{simpl}.log",
     benchmark:
         (
             BENCHMARKS
-            + "{interconnect}/build_renewable_profiles_{technology}_{planning_horizon}"
+            + "{interconnect}/build_renewable_profiles_{technology}_{planning_horizon}_s{simpl}"
             if godeeep_planning_horizon
-            else BENCHMARKS + "{interconnect}/build_renewable_profiles_{technology}"
+            else BENCHMARKS
+            + "{interconnect}/build_renewable_profiles_{technology}_s{simpl}"
         )
     threads: ATLITE_NPROCESSES
     resources:
+        # godeeep does no atlite excluder work: it streams the compressed CF in
+        # 500-hour chunks and aggregates onto bus polygons, whose peak footprint
+        # is set by the chunk and the cell->bus mapping, not by input.size.
         mem_mb=lambda wildcards, input, attempt: (
-            ATLITE_NPROCESSES * input.size // 2000000
-        )
-        * 2.5,
+            32000 * attempt
+            if config["renewable"]["dataset"] == "godeeep"
+            else (ATLITE_NPROCESSES * input.size // 2000000) * 2.5
+        ),
         walltime=config_provider(
             "walltime", "build_renewable_profiles", default="02:30:00"
         ),
@@ -310,6 +380,15 @@ def eer_demand_file():
     return filename
 
 
+SERVM_LOAD_FILE = "cpuc/servm/HourlyLoad_CA_Regions_V2025E_2224_Mon_{year}.csv"
+
+
+def servm_demand_files():
+    """One CPUC SERVM hourly-load file per planning horizon."""
+    horizons = sorted(set(config["scenario"]["planning_horizons"]))
+    return [DATA + SERVM_LOAD_FILE.format(year=year) for year in horizons]
+
+
 def demand_raw_data(wildcards):
     # get profile to use
     end_use = wildcards.end_use
@@ -341,6 +420,8 @@ def demand_raw_data(wildcards):
         return DATA + f"nrel_efs/EFSLoadProfile_{efs_case}_{efs_speed}.csv"
     elif profile == "eer":
         return DATA + f"eer/{eer_demand_file()}"
+    elif profile == "servm":
+        return servm_demand_files()
     elif profile == "ferc":
         return [
             DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
@@ -375,17 +456,24 @@ def demand_raw_data(wildcards):
         return []
 
 
-def demand_dissagregate_data(wildcards):
-    end_use = wildcards.end_use
-    if end_use == "industry":
-        strategy = "cliu"
-    else:
-        strategy = "pop"
+def demand_disaggregate_data(wildcards):
+    """Extra per-profile input needed to spread zonal demand over buses.
 
-    if strategy == "pop":
-        return []
-    elif strategy == "cliu":
+    CLIU county-level industrial loads serve the industry end use; the SERVM
+    profile needs its precomputed (region, bus) allocation weights. Everything
+    else disaggregates by population and needs no extra file.
+    """
+    if wildcards.end_use == "industry":
         return DATA + "industry_load/2014_update_20170910-0116.csv"
+    if (
+        wildcards.end_use == "power"
+        and config["electricity"]["demand"]["profile"] == "servm"
+    ):
+        return (
+            DEMAND
+            + f"{wildcards.interconnect}/servm_load_weights_s{wildcards.simpl}.csv"
+        )
+    return []
 
 
 def demand_scaling_data(wildcards):
@@ -408,6 +496,8 @@ def demand_scaling_data(wildcards):
         return []
     elif profile == "eer":
         return []
+    elif profile == "servm":
+        return []
     else:
         return ""
 
@@ -421,18 +511,24 @@ rule build_electrical_demand:
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         planning_horizons=config["scenario"]["planning_horizons"],
         renewable_weather_years=config["renewable_weather_years"],
+        servm_weather_years=config["electricity"]["demand"]["scenario"].get(
+            "servm_weather_years", []
+        ),
         snapshots=config["snapshots"],
         pudl_path=config_provider("pudl_path"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
+        dissagregate_files=demand_disaggregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        elec_demand=RESOURCES + "{interconnect}/demand/{end_use}_electricity.csv",
+        elec_demand=DEMAND + "{interconnect}/{end_use}_electricity_s{simpl}.csv",
+        zonal_components=DEMAND
+        + "{interconnect}/{end_use}_zonal_components_s{simpl}.parquet",
     log:
-        LOGS + "{interconnect}/{end_use}_build_demand.log",
+        LOGS + "{interconnect}/{end_use}_build_demand_s{simpl}.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/{end_use}_build_demand"
+        BENCHMARKS + "{interconnect}/{end_use}_build_demand_s{simpl}"
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
@@ -452,19 +548,19 @@ rule build_service_demand:
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
-        dissagregate_files=demand_dissagregate_data,
+        dissagregate_files=demand_disaggregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        electricity=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
-        space_heat=RESOURCES + "{interconnect}/demand/{end_use}_space-heating.pkl",
-        water_heat=RESOURCES + "{interconnect}/demand/{end_use}_water-heating.pkl",
-        cool=RESOURCES + "{interconnect}/demand/{end_use}_cooling.pkl",
+        electricity=DEMAND + "{interconnect}/{end_use}_electricity_s{simpl}.pkl",
+        space_heat=DEMAND + "{interconnect}/{end_use}_space-heating_s{simpl}.pkl",
+        water_heat=DEMAND + "{interconnect}/{end_use}_water-heating_s{simpl}.pkl",
+        cool=DEMAND + "{interconnect}/{end_use}_cooling_s{simpl}.pkl",
     log:
-        LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
+        LOGS + "{interconnect}/demand/{end_use}_build_demand_s{simpl}.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
+        BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand_s{simpl}"
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
@@ -482,17 +578,17 @@ rule build_industry_demand:
         snapshots=config_provider("snapshots"),
         pudl_path=config_provider("pudl_path"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
-        dissagregate_files=demand_dissagregate_data,
+        dissagregate_files=demand_disaggregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        electricity=RESOURCES + "{interconnect}/demand/{end_use}_electricity.pkl",
-        heat=RESOURCES + "{interconnect}/demand/{end_use}_heating.pkl",
+        electricity=DEMAND + "{interconnect}/{end_use}_electricity_s{simpl}.pkl",
+        heat=DEMAND + "{interconnect}/{end_use}_heating_s{simpl}.pkl",
     log:
-        LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
+        LOGS + "{interconnect}/demand/{end_use}_build_demand_s{simpl}.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
+        BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand_s{simpl}"
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
@@ -510,19 +606,19 @@ rule build_transport_road_demand:
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
-        dissagregate_files=demand_dissagregate_data,
+        dissagregate_files=demand_disaggregate_data,
         demand_scaling_file=demand_scaling_data,
     output:
-        light_duty=RESOURCES + "{interconnect}/demand/{end_use}_light-duty.pkl",
-        med_duty=RESOURCES + "{interconnect}/demand/{end_use}_med-duty.pkl",
-        heavy_duty=RESOURCES + "{interconnect}/demand/{end_use}_heavy-duty.pkl",
-        bus=RESOURCES + "{interconnect}/demand/{end_use}_bus.pkl",
+        light_duty=DEMAND + "{interconnect}/{end_use}_light-duty_s{simpl}.pkl",
+        med_duty=DEMAND + "{interconnect}/{end_use}_med-duty_s{simpl}.pkl",
+        heavy_duty=DEMAND + "{interconnect}/{end_use}_heavy-duty_s{simpl}.pkl",
+        bus=DEMAND + "{interconnect}/{end_use}_bus_s{simpl}.pkl",
     log:
-        LOGS + "{interconnect}/demand/{end_use}_build_demand.log",
+        LOGS + "{interconnect}/demand/{end_use}_build_demand_s{simpl}.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand"
+        BENCHMARKS + "{interconnect}/demand/{end_use}_build_demand_s{simpl}"
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
@@ -542,15 +638,16 @@ rule build_transport_other_demand:
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
-        dissagregate_files=demand_dissagregate_data,
+        dissagregate_files=demand_disaggregate_data,
     output:
-        RESOURCES + "{interconnect}/demand/{end_use}_{vehicle}.pkl",
+        DEMAND + "{interconnect}/{end_use}_{vehicle}_s{simpl}.pkl",
     log:
-        LOGS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand.log",
+        LOGS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand_s{simpl}.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/demand/{end_use}_{vehicle}_build_demand"
+        BENCHMARKS
+        +"{interconnect}/demand/{end_use}_{vehicle}_build_demand_s{simpl}"
     threads: 2
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
@@ -561,7 +658,7 @@ rule build_transport_other_demand:
 def demand_to_add(wildcards):
 
     if config["scenario"]["sector"] == "E":
-        return RESOURCES + "{interconnect}/demand/power_electricity.csv"
+        return DEMAND + "{interconnect}/power_electricity_s{simpl}.csv"
     else:
         # service demand
         services = ["residential", "commercial"]
@@ -570,27 +667,27 @@ def demand_to_add(wildcards):
         else:
             fuels = ["electricity", "cooling", "heating"]
         service_demands = [
-            RESOURCES + "{interconnect}/demand/" + service + "_" + fuel + ".pkl"
+            DEMAND + "{interconnect}/" + service + "_" + fuel + "_s{simpl}.pkl"
             for service in services
             for fuel in fuels
         ]
         # industrial demand
         fuels = ["electricity", "heating"]
         industrial_demands = [
-            RESOURCES + "{interconnect}/demand/industry_" + fuel + ".pkl"
+            DEMAND + "{interconnect}/industry_" + fuel + "_s{simpl}.pkl"
             for fuel in fuels
         ]
         # road transport demands
         vehicles = ["light-duty", "med-duty", "heavy-duty", "bus"]
         road_demand = [
-            RESOURCES + "{interconnect}/demand/transport_" + vehicle + ".pkl"
+            DEMAND + "{interconnect}/transport_" + vehicle + "_s{simpl}.pkl"
             for vehicle in vehicles
         ]
 
         # other transport demands
         vehicles = ["boat-shipping", "rail-shipping", "rail-passenger", "air"]
         non_road_demand = [
-            RESOURCES + "{interconnect}/demand/transport_" + vehicle + ".pkl"
+            DEMAND + "{interconnect}/transport_" + vehicle + "_s{simpl}.pkl"
             for vehicle in vehicles
         ]
 
@@ -603,14 +700,14 @@ rule add_demand:
         planning_horizons=config_provider("scenario", "planning_horizons"),
         snapshots=config_provider("snapshots"),
     input:
-        network=RESOURCES + "{interconnect}/elec_base_network.nc",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
         demand=demand_to_add,
     output:
-        network=RESOURCES + "{interconnect}/elec_base_network_dem.nc",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}_dem.nc",
     log:
-        LOGS + "{interconnect}/add_demand.log",
+        LOGS + "{interconnect}/elec_s{simpl}_add_demand.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/add_demand"
+        BENCHMARKS + "{interconnect}/elec_s{simpl}_add_demand"
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
         walltime=config_provider("walltime", "add_demand", default="00:50:00"),
@@ -629,14 +726,15 @@ rule build_fuel_prices:
     params:
         snapshots=config["snapshots"],
         api_eia=config["api"]["eia"],
+        dynamic_fuel_price=config_provider("conventional", "dynamic_fuel_price"),
         pudl_path=config_provider("pudl_path"),
     input:
         gas_balancing_area=ba_gas_dynamic_fuel_price_files,
     output:
-        state_ng_fuel_prices=RESOURCES + "{interconnect}/state_ng_power_prices.csv",
-        state_coal_fuel_prices=RESOURCES + "{interconnect}/state_coal_power_prices.csv",
-        ba_ng_fuel_prices=RESOURCES + "{interconnect}/ba_ng_power_prices.csv",
-        pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
+        state_ng_fuel_prices=PRICES + "{interconnect}/state_ng_power_prices.csv",
+        state_coal_fuel_prices=PRICES + "{interconnect}/state_coal_power_prices.csv",
+        ba_ng_fuel_prices=PRICES + "{interconnect}/ba_ng_power_prices.csv",
+        pudl_fuel_costs=PRICES + "{interconnect}/pudl_fuel_costs.csv",
     log:
         LOGS + "{interconnect}/build_fuel_prices.log",
     benchmark:
@@ -653,11 +751,10 @@ rule build_fuel_prices:
 def dynamic_fuel_price_files(wildcards):
     if config["conventional"]["dynamic_fuel_price"]["wholesale"]:
         return {
-            "state_ng_fuel_prices": RESOURCES
-            + "{interconnect}/state_ng_power_prices.csv",
-            "state_coal_fuel_prices": RESOURCES
+            "state_ng_fuel_prices": PRICES + "{interconnect}/state_ng_power_prices.csv",
+            "state_coal_fuel_prices": PRICES
             + "{interconnect}/state_coal_power_prices.csv",
-            "ba_ng_fuel_prices": RESOURCES + "{interconnect}/ba_ng_power_prices.csv",
+            "ba_ng_fuel_prices": PRICES + "{interconnect}/ba_ng_power_prices.csv",
         }
     else:
         return {}
@@ -673,14 +770,37 @@ rule build_powerplants:
         cems="repo_data/plants/cems_heat_rates.xlsx",
         epa_crosswalk="repo_data/plants/epa_eia_crosswalk.csv",
     output:
-        powerplants="resources/powerplants.csv",
+        powerplants="resources/powerplants/powerplants.csv",
     log:
         "logs/build_powerplants.log",
+    benchmark:
+        BENCHMARKS + "build_powerplants"
     resources:
         mem_mb=30000,
         walltime=config_provider("walltime", "build_powerplants", default="00:30:00"),
     script:
         "../scripts/build_powerplants.py"
+
+
+def remote_contracted_resource_files(wildcards):
+    """CPUC out-of-state contracted units, plus what is needed to place them.
+
+    Only requested when ``electricity.remote_contracted_resources.enable`` is on,
+    so the option is fully inert (and pulls no extra inputs) by default. The
+    SERVM load weights supply the (region -> California bus) attribution and the
+    tech map reconciles the ledger's `compare_category` with model carriers.
+    """
+    cfg = config["electricity"].get("remote_contracted_resources", {}) or {}
+    if not cfg.get("enable", False):
+        return {}
+    return {
+        "remote_resources": cfg.get(
+            "file", "repo_data/CPUC/servm_out_of_state_units.csv"
+        ),
+        "servm_tech_map": "repo_data/CPUC/servm_tech_map.csv",
+        "servm_load_weights": DEMAND
+        + f"{wildcards.interconnect}/servm_load_weights_s{wildcards.simpl}.csv",
+    }
 
 
 rule add_electricity:
@@ -694,13 +814,18 @@ rule add_electricity:
         costs=config["costs"],
         planning_horizons=config["scenario"]["planning_horizons"],
         eia_api=config["api"]["eia"],
+        remote_contracted=config["electricity"].get("remote_contracted_resources", {}),
+        imports_representation=config_provider(
+            "electricity", "imports", "representation", default="store"
+        ),
     input:
         unpack(dynamic_fuel_price_files),
+        unpack(remote_contracted_resource_files),
         **(
             {
                 # For GODEEEP future scenarios: pass all horizon-specific profiles
-                f"profile_{tech}_{horizon}": RESOURCES
-                + f"{{interconnect}}/{horizon}/profile_{tech}.nc"
+                f"profile_{tech}_{horizon}": PROFILES
+                + f"{{interconnect}}/{horizon}/profile_{tech}_s{{simpl}}.nc"
                 for tech in config["electricity"]["renewable_carriers"]
                 if tech != "hydro"
                 for horizon in config["scenario"]["planning_horizons"]
@@ -708,7 +833,9 @@ rule add_electricity:
             if godeeep_planning_horizon
             else {
                 # For historical or AtLite: pass single profile
-                f"profile_{tech}": RESOURCES + "{interconnect}" + f"/profile_{tech}.nc"
+                f"profile_{tech}": PROFILES
+                + "{interconnect}"
+                + f"/profile_{tech}_s{{simpl}}.nc"
                 for tech in config["electricity"]["renewable_carriers"]
                 if tech != "hydro"
             }
@@ -724,28 +851,27 @@ rule add_electricity:
             f"gen_cost_mult_{Path(x).stem}": f"repo_data/locational_multipliers/{Path(x).name}"
             for x in Path("repo_data/locational_multipliers/").glob("*")
         },
-        base_network=RESOURCES + "{interconnect}/elec_base_network_dem.nc",
-        tech_costs=RESOURCES
-        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
+        base_network=NETWORKS + "{interconnect}/elec_s{simpl}_dem.nc",
+        tech_costs=COSTS + f"costs_{config['scenario']['planning_horizons'][0]}.csv",
         # attach first horizon costs
         all_reeds_shapes="repo_data/geospatial/Reeds_Shapes/rb_and_ba_areas.shp",
         reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
-        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore.geojson",
-        reeds_shapes=RESOURCES + "{interconnect}/Geospatial/reeds_shapes.geojson",
-        powerplants="resources/powerplants.csv",
+        regions_onshore=GEOSPATIAL + "{interconnect}/regions_onshore_s{simpl}.geojson",
+        regions_offshore=GEOSPATIAL + "{interconnect}/regions_offshore_s{simpl}.geojson",
+        reeds_shapes=GEOSPATIAL + "{interconnect}/reeds_shapes.geojson",
+        powerplants="resources/powerplants/powerplants.csv",
         plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
-        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
-        pudl_fuel_costs=RESOURCES + "{interconnect}/pudl_fuel_costs.csv",
+        bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
+        busmap_s=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
+        pudl_fuel_costs=PRICES + "{interconnect}/pudl_fuel_costs.csv",
         specs_egs=(
-            DATA + "EGS/{interconnect}/specs_EGS.nc"
+            PROFILES + "{interconnect}/specs_EGS_s{simpl}.nc"
             if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
             else []
         ),
         profile_egs=(
-            DATA + "EGS/{interconnect}/profile_EGS.nc"
+            PROFILES + "{interconnect}/profile_EGS_s{simpl}.nc"
             if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]
             else []
         ),
@@ -758,11 +884,15 @@ rule add_electricity:
             else []
         ),
     output:
-        RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}_l_pp.pkl",
+        # CPUC contracted out-of-state units, serialized for attachment behind
+        # the model boundary when electricity.imports.representation == generator.
+        # Always declared; a sentinel is written otherwise.
+        remote_units=NETWORKS + "{interconnect}/remote_units_s{simpl}.pkl",
     log:
-        LOGS + "{interconnect}/add_electricity.log",
+        LOGS + "{interconnect}/elec_s{simpl}_add_electricity.log",
     benchmark:
-        BENCHMARKS + "{interconnect}/add_electricity"
+        BENCHMARKS + "{interconnect}/elec_s{simpl}_add_electricity"
     threads: 1
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 400000) * attempt * 2,
@@ -772,36 +902,102 @@ rule add_electricity:
 
 
 ################# ----------- Rules to Aggregate & Simplify Network ---------- #################
-rule simplify_network:
+rule aggregate_to_substations:
+    params:
+        aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
+        topological_boundaries=config_provider(
+            "model_topology", "topological_boundaries"
+        ),
+    input:
+        bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
+        sub=BUSMAPS + "{interconnect}/sub.csv",
+        network=NETWORKS + "{interconnect}/elec_base_network.nc",
+    output:
+        network=NETWORKS + "{interconnect}/elec_b.nc",
+        busmap=BUSMAPS + "{interconnect}/busmap_b.csv",
+    log:
+        "logs/aggregate_to_substations/{interconnect}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/aggregate_to_substations"
+    threads: 1
+    resources:
+        mem_mb=lambda wildcards, input, attempt: (input.size // 150000) * attempt * 1.5,
+        walltime=config_provider(
+            "walltime", "aggregate_to_substations", default="01:00:00"
+        ),
+    script:
+        "../scripts/aggregate_to_substations.py"
+
+
+if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:
+
+    rule aggregate_egs:
+        input:
+            specs=DATA + "EGS/{interconnect}/specs_EGS.nc",
+            profile=DATA + "EGS/{interconnect}/profile_EGS.nc",
+            busmap=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
+        output:
+            specs=PROFILES + "{interconnect}/specs_EGS_s{simpl}.nc",
+            profile=PROFILES + "{interconnect}/profile_EGS_s{simpl}.nc",
+        log:
+            LOGS + "{interconnect}/aggregate_egs_s{simpl}.log",
+        threads: 1
+        resources:
+            mem_mb=lambda wildcards, input, attempt: (input.size // 200000)
+            * attempt
+            * 2,
+            walltime=config_provider("walltime", "aggregate_egs", default="01:00:00"),
+        script:
+            "../scripts/aggregate_egs.py"
+
+
+rule cluster_resources:
     params:
         aggregation_strategies=config["clustering"].get("aggregation_strategies", {}),
         focus_weights=config_provider("focus_weights", default=False),
         simplify_network=config_provider("clustering", "simplify_network"),
         planning_horizons=config_provider("scenario", "planning_horizons"),
-        topological_boundaries=config_provider(
-            "model_topology", "topological_boundaries"
-        ),
     input:
-        bus2sub=RESOURCES + "{interconnect}/bus2sub.csv",
-        sub=RESOURCES + "{interconnect}/sub.csv",
-        network=RESOURCES + "{interconnect}/elec_base_network_l_pp.pkl",
-        regions_onshore=RESOURCES + "{interconnect}/Geospatial/regions_onshore.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore.geojson",
+        network=NETWORKS + "{interconnect}/elec_b.nc",
+        regions_onshore=GEOSPATIAL + "{interconnect}/regions_onshore.geojson",
+        regions_offshore=GEOSPATIAL + "{interconnect}/regions_offshore.geojson",
     output:
-        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore_s{simpl}.geojson",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
+        regions_onshore=GEOSPATIAL + "{interconnect}/regions_onshore_s{simpl}.geojson",
+        regions_offshore=GEOSPATIAL + "{interconnect}/regions_offshore_s{simpl}.geojson",
+        busmap=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
     log:
-        "logs/simplify_network/{interconnect}/elec_s{simpl}.log",
+        "logs/cluster_resources/{interconnect}/elec_s{simpl}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/cluster_resources_elec_s{simpl}"
     threads: 1
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 150000) * attempt * 1.5,
-        walltime=config_provider("walltime", "simplify_network", default="01:00:00"),
+        walltime=config_provider("walltime", "cluster_resources", default="01:00:00"),
     script:
-        "../scripts/simplify_network.py"
+        "../scripts/cluster_simpl.py"
+
+
+rule build_servm_load_weights:
+    input:
+        network=NETWORKS + "{interconnect}/elec_base_network.nc",
+        busmap_b=BUSMAPS + "{interconnect}/busmap_b.csv",
+        busmap_s=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
+        region_map="repo_data/CPUC/servm_region_map.csv",
+    output:
+        weights=DEMAND + "{interconnect}/servm_load_weights_s{simpl}.csv",
+    log:
+        LOGS + "{interconnect}/build_servm_load_weights_s{simpl}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_servm_load_weights_s{simpl}"
+    threads: 1
+    resources:
+        mem_mb=lambda wildcards, input, attempt: (input.size // 200000) * attempt * 2,
+        walltime=config_provider(
+            "walltime", "build_servm_load_weights", default="00:20:00"
+        ),
+    script:
+        "../scripts/build_servm_load_weights.py"
 
 
 rule cluster_network:
@@ -822,18 +1018,15 @@ rule cluster_network:
         topology_aggregation=config_provider("model_topology", "aggregate"),
         s_max_pu=config_provider("lines", "s_max_pu", default=0.7),
     input:
-        network=RESOURCES + "{interconnect}/elec_s{simpl}.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore_s{simpl}.geojson",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}_l_pp.pkl",
+        regions_onshore=GEOSPATIAL + "{interconnect}/regions_onshore_s{simpl}.geojson",
+        regions_offshore=GEOSPATIAL + "{interconnect}/regions_offshore_s{simpl}.geojson",
         custom_busmap=(
             DATA + "{interconnect}/custom_busmap_{clusters}.csv"
             if config["enable"].get("custom_busmap", False)
             else []
         ),
-        tech_costs=RESOURCES
-        + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv",
+        tech_costs=COSTS + f"costs_{config['scenario']['planning_horizons'][0]}.csv",
         itl_reeds_zone="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv",
         itl_county="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_county_NARIS2024.csv",
         itl_trans_grp="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_transgrp_NARIS2024.csv",
@@ -842,13 +1035,13 @@ rule cluster_network:
         itl_state="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_state_NARIS2024.csv",
         itl_costs_state="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_state.csv",
     output:
-        network=RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
-        regions_offshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_offshore_s{simpl}_{clusters}.geojson",
-        busmap=RESOURCES + "{interconnect}/busmap_s{simpl}_{clusters}.csv",
-        linemap=RESOURCES + "{interconnect}/linemap_s{simpl}_{clusters}.csv",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
+        regions_onshore=GEOSPATIAL
+        + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
+        regions_offshore=GEOSPATIAL
+        + "{interconnect}/regions_offshore_s{simpl}_{clusters}.geojson",
+        busmap=BUSMAPS + "{interconnect}/busmap_s{simpl}_{clusters}.csv",
+        linemap=BUSMAPS + "{interconnect}/linemap_s{simpl}_{clusters}.csv",
     log:
         "logs/cluster_network/{interconnect}/elec_s{simpl}_c{clusters}.log",
     benchmark:
@@ -880,17 +1073,18 @@ rule add_extra_components:
             for hour in phs_tech.split("hr_")
             if hour.isdigit()
         },
-        network=RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
+        network=NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
         tech_costs=lambda wildcards: expand(
-            RESOURCES + "costs/costs_{year}.csv",
+            COSTS + "costs_{year}.csv",
             year=config["scenario"]["planning_horizons"],
         ),
-        regions_onshore=RESOURCES
-        + "{interconnect}/Geospatial/regions_onshore_s{simpl}_{clusters}.geojson",
+        regions_onshore=GEOSPATIAL
+        + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
         flowgates=flowgates_for_extra_components,
         reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
+        remote_units=NETWORKS + "{interconnect}/remote_units_s{simpl}.pkl",
         co2_storage=(
-            RESOURCES + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
+            CO2 + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
             if config["scenario"]["sector"] == "" and config["co2"]["storage"] is True
             else []
         ),
@@ -898,7 +1092,6 @@ rule add_extra_components:
     params:
         retirement=config["electricity"].get("retirement", "technical"),
         demand_response=config["electricity"].get("demand_response", {}),
-        trim_network=config_provider("model_topology", "trim", default=False),
         imports=config_provider("electricity", "imports", default={}),
         exports=config_provider("electricity", "exports", default={}),
         weather_year=config_provider("renewable_weather_years"),
@@ -908,11 +1101,12 @@ rule add_extra_components:
         ),
         transmission_network=config_provider("model_topology", "transmission_network"),
         costs=config_provider("costs"),
-        ucap=config_provider("ucap", default={}),
     output:
-        RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
+        NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc",
     log:
         "logs/add_extra_components/{interconnect}/elec_s{simpl}_c{clusters}_ec.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/add_extra_components_elec_s{simpl}_c{clusters}_ec"
     threads: 1
     resources:
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 2,
@@ -926,10 +1120,8 @@ rule add_extra_components:
 rule prepare_network:
     params:
         time_resolution=config_provider("clustering", "temporal", "resolution_elec"),
-        adjustments=False,
         links=config_provider("links"),
         lines=config_provider("lines"),
-        co2base=config_provider("electricity", "co2base"),
         co2limit=config_provider("electricity", "co2limit"),
         co2limit_enable=config_provider("electricity", "co2limit_enable", default=False),
         gaslimit=config_provider("electricity", "gaslimit"),
@@ -941,7 +1133,7 @@ rule prepare_network:
             config["custom_files"]["files_path"]
             + config["custom_files"]["network_name"]
             if config["custom_files"].get("activate", False)
-            else RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc"
+            else NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}_ec.nc"
         ),
         tech_costs=(
             config["custom_files"]["files_path"] + "costs_2030.csv"
@@ -950,16 +1142,17 @@ rule prepare_network:
             + f"costs/costs_{config['scenario']['planning_horizons'][0]}.csv"
         ),
     output:
-        RESOURCES + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
+        NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
     log:
-        solver="logs/prepare_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.log",
+        "logs/prepare_network/{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.log",
+    benchmark:
+        BENCHMARKS
+        +"{interconnect}/prepare_network_elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}"
     threads: 1
     resources:
         walltime=config_provider("walltime", "prepare_network", default="00:30:00"),
         mem_mb=lambda wildcards, input, attempt: (input.size // 100000) * attempt * 6,
     group:
         "prepare"
-    log:
-        "logs/prepare_network",
     script:
         "../scripts/prepare_network.py"

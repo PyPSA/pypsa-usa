@@ -215,9 +215,6 @@ def plot_capacity_additions_bar(
     existing_gen, existing_su = _capacity_existing_at_start(n)
     existing_capacity = existing_gen.to_frame(name="Existing Capacity")
     storage_units = existing_su.to_frame(name="Existing Capacity")
-    existing_gen, existing_su = _capacity_existing_at_start(n)
-    existing_capacity = existing_gen.to_frame(name="Existing Capacity")
-    storage_units = existing_su.to_frame(name="Existing Capacity")
     existing_capacity = pd.concat([existing_capacity, storage_units])
     existing_capacity.index = existing_capacity.index.map(n.carriers.nice_name)
 
@@ -232,8 +229,8 @@ def plot_capacity_additions_bar(
     optimal_capacity = optimal_capacity.fillna(0)
 
     # Drop the synthetic "imports" carrier — it represents external power
-    # injection (from trim_network or the imports/exports config), not built
-    # capacity, and would otherwise dominate the bar by orders of magnitude.
+    # injection (from the imports/exports config), not built capacity, and would
+    # otherwise dominate the bar by orders of magnitude.
     hidden_carriers = {"imports", "Imports"}
     optimal_capacity = optimal_capacity.drop(
         index=[c for c in hidden_carriers if c in optimal_capacity.index],
@@ -306,12 +303,6 @@ def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
         if hasattr(n, "investment_periods") and n.investment_periods is not None and len(n.investment_periods)
         else None
     )
-    """Returns a DataFrame with capacity existing at start of first period (by region/carrier)."""
-    first_period = (
-        n.investment_periods[0]
-        if hasattr(n, "investment_periods") and n.investment_periods is not None and len(n.investment_periods)
-        else None
-    )
     n.generators["nerc_reg"] = n.generators.bus.map(n.buses.nerc_reg)
     if first_period is not None:
         gen_mask = n.generators["build_year"].isna() | (n.generators["build_year"] < first_period)
@@ -360,8 +351,7 @@ def get_statistics(n, column_name):
     -------
     - pd.DataFrame: Prepared and grouped data
     """
-    groupers = n.statistics.groupers
-    df = n.statistics(groupby=groupers.get_name_bus_and_carrier).round(3)
+    df = n.statistics(groupby=["name", "bus", "carrier"]).round(3)
     df = df.loc[["Generator", "StorageUnit"]]
 
     # Add nerc_region data
@@ -955,7 +945,7 @@ def plot_fuel_costs(
     color_palette = n.carriers.color.to_dict()
 
     # plot error plot of all fuels
-    df = fuel_costs.droplevel(["bus", "Generator"]).T.resample("d").mean().reset_index().melt(id_vars="timestep")
+    df = fuel_costs.droplevel(["bus", "Generator"]).T.resample("D").mean().reset_index().melt(id_vars="timestep")
     sns.lineplot(
         data=df,
         x="timestep",
@@ -972,7 +962,7 @@ def plot_fuel_costs(
     # plot bus fuel prices for each fuel
     for i, fuel in enumerate(fuels):
         nice_name = n.carriers.at[fuel, "nice_name"]
-        df = fuel_costs.loc[fuel, :, :].droplevel("Generator").T.resample("d").mean().T.groupby(level=0).mean().T
+        df = fuel_costs.loc[fuel, :, :].droplevel("Generator").T.resample("D").mean().T.groupby(level=0).mean().T
         sns.lineplot(
             data=df,
             legend=False,
@@ -1136,8 +1126,6 @@ def plot_seasonal_generation(
     **wildcards,
 ) -> None:
     """Multi-panel generation analysis showing total monthly energy by technology."""
-    from plot_network_maps import get_color_palette
-
     # Get energy timeseries (power in GW)
     energy_mix = get_energy_timeseries(n).mul(1e-3)  # convert MW to GW
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
@@ -1315,10 +1303,10 @@ def compute_corrected_curtailment(n, groupby=None):
 
         period_snaps = n.snapshots[n.snapshots.get_level_values(0) == period]
         p_nom_opt = n.generators.loc[active_gens, "p_nom_opt"]
-        p = n.pnl("Generator").p.loc[period_snaps, active_gens]
+        p = n.components["Generator"].dynamic.p.loc[period_snaps, active_gens]
 
         # Time-varying p_max_pu if available; otherwise use static value
-        pmax_pnl = n.pnl("Generator").get("p_max_pu", pd.DataFrame())
+        pmax_pnl = n.components["Generator"].dynamic.get("p_max_pu", pd.DataFrame())
         if not pmax_pnl.empty:
             pmax_ts = pmax_pnl.loc[period_snaps].reindex(columns=active_gens)
             # Fill generators without a time-series p_max_pu with their static value
@@ -1383,9 +1371,6 @@ if __name__ == "__main__":
 
     sanitize_carriers(n, snakemake.config)
 
-    # mappers
-    generating_link_carrier_map = {"fuel cell": "H2", "battery discharger": "battery"}
-
     # carriers to plot
     carriers = (
         snakemake.params.electricity["conventional_carriers"]
@@ -1400,15 +1385,14 @@ if __name__ == "__main__":
 
     if mode in ("export", "all"):
         # Export Statistics Tables
-        groupers = n.statistics.groupers
-        stats_disagg = n.statistics(groupby=groupers.get_name_bus_and_carrier).round(3)
+        stats_disagg = n.statistics(groupby=["name", "bus", "carrier"]).round(3)
         stats_summary = n.statistics().round(2)
 
         if isinstance(n.snapshots, pd.MultiIndex):
             corrected_curt_summary = compute_corrected_curtailment(n).round(2)
             corrected_curt_disagg = compute_corrected_curtailment(
                 n,
-                groupby=groupers.get_name_bus_and_carrier,
+                groupby=["name", "bus", "carrier"],
             ).round(3)
             gen_idx_summary = corrected_curt_summary.index.intersection(stats_summary["Curtailment"].index)
             stats_summary.loc[gen_idx_summary, "Curtailment"] = corrected_curt_summary.loc[gen_idx_summary]
@@ -1432,7 +1416,7 @@ if __name__ == "__main__":
                 sanitize_carriers(np_, snakemake.config)
                 period_stats = np_.statistics().round(2)
                 period_stats_disagg = np_.statistics(
-                    groupby=np_.statistics.groupers.get_name_bus_and_carrier,
+                    groupby=["name", "bus", "carrier"],
                 ).round(3)
                 # Use tuple key to select a single-period Series from the MultiIndex columns.
                 # Selecting by string returns a sub-DataFrame across all periods, which cannot

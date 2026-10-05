@@ -65,7 +65,7 @@ copy of the code under your account on the repository service.
 - Clone this copy to your local disk:
 
     ``` bash
-    ~/repositories $ git clone https://github.com/<github_username>/PyPSA/pypsa-usa.git
+    ~/repositories $ git clone https://github.com/<github_username>/pypsa-usa.git
     ~/repositories $ cd pypsa-usa
     ~/repositories/pypsa-usa $
     ```
@@ -161,7 +161,13 @@ code contribution. We use Markdown language with
 [MyST](https://myst-parser.readthedocs.io/en/latest/syntax/syntax.html)
 extensions
 
-When working on documentation changes, ensure you have completed the developer installation instructions. Then compile the documentation on your local machine:
+When working on documentation changes, ensure you have completed the developer installation instructions, and install the documentation build requirements:
+
+```console
+uv pip install -r docs/requirements.txt
+```
+
+Then compile the documentation on your local machine:
 
 ```console
 cd docs && make html && cd ..
@@ -173,3 +179,18 @@ And use Python's built-in web server for a preview in your web browser
 ```console
 python3 -m http.server --directory 'docs/build/html'
 ```
+
+Two conventions to know when touching documentation:
+
+- The configuration-reference pages pull YAML snippets straight from
+  `workflow/repo_data/config/*.yaml` via `literalinclude` directives anchored on
+  `# docs : <name>` comment markers. Each marker sits directly above the top-level
+  key it names, and an include renders from its marker to the next one. If you add,
+  move, or rename a config section, keep its marker with it — `pytest tests/docs`
+  verifies that every include renders exactly the section it claims to.
+- Workflow-generated documentation figures live in `docs/source/_static/generated/`
+  and are re-rendered with `snakemake docs_figures` (needs built networks),
+  `snakemake docs_simpl_resolutions` (needs the `""` and `<N>a` variants, plus an optional `<run>County` sibling run),
+  `snakemake docs_rec_trading_zones` and `snakemake docs_tct_targets` (repo data only);
+  the DAG images are re-rendered
+  with `snakemake dag`. Don't hand-edit these.

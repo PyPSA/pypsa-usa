@@ -1,0 +1,266 @@
+"""Tier B — session-scoped fixture that runs `snakemake --until cluster_network`
+once per test session and exposes paths to the produced artifacts.
+
+Skipped automatically if required data dirs are missing (lets developers
+run `pytest -m fast` locally without setting up the data deps).
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+
+import pypsa
+import pytest
+
+# Keep network frames on numpy object dtype under pandas 3 (matches _helpers),
+# so the artifacts these tests read back match what the workflow produced.
+if hasattr(pypsa, "options"):
+    pypsa.options.api.legacy_string_dtype = True
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+WORKFLOW_DIR = REPO_ROOT / "workflow"
+DATA_DIRS = [WORKFLOW_DIR / "data", WORKFLOW_DIR / "cutouts", WORKFLOW_DIR / "repo_data"]
+
+
+def pytest_collection_modifyitems(config, items):
+    """Reject pytest-xdist for integration tests.
+
+    The ``built`` session fixture runs snakemake once per session against the
+    shared ``workflow/`` directory. With xdist, each worker is its own
+    session — they would race on ``.snakemake/`` locks and repeat the (slow)
+    snakemake build. Until the fixture is refactored to use a truly isolated
+    per-worker workflow dir, refuse to run.
+    """
+    if not any(item.get_closest_marker("integration") for item in items):
+        return
+    workers = getattr(config.option, "numprocesses", None)
+    if workers and workers != 0:
+        pytest.exit(
+            "tests/integration are not safe under pytest-xdist (see conftest "
+            "docstring). Run them without `-n` / `--numprocesses`.",
+            returncode=4,
+        )
+
+
+@dataclass(frozen=True)
+class BuiltArtifacts:
+    """Paths to the per-stage artifacts produced by the Tier B snakemake build.
+
+    The ``interconnect``, ``simpl``, and ``clusters`` defaults MUST match
+    ``workflow/repo_data/config/config.test.yaml``'s ``scenario`` section.
+    If you change one, change both — the smoke test will fail loudly but
+    only after the (slow) build, wasting CI time.
+    """
+
+    run_name: str
+    base: Path  # resources/{run_name}/
+    interconnect: str = "western"
+    simpl: str = "20"
+    clusters: str = "4m"
+
+    @property
+    def elec_b(self) -> Path:
+        """Base electrical network (pre-simplification)."""
+        return self.base / "networks" / self.interconnect / "elec_b.nc"
+
+    @property
+    def elec_s(self) -> Path:
+        """Simplified electrical network (after cluster_simpl)."""
+        return self.base / "networks" / self.interconnect / f"elec_s{self.simpl}.nc"
+
+    @property
+    def elec_s_dem(self) -> Path:
+        """Simplified network with demand attached."""
+        return self.base / "networks" / self.interconnect / f"elec_s{self.simpl}_dem.nc"
+
+    @property
+    def elec_s_l_pp(self) -> Path:
+        """Simplified network with line + powerplant attributes added."""
+        return self.base / "networks" / self.interconnect / f"elec_s{self.simpl}_l_pp.pkl"
+
+    @property
+    def elec_s_c(self) -> Path:
+        """Final clustered network (after cluster_network)."""
+        return self.base / "networks" / self.interconnect / f"elec_s{self.simpl}_c{self.clusters}.nc"
+
+    @property
+    def busmap_s(self) -> Path:
+        """Bus mapping from base -> simplified network."""
+        return self.base / "busmaps" / self.interconnect / f"busmap_s{self.simpl}.csv"
+
+
+@dataclass(frozen=True)
+class ServmArtifacts:
+    """Paths to the CPUC SERVM demand artifacts produced by the Tier B build.
+
+    The ``interconnect`` and ``simpl`` defaults MUST match
+    ``workflow/repo_data/config/config.test.california.yaml``'s ``scenario``
+    section. If you change one, change both.
+    """
+
+    run_name: str
+    base: Path  # resources/{run_name}/
+    interconnect: str = "western"
+    simpl: str = "20"
+
+    @property
+    def elec_s(self) -> Path:
+        """Simplified network the weights and demand were built against."""
+        return self.base / "networks" / self.interconnect / f"elec_s{self.simpl}.nc"
+
+    @property
+    def elec_s_dem(self) -> Path:
+        """Simplified network with SERVM demand attached."""
+        return self.base / "networks" / self.interconnect / f"elec_s{self.simpl}_dem.nc"
+
+    @property
+    def weights(self) -> Path:
+        """(bus, servm_region, laf) allocation table from build_servm_load_weights."""
+        return self.base / "demand" / self.interconnect / f"servm_load_weights_s{self.simpl}.csv"
+
+    @property
+    def demand(self) -> Path:
+        """Per-bus hourly demand CSV written by build_electrical_demand."""
+        return self.base / "demand" / self.interconnect / f"power_electricity_s{self.simpl}.csv"
+
+    @property
+    def zonal_components(self) -> Path:
+        """Component-resolved zonal demand parquet (pre-disaggregation)."""
+        return self.base / "demand" / self.interconnect / f"power_zonal_components_s{self.simpl}.parquet"
+
+
+def _run_snakemake(configfile: str, until: str, run_name: str) -> None:
+    """Run one ``snakemake --until <rule>`` build against ``workflow/``."""
+    cmd = [
+        "snakemake",
+        "--until",
+        until,
+        "--configfile",
+        configfile,
+        "--config",
+        f"run={{name: '{run_name}', shared_cutouts: true}}",
+        "-j",
+        str(os.cpu_count() or 2),
+        # Force greedy scheduler to avoid the ILP scheduler's cbc dependency
+        # (cbc is shipped non-executable in some envs and causes PermissionError).
+        "--scheduler",
+        "greedy",
+        # In a fresh checkout/worktree that shares data/ via symlink, snakemake's
+        # empty provenance DB marks every input-less retrieve rule as "code has
+        # changed" and re-downloads (rewriting the shared tree). mtime-only
+        # triggers treat existing retrieve outputs as up to date.
+        "--rerun-triggers",
+        "mtime",
+        "--quiet",
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=WORKFLOW_DIR,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+    except subprocess.TimeoutExpired as e:
+        raw_stderr = e.stderr
+        if isinstance(raw_stderr, bytes):
+            raw_stderr = raw_stderr.decode("utf-8", errors="replace")
+        stderr_tail = "\n".join(raw_stderr.splitlines()[-100:]) if raw_stderr else "<no stderr captured>"
+        pytest.fail(
+            f"snakemake build timed out after {e.timeout}s\nstderr (last 100 lines):\n{stderr_tail}",
+        )
+    if result.returncode != 0:
+        pytest.fail(
+            f"snakemake build failed (exit {result.returncode}):\n"
+            f"stderr (last 100 lines):\n" + "\n".join(result.stderr.splitlines()[-100:]),
+        )
+
+
+@pytest.fixture(scope="session")
+def servm_built(tmp_path_factory) -> ServmArtifacts:
+    """Run ``snakemake --until add_demand`` on the SERVM test config once per session.
+
+    Stops at ``add_demand`` rather than ``cluster_network``: the SERVM
+    artifacts under test (weights, per-bus demand CSV, zonal components) are all
+    produced at or before that stage, and the extra clustering work is already
+    covered by the ``built`` fixture.
+
+    Skips like ``built`` when the data dirs are missing. This build also
+    downloads one ~118 MB CPUC SERVM load file the first time it runs.
+    """
+    missing = [d for d in DATA_DIRS if not d.exists()]
+    if missing:
+        pytest.skip(
+            "Integration tests require populated data dirs; missing: " + ", ".join(str(m) for m in missing),
+        )
+    run_name = f"pytest_servm_{tmp_path_factory.mktemp('servm_run').name}"
+    _run_snakemake("repo_data/config/config.test.california.yaml", "add_demand", run_name)
+    return ServmArtifacts(
+        run_name=run_name,
+        base=WORKFLOW_DIR / "resources" / run_name,
+    )
+
+
+@pytest.fixture(scope="session")
+def built(tmp_path_factory) -> BuiltArtifacts:
+    """Run ``snakemake --until cluster_network`` once per session and expose artifact paths.
+
+    Skips the session's integration tests if ``workflow/data``, ``workflow/cutouts``,
+    or ``workflow/repo_data`` are missing — keeps Tier A runnable on bare clones.
+    """
+    missing = [d for d in DATA_DIRS if not d.exists()]
+    if missing:
+        pytest.skip(
+            "Integration tests require populated data dirs; missing: " + ", ".join(str(m) for m in missing),
+        )
+    run_name = f"pytest_{tmp_path_factory.mktemp('run').name}"
+    cmd = [
+        "snakemake",
+        "--until",
+        "cluster_network",
+        "--configfile",
+        "repo_data/config/config.test.yaml",
+        "--config",
+        f"run={{name: '{run_name}', shared_cutouts: true}}",
+        "-j",
+        str(os.cpu_count() or 2),
+        # Force greedy scheduler to avoid the ILP scheduler's cbc dependency
+        # (cbc is shipped non-executable in some envs and causes PermissionError).
+        "--scheduler",
+        "greedy",
+        # In a fresh checkout/worktree that shares data/ via symlink, snakemake's
+        # empty provenance DB marks every input-less retrieve rule as "code has
+        # changed" and re-downloads (rewriting the shared tree). mtime-only
+        # triggers treat existing retrieve outputs as up to date.
+        "--rerun-triggers",
+        "mtime",
+        "--quiet",
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=WORKFLOW_DIR,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+    except subprocess.TimeoutExpired as e:
+        raw_stderr = e.stderr
+        if isinstance(raw_stderr, bytes):
+            raw_stderr = raw_stderr.decode("utf-8", errors="replace")
+        stderr_tail = "\n".join(raw_stderr.splitlines()[-100:]) if raw_stderr else "<no stderr captured>"
+        pytest.fail(
+            f"snakemake build timed out after {e.timeout}s\nstderr (last 100 lines):\n{stderr_tail}",
+        )
+    if result.returncode != 0:
+        pytest.fail(
+            f"snakemake build failed (exit {result.returncode}):\n"
+            f"stderr (last 100 lines):\n" + "\n".join(result.stderr.splitlines()[-100:]),
+        )
+    return BuiltArtifacts(
+        run_name=run_name,
+        base=WORKFLOW_DIR / "resources" / run_name,
+    )

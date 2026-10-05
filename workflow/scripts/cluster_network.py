@@ -1,6 +1,7 @@
 """Cluster_network aggregates the outputs of simplify_network, and transforms the network to a zonal power balance model if specified in the configuration."""
 
 import logging
+import re
 import warnings
 from functools import reduce
 
@@ -16,13 +17,14 @@ from _helpers import (
     configure_logging,
     is_transport_model,
     load_costs,
+    log_network_schema,
+    plot_geojson,
     update_p_nom_max,
 )
 from add_electricity import update_transmission_costs
 from constants import REEDS_NERC_INTERCONNECT_MAPPER, STATES_INTERCONNECT_MAPPER
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
-    busmap_by_hac,
     busmap_by_kmeans,
     get_clustering_from_busmap,
 )
@@ -64,49 +66,9 @@ def weighting_for_region(n, x, weighting_strategy=None):
     weighting = gen_weight + load_weight
 
     if weighting_strategy == "population":
-        weighting = normed(n.buses.loc[x.index].Pd)
+        weighting = normed(n.buses.loc[x.index].load_weight)
 
     return (weighting * (100.0 / weighting.max())).clip(lower=1.0).astype(int)
-
-
-def get_feature_for_hac(n, buses_i=None, feature=None):
-    if buses_i is None:
-        buses_i = n.buses.index
-
-    if feature is None:
-        feature = "solar+onwind-time"
-
-    carriers = feature.split("-")[0].split("+")
-    if "offwind" in carriers:
-        carriers.remove("offwind")
-        carriers = np.append(
-            carriers,
-            n.generators.carrier.filter(like="offwind").unique(),
-        )
-
-    if feature.split("-")[1] == "cap":
-        feature_data = pd.DataFrame(index=buses_i, columns=carriers)
-        for carrier in carriers:
-            gen_i = n.generators.query("carrier == @carrier").index
-            attach = n.generators_t.p_max_pu[gen_i].mean().rename(index=n.generators.loc[gen_i].bus)
-            feature_data[carrier] = attach
-
-    if feature.split("-")[1] == "time":
-        feature_data = pd.DataFrame(columns=buses_i)
-        for carrier in carriers:
-            gen_i = n.generators.query("carrier == @carrier").index
-            attach = n.generators_t.p_max_pu[gen_i].rename(
-                columns=n.generators.loc[gen_i].bus,
-            )
-            feature_data = pd.concat([feature_data, attach], axis=0)[buses_i]
-
-        feature_data = feature_data.T
-        # timestamp raises error in sklearn >= v1.2:
-        feature_data.columns = feature_data.columns.astype(str)
-
-    feature_data = feature_data.fillna(0)
-
-    return feature_data
 
 
 def distribute_clusters(
@@ -118,7 +80,7 @@ def distribute_clusters(
 ):
     """Determine the number of clusters per region."""
     if weighting_strategy == "population":
-        bus_distribution_factor = n.buses.Pd
+        bus_distribution_factor = n.buses.load_weight
     else:
         bus_distribution_factor = n.loads_t.p_set.mean().groupby(n.loads.bus).sum()
     factors = bus_distribution_factor.groupby([n.buses.country, n.buses.sub_network]).sum().pipe(normed)
@@ -181,7 +143,6 @@ def busmap_for_n_clusters(
     solver_name,
     focus_weights=None,
     algorithm="kmeans",
-    feature=None,
     weighting_strategy=None,
     **algorithm_kwds,
 ):
@@ -203,50 +164,13 @@ def busmap_for_n_clusters(
     """
     if algorithm == "kmeans":
         algorithm_kwds.setdefault("n_init", 1000)
-        algorithm_kwds.setdefault("max_iter", 30000)
+        algorithm_kwds.setdefault("max_iter", 20000)
         algorithm_kwds.setdefault("tol", 1e-6)
         algorithm_kwds.setdefault("random_state", 0)
 
-    def fix_country_assignment_for_hac(n):
-        from scipy.sparse import csgraph
-
-        # overwrite country of nodes that are disconnected from their country-topology
-        for country in n.buses.country.unique():
-            m = n[n.buses.country == country].copy()
-
-            _, labels = csgraph.connected_components(
-                m.adjacency_matrix(),
-                directed=False,
-            )
-
-            component = pd.Series(labels, index=m.buses.index)
-            component_sizes = component.value_counts()
-
-            if len(component_sizes) > 1:
-                disconnected_bus = component[component == component_sizes.index[-1]].index[0]
-
-                neighbor_bus = n.lines.query(
-                    "bus0 == @disconnected_bus or bus1 == @disconnected_bus",
-                ).iloc[0][["bus0", "bus1"]]
-                new_country = next(
-                    iter(set(n.buses.loc[neighbor_bus].country) - {country}),
-                )
-
-                logger.info(
-                    f"overwriting country `{country}` of bus `{disconnected_bus}` "
-                    f"to new country `{new_country}`, because it is disconnected "
-                    "from its initial inter-country transmission grid.",
-                )
-                n.buses.at[disconnected_bus, "country"] = new_country
-        return n
-
     if algorithm == "hac":
-        feature = get_feature_for_hac(n, buses_i=n.buses.index, feature=feature)
-        n = fix_country_assignment_for_hac(n)
-
-    if (algorithm != "hac") and (feature is not None):
-        logger.warning(
-            f"Keyword argument feature is only valid for algorithm `hac`. Given feature `{feature}` will be ignored.",
+        raise ValueError(
+            "HAC clustering was removed from pypsa-usa. Use algorithm='kmeans' or 'modularity'.",
         )
 
     n.determine_network_topology()
@@ -268,16 +192,16 @@ def busmap_for_n_clusters(
             f"Reconciling TAMU and ReEDS Topologies. \n Removing buses: {buses_remove.index}",
         )
         for c in n.one_port_components:
-            component = n.df(c)
+            component = n.components[c].static
             rm = component[component.bus.isin(buses_remove.index)]
             logger.warning(f"Removing {rm.shape} component {c}")
-            n.mremove(c, rm.index)
+            n.remove(c, rm.index)
         for c in ["Line", "Link"]:
-            component = n.df(c)
+            component = n.components[c].static
             rm = component[component.bus0.isin(buses_remove.index) | component.bus1.isin(buses_remove.index)]
             logger.warning(f"Removing {rm.shape} component {c}")
-            n.mremove(c, rm.index)
-        n.mremove("Bus", buses_remove.index)
+            n.remove(c, rm.index)
+        n.remove("Bus", buses_remove.index)
         n.determine_network_topology()
 
     def busmap_for_country(x):
@@ -294,13 +218,6 @@ def busmap_for_n_clusters(
                 buses_i=x.index,
                 **algorithm_kwds,
             )
-        elif algorithm == "hac":
-            return prefix + busmap_by_hac(
-                n,
-                n_clusters_per_region[x.name],
-                buses_i=x.index,
-                feature=feature.loc[x.index],
-            )
         elif algorithm == "modularity":
             return prefix + busmap_by_greedy_modularity(
                 n,
@@ -309,7 +226,7 @@ def busmap_for_n_clusters(
             )
         else:
             raise ValueError(
-                f"`algorithm` must be one of 'kmeans' or 'hac'. Is {algorithm}.",
+                f"`algorithm` must be one of 'kmeans' or 'modularity'. Is {algorithm}.",
             )
 
     return (
@@ -328,8 +245,7 @@ def clustering_for_n_clusters(
     line_length_factor=1.25,
     aggregation_strategies=dict(),
     solver_name="cbc",
-    algorithm="hac",
-    feature=None,
+    algorithm="kmeans",
     focus_weights=None,
     weighting_strategy=None,
 ):
@@ -340,7 +256,6 @@ def clustering_for_n_clusters(
             solver_name,
             focus_weights,
             algorithm,
-            feature,
             weighting_strategy,
         )
         # plot_busmap(n, busmap, 'busmap.png')
@@ -350,7 +265,13 @@ def clustering_for_n_clusters(
     line_strategies = aggregation_strategies.get("lines", dict())
     generator_strategies = aggregation_strategies.get("generators", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
-    bus_strategies = {"Pd": "sum", "rec_trading_zone": "first", "original_reeds_zone": "first"}
+    bus_strategies = {
+        "Pd": "sum",
+        "load_weight": "sum",
+        "LAF_state": "sum",
+        "rec_trading_zone": "first",
+        "original_reeds_zone": "first",
+    }
     clustering = get_clustering_from_busmap(
         n,
         busmap,
@@ -368,13 +289,13 @@ def clustering_for_n_clusters(
     return clustering
 
 
-def add_itls(buses, itls, itl_cost, planning_horizons, lifetime, expansion=True):
+def add_itls(buses, itls, itl_cost, planning_horizons, lifetime):
     """
     Adds ITL limits to the network.
 
-    Adds bi-directional links for all ITLS which are non-expandable.
-    Adds a second link that is expandable with equal expansion in each
-    direction.
+    Adds a fwd and a rev link for every ITL, non-expandable here. prepare_network
+    makes them extendable when the transmission limit allows expansion, and
+    solve_network constrains each pair to equal expansion in both directions.
 
     For each ITL, the original fwd/rev links are stamped at the first planning
     horizon and carry the existing REEDS capacity (mw_f0/mw_r0). For every
@@ -411,10 +332,10 @@ def add_itls(buses, itls, itl_cost, planning_horizons, lifetime, expansion=True)
     )  # divide by 2 to avoid accounting for the capital cost repeatedly
     efficiency = 1 if itl_cost is None else itls.efficiency.values
 
-    # The fwd and rev links will be made extendable in prepare_network, so no need to add AC_exp
-    clustering.network.madd(
+    # The fwd and rev links will be made extendable in prepare_network
+    clustering.n.add(
         "Link",
-        names=itls.interface,  # itl name
+        name=itls.interface,  # itl name
         suffix="_fwd",
         bus0=buses.loc[itls.r].index,
         bus1=buses.loc[itls.rr].index,
@@ -431,9 +352,9 @@ def add_itls(buses, itls, itl_cost, planning_horizons, lifetime, expansion=True)
         lifetime=lifetime,
     )
 
-    clustering.network.madd(
+    clustering.n.add(
         "Link",
-        names=itls.interface,  # itl name
+        name=itls.interface,  # itl name
         suffix="_rev",
         bus0=buses.loc[itls.rr].index,
         bus1=buses.loc[itls.r].index,
@@ -454,9 +375,9 @@ def add_itls(buses, itls, itl_cost, planning_horizons, lifetime, expansion=True)
     # will flip these to extendable alongside the originals so each period can build
     # new transmission capacity tagged with its own build_year.
     for horizon in future_horizons:
-        clustering.network.madd(
+        clustering.n.add(
             "Link",
-            names=itls.interface,
+            name=itls.interface,
             suffix=f"_fwd_{horizon}",
             bus0=buses.loc[itls.r].index,
             bus1=buses.loc[itls.rr].index,
@@ -472,9 +393,9 @@ def add_itls(buses, itls, itl_cost, planning_horizons, lifetime, expansion=True)
             build_year=horizon,
             lifetime=lifetime,
         )
-        clustering.network.madd(
+        clustering.n.add(
             "Link",
-            names=itls.interface,
+            name=itls.interface,
             suffix=f"_rev_{horizon}",
             bus0=buses.loc[itls.rr].index,
             bus1=buses.loc[itls.r].index,
@@ -502,31 +423,32 @@ def convert_to_transport(
     topology_aggregation,
     planning_horizons,
     lifetime,
+    agg_busmap=None,
 ):
     """
     Replaces all Lines according to Links with the transfer capacity specified
     by the ITLs.
     """
-    clustering.network.mremove("Line", clustering.network.lines.index)
-    buses = clustering.network.buses.copy()
+    clustering.n.remove("Line", clustering.n.lines.index)
+    buses = clustering.n.buses.copy()
 
     itls = pd.read_csv(itl_fn)
     itl_cost = pd.read_csv(itl_cost_fn)
     itls.columns = itls.columns.str.lower()
     if topological_boundaries == "state":  # use reeds_state - abbreviations
         itls_filt = itls[
-            itls.r.isin(clustering.network.buses["reeds_state"]) & itls.rr.isin(clustering.network.buses["reeds_state"])
+            itls.r.isin(clustering.n.buses["reeds_state"]) & itls.rr.isin(clustering.n.buses["reeds_state"])
         ]
     else:
         itls_filt = itls[
-            itls.r.isin(clustering.network.buses[f"{topological_boundaries}"])
-            & itls.rr.isin(clustering.network.buses[f"{topological_boundaries}"])
+            itls.r.isin(clustering.n.buses[f"{topological_boundaries}"])
+            & itls.rr.isin(clustering.n.buses[f"{topological_boundaries}"])
         ]
     add_itls(buses, itls_filt, itl_cost, planning_horizons, lifetime)
 
     if itl_agg_fn:
+        assert agg_busmap is not None, "agg_busmap is required when itl_agg_fn is given."
         # Aggregating the ITLs to lower resolution
-        topology_aggregation_key = next(iter(topology_aggregation.keys()))
         itl_lower_res = pd.read_csv(itl_agg_fn)
         itl_lower_res.columns = itl_lower_res.columns.str.lower()
         itl_lower_res = itl_lower_res.rename(
@@ -538,11 +460,6 @@ def convert_to_transport(
         ]
         aggregated_buses = agg_busmap.rename(index=lambda x: x.rsplit(" ", 1)[0])
         aggregated_buses = aggregated_buses[~aggregated_buses.index.duplicated(keep="first")]
-        non_agg_buses = buses[~buses.index.isin(agg_busmap.values)]
-        non_agg_buses = non_agg_buses[
-            non_agg_buses[topology_aggregation_key].isin(itl_lower_res.r)
-            | non_agg_buses[topology_aggregation_key].isin(itl_lower_res.rr)
-        ]
 
         itl_lower_res = itl_lower_res[  # Filter low-res ITLs to only include those that have both ends in the network
             itl_lower_res.r.isin(buses["country"])
@@ -569,30 +486,28 @@ def convert_to_transport(
 
         itl_lower_res = pd.concat([itl_lower_res, itls_between])
         itl_agg_costs = None if itl_agg_costs_fn is None else pd.concat([itl_cost, pd.read_csv(itl_agg_costs_fn)])
-        add_itls(buses, itl_lower_res, itl_agg_costs, planning_horizons, lifetime, expansion=True)
+        add_itls(buses, itl_lower_res, itl_agg_costs, planning_horizons, lifetime)
         itls = pd.concat([itls_filt, itl_lower_res])
     else:
         itls = itls_filt
-
-    clustering.network.add("Carrier", "AC_exp", co2_emissions=0)
 
     # If bus 'p19' is in the network, add a link from it to 'p20'
     # reeds dataset is missing link to and from this zone
     if (
         topological_boundaries == "reeds_zone"
-        and "p19" in clustering.network.buses.reeds_zone.unique()
-        and "p20" in clustering.network.buses.reeds_zone.unique()
+        and "p19" in clustering.n.buses.reeds_zone.unique()
+        and "p20" in clustering.n.buses.reeds_zone.unique()
     ):
-        buses_p19 = clustering.network.buses[clustering.network.buses.reeds_zone == "p19"]
-        buses_p20 = clustering.network.buses[clustering.network.buses.reeds_zone == "p20"]
-        existing_links = clustering.network.links[clustering.network.links.bus0.isin(buses_p19.index)]
+        buses_p19 = clustering.n.buses[clustering.n.buses.reeds_zone == "p19"]
+        buses_p20 = clustering.n.buses[clustering.n.buses.reeds_zone == "p20"]
+        existing_links = clustering.n.links[clustering.n.links.bus0.isin(buses_p19.index)]
         if existing_links.empty:
             sorted_horizons = sorted(int(h) for h in planning_horizons)
             first_horizon = sorted_horizons[0]
             future_horizons = sorted_horizons[1:]
-            clustering.network.madd(
+            clustering.n.add(
                 "Link",
-                names=["p19_to_p20"],
+                name=["p19_to_p20"],
                 bus0=buses_p19.iloc[0].name,
                 bus1=buses_p20.iloc[0].name,
                 p_nom=300,
@@ -604,9 +519,9 @@ def convert_to_transport(
                 lifetime=lifetime,
             )
             for horizon in future_horizons:
-                clustering.network.madd(
+                clustering.n.add(
                     "Link",
-                    names=[f"p19_to_p20_{horizon}"],
+                    name=[f"p19_to_p20_{horizon}"],
                     bus0=buses_p19.iloc[0].name,
                     bus1=buses_p20.iloc[0].name,
                     p_nom=0,
@@ -620,7 +535,7 @@ def convert_to_transport(
 
     # Remove any disconnected buses
     unique_buses = buses.loc[itls.r].index.union(buses.loc[itls.rr].index).unique()
-    disconnected_buses = clustering.network.buses.index[~clustering.network.buses.index.isin(unique_buses)]
+    disconnected_buses = clustering.n.buses.index[~clustering.n.buses.index.isin(unique_buses)]
 
     if len(disconnected_buses) > 0:
         logger.warning(
@@ -629,6 +544,45 @@ def convert_to_transport(
 
     logger.info("Replaced Lines with Links for zonal model configuration.")
     return clustering
+
+
+def parse_clusters_wildcard(
+    cluster_wc: str,
+    all_carriers: set,
+    conventional_carriers: set,
+    aggregate_carriers: set,
+    n_buses: int,
+) -> tuple[int, set, set]:
+    """Resolve the ``{clusters}`` wildcard into (n_clusters, aggregate, keep).
+
+    ``aggregate_carriers`` arrives already stripped of ``exclude_carriers``.
+    Suffix semantics (default changed 2026-09-06 so that renewable resource
+    zones are preserved unless the user opts into merging them):
+
+    * ``N`` / ``Nm`` — aggregate only conventional carriers; renewables keep
+      their ``{simpl}``-level resource zones. ``m`` is an accepted alias for
+      the plain integer.
+    * ``Na`` — aggregate no carriers at all.
+    * ``Ns`` — "small": aggregate every carrier (one generator per carrier
+      and cluster bus). This was the pre-2026-09 plain-integer behaviour.
+    * ``Nc`` — aggregate all except conventional carriers.
+    * ``all`` — one cluster per bus, every carrier aggregated (no-op merge).
+    """
+    if cluster_wc == "all":
+        return n_buses, aggregate_carriers, set()
+    m = re.fullmatch(r"(\d+)([msac]?)", str(cluster_wc))
+    if m is None:
+        raise ValueError(f"unrecognised clusters wildcard {cluster_wc!r}; expected <int>[m|s|a|c] or 'all'")
+    n_clusters, suffix = int(m.group(1)), m.group(2)
+    if suffix in ("", "m"):
+        agg = conventional_carriers & aggregate_carriers
+    elif suffix == "s":
+        agg = aggregate_carriers
+    elif suffix == "c":
+        agg = aggregate_carriers - conventional_carriers
+    else:  # "a"
+        agg = set()
+    return n_clusters, agg, all_carriers - agg
 
 
 def cluster_regions(busmaps, input=None, output=None):
@@ -643,21 +597,33 @@ def cluster_regions(busmaps, input=None, output=None):
             # Try to convert to float to see if values are numeric
             pd.to_numeric(regions["name"], errors="raise")
             is_float = True
-        except:  # noqa: E722
+        except (ValueError, TypeError):
             is_float = False
 
-        # Reindex to set name as index
-        regions = regions.reindex(columns=["name", "geometry"]).set_index("name")
+        # Preserve representative coordinates alongside geometry; downstream
+        # consumers (e.g. build_renewable_profiles) require x/y on each cluster,
+        # add_electricity.match_plant_to_bus requires `country` on each region.
+        keep_cols = [c for c in ("name", "x", "y", "country", "geometry") if c in regions.columns]
+        regions = regions.reindex(columns=keep_cols).set_index("name")
 
         # Convert float indices to string representation of integers if needed
         if is_float:
             regions.index = regions.index.astype(float).astype(int).astype(str)
 
-        # Dissolve regions according to busmap
-        regions_c = regions.dissolve(busmap)
+        # Dissolve regions according to busmap; mean-aggregate coords so the
+        # cluster's x/y match pypsa's mean aggregation of the underlying buses.
+        agg = {c: "mean" for c in ("x", "y") if c in regions.columns}
+        if "country" in regions.columns:
+            agg["country"] = "first"
+        regions_c = regions.dissolve(
+            busmap,
+            aggfunc=agg if agg else "first",
+        )
         regions_c.index.name = "name"
         regions_c = regions_c.reset_index()
-        regions_c.to_file(getattr(output, which))
+        out_path = getattr(output, which)
+        regions_c.to_file(out_path)
+        plot_geojson(out_path)
 
 
 def plot_busmap(n, busmap, fn=None):
@@ -709,6 +675,8 @@ def calibrate_tamu_transmission_capacity(
     """
     logger.info("Calibrate TAMU transmission capacity...")
 
+    hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
+
     # Read REEDS capacity data
     reeds_data = pd.read_csv(reeds_capacity_file)
     reeds_data.columns = reeds_data.columns.str.lower()
@@ -733,13 +701,13 @@ def calibrate_tamu_transmission_capacity(
     matched_reeds_interfaces = set()
 
     # Get lines from the network
-    lines = clustering.network.lines.copy()
+    lines = clustering.n.lines.copy()
     lines_not_in_reeds = []
     lines_updated = 0
 
     # Build region to bus mapping for later adding missing lines
     region_to_bus = {}
-    for bus_id, bus in clustering.network.buses.iterrows():
+    for bus_id, bus in clustering.n.buses.iterrows():
         if use_original_region:
             region_field = f"original_{topological_boundaries}"
             if region_field in bus.index:
@@ -764,8 +732,8 @@ def calibrate_tamu_transmission_capacity(
     # Update existing lines
     for line_idx in lines.index:
         line = lines.loc[line_idx]
-        bus0 = clustering.network.buses.loc[line.bus0]
-        bus1 = clustering.network.buses.loc[line.bus1]
+        bus0 = clustering.n.buses.loc[line.bus0]
+        bus1 = clustering.n.buses.loc[line.bus1]
 
         # Determine which field to use for region identification
         if use_original_region:
@@ -805,23 +773,23 @@ def calibrate_tamu_transmission_capacity(
             capacity_ratio = new_s_nom / old_s_nom
 
             # Update s_nom
-            clustering.network.lines.loc[line_idx, "s_nom"] = new_s_nom
+            clustering.n.lines.loc[line_idx, "s_nom"] = new_s_nom
             # Stamp these as existing brownfield infrastructure
-            clustering.network.lines.loc[line_idx, "build_year"] = build_year
-            clustering.network.lines.loc[line_idx, "lifetime"] = lifetime
+            clustering.n.lines.loc[line_idx, "build_year"] = build_year
+            clustering.n.lines.loc[line_idx, "lifetime"] = lifetime
 
             # Update electrical parameters based on power system principles
             if capacity_ratio != 1.0:
                 # r (resistance) and x (reactance) are inversely proportional to capacity
                 # (capacity increase through increased conductor cross-section)
                 if line["r"] > 0:
-                    clustering.network.lines.loc[line_idx, "r"] = line["r"] / capacity_ratio
+                    clustering.n.lines.loc[line_idx, "r"] = line["r"] / capacity_ratio
                 if line["x"] > 0:
-                    clustering.network.lines.loc[line_idx, "x"] = line["x"] / capacity_ratio
+                    clustering.n.lines.loc[line_idx, "x"] = line["x"] / capacity_ratio
 
                 # b (susceptance) and g (conductance) are proportional to capacity
-                clustering.network.lines.loc[line_idx, "b"] = line["b"] * capacity_ratio
-                clustering.network.lines.loc[line_idx, "g"] = line["g"] * capacity_ratio
+                clustering.n.lines.loc[line_idx, "b"] = line["b"] * capacity_ratio
+                clustering.n.lines.loc[line_idx, "g"] = line["g"] * capacity_ratio
 
                 lines_updated += 1
         else:
@@ -830,7 +798,7 @@ def calibrate_tamu_transmission_capacity(
 
     # Remove lines not in REEDS data
     if lines_not_in_reeds:
-        clustering.network.mremove("Line", lines_not_in_reeds)
+        clustering.n.remove("Line", lines_not_in_reeds)
 
     logger.info(
         f"REEDS capacity corrections completed: {lines_updated} lines updated with REEDS data, "
@@ -839,7 +807,7 @@ def calibrate_tamu_transmission_capacity(
 
     # Calculate average line parameters per unit length and capacity from existing lines
     # These will be used to estimate parameters for new lines
-    existing_lines = clustering.network.lines
+    existing_lines = clustering.n.lines
     # Calculate per-unit parameters: parameter / (length * s_nom)
     # For r and x: Ohm = (Ohm*km*MW) / (km * MW)
     avg_r_per_length_capacity = (existing_lines["r"] / existing_lines["length"] * existing_lines["s_nom"]).mean()
@@ -876,8 +844,8 @@ def calibrate_tamu_transmission_capacity(
         bus0_id = region_to_bus[region0][0]
         bus1_id = region_to_bus[region1][0]
 
-        bus0 = clustering.network.buses.loc[bus0_id]
-        bus1 = clustering.network.buses.loc[bus1_id]
+        bus0 = clustering.n.buses.loc[bus0_id]
+        bus1 = clustering.n.buses.loc[bus1_id]
 
         # Calculate distance using PyPSA's haversine function
         bus0_coords = pd.DataFrame([[bus0["x"], bus0["y"]]], columns=["x", "y"])
@@ -941,9 +909,9 @@ def calibrate_tamu_transmission_capacity(
     # Batch add all new lines using madd
     if new_lines_data:
         new_lines_df = pd.DataFrame(new_lines_data)
-        clustering.network.madd(
+        clustering.n.add(
             "Line",
-            names=new_lines_df["name"],
+            name=new_lines_df["name"],
             bus0=new_lines_df["bus0"].values,
             bus1=new_lines_df["bus1"].values,
             v_nom=new_lines_df["v_nom"].values,
@@ -983,7 +951,15 @@ if __name__ == "__main__":
     params = snakemake.params
     solver_name = snakemake.config["solving"]["solver"]["name"]
 
-    n = pypsa.Network(snakemake.input.network)
+    if str(snakemake.input.network).endswith(".pkl"):
+        import dill as pickle
+
+        with open(snakemake.input.network, "rb") as fh:
+            n = pickle.load(fh)
+    else:
+        n = pypsa.Network(snakemake.input.network)
+
+    schema_entry = log_network_schema(n, stage="entry")
 
     n.set_investment_periods(
         periods=snakemake.params.planning_horizons,
@@ -1005,29 +981,13 @@ if __name__ == "__main__":
 
     # Extract cluster information from wildcards
     cluster_wc = snakemake.wildcards.get("clusters", None) or snakemake.wildcards.get("clusters_hires", None)
-
-    if cluster_wc == "all":
-        n_clusters = len(n.buses)
-        non_aggregated_carriers = set()
-    elif cluster_wc.endswith("m"):
-        # Only aggregate conventional carriers
-        n_clusters = int(cluster_wc[:-1])
-        aggregate_carriers = conventional_carriers & aggregate_carriers
-        non_aggregated_carriers = all_carriers - aggregate_carriers
-    elif cluster_wc.endswith("c"):
-        # Aggregate all except conventional carriers
-        n_clusters = int(cluster_wc[:-1])
-        aggregate_carriers = aggregate_carriers - conventional_carriers
-        non_aggregated_carriers = all_carriers - aggregate_carriers
-    elif cluster_wc.endswith("a"):
-        # Do not aggregate Any carriers
-        n_clusters = int(cluster_wc[:-1])
-        aggregate_carriers = set()
-        non_aggregated_carriers = all_carriers
-    else:
-        # Default case - just interpret as number of clusters
-        n_clusters = int(cluster_wc)
-        non_aggregated_carriers = set()
+    n_clusters, aggregate_carriers, non_aggregated_carriers = parse_clusters_wildcard(
+        cluster_wc,
+        all_carriers=all_carriers,
+        conventional_carriers=conventional_carriers,
+        aggregate_carriers=aggregate_carriers,
+        n_buses=len(n.buses),
+    )
 
     n.generators.loc[
         n.generators.carrier.isin(non_aggregated_carriers),
@@ -1058,6 +1018,8 @@ if __name__ == "__main__":
                 )
         aggregate_carriers = carriers
 
+    costs = load_costs(snakemake.input.tech_costs, params.costs)
+
     if (n_clusters == len(n.buses)) and not transport_model:
         # Fast-path if no clustering is necessary
         busmap = n.buses.index.to_series()
@@ -1067,20 +1029,13 @@ if __name__ == "__main__":
             busmap,
             linemap,
         )
-
-        costs = load_costs(snakemake.input.tech_costs, params.costs)
-        hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
     else:
-        costs = load_costs(snakemake.input.tech_costs, params.costs)
-        hvac_overhead_cost = costs.at["HVAC overhead", "annualized_capex_per_mw_km"]
-
         custom_busmap = params.custom_busmap
         if custom_busmap:
             custom_busmap = pd.read_csv(
                 snakemake.input.custom_busmap,
                 index_col=0,
-                squeeze=True,
-            )
+            ).squeeze("columns")
             custom_busmap.index = custom_busmap.index.astype(str)
             logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
 
@@ -1088,6 +1043,7 @@ if __name__ == "__main__":
             # Prepare data for transport model
             itl_agg_fn = None
             itl_agg_costs_fn = None
+            agg_busmap = None
             logger.info(
                 f"Aggregating to transport model with {topological_boundaries} zones.",
             )
@@ -1162,14 +1118,13 @@ if __name__ == "__main__":
             params.aggregation_strategies,
             solver_name,
             params.cluster_network["algorithm"],
-            params.cluster_network["feature"],
             params.focus_weights,
             weighting_strategy=params.cluster_network.get("weighting_strategy", None),
         )
 
         # add interconnect information back to clustered network
         if topological_boundaries == "state":
-            clustering.network.buses["interconnect"] = clustering.network.buses["reeds_state"].map(
+            clustering.n.buses["interconnect"] = clustering.n.buses["reeds_state"].map(
                 STATES_INTERCONNECT_MAPPER,
             )
 
@@ -1185,10 +1140,11 @@ if __name__ == "__main__":
                 topology_aggregation,
                 snakemake.params.planning_horizons,
                 transmission_lifetime,
+                agg_busmap=agg_busmap,
             )
         else:
             # Use standard transmission cost estimates
-            update_transmission_costs(clustering.network, costs)
+            update_transmission_costs(clustering.n, costs)
 
     if not transport_model:
         # Apply REEDS transmission capacity corrections
@@ -1213,8 +1169,8 @@ if __name__ == "__main__":
 
         # Check if topology_aggregation was used (original region info saved)
         use_original_region = False
-        if hasattr(clustering.network.buses, "columns"):
-            use_original_region = f"original_{topological_boundaries}" in clustering.network.buses.columns
+        if hasattr(clustering.n.buses, "columns"):
+            use_original_region = f"original_{topological_boundaries}" in clustering.n.buses.columns
 
         # Apply corrections
         calibrate_tamu_transmission_capacity(
@@ -1234,36 +1190,37 @@ if __name__ == "__main__":
     # build_base_network.py) is treated as pre-existing brownfield in myopic per-period
     # accounting. The targeted edits in convert_to_transport/calibrate_tamu_transmission_capacity
     # already cover the REEDS path; this catches everything else.
-    lines = clustering.network.lines
+    lines = clustering.n.lines
     if not lines.empty:
         lines.loc[lines["build_year"] == 0, "build_year"] = transmission_build_year
         lines.loc[~np.isfinite(lines["lifetime"]), "lifetime"] = transmission_lifetime
-    links = clustering.network.links
+    links = clustering.n.links
     if not links.empty:
         transmission_link_mask = links["carrier"].isin(["AC", "DC"])
         links.loc[transmission_link_mask & (links["build_year"] == 0), "build_year"] = transmission_build_year
         links.loc[transmission_link_mask & ~np.isfinite(links["lifetime"]), "lifetime"] = transmission_lifetime
 
-    update_p_nom_max(clustering.network)
-    clustering.network.generators.land_region = clustering.network.generators.land_region.fillna(
-        clustering.network.generators.bus,
+    update_p_nom_max(clustering.n)
+    clustering.n.generators.land_region = clustering.n.generators.land_region.fillna(
+        clustering.n.generators.bus,
     )
 
     if params.cluster_network.get("consider_efficiency_classes"):
         labels = [f" {label} efficiency" for label in ["low", "medium", "high"]]
-        nc = clustering.network
+        nc = clustering.n
         nc.generators["carrier"] = nc.generators.carrier.replace(labels, "", regex=True)
 
-    clustering.network.meta = dict(
+    clustering.n.meta = dict(
         snakemake.config,
         **dict(wildcards=dict(snakemake.wildcards)),
     )
 
-    clustering.network.set_investment_periods(
+    clustering.n.set_investment_periods(
         periods=snakemake.params.planning_horizons,
     )
 
-    clustering.network.export_to_netcdf(snakemake.output.network)
+    log_network_schema(clustering.n, stage="exit", baseline=schema_entry)
+    clustering.n.export_to_netcdf(snakemake.output.network)
 
     for attr in (
         "busmap",

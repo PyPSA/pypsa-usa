@@ -5,9 +5,11 @@ import logging
 import cartopy.io.shapereader as shpreader
 import geopandas as gpd
 import pandas as pd
-from _helpers import configure_logging, mock_snakemake
+from _helpers import configure_logging, mock_snakemake, plot_geojson
 from constants import GPS_CRS, MEASUREMENT_CRS
 from shapely.geometry import MultiPolygon
+
+logger = logging.getLogger(__name__)
 
 
 def filter_small_polygons_gpd(
@@ -82,9 +84,6 @@ def filter_shapes(
     add_regions: list | None = None,
 ) -> gpd.GeoDataFrame:
     """Filters breakthrough energy zone data by interconnect region."""
-    if interconnect not in ("western", "texas", "eastern", "usa"):
-        logger.warning(f"Interconnector of {interconnect} is not valid")
-
     regions = zones.state
     if add_regions:
         if not isinstance(add_regions, list):
@@ -227,32 +226,14 @@ def main(snakemake):
     gdf_na = gdf_na.query("name not in ['Alaska', 'Hawaii']")
 
     # Build State Shapes filtered by interconnect
-    if interconnect == "western":  # filter states that have any portion in interconnect
-        gdf_states = filter_shapes(
-            data=gdf_na,
-            zones=breakthrough_zones,
-            interconnect=interconnect,
-        )
-    elif interconnect == "texas":
-        gdf_states = filter_shapes(
-            data=gdf_na,
-            zones=breakthrough_zones,
-            interconnect=interconnect,
-        )
-    elif interconnect == "eastern":
-        gdf_states = filter_shapes(
-            data=gdf_na,
-            zones=breakthrough_zones,
-            interconnect=interconnect,
-        )
-    elif interconnect == "usa":
-        gdf_states = filter_shapes(
-            data=gdf_na,
-            zones=breakthrough_zones,
-            interconnect=interconnect,
-        )
-    else:
-        raise NotImplementedError
+    # filter states that have any portion in interconnect
+    if interconnect not in ("western", "texas", "eastern", "usa"):
+        raise NotImplementedError(f"Unsupported interconnect: {interconnect}")
+    gdf_states = filter_shapes(
+        data=gdf_na,
+        zones=breakthrough_zones,
+        interconnect=interconnect,
+    )
 
     # Trim gdf_states to only include portions of texas in NERC Interconnect
     gdf_nerc = gpd.read_file(snakemake.input.nerc_shapes)
@@ -265,10 +246,12 @@ def main(snakemake):
     )
     interconnect_regions = interconnect_regions.set_crs(GPS_CRS)
     interconnect_regions.to_file(snakemake.output.country_shapes)
+    plot_geojson(snakemake.output.country_shapes)
 
     # Save State shapes
     state_boundaries = gdf_states[["name", "country", "geometry"]].set_crs(GPS_CRS)
     state_boundaries.to_file(snakemake.output.state_shapes)
+    plot_geojson(snakemake.output.state_shapes)
 
     # Load & Trim balancing authority shapes
     gdf_ba = load_ba_shape(snakemake.input.onshore_shapes)
@@ -288,6 +271,7 @@ def main(snakemake):
     gdf_ba_states = ba_states.copy()
     gdf_ba_states.rename(columns={"name_1": "name"})
     gdf_ba_states.to_file(snakemake.output.onshore_shapes)
+    plot_geojson(snakemake.output.onshore_shapes)
 
     # Load, Trim, Save REeDs Shapes
     gdf_reeds = load_reeds_shape(snakemake.input.reeds_shapes)
@@ -316,12 +300,14 @@ def main(snakemake):
         reeds_exclusion,
     )
     gdf_reeds.to_file(snakemake.output.reeds_shapes)
+    plot_geojson(snakemake.output.reeds_shapes)
 
     # read county shapes
     # takes ~10min to trim shap to interconnect, so skipping
     gdf_counties = load_counties_shape(snakemake.input.county_shapes)
     gdf_counties["GEOID"] = "p" + gdf_counties["GEOID"]
     gdf_counties.to_file(snakemake.output.county_shapes)
+    plot_geojson(snakemake.output.county_shapes)
 
     # Load and build offshore shapes
     offshore_config = snakemake.params.source_offshore_shapes["use"]
@@ -362,10 +348,10 @@ def main(snakemake):
         buffer=buffer_distance_max,
     )
     offshore = offshore.set_crs(GPS_CRS).to_file(snakemake.output.offshore_shapes)
+    plot_geojson(snakemake.output.offshore_shapes)
 
 
 if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
     if "snakemake" not in globals():
         snakemake = mock_snakemake("build_shapes", interconnect="eastern")
     configure_logging(snakemake)

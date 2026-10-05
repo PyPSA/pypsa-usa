@@ -5,9 +5,6 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-import os
-import sys
-
 project = "pypsa-usa"
 copyright = "2024, Kamran Tehranchi, Trevor Barnes"
 author = "Kamran Tehranchi, Trevor Barnes"
@@ -15,33 +12,23 @@ author = "Kamran Tehranchi, Trevor Barnes"
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-sys.path.insert(0, os.path.abspath("../../workflow/scripts"))
-
 extensions = [
-    # 'sphinx.ext.autodoc',
-    # 'sphinx.ext.autosummary',
     "myst_parser",
-    # "sphinx.ext.autosectionlabel",
     "sphinx.ext.intersphinx",
-    "sphinx.ext.todo",
     "sphinx.ext.mathjax",
-    "sphinx.ext.napoleon",
     "sphinx.ext.graphviz",
+    "sphinx_copybutton",
     "sphinxcontrib.bibtex",
-    # 'sphinx.ext.pngmath',
-    # 'sphinxcontrib.tikz',
-    # 'rinoh.frontend.sphinx',
-    "sphinx.ext.imgconverter",  # for SVG conversion
+    "sphinx.ext.imgconverter",  # raster fallback for SVG in non-HTML builds
 ]
-myst_enable_extensions = ["html_image", "colon_fence", "amsmath"]
+myst_enable_extensions = ["html_image", "colon_fence", "amsmath", "dollarmath"]
 myst_heading_anchors = 3
 
-templates_path = ["_templates"]
 exclude_patterns = []
+
+intersphinx_mapping = {
+    "atlite": ("https://atlite.readthedocs.io/en/latest/", None),
+}
 
 bibtex_bibfiles = ["publications.bib"]
 bibtex_default_style = "unsrt"
@@ -56,6 +43,7 @@ html_theme_options = {
     "repository_url": "https://github.com/pypsa/pypsa-usa",
     "use_repository_button": True,
     "show_navbar_depth": 1,
+    "show_toc_level": 2,
 }
 
 # The name for this set of Sphinx documents.  If None, it defaults to

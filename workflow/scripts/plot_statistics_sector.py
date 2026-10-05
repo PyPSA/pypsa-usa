@@ -197,7 +197,7 @@ def plot_sector_production_timeseries(
         df = df_all.loc[period]
 
         if month:
-            df = df[df.index.get_level_values("timestep").month == month_i]
+            df = df[df.index.get_level_values("timestep").month == month]
 
         if df.empty:
             logger.warning(f"No data to plot for {state}")
@@ -293,7 +293,7 @@ def plot_transportation_production_timeseries(
         df_veh_period = df_veh.loc[period]
 
         if month:
-            df_veh_period = df_veh_period[df_veh_period.index.get_level_values("timestep").month == month_i].copy()
+            df_veh_period = df_veh_period[df_veh_period.index.get_level_values("timestep").month == month].copy()
 
         for i, unit in enumerate(diff_units):
             all_modes = [x.name for x in modes]
@@ -802,7 +802,7 @@ def plot_sector_load_factor_timeseries(
         row = i // 2
         col = i % 2
 
-        df = get_load_factor_timeseries(n, sector, state=state).loc[investment_period].resample("d").mean().dropna()
+        df = get_load_factor_timeseries(n, sector, state=state).loc[investment_period].resample("D").mean().dropna()
 
         try:
             if nrows > 1:
@@ -1025,7 +1025,7 @@ def plot_sector_dr_timeseries(
         df = e.loc[period]
 
         if month:
-            df = df[df.index.get_level_values("timestep").month == month_i]
+            df = df[df.index.get_level_values("timestep").month == month]
 
         if df.empty:
             # logger.warning(f"No Demand Response data to plot for {state}")

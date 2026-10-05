@@ -54,7 +54,7 @@ def filter_components(
     - pd.DataFrame
         Filtered assets.
     """
-    component = n.df(component_type)
+    component = n.components[component_type].static
     if planning_horizon != "all":
         ph = int(planning_horizon)
         iv = n.investment_periods
@@ -63,7 +63,7 @@ def filter_components(
         valid_periods = iv[iv >= ph]
         if len(valid_periods) > 0:
             period = valid_periods[0]
-            active_components = n.get_active_assets(component.index.name, period)
+            active_components = n.components[component_type].get_active_assets(investment_period=period)
         else:
             # Instead of empty index, create a boolean Series with all False values
             active_components = pd.Series(False, index=component.index)

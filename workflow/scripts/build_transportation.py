@@ -78,7 +78,7 @@ def add_ev_infrastructure(
     """Adds bus that all EVs attach to at a node level."""
     nodes = n.buses[n.buses.carrier == "AC"]
 
-    n.madd(
+    n.add(
         "Bus",
         nodes.index,
         suffix=f" trn-elec-{vehicle}",
@@ -90,7 +90,7 @@ def add_ev_infrastructure(
         carrier=f"trn-elec-{vehicle}",
     )
 
-    n.madd(
+    n.add(
         "Link",
         nodes.index,
         suffix=f" trn-elec-{vehicle}",
@@ -113,7 +113,7 @@ def add_lpg_infrastructure(
     """Adds lpg connections for vehicle type."""
     nodes = n.buses[n.buses.carrier == "AC"]
 
-    n.madd(
+    n.add(
         "Bus",
         nodes.index,
         suffix=f" trn-lpg-{vehicle}",
@@ -134,7 +134,7 @@ def add_lpg_infrastructure(
     else:
         efficiency2 = 0
 
-    n.madd(
+    n.add(
         "Link",
         nodes.index,
         suffix=f" trn-lpg-{vehicle}",
@@ -171,7 +171,7 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
 
     # two buses for forward and backwards load shifting
 
-    n.madd(
+    n.add(
         "Bus",
         df.index,
         suffix="-fwd-dr",
@@ -183,7 +183,7 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         STATE_NAME=df.STATE_NAME,
     )
 
-    n.madd(
+    n.add(
         "Bus",
         df.index,
         suffix="-bck-dr",
@@ -197,7 +197,7 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
 
     # seperate charging/discharging links to follow conventions
 
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix="-fwd-dr-charger",
@@ -210,7 +210,7 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         build_year=build_year,
     )
 
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix="-fwd-dr-discharger",
@@ -223,7 +223,7 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         build_year=build_year,
     )
 
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix="-bck-dr-charger",
@@ -236,7 +236,7 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         build_year=build_year,
     )
 
-    n.madd(
+    n.add(
         "Link",
         df.index,
         suffix="-bck-dr-discharger",
@@ -252,12 +252,13 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
     # backward stores have positive marginal cost storage and postive e
     # forward stores have negative marginal cost storage and negative e
 
-    n.madd(
+    n.add(
         "Store",
         df.index,
         suffix="-bck-dr",
         bus=df.index + "-bck-dr",
         e_cyclic=True,
+        e_cyclic_per_period=True,  # pypsa v1 flipped this default to False
         e_nom_extendable=False,
         e_nom=1e9,
         e_min_pu=0,
@@ -269,12 +270,13 @@ def add_transport_dr(n: pypsa.Network, vehicle: str, dr_config: dict[str, Any]) 
         standing_loss=0,
     )
 
-    n.madd(
+    n.add(
         "Store",
         df.index,
         suffix="-fwd-dr",
         bus=df.index + "-fwd-dr",
         e_cyclic=True,
+        e_cyclic_per_period=True,  # pypsa v1 flipped this default to False
         e_nom_extendable=False,
         e_nom=1e9,
         e_min_pu=-1,
@@ -343,7 +345,7 @@ def add_elec_vehicle(
     vehicles["bus1"] = vehicles.index + f" trn-{vehicle}-{mode}"
     vehicles["carrier"] = f"trn-elec-{vehicle}-{mode}"
 
-    n.madd(
+    n.add(
         "Link",
         vehicles.index,
         suffix=f" trn-elec-{vehicle}-{mode}",
@@ -420,7 +422,7 @@ def add_lpg_vehicle(
     else:
         raise TypeError
 
-    n.madd(
+    n.add(
         "Link",
         vehicles.index,
         suffix=f" trn-lpg-{vehicle}-{mode}",
@@ -466,7 +468,7 @@ def add_air(
     vehicles["bus1"] = vehicles.index + f" trn-{vehicle}-{mode}"
     vehicles["carrier"] = f"trn-lpg-{vehicle}-{mode}"
 
-    n.madd(
+    n.add(
         "Link",
         vehicles.index,
         suffix=f" trn-lpg-{vehicle}-{mode}",
@@ -509,7 +511,7 @@ def add_boat(
     vehicles["bus1"] = vehicles.index + f" trn-{vehicle}-{mode}"
     vehicles["carrier"] = f"trn-lpg-{vehicle}-{mode}"
 
-    n.madd(
+    n.add(
         "Link",
         vehicles.index,
         suffix=f" trn-lpg-{vehicle}-{mode}",
@@ -568,7 +570,7 @@ def add_rail(
     vehicles["bus1"] = vehicles.index + f" trn-{vehicle}-{mode}"
     vehicles["carrier"] = f"trn-lpg-{vehicle}-{mode}"
 
-    n.madd(
+    n.add(
         "Link",
         vehicles.index,
         suffix=f" trn-lpg-{vehicle}-{mode}",
