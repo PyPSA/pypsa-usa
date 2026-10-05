@@ -41,7 +41,6 @@ model-workflow
 model-components
 model-constraints
 model-network-schema
-california-model
 ```
 
 ```{toctree}
@@ -70,6 +69,7 @@ config-spatial
 config-configuration
 config-wildcards
 config-sectors
+california-model
 ```
 
 ```{toctree}
