@@ -1,5 +1,5 @@
 (california-model)=
-# California Model (CPUC SERVM)
+# Example California Model
 
 PyPSA-USA ships a maintained, runnable California-only configuration at
 `workflow/repo_data/config/config.california.yaml`. It is a sparse overlay on the layered base
