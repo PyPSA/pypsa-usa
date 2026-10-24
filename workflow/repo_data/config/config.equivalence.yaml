@@ -25,10 +25,11 @@ foresight: 'perfect'
 # --- Pinned identically on BOTH sides (harness plan "What 'the same config'
 # --- means", decision 2 of 2026-09-14; see memory/plans/harness-master-vs-develop.md).
 # Newest PUDL release referenced anywhere on develop. Master's loaded
-# config.common.yaml says v2025.2.0 and develop's says v2026.8.0; snakemake
+# config.common.yaml says v2025.2.0 and develop's says v2026.10.0 (develop reads
+# the 2025 ATB, which PUDL first carries in v2026.9.0); snakemake
 # applies --configfile AFTER every configfile: directive, so pinning it here
 # wins on both branches and HF-1's pudl_path half stops being a difference.
-pudl_path: s3://pudl.catalyst.coop/v2026.8.0
+pudl_path: s3://pudl.catalyst.coop/v2026.10.0
 
 scenario:
   interconnect: [western]

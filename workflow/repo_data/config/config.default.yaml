@@ -337,7 +337,7 @@ dac:
 costs:
   # NREL Annual Technology Baseline (ATB) — primary capex/fom source
   atb:
-    model_case: "Market"                   # Market (commercial) | R&D (advanced research)
+    model_case: "R&D + TC"                 # R&D | R&D + TC | Exp | Exp + TC  (TC = with tax credits; Exp = expanded cost drivers)
     scenario:   "Moderate"                 # Advanced | Conservative | Moderate
     overrides:                             # OPTIONAL: per-carrier overrides; falls back to defaults above
       # solar:

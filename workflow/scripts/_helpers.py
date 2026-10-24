@@ -226,7 +226,8 @@ def load_costs(tech_costs: str, costs_config: dict | None = None) -> pd.DataFram
     combination plus scenario-independent rows (EGS, sector_costs CSVs) where those
     columns are NA. ``costs_config["atb"]`` provides global defaults
     (``scenario``, ``model_case``) and an optional per-carrier ``overrides`` map. If the
-    file predates these columns or no config is supplied, the data is pivoted as-is.
+    file predates these columns, the data is pivoted as-is. A configured
+    (scenario, model_case) the file does not carry raises instead of selecting nothing.
     """
     df = pd.read_csv(tech_costs)
 
@@ -235,7 +236,7 @@ def load_costs(tech_costs: str, costs_config: dict | None = None) -> pd.DataFram
 
     atb_cfg = (costs_config or {}).get("atb") or {}
     default_scenario = atb_cfg.get("scenario", "Moderate")
-    default_case = atb_cfg.get("model_case", "Market")
+    default_case = atb_cfg.get("model_case", "R&D + TC")
     overrides = atb_cfg.get("overrides") or {}
 
     has_scenario = df["atb_scenario"].notna() & df["atb_model_case"].notna()
@@ -245,6 +246,17 @@ def load_costs(tech_costs: str, costs_config: dict | None = None) -> pd.DataFram
     carriers = atb_rows["pypsa-name"].unique()
     scenario_map = {c: (overrides.get(c) or {}).get("scenario", default_scenario) for c in carriers}
     case_map = {c: (overrides.get(c) or {}).get("model_case", default_case) for c in carriers}
+
+    # An unpublished slice (e.g. the 2024 ATB's "Market") would select no rows, and
+    # the carriers would silently drop out of the cost table.
+    available = set(zip(atb_rows["atb_scenario"], atb_rows["atb_model_case"]))
+    unknown = {(scenario_map[c], case_map[c]) for c in carriers} - available
+    if unknown:
+        raise ValueError(
+            f"costs.atb selects (scenario, model_case) {sorted(unknown)}, which {tech_costs} "
+            f"does not carry. Available: {sorted(available)}.",
+        )
+
     selected = atb_rows[
         (atb_rows["atb_scenario"] == atb_rows["pypsa-name"].map(scenario_map))
         & (atb_rows["atb_model_case"] == atb_rows["pypsa-name"].map(case_map))
