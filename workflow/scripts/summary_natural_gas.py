@@ -128,15 +128,15 @@ def get_linepack(n: pypsa.Network) -> dict[str, pd.DataFrame]:
 
 
 def get_underground_storage(n: pypsa.Network) -> dict[str, pd.DataFrame]:
-    """Gets underground storage data."""
+    """Gets underground storage data, summed over the storage of each state."""
     stores = n.stores[n.stores.carrier == "gas storage"]
-    stores = n.stores_t.e[stores.index]
+    states = stores.bus.map(n.buses.country)
+    energy = n.stores_t.e[stores.index]
 
     data = {}
 
-    for col in stores.columns:
-        state = col.split(" gas storage")[0]
-        data[state] = stores[col].to_frame()
+    for state, names in states.groupby(states).groups.items():
+        data[state] = energy[names].sum(axis=1).to_frame(name=f"{state} gas storage")
 
     return data
 
