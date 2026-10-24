@@ -600,8 +600,8 @@ def constrain_charing_rates(n: pypsa.Network, must_run_evs: bool) -> None:
     lpgs = links[links.carrier.str.contains("-lpg-")]
 
     # these must be done seperatly, as they share bus1 names
-    ev_mapper = evs.reset_index().set_index("bus1")["Link"].to_dict()
-    lpg_mapper = lpgs.reset_index().set_index("bus1")["Link"].to_dict()
+    ev_mapper = dict(zip(evs.bus1, evs.index))
+    lpg_mapper = dict(zip(lpgs.bus1, lpgs.index))
 
     assert len(evs) + len(lpgs) == len(links)
 
