@@ -37,7 +37,6 @@ logger = logging.getLogger(__name__)
 
 # for converting everthing into MWh_th
 MWH_2_MMCF = NG_MWH_2_MMCF
-KJ_2_MWH = (1 / 1000) * (1 / 3600)
 
 ###
 # Geolocation of Assets class
@@ -1141,18 +1140,21 @@ class PipelineLinepack(GasData):
 
     def format_data(self, data: gpd.GeoDataFrame) -> pd.DataFrame:
         """Format linepack data."""
-        gdf = data.copy()
+        gdf = data[data.geometry.notna()].copy()
         states = self.states.copy()
 
-        length_in_state = gpd.sjoin(
-            gdf.to_crs("4269"),
-            states,
-            how="right",
-            predicate="within",
-        ).reset_index()
+        # clip pipelines at state borders so a segment crossing a border is split
+        # between both states, and measure length in an equal-area projection
+        # (the 'Shape__Length' attribute is in web mercator meters)
+        length_in_state = gpd.overlay(
+            gdf[["TYPEPIPE", "geometry"]].to_crs(5070),
+            states.to_crs(5070),
+            how="intersection",
+            keep_geom_type=True,
+        )
+        length_in_state["LENGTH_M"] = length_in_state.length
         length_in_state = (
-            length_in_state[["STATE_NAME", "STATE", "TYPEPIPE", "Shape_Leng", "Shape__Length"]]
-            .rename(columns={"Shape_Leng": "LENGTH_DEG", "Shape__Length": "LENGTH_M"})
+            length_in_state[["STATE_NAME", "STATE", "TYPEPIPE", "LENGTH_M"]]
             .groupby(by=["STATE_NAME", "STATE", "TYPEPIPE"])
             .sum()
             .reset_index()
@@ -1174,23 +1176,17 @@ class PipelineLinepack(GasData):
         max_pressure = 8000  # kPa
         min_pressure = 4000  # kPa
 
-        # Energy content calculated using:
-        # E_total = n * Cv * T = (PV/RT) * Cv * T = (PV/R) * Cv
-        # E = PV * (R/Cv)
-        # R = 8.314 J/(mol.K)
-        # Cv_Methane = 35.7 J/(mol.K)
+        # Linepack is the fuel held in the pipe, so its energy is the gas volume at
+        # standard conditions times the same heating value used for MMcf -> MWh.
+        # Ideal gas at the standard temperature: V_std = V * P / P_std
+        std_pressure = 101.56  # kPa (14.73 psia, the EIA reporting basis)
+        m3_2_mmcf = 35.3147 / 1e6
 
-        r_cv = 8.314 / 35.7
-
-        energy_in_state = volumne_in_state.copy()
-        energy_in_state["MAX_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * max_pressure * r_cv
-        energy_in_state["MIN_ENERGY_kJ"] = energy_in_state.VOLUME_M3 * min_pressure * r_cv
-        energy_in_state["NOMINAL_ENERGY_kJ"] = (energy_in_state.MAX_ENERGY_kJ + energy_in_state.MIN_ENERGY_kJ) / 2
-
-        final = energy_in_state.copy()
-        final["MAX_ENERGY_MWh"] = final.MAX_ENERGY_kJ * KJ_2_MWH
-        final["MIN_ENERGY_MWh"] = final.MIN_ENERGY_kJ * KJ_2_MWH
-        final["NOMINAL_ENERGY_MWh"] = final.NOMINAL_ENERGY_kJ * KJ_2_MWH
+        final = volumne_in_state.copy()
+        mwh_per_kpa = final.VOLUME_M3 / std_pressure * m3_2_mmcf * MWH_2_MMCF
+        final["MAX_ENERGY_MWh"] = mwh_per_kpa * max_pressure
+        final["MIN_ENERGY_MWh"] = mwh_per_kpa * min_pressure
+        final["NOMINAL_ENERGY_MWh"] = (final.MAX_ENERGY_MWh + final.MIN_ENERGY_MWh) / 2
 
         final = final[["MAX_ENERGY_MWh", "MIN_ENERGY_MWh", "NOMINAL_ENERGY_MWh"]].reset_index()
         return self.filter_on_interconnect(final)
