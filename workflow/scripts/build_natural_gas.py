@@ -799,7 +799,11 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         for invesetment_period in n.investment_periods:
             # reindex to match any tsa
             cost = costs.copy()
+            # snapshots carry no leap day, and Feb 29 has no date in a non-leap period
+            cost = cost[~((cost.index.month == 2) & (cost.index.day == 29))]
             cost.index = cost.index.map(lambda x: x.replace(year=invesetment_period))
+            # EIA monthly data runs to January 1st of the next year, which the year swap duplicates
+            cost = cost[~cost.index.duplicated(keep="first")]
             cost = cost.reindex(n.snapshots.get_level_values(1), method="nearest")
             # set investment periods
             # https://stackoverflow.com/a/56278736/14961492
@@ -1038,6 +1042,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         marginal_cost = pd.concat([import_costs, export_costs], axis=1)
         marginal_cost = self._expand_costs(n, marginal_cost)
+        marginal_cost = marginal_cost[template.index]  # pypsa 1.x matches columns to names in order
 
         marginal_cost_multiplier = kwargs.get("marginal_cost_multiplier", 1)
         marginal_cost = marginal_cost.mul(marginal_cost_multiplier).round(4)

@@ -579,6 +579,10 @@ rule build_industry_demand:
         pudl_path=config_provider("pudl_path"),
     input:
         network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
+        # county-level loads are matched to base buses, then mapped to cluster buses
+        base_network=NETWORKS + "{interconnect}/elec_base_network.nc",
+        busmap_b=BUSMAPS + "{interconnect}/busmap_b.csv",
+        busmap_s=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
         demand_files=demand_raw_data,
         dissagregate_files=demand_disaggregate_data,
         demand_scaling_file=demand_scaling_data,
