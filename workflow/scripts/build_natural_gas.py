@@ -10,12 +10,14 @@ Specifically, it will do the following
 - Creates capacity constrained pipelines to states neighbouring the interconnect
 - Creates capacity and energy constrained import/exports to international connections
 - Adds import/export historical natural gas prices
+- Adds AEO2026 projected supply prices as the gas production marginal cost
 """
 
 import logging
 import math
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from math import pi
 from typing import Any
 
@@ -25,7 +27,14 @@ import numpy as np
 import pandas as pd
 import pypsa
 import yaml
-from constants import CODE_2_STATE, EMPTY_STATES, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
+from constants import (
+    CODE_2_STATE,
+    EMPTY_STATES,
+    NG_MWH_2_MMCF,
+    STATE_2_CODE,
+    STATES_INTERCONNECT_MAPPER,
+    NG_Dol_MMBTU_2_MWH,
+)
 from pypsa import Network
 
 logger = logging.getLogger(__name__)
@@ -34,6 +43,9 @@ logger = logging.getLogger(__name__)
 ###
 # Constants
 ###
+
+# AEO2026 prices are in 2025 dollars; model costs are in 2023 dollars
+USD_2025_2_USD_2023 = 1 / 1.06
 
 # for converting everthing into MWh_th
 MWH_2_MMCF = NG_MWH_2_MMCF
@@ -430,11 +442,14 @@ class GasProcessing(GasData):
             STATE=df.index,
         )
 
-        # marginal cost
-        # https://www.aer.ca/providing-information/data-and-reports/statistical-reports/st98/natural-gas/supply-costs
-        # Table S5.6 with Variable Operating Cost average of ~$63 CAD/ 1000 m3
-        # (63 CAD/ 1000 m3) (1 m3 / 35.5 CF) (1,000,000 CF / MMCF) (1 MMCF / 303.5 MWH) (1 USD / 0.75 CAD)
-        # ~7.5 $/MWh
+        # marginal cost is the Lower 48 average supply price of the investment
+        # period (see get_production_costs), the same in every state
+        production_costs = kwargs["production_costs"]
+        period_costs = pd.Series(
+            n.snapshots.get_level_values(0).map(production_costs),
+            index=n.snapshots,
+        )
+        marginal_cost = pd.concat({state: period_costs for state in df.index}, axis=1)
 
         n.add(
             "Link",
@@ -447,7 +462,7 @@ class GasProcessing(GasData):
             efficiency=1,
             p_nom_extendable=p_nom_extendable,
             capital_cost=0.01,  # to update
-            marginal_cost=7.5,
+            marginal_cost=marginal_cost,
             p_nom=(df.p_nom * p_nom_mult).round(2),
             p_nom_min=0,
             p_nom_max=df.p_nom * p_nom_max_mult,
@@ -475,6 +490,30 @@ class GasProcessing(GasData):
             lifetime=np.inf,
             build_year=n.investment_periods[0],
         )
+
+
+def get_production_costs(api: str, investment_periods: Sequence[int]) -> pd.Series:
+    """
+    Gas production marginal cost of each investment period in 2023$/MWh_th.
+
+    The prices are the AEO2026 Lower 48 average supply price in 2025$/MMBtu
+    (see ``eia.SupplyPrice``). Periods outside the AEO years take the price of
+    the nearest year.
+    """
+    df = eia.SupplyPrice("gas", api).get_data()
+    if not (df.units == "2025 $/MMBtu").all():
+        raise ValueError(f"Expected AEO gas supply prices in 2025 $/MMBtu, got {df.units.unique().tolist()}")
+    prices = df.value
+
+    periods = pd.Series(list(investment_periods), index=list(investment_periods))
+    years = periods.clip(prices.index.min(), prices.index.max())
+    if not years.equals(periods):
+        logger.warning(
+            f"AEO2026 gas supply prices cover {prices.index.min()}-{prices.index.max()}; "
+            f"using the nearest year for investment periods {periods[years != periods].tolist()}",
+        )
+
+    return years.map(prices) * USD_2025_2_USD_2023 * NG_Dol_MMBTU_2_MWH
 
 
 class _GasPipelineCapacity(GasData):
@@ -1262,7 +1301,8 @@ def build_natural_gas(
     # add state level natural gas processing facilities
 
     production = GasProcessing(year, interconnect, api)
-    production.build_infrastructure(n, capacity_multiplier=1)
+    production_costs = get_production_costs(api, n.investment_periods)
+    production.build_infrastructure(n, capacity_multiplier=1, production_costs=production_costs)
 
     # add state level gas storage facilities
 
