@@ -2,22 +2,28 @@
 # Costs
 ## Costs and Candidate Resources
 
- In PyPSA-USA, candidate resource forecasted capital and operating costs are defined by the NREL Annual Technology Baseline (ATB) accessed through the PUDL project. The model currently uses the 2024 ATB which provides data for expected costs across the years 2024 - 2050 (planning horizons earlier than 2024 use the 2024 costs). The full ATB scenario grid is exported by `build_cost_data` for every planning horizon, and the configuration below selects which slice of that grid each carrier ultimately uses.
+ In PyPSA-USA, candidate resource forecasted capital and operating costs are defined by the NREL Annual Technology Baseline (ATB) accessed through the PUDL project. The model currently uses the 2025 ATB; costs are taken for the years 2024 - 2050 (planning horizons earlier than 2024 use the 2024 costs, later ones the 2050 costs). The full ATB scenario grid is exported by `build_cost_data` for every planning horizon, and the configuration below selects which slice of that grid each carrier ultimately uses.
 
 ### Selecting an ATB scenario and model case
 
 ATB exposes two orthogonal axes that bound the cost trajectory of every technology:
 
 - **`scenario`** — `Moderate` (default), `Advanced`, or `Conservative`. Reflects how aggressively technology costs decline over time. `Advanced` is most optimistic; `Conservative` is most pessimistic.
-- **`model_case`** — `Market` (default) or `R&D`. `Market` bakes current policy incentives (PTC/ITC) into the financing assumptions; `R&D` strips those out and isolates pure technology learning.
+- **`model_case`** — `R&D + TC` (default), `R&D`, `Exp + TC`, or `Exp`. `R&D` uses ATB's research-and-development cost drivers; `Exp` uses its expanded cost drivers. `+ TC` adds the tax credits enacted as of July 2025 to the financing assumptions; without it, no tax credits are assumed.
+
+ATB publishes the `Exp` cases only for utility PV, land-based wind, and utility-scale batteries. For every other carrier, `build_cost_data` fills an `Exp` slice from the matching `R&D` case (`Exp` → `R&D`, `Exp + TC` → `R&D + TC`), so selecting `Exp` never leaves a carrier without costs.
+
+```{note}
+The 2024 ATB's `Market` financial case no longer exists, and `R&D` now names a cost-driver case rather than a financial case. A config that still sets `model_case: "Market"` fails schema validation, and one that names it in `overrides` stops in `load_costs` with the list of available cases. `R&D + TC` is the closest equivalent of the old `Market` default, since both carry tax credits in the financing.
+```
 
 The global default applies to every carrier unless an override is set:
 
 ```yaml
 costs:
   atb:
-    model_case: "Market"   # Market, R&D
-    scenario: "Moderate"   # Moderate, Advanced, Conservative
+    model_case: "R&D + TC"   # R&D + TC, R&D, Exp + TC, Exp
+    scenario: "Moderate"     # Moderate, Advanced, Conservative
 ```
 
 #### Per-carrier overrides
@@ -27,14 +33,14 @@ To stress-test specific carriers under a different scenario without touching the
 ```yaml
 costs:
   atb:
-    model_case: "Market"
+    model_case: "R&D + TC"
     scenario: "Moderate"
     overrides:
       solar:
         scenario: "Advanced"            # cheaper solar
       onwind:
         scenario: "Advanced"
-        model_case: "R&D"               # no-PTC view of onshore wind
+        model_case: "R&D"               # no-tax-credit view of onshore wind
       nuclear:
         scenario: "Conservative"        # higher-cost nuclear
 ```
@@ -42,7 +48,7 @@ costs:
 Resolution order, highest priority first:
 1. Per-carrier override under `costs.atb.overrides[<pypsa-name>]`
 2. Global `costs.atb.scenario` / `costs.atb.model_case`
-3. Hardcoded fallback (`Moderate` / `Market`)
+3. Hardcoded fallback (`Moderate` / `R&D + TC`)
 
 Carrier names must match the keys in `ATB_TECH_MAPPER` (`workflow/scripts/constants.py`) — e.g. `solar`, `onwind`, `offwind`, `offwind_floating`, `nuclear`, `SMR`, `CCGT`, `CCGT-95CCS`, `coal`, `coal-95CCS`, `geothermal`, `biomass`, `4hr_battery_storage`, etc.
 
