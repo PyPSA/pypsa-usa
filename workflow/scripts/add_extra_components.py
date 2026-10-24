@@ -211,6 +211,48 @@ def copy_timeseries_for_suffix(
         n.generators_t[attr] = source.join(renamed)
 
 
+def apply_new_build_parameters(
+    n: pypsa.Network,
+    fleet: pd.DataFrame,
+    new_index: pd.Index,
+    costs: pd.DataFrame,
+) -> None:
+    """
+    Gives new units copied from an existing fleet the ATB efficiency and VOM.
+
+    ``new_index[i]`` is the unit copied from ``fleet.iloc[i]``. A new unit keeps
+    the fleet's fuel price per MWh_th, burnt at the ATB efficiency, so static
+    and time varying (dynamic fuel price) marginal costs are converted alike.
+    Units holding existing capacity, and carriers without an ATB heat rate
+    (renewables), keep the fleet's values.
+    """
+    new = pd.DataFrame(
+        {
+            "fleet_eff": fleet.efficiency.to_numpy(),
+            "fleet_vom": fleet.get("vom_cost", pd.Series(np.nan, index=fleet.index)).fillna(0).to_numpy(),
+            "atb_eff": fleet.carrier.map(costs.efficiency).to_numpy(),
+            "atb_vom": fleet.carrier.map(costs.opex_variable_per_mwh).to_numpy(),
+            "atb_heat_rate": fleet.carrier.map(costs.heat_rate_mmbtu_per_mwh).to_numpy(),
+        },
+        index=new_index,
+    )
+    new = new[(new.atb_heat_rate > 0) & (new.atb_eff > 0) & (n.generators.loc[new_index, "p_nom"] == 0)]
+    if new.empty:
+        return
+
+    # $/MWh_el of the fleet -> $/MWh_el of the new unit
+    mc = n.generators.loc[new.index, "marginal_cost"]
+    n.generators.loc[new.index, "marginal_cost"] = (mc - new.fleet_vom) * new.fleet_eff / new.atb_eff + new.atb_vom
+    n.generators.loc[new.index, "efficiency"] = new.atb_eff
+    n.generators.loc[new.index, "vom_cost"] = new.atb_vom
+
+    mc_t = n.generators_t.marginal_cost
+    cols = mc_t.columns.intersection(new.index)
+    if len(cols):
+        p = new.loc[cols]
+        mc_t[cols] = mc_t[cols].sub(p.fleet_vom).mul(p.fleet_eff).div(p.atb_eff).add(p.atb_vom)
+
+
 def split_retirement_gens(
     n: pypsa.Network,
     costs: pd.DataFrame,
@@ -304,9 +346,12 @@ def split_retirement_gens(
         p_max_pu=retirement_gens.p_max_pu,
         land_region=retirement_gens.land_region,
     )
+    n.generators.loc[retirement_gens.index, "vom_cost"] = retirement_gens.get("vom_cost", np.nan)
 
     # time dependent factors added after as not all generators are time dependent
     copy_timeseries_for_suffix(n, retirement_gens.index, "existing")
+
+    apply_new_build_parameters(n, retirement_gens, retirement_gens.index, costs)
 
 
 def attach_multihorizon_existing_generators(
@@ -358,9 +403,13 @@ def attach_multihorizon_existing_generators(
         lifetime=gens.carrier.map(costs.cost_recovery_period_years),
         land_region=gens.land_region,
     )
+    vom = gens.get("vom_cost", pd.Series(np.nan, index=gens.index))
+    n.generators.loc[gens.index + f" {investment_year}", "vom_cost"] = vom.to_numpy()
 
     # time dependent factors added after as not all generators are time dependent
     copy_timeseries_for_suffix(n, gens.index, investment_year)
+
+    apply_new_build_parameters(n, gens, gens.index + f" {investment_year}", costs)
 
 
 def attach_multihorizon_egs(
@@ -487,6 +536,10 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year):
             ramp_limit_up=existing_gens.ramp_limit_up.mean() or 1,
             ramp_limit_down=existing_gens.ramp_limit_down.mean() or 1,
         )
+        n.generators.loc[buses_i + f" {carrier}_{investment_year}", "vom_cost"] = costs.at[
+            carrier,
+            "opex_variable_per_mwh",
+        ]
 
 
 def apply_itc(n, itc_modifier, monitization_cost=0.1):
@@ -1126,14 +1179,14 @@ def main(snakemake) -> None:
     if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
         attach_phs_storageunits(n, elec_config, costs_dict[n.investment_periods[0]])
 
-    if snakemake.params.retirement == "economic":
-        economic_retirement_gens = set(elec_config.get("conventional_carriers", None))
-        split_retirement_gens(
-            n,
-            costs_dict[n.investment_periods[0]],
-            economic_retirement_gens,
-            economic=True,
-        )
+    # Split conventional generators so expansion is a new unit; with technical
+    # retirement the existing part is fixed and retires on its lifetime
+    split_retirement_gens(
+        n,
+        costs_dict[n.investment_periods[0]],
+        set(elec_config.get("conventional_carriers", None)),
+        economic=snakemake.params.retirement == "economic",
+    )
     # Split renewable generators from the first investement period to support lifetime retirement
     split_retirement_gens(
         n,
