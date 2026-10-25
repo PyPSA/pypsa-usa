@@ -101,11 +101,11 @@ class Eulp:
         self,
         filepath: str | None = None,
         df: pd.DataFrame | None = None,
-        stock: str | None = None,
+        stock: str = "res",
         factors: pd.Series | None = None,
     ) -> None:
         if filepath:
-            assert stock in ("res", "com"), "stock must be 'res' or 'com' when reading a file"
+            assert stock in ("res", "com"), "stock must be 'res' or 'com'"
             if stock == "com":
                 needed = {c for cols in self._com_useful_groups.values() for c in cols}
                 missing = needed.difference(factors.index if factors is not None else [])
@@ -192,9 +192,6 @@ class Eulp:
             return df[sector_columns].mul(weights[sector_columns]).sum(axis=1)
 
         if self.stock == "res":
-            delivered = {c for cols in self._res_useful_groups.values() for c in cols}
-            missing = delivered.difference(df.columns)
-            assert not missing, f"ResStock file has no delivered-load columns {sorted(missing)}"
             # delivered loads carry small negative values (simulation noise)
             useful = {
                 end_use: aggregate_sector(df, cols).clip(lower=0).mul(self.KBTU_TO_KWH)

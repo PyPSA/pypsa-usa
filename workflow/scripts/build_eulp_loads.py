@@ -68,6 +68,13 @@ EQUIPMENT = [
 ]
 
 
+def assert_delivered_loads(path: str) -> None:
+    """ResStock releases without delivered-load columns would give zero heating and cooling."""
+    delivered = {c for cols in Eulp._res_useful_groups.values() for c in cols}
+    missing = delivered.difference(pd.read_csv(path, nrows=0).columns)
+    assert not missing, f"ResStock file {path} has no delivered-load columns {sorted(missing)}"
+
+
 def _final(column: str) -> str:
     """Annual-results column of a timeseries column (same name without the unit)."""
     return column.removesuffix(".kwh")
@@ -190,6 +197,9 @@ if __name__ == "__main__":
     if stock == "com":
         factors = comstock_factors(read_comstock_metadata(snakemake.input.metadata))
         logger.info(f"ComStock useful-energy factors for {state}:\n{factors.round(3).to_string()}")
+    else:
+        for f in snakemake.input.profiles:
+            assert_delivered_loads(f)
 
     profiles = [Eulp(f, stock=stock, factors=factors) for f in snakemake.input.profiles]
     loads = sum(profiles[1:], profiles[0])

@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from build_eulp_loads import EQUIPMENT, J_TO_KWH, comstock_factors, read_comstock_metadata
+from build_eulp_loads import EQUIPMENT, J_TO_KWH, assert_delivered_loads, comstock_factors, read_comstock_metadata
 from eulp import Eulp
 
 pytestmark = pytest.mark.fast
@@ -80,13 +80,16 @@ def test_residential_delivered_loads_clip_simulation_noise(tmp_path):
     assert (Eulp(path, stock="res").space_heating == 0).all()
 
 
-def test_residential_file_without_delivered_loads_fails(tmp_path):
+def test_residential_file_without_delivered_loads_fails_the_build(tmp_path):
     path = _write_profile(
         tmp_path / "mobile_home.csv",
         {"out.natural_gas.heating.energy_consumption.kwh": 1.0},
     )
     with pytest.raises(AssertionError, match="delivered-load"):
-        Eulp(path, stock="res")
+        assert_delivered_loads(path)
+    # Eulp itself reads such a file as residential with zero heating and cooling
+    data = Eulp(path).data
+    assert (data[["heating", "cooling"]] == 0).all().all()
 
 
 def test_commercial_final_energy_is_converted_once(tmp_path):
