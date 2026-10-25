@@ -1,11 +1,11 @@
 (data-demand)=
 # Electricity Demand
 
-PyPSA-USA offers access to both exogenously defined historical and future forecasted electrical demand data.
+PyPSA-USA offers access to both exogenously defined historical and future forecasted electrical demand data. Every profile is moved onto the model's UTC snapshots, which carry no daylight-saving transition (see [Temporal structure](./model-components.md#temporal-structure)); the native clock of each source is given below.
 
 ## Historical Demand
 
-Historical demand data is imported from the EIA930 via the [GridEmissions](https://github.com/jdechalendar/gridemissions) tool, covering the years 2018-2023. This data is defined at the balancing area region level.
+Historical demand data is imported from the EIA930 via the [GridEmissions](https://github.com/jdechalendar/gridemissions) tool, covering the years 2018-2023. This data is defined at the balancing area region level. Its timestamps are already UTC and are used as is, as are those of the state-level FERC 714 demand read from PUDL with `profile: ferc` (`datetime_utc`).
 
 ## Forecasted Demand
 
@@ -13,13 +13,16 @@ Forecasted demand is sourced from the NREL Electrification Futures Study (EFS), 
 
 The EFS also provides electrification cases, with reference, medium, and high electrification cases, with slow, moderate, and rapid speeds. These scenarios can be controlled via the configuration `demand: scenario: efs_case: / efs_speed:`.
 
+EFS hours are in local standard time and are moved forward by each state's UTC offset. A state takes the single timezone listed in `STATE_2_TIMEZONE`, so a state that spans two timezones (Tennessee, Kentucky, Indiana, Florida, Idaho, Oregon, the Dakotas, ...) is up to an hour off in its minority part.
+
 A third source, selected with `profile: eer`, provides state-level hourly demand scenarios from
 the EER dataset (retrieved automatically from Zenodo). Three scenario files are available via
 the `demand: scenario: eer_file:` setting: `demand_EER2025_100by2050`,
 `demand_EER2025_Baseline_AEO2023`, and `demand_EER2025_IRAlow`. EER profiles are defined for
 the model years 2021, 2025, 2030, 2035, 2040, 2045, and 2050, and each profile is indexed to a
 historical weather year, so `renewable_weather_years` must contain exactly one year from
-2007-2013 or 2016-2023.
+2007-2013 or 2016-2023. EER timestamps are fixed CST (UTC−6, no daylight saving) and are
+rolled forward 6 hours.
 
 (servm-demand)=
 ### CPUC SERVM (California)

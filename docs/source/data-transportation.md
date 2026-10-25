@@ -29,7 +29,7 @@ Road transport electricity load profiles are extracted from the [NREL Electrific
 Example Electrical Vehicle Load Profiles for a Single Bus in 2018 and 2050. Gray lines are hourly profiles over the year. The blue line is the average profile over the year. (a) Light-Duty Vehicles. (b) Medium-Duty Vehicles. (c) Heavy-Duty Vehicles. (d) Buses.
 :::
 
-The EFS study gives electrical load magnitude, however, it does not give the corresponding petrol magnitude[^1]. Therefore, only the charging profiles from EFS are used. These profiles are disaggregated across the state following the same population based disaggregation strategy as service level demand.
+The EFS study gives electrical load magnitude, however, it does not give the corresponding petrol magnitude[^1]. Therefore, only the charging profiles from EFS are used. These profiles are disaggregated across the state following the same population based disaggregation strategy as service level demand. EFS hours are in local standard time and are moved forward by each state's UTC offset onto the model's UTC snapshots, as for the [EFS electricity profiles](./data-demand.md#forecasted-demand).
 
 #### Annual Load
 

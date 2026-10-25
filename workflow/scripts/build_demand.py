@@ -29,6 +29,28 @@ CODE_2_STATE = const.CODE_2_STATE
 STATE_TIMEZONE = const.STATE_2_TIMEZONE
 TBTU_2_MWH = const.TBTU_2_MWH
 
+#: Hours each timezone's standard time runs behind UTC. Snapshots are UTC with
+#: no daylight saving, so a reader holding local-standard-time data rolls it
+#: forward by this many hours.
+UTC_OFFSET_HOURS: dict[str, int] = {
+    "US/Eastern": 5,
+    "US/Central": 6,
+    "US/Mountain": 7,
+    "US/Pacific": 8,
+    "US/Alaska": 9,
+    "Pacific/Honolulu": 10,
+}
+
+
+def _state_utc_offset(state: str) -> int:
+    """Hours a state's (abbreviated) local standard time runs behind UTC."""
+    timezone = STATE_TIMEZONE[state]
+    try:
+        return UTC_OFFSET_HOURS[timezone]
+    except KeyError:
+        raise KeyError(f"Timezone {timezone} not mapped :(") from None
+
+
 #: Demand-table columns folded into another column before disaggregation, because
 #: no bus ever carries the source key (HF-29).
 #:
@@ -408,26 +430,8 @@ class ReadEfs(ReadStrategy):
     @staticmethod
     def _apply_timezones(df: pd.DataFrame) -> pd.DataFrame:
         """Changes local time to relative time from UTC."""
-
-        def apply_timezone_shift(timezone: str) -> int:
-            """All shifts realitive to UTC time."""
-            if timezone == "US/Pacific":
-                return 8
-            elif timezone == "US/Mountain":
-                return 7
-            elif timezone == "US/Central":
-                return 6
-            elif timezone == "US/Eastern":
-                return 5
-            elif timezone == "US/Alaska":
-                return 9
-            elif timezone == "Pacific/Honolulu":
-                return 11
-            else:
-                raise KeyError(f"Timezone {timezone} not mapped :(")
-
         # mapper of {state:0} where value is offset from UTC
-        utc_shift = {state: apply_timezone_shift(STATE_TIMEZONE[state]) for state in STATE_TIMEZONE}
+        utc_shift = {state: _state_utc_offset(state) for state in STATE_TIMEZONE}
 
         df["utc_shift"] = df.State.map(utc_shift)
         df["UtcHourID"] = df.LocalHourID + df.utc_shift
@@ -930,6 +934,11 @@ class ReadServm(ReadStrategy):
 class ReadEulp(ReadStrategy):
     """Reads in End Use Load Profile data."""
 
+    # ResStock/ComStock aggregates stamp every state in EST (UTC-5), not local
+    # time: the residential night-time minimum sits at hour 6 for CA/WA, 5 for
+    # CO and 4 for TX, i.e. local 03:00 read on a single Eastern clock.
+    EST_TO_UTC_SHIFT: ClassVar[int] = 5
+
     def __init__(self, filepath: str | list[str], stock: str) -> None:
         super().__init__(filepath)
         assert stock in ("res", "com")
@@ -959,7 +968,7 @@ class ReadEulp(ReadStrategy):
         return data
 
     def _format_data(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
-        df = self._apply_timeshift(data)
+        data = self._apply_timeshift(data)
         df = self._collapse_data(data)
         df["fuel"] = df.fuel.map(
             {
@@ -988,32 +997,21 @@ class ReadEulp(ReadStrategy):
     def _extract_state(filepath: str) -> str:
         return Path(filepath).stem
 
-    @staticmethod
-    def _apply_timeshift(data: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
-        """Raw EULP given in EST. Shift data by in local state time."""
-        data_shifted = {}
+    @classmethod
+    def _apply_timeshift(cls, data: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+        """Roll each state's EST strip forward onto the UTC snapshots.
 
-        for state, df in data.items():
-            year = df.index[0].year
-
-            timezone = STATE_TIMEZONE[state]
-            if timezone == "US/Eastern":
-                shift = 0
-            elif timezone == "US/Central":
-                shift = 1
-            elif timezone == "US/Mountain":
-                shift = 2
-            elif timezone == "US/Pacific":
-                shift = 3
-            else:
-                logger.warning(f"Not time shifting EULP for timezone {timezone}")
-
-            shifted_index = pd.DatetimeIndex(df.index) - pd.DateOffset(hours=shift)
-            shifted_index = shifted_index.map(lambda x: x.replace(year=year))
-
-            data_shifted[state] = df.reindex(shifted_index).sort_index()
-
-        return data_shifted
+        The roll is circular, as for EER and SERVM: the last hours of December
+        31 wrap to the start of January 1 of the same profile year.
+        """
+        return {
+            state: pd.DataFrame(
+                np.roll(df.to_numpy(), cls.EST_TO_UTC_SHIFT, axis=0),
+                index=df.index,
+                columns=df.columns,
+            )
+            for state, df in data.items()
+        }
 
     @staticmethod
     def _collapse_data(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -1299,6 +1297,13 @@ class ReadCliu(ReadStrategy):
         | AL    |   1   |   1  | 0.75        |  0.82   |
         | ...   |       |      |             |         |
         | WY    |   12  |  23  | 0.80        |  0.85   |
+
+        Hours are UTC. EPRI shapes are in local time (every NERC region, Pacific
+        to Eastern, bottoms out at HR5 and peaks at HR13), so each state's
+        typical day is rotated forward by its UTC offset. The rotation wraps
+        within the day; as every day of a season repeats the same shape, this
+        only differs from a true roll in the few hours that straddle the
+        Peak/OffPeak season change.
         """
         df = data.copy()
         df["end_use"] = df["End Use"].map(self.EPRI_ENDUSE)
@@ -1326,6 +1331,7 @@ class ReadCliu(ReadStrategy):
             )  # start hour is zero
             .reset_index()
             .melt(id_vars=["state", "month", "end_use"], var_name="hour")
+            .assign(hour=lambda x: (x.hour.astype(int) + x.state.map(_state_utc_offset)) % 24)
             .pivot(index=["state", "month", "hour"], columns=["end_use"])
         )
         df.columns = df.columns.droplevel(0)  # drops name "value"

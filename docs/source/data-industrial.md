@@ -13,7 +13,7 @@ The demand methodology follows a similar methodology to that proposed by NREL in
 
 ### Demand Profiles
 
-Demand profiles are taken from the [EPRI Load Shape Library](https://loadshape.epri.com/enduse). Average profiles for on and off peak seasons at a NERC region level are extracted. EPRI does not give explicit electrical/heating/cooling/petrol demands, rather, they give demand by end-use. We manually group these into heating and electrical load. A sample of these profiles is given in the figure below.
+Demand profiles are taken from the [EPRI Load Shape Library](https://loadshape.epri.com/enduse). Average profiles for on and off peak seasons at a NERC region level are extracted. EPRI does not give explicit electrical/heating/cooling/petrol demands, rather, they give demand by end-use. We manually group these into heating and electrical load. EPRI shapes are hourly typical days in **local time** (every NERC region, Pacific to Eastern, bottoms out at HR5 and peaks at HR13), so each state's typical day is rotated forward by its UTC offset onto the model's UTC snapshots (see [Temporal structure](./model-components.md#temporal-structure)). The rotation wraps within the day, which only differs from a continuous shift in the few hours that straddle the Peak/OffPeak season change. A sample of these profiles is given in the figure below.
 
 :::{figure} _static/industry/profiles.png
 :name: load-profile
