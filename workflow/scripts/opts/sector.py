@@ -4,7 +4,7 @@ from typing import Any
 import pandas as pd
 import pypsa
 import xarray as xr
-from constants import NG_MWH_2_MMCF
+from constants import HOURS_PER_YEAR, NG_MWH_2_MMCF
 from eia import Trade
 
 logger = logging.getLogger(__name__)
@@ -347,9 +347,13 @@ def add_ng_import_export_limits(n, config):
 
     def _format_data(
         prod: pd.DataFrame,
+        year: int,
         link_suffix: str | None = None,
     ) -> pd.DataFrame:
-        df = prod.copy()
+        # EIA returns the year before the data year as well; keep one annual
+        # value per flow, the latest one up to the data year
+        df = prod[prod.index <= year].sort_index()
+        df = df[~df.state.duplicated(keep="last")].copy()
         df["link"] = df.state.map(_format_link_name)
         if link_suffix:
             df["link"] = df.link + link_suffix
@@ -363,7 +367,7 @@ def add_ng_import_export_limits(n, config):
         """Sets gas import limit over each year."""
         assert constraint in ("max", "min")
 
-        if not multiplier:
+        if multiplier is None:
             multiplier = 1
 
         weights = n.snapshot_weightings.objective
@@ -371,9 +375,11 @@ def add_ng_import_export_limits(n, config):
         links = n.links[(n.links.carrier == "gas trade") & (n.links.bus0.str.endswith(" gas trade"))].index.to_list()
 
         for year in n.investment_periods:
+            # the EIA volumes are annual; scale them to the hours modelled in the period
+            year_fraction = weights.loc[year].sum() / HOURS_PER_YEAR
             for link in links:
                 try:
-                    rhs = data.at[link, "rhs"] * multiplier
+                    rhs = data.at[link, "rhs"] * multiplier * year_fraction
                 except KeyError:
                     # logger.warning(f"Can not set gas import limit for {link}")
                     continue
@@ -394,7 +400,7 @@ def add_ng_import_export_limits(n, config):
         """Sets maximum export limit over the year."""
         assert constraint in ("max", "min")
 
-        if not multiplier:
+        if multiplier is None:
             multiplier = 1
 
         weights = n.snapshot_weightings.objective
@@ -402,9 +408,11 @@ def add_ng_import_export_limits(n, config):
         links = n.links[(n.links.carrier == "gas trade") & (n.links.bus0.str.endswith(" gas"))].index.to_list()
 
         for year in n.investment_periods:
+            # the EIA volumes are annual; scale them to the hours modelled in the period
+            year_fraction = weights.loc[year].sum() / HOURS_PER_YEAR
             for link in links:
                 try:
-                    rhs = data.at[link, "rhs"] * multiplier
+                    rhs = data.at[link, "rhs"] * multiplier * year_fraction
                 except KeyError:
                     # logger.warning(f"Can not set gas import limit for {link}")
                     continue
@@ -455,7 +463,7 @@ def add_ng_import_export_limits(n, config):
     # add domestic limits
 
     trade = Trade("gas", False, "exports", year, api).get_data()
-    trade = _format_data(trade, " trade")
+    trade = _format_data(trade, year, " trade")
 
     add_import_limits(n, trade, "min", import_min)
     add_export_limits(n, trade, "min", export_min)
@@ -468,7 +476,7 @@ def add_ng_import_export_limits(n, config):
     # add international limits
 
     trade = Trade("gas", True, "exports", year, api).get_data()
-    trade = _format_data(trade, " trade")
+    trade = _format_data(trade, year, " trade")
 
     add_import_limits(n, trade, "min", import_min)
     add_export_limits(n, trade, "min", export_min)
