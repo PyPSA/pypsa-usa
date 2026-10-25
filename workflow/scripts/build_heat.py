@@ -1028,15 +1028,17 @@ def add_service_water_store(
     if not standing_loss:
         standing_loss = 0
 
+    # the tank cost is per MWh of heat, while the store holds the fuel ahead of the heater
+    tank_capex = capex_per_input(costs, cost_name)
     if simple_storage:
         if not n_hours:
             logger.info("Setting water storage capacity costs to 2 hours")
             n_hours = 2
-        link_capex = costs.at[cost_name, "capital_cost"] / n_hours
+        link_capex = tank_capex / n_hours
         store_capex = 0
     else:
         link_capex = 0
-        store_capex = costs.at[cost_name, "capital_cost"]
+        store_capex = tank_capex
 
     lifetime = (costs.at[cost_name, "lifetime"],)
     build_year = n.investment_periods[0]

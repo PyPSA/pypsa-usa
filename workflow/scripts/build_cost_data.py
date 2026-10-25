@@ -126,6 +126,20 @@ def match_technology(row, tech_dict):
     return None
 
 
+# Temperature rise (K) of the water in a storage water heater, from the DOE test
+# procedures behind the EIA efficiencies: 58 -> 125 F for residential units (UEF,
+# 10 CFR 430 Subpart B, Appendix E) and 70 -> 140 F for commercial units
+# (thermal efficiency, 10 CFR 431.106).
+WATER_HEATER_DELTA_T = {"Residential": 67 * 5 / 9, "Commercial": 70 * 5 / 9}
+KJ_PER_GALLON_KELVIN = 3.785 * 4.186  # 3.785 kg of water per gallon, cp of 4.186 kJ/kg/K
+
+
+def gallon_cost_factor(technology: pd.Series) -> pd.Series:
+    """USD/gal -> USD/MWh of heat a water heater tank holds across its test temperature rise."""
+    delta_t = technology.str.split().str[0].map(WATER_HEATER_DELTA_T)
+    return 3.6e6 / (KJ_PER_GALLON_KELVIN * delta_t)
+
+
 def get_sector_costs(
     efs_tech_costs: str,
     efs_icev_costs: str,
@@ -136,12 +150,10 @@ def get_sector_costs(
     """Gets end-use tech costs for sector coupling studies."""
 
     def correct_units(df: pd.DataFrame) -> pd.DataFrame:
-        # USD/gal -> USD/MWh (water storage)
-        # assume cp = 4.186 kJ/kg/C
-        # (USD / gal) * (1 gal / 3.75 liter) * (1L / 1 kg H2O) = 0.267 USD / kg water
-        # (0.267 USD / kg) * (1 / 4.186 kJ/kg/C) * (1 / 1C) = 0.0637 USD / kJ
-        # (0.0637 USD / kJ) * (1000 kJ / 1 MJ) * (3600sec / 1hr) = 229335 USD / MWh
-        df.loc[df.unit.str.contains("USD/gal"), "value"] *= 229335
+        gallons = df.unit.str.contains("USD/gal")
+        factor = gallon_cost_factor(df.technology[gallons])
+        assert factor.notna().all(), "No water heater temperature rise for a USD/gal cost"
+        df.loc[gallons, "value"] *= factor.to_numpy()
         df.unit = df.unit.str.replace("USD/gal", "USD/MWh")
 
         df.unit = df.unit.str.replace("$/", "USD/")
