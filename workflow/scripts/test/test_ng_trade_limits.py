@@ -41,9 +41,14 @@ class FakeTrade:
         self.international = international
 
     def get_data(self):
-        rows = [] if self.international else [
-            (period, state, value) for state, by_year in self.volumes.items() for period, value in by_year.items()
-        ]
+        """Annual volumes in the shape eia.Trade returns: indexed by period, one row per flow and year."""
+        rows = (
+            []
+            if self.international
+            else [
+                (period, state, value) for state, by_year in self.volumes.items() for period, value in by_year.items()
+            ]
+        )
         df = pd.DataFrame(rows, columns=["period", "state", "value"]).set_index("period")
         df["series-description"] = ""
         df["units"] = "MMCF"
