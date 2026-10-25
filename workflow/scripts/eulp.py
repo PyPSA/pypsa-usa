@@ -3,7 +3,7 @@ Holds data processing class for NREL End Use Load Profiles.
 
  See the <https://data.openei.org/submissions/4520>`_ (End Use Load Profile) data description for further information on the data
 
-See `retrieve_eulp` rule for the data extraction
+See `retrieve_eulp` rule for the data extraction and `build_eulp_loads` for the state aggregation
 """
 
 from typing import ClassVar
@@ -14,23 +14,34 @@ from matplotlib.axes import Axes
 
 class Eulp:
     """
-    End use by sector.
+    End use loads of one ResStock or ComStock building type, hourly in MWh.
 
     The groups are:
-    - electric -> end use electricity
-    - cooling -> end use space cooling
-    - heat -> end use space and water cooling
-    - space_heat -> end use space heating
-    - water_heat -> end use water heating
+    - electricity -> end use electricity, other than space or water heating and cooling
+    - heating -> useful space and water heating
+    - space_heating -> useful space heating
+    - water_heating -> useful water heating
+    - cooling -> useful space cooling
+
+    Heating and cooling are useful energy because the service sector supplies
+    them through furnaces, heat pumps and air conditioners at their efficiency.
+    ResStock reports the delivered loads directly. ComStock reports only final
+    energy per fuel, which is converted with state-level useful-energy factors
+    (see ``build_eulp_loads.py``). Gas, propane and fuel-oil end uses that are
+    neither space nor water heating (cooking, drying, fireplaces, pools) are
+    not modelled.
     """
 
-    _elec_group: ClassVar[list[str]] = [
-        # residential
+    KBTU_TO_KWH: ClassVar[float] = 0.29307107
+
+    _res_elec_group: ClassVar[list[str]] = [
         "out.electricity.ceiling_fan.energy_consumption.kwh",
         "out.electricity.clothes_dryer.energy_consumption.kwh",
         "out.electricity.clothes_washer.energy_consumption.kwh",
+        "out.electricity.cooling_fans_pumps.energy_consumption.kwh",
         "out.electricity.dishwasher.energy_consumption.kwh",
         "out.electricity.freezer.energy_consumption.kwh",
+        "out.electricity.heating_fans_pumps.energy_consumption.kwh",
         "out.electricity.lighting_exterior.energy_consumption.kwh",
         "out.electricity.lighting_garage.energy_consumption.kwh",
         "out.electricity.lighting_interior.energy_consumption.kwh",
@@ -38,13 +49,22 @@ class Eulp:
         "out.electricity.permanent_spa_heat.energy_consumption.kwh",
         "out.electricity.permanent_spa_pump.energy_consumption.kwh",
         "out.electricity.plug_loads.energy_consumption.kwh",
+        "out.electricity.pool_heater.energy_consumption.kwh",
         "out.electricity.pool_pump.energy_consumption.kwh",
         "out.electricity.pv.energy_consumption.kwh",
         "out.electricity.range_oven.energy_consumption.kwh",
         "out.electricity.refrigerator.energy_consumption.kwh",
         "out.electricity.well_pump.energy_consumption.kwh",
-        "out.natural_gas.lighting.energy_consumption.kwh",
-        # commercial
+    ]
+
+    # delivered loads, in kBtu
+    _res_useful_groups: ClassVar[dict[str, list[str]]] = {
+        "space_heating": ["out.load.heating.energy_delivered.kbtu"],
+        "water_heating": ["out.load.hot_water.energy_delivered.kbtu"],
+        "cooling": ["out.load.cooling.energy_delivered.kbtu"],
+    }
+
+    _com_elec_group: ClassVar[list[str]] = [
         "out.electricity.exterior_lighting.energy_consumption.kwh",
         "out.electricity.fans.energy_consumption.kwh",
         "out.electricity.heat_recovery.energy_consumption.kwh",
@@ -53,106 +73,45 @@ class Eulp:
         "out.electricity.interior_lighting.energy_consumption.kwh",
         "out.electricity.pumps.energy_consumption.kwh",
         "out.electricity.refrigeration.energy_consumption.kwh",
-        "out.electricity.water_systems.energy_consumption.kwh",
     ]
 
-    _heat_group: ClassVar[list[str]] = [
-        # residential
-        "out.electricity.heating.energy_consumption.kwh",
-        "out.electricity.heating_fans_pumps.energy_consumption.kwh",
-        "out.electricity.heating_hp_bkup.energy_consumption.kwh",
-        "out.electricity.heating_hp_bkup_fa.energy_consumption.kwh",
-        "out.electricity.hot_water.energy_consumption.kwh",
-        "out.electricity.pool_heater.energy_consumption.kwh",
-        "out.natural_gas.heating.energy_consumption.kwh",
-        "out.natural_gas.heating_hp_bkup.energy_consumption.kwh",
-        "out.natural_gas.clothes_dryer.energy_consumption.kwh",
-        "out.natural_gas.fireplace.energy_consumption.kwh",
-        "out.natural_gas.grill.energy_consumption.kwh",
-        "out.natural_gas.hot_water.energy_consumption.kwh",
-        "out.natural_gas.range_oven.energy_consumption.kwh",
-        "out.propane.clothes_dryer.energy_consumption.kwh",
-        "out.propane.heating.energy_consumption.kwh",
-        "out.propane.heating_hp_bkup.energy_consumption.kwh",
-        "out.propane.hot_water.energy_consumption.kwh",
-        "out.propane.range_oven.energy_consumption.kwh",
-        "out.fuel_oil.heating.energy_consumption.kwh",
-        "out.fuel_oil.heating_hp_bkup.energy_consumption.kwh",
-        "out.fuel_oil.hot_water.energy_consumption.kwh",
-        "out.natural_gas.permanent_spa_heat.energy_consumption.kwh",
-        "out.natural_gas.pool_heater.energy_consumption.kwh",
-        # commercial
-        "out.district_heating.heating.energy_consumption.kwh",
-        "out.district_heating.water_systems.energy_consumption.kwh",
-        "out.natural_gas.heating.energy_consumption.kwh",
-        "out.natural_gas.interior_equipment.energy_consumption.kwh",
-        "out.natural_gas.water_systems.energy_consumption.kwh",
-        "out.other_fuel.heating.energy_consumption.kwh",
-        "out.other_fuel.water_systems.energy_consumption.kwh",
-        "out.electricity.heating.energy_consumption.kwh",
-    ]
-
-    _space_heat_group: ClassVar[list[str]] = [
-        # residential
-        "out.electricity.heating.energy_consumption.kwh",
-        "out.electricity.heating_fans_pumps.energy_consumption.kwh",
-        "out.electricity.heating_hp_bkup.energy_consumption.kwh",
-        "out.electricity.heating_hp_bkup_fa.energy_consumption.kwh",
-        "out.natural_gas.heating.energy_consumption.kwh",
-        "out.natural_gas.heating_hp_bkup.energy_consumption.kwh",
-        "out.natural_gas.clothes_dryer.energy_consumption.kwh",
-        "out.natural_gas.fireplace.energy_consumption.kwh",
-        "out.natural_gas.grill.energy_consumption.kwh",
-        "out.natural_gas.range_oven.energy_consumption.kwh",
-        "out.propane.clothes_dryer.energy_consumption.kwh",
-        "out.propane.heating.energy_consumption.kwh",
-        "out.propane.heating_hp_bkup.energy_consumption.kwh",
-        "out.propane.range_oven.energy_consumption.kwh",
-        "out.fuel_oil.heating.energy_consumption.kwh",
-        "out.fuel_oil.heating_hp_bkup.energy_consumption.kwh",
-        # commercial
-        "out.district_heating.heating.energy_consumption.kwh",
-        "out.district_heating.water_systems.energy_consumption.kwh",
-        "out.natural_gas.heating.energy_consumption.kwh",
-        "out.natural_gas.interior_equipment.energy_consumption.kwh",
-        "out.natural_gas.water_systems.energy_consumption.kwh",
-        "out.other_fuel.heating.energy_consumption.kwh",
-        "out.other_fuel.water_systems.energy_consumption.kwh",
-        "out.electricity.heating.energy_consumption.kwh",
-    ]
-
-    _water_heat_group: ClassVar[list[str]] = [
-        # residential
-        "out.electricity.hot_water.energy_consumption.kwh",
-        "out.electricity.pool_heater.energy_consumption.kwh",
-        "out.natural_gas.hot_water.energy_consumption.kwh",
-        "out.propane.hot_water.energy_consumption.kwh",
-        "out.fuel_oil.hot_water.energy_consumption.kwh",
-        "out.natural_gas.permanent_spa_heat.energy_consumption.kwh",
-        "out.natural_gas.pool_heater.energy_consumption.kwh",
-        # commercial
-        "out.district_heating.water_systems.energy_consumption.kwh",
-        "out.natural_gas.water_systems.energy_consumption.kwh",
-        "out.other_fuel.water_systems.energy_consumption.kwh",
-    ]
-
-    _cool_group: ClassVar[list[str]] = [
-        # residential
-        "out.electricity.cooling.energy_consumption.kwh",
-        "out.electricity.cooling_fans_pumps.energy_consumption.kwh",
-        # commercial
-        "out.electricity.cooling.energy_consumption.kwh,",
-        "out.district_heating.cooling.energy_consumption.kwh",
-        "out.other_fuel.cooling.energy_consumption.kwh",
-        "out.district_cooling.cooling.energy_consumption.kwh",
-    ]
+    # final energy, weighted by the useful-energy factors
+    _com_useful_groups: ClassVar[dict[str, list[str]]] = {
+        "space_heating": [
+            "out.district_heating.heating.energy_consumption.kwh",
+            "out.electricity.heating.energy_consumption.kwh",
+            "out.natural_gas.heating.energy_consumption.kwh",
+            "out.other_fuel.heating.energy_consumption.kwh",
+        ],
+        "water_heating": [
+            "out.district_heating.water_systems.energy_consumption.kwh",
+            "out.electricity.water_systems.energy_consumption.kwh",
+            "out.natural_gas.water_systems.energy_consumption.kwh",
+            "out.other_fuel.water_systems.energy_consumption.kwh",
+        ],
+        "cooling": [
+            "out.district_cooling.cooling.energy_consumption.kwh",
+            "out.district_heating.cooling.energy_consumption.kwh",
+            "out.electricity.cooling.energy_consumption.kwh",
+            "out.other_fuel.cooling.energy_consumption.kwh",
+        ],
+    }
 
     def __init__(
         self,
         filepath: str | None = None,
         df: pd.DataFrame | None = None,
+        stock: str | None = None,
+        factors: pd.Series | None = None,
     ) -> None:
         if filepath:
+            assert stock in ("res", "com"), "stock must be 'res' or 'com' when reading a file"
+            if stock == "com":
+                needed = {c for cols in self._com_useful_groups.values() for c in cols}
+                missing = needed.difference(factors.index if factors is not None else [])
+                assert not missing, f"ComStock useful-energy factors missing for {sorted(missing)}"
+            self.stock = stock
+            self.factors = factors
             df = self._read_data(filepath)
             df = self._aggregate_data(df)
             self.data = self._resample_data(df)
@@ -226,24 +185,38 @@ class Eulp:
         return resampled.sort_index()
 
     def _aggregate_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        def aggregate_sector(df: pd.DataFrame, columns: list[str]) -> pd.Series:
+        def aggregate_sector(df: pd.DataFrame, columns: list[str], weights: pd.Series | None = None) -> pd.Series:
             sector_columns = [x for x in columns if x in df.columns.to_list()]
-            return df[sector_columns].sum(axis=1)
+            if weights is None:
+                return df[sector_columns].sum(axis=1)
+            return df[sector_columns].mul(weights[sector_columns]).sum(axis=1)
 
-        dfs = []
-        sectors = {
-            "electricity": self._elec_group,
-            "heating": self._heat_group,
-            "space_heating": self._space_heat_group,
-            "water_heating": self._water_heat_group,
-            "cooling": self._cool_group,
-        }
-        for sector, sector_cols in sectors.items():
-            sector_load = aggregate_sector(df, sector_cols)
-            sector_load.name = sector
-            dfs.append(sector_load)
+        if self.stock == "res":
+            delivered = {c for cols in self._res_useful_groups.values() for c in cols}
+            missing = delivered.difference(df.columns)
+            assert not missing, f"ResStock file has no delivered-load columns {sorted(missing)}"
+            # delivered loads carry small negative values (simulation noise)
+            useful = {
+                end_use: aggregate_sector(df, cols).clip(lower=0).mul(self.KBTU_TO_KWH)
+                for end_use, cols in self._res_useful_groups.items()
+            }
+            electricity = aggregate_sector(df, self._res_elec_group)
+        else:
+            useful = {
+                end_use: aggregate_sector(df, cols, self.factors) for end_use, cols in self._com_useful_groups.items()
+            }
+            electricity = aggregate_sector(df, self._com_elec_group)
 
-        return pd.concat(dfs, axis=1).mul(1e-3)  # kwh -> MWh
+        data = pd.DataFrame(
+            {
+                "electricity": electricity,
+                "heating": useful["space_heating"] + useful["water_heating"],
+                "space_heating": useful["space_heating"],
+                "water_heating": useful["water_heating"],
+                "cooling": useful["cooling"],
+            },
+        )
+        return data.mul(1e-3)  # kwh -> MWh
 
     def plot(
         self,
@@ -273,4 +246,4 @@ class Eulp:
 
 
 if __name__ == "__main__":
-    print(Eulp("./../data/eulp/res/TX/mobile_home.csv"))
+    print(Eulp("./../data/eulp/res/TX/mobile_home.csv", stock="res"))

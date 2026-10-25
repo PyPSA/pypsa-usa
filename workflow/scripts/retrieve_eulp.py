@@ -15,7 +15,6 @@ from typing import ClassVar
 
 import requests
 from _helpers import configure_logging
-from eulp import Eulp
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +54,21 @@ class OediDownload:
         self.stock = stock
         self.release = 2 if self.stock == "res" else 1
 
+    @property
+    def data_folder(self) -> str:
+        """Release folder the timeseries and metadata are read from."""
+        model = "resstock" if self.stock == "res" else "comstock"
+        return f"{self.root}/{model}_amy2018_release_{self.release}"
+
     def _get_html_folder(self, state: str, upgrade: int | None = 0) -> str:
         """Gets html of folder."""
-        if self.stock == "res":
-            data_folder = f"resstock_amy2018_release_{self.release}"
-        elif self.stock == "com":
-            data_folder = f"comstock_amy2018_release_{self.release}"
+        return f"{self.data_folder}/timeseries_aggregates/by_state/upgrade={upgrade}/state={state.upper()}"
 
-        return f"{self.root}/{data_folder}/timeseries_aggregates/by_state/upgrade={upgrade}/state={state.upper()}"
+    def download_metadata(self, state: str, save: str) -> None:
+        """Download the characteristics and annual results of the state's baseline buildings."""
+        state = state.upper()
+        folder = f"{self.data_folder}/metadata_and_annual_results/by_state/state={state}/parquet"
+        self._request_data(f"{folder}/{state}_baseline_metadata_and_annual_results.parquet", save)
 
     def _get_htmls(
         self,
@@ -142,24 +148,5 @@ if __name__ == "__main__":
 
     oedi = OediDownload(stock)
 
-    # download all requested data
+    # download all requested data; build_eulp_loads aggregates the building types
     oedi.download_data(state, buildings, save_dir)
-
-    # collapse into a single file
-    if stock == "res":
-        files_to_combine = oedi.res_files
-    elif stock == "com":
-        files_to_combine = oedi.com_files
-    else:
-        raise NotImplementedError
-
-    data_to_sum = []
-    for f_num, building_name in enumerate(files_to_combine):
-        f_name = f"{save_dir}/{state}/{building_name}.csv"
-        if f_num == 0:
-            start_data = Eulp(f_name)
-        else:
-            data_to_sum.append(Eulp(f_name))
-
-    summed_data = sum(data_to_sum, start_data)
-    summed_data.to_csv(f"{save_dir}/{state}.csv")

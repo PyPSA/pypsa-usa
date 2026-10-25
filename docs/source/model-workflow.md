@@ -157,6 +157,7 @@ on first use:
 | `retrieve_nrel_exclusion_artifact` | NREL reV-based land-access exclusion layers |
 | `retrieve_godeeep_cf` | One compressed GODEEEP capacity-factor file, from the local mirror or Zenodo record declared in `godeeep_cf_registry` (godeeep runs) |
 | `retrieve_res_eulp` / `retrieve_com_eulp` | NREL End-Use Load Profiles (sector runs) |
+| `retrieve_comstock_metadata` | ComStock building characteristics and annual results, for converting commercial loads to useful energy (sector runs) |
 | `retrieve_sector_databundle` | Sector-coupling data bundle (sector runs) |
 | `retrieve_seismic_risk_mask` | Seismic-risk exclusion mask (EGS runs) |
 

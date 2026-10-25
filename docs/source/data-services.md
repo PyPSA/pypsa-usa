@@ -41,6 +41,15 @@ Commercial sector demand in California. (a) Yearly load profile resampled to dai
 End-use load profiles are exogenously defined, but grid level load profiles are endogenous. For example, if the model may choose to replace furnaces with heat-pumps to supply heat demand. In this case, the total electrical load on the grid increases, but the end-use electrical load profile remains the same.
 :::
 
+#### Useful Energy
+
+Space heating, water heating and cooling loads are **useful energy**: the heat or cooling delivered to the building, not the fuel or electricity consumed to produce it. Furnaces, heat pumps and air conditioners supply these loads through their efficiency or COP, so a final-energy load would count the conversion twice. Electricity loads stay final energy. The `build_eulp_loads` rule aggregates the building types of each state:
+
+- **Residential**: ResStock reports the delivered loads directly (`out.load.heating`, `out.load.hot_water` and `out.load.cooling`, `energy_delivered`). Heating and cooling fans and pumps count as electricity.
+- **Commercial**: ComStock reports final energy per fuel only. Each fuel's profile is multiplied by a state-level useful-energy factor (useful over final energy), summed over the state's baseline buildings from the equipment loads, energies and efficiencies in the ComStock annual results (`retrieve_comstock_metadata`). Boilers and fuel-fired coils carry their simulated efficiency, heat pumps, DX units and chillers their COP, electric resistance and district energy a factor of one, and fuel-fired service water heaters 0.80. The factor is an annual, stock-weighted value, so temperature-dependent COPs are not resolved within the year. Electric service water heating is part of the water heating load.
+
+Gas, propane and fuel-oil end uses that are neither space nor water heating, such as cooking, clothes drying, fireplaces and pool heaters, are not modelled; their electric counterparts are part of the electricity load.
+
 #### Disaggregation
 
 Demand disaggregation is a two step process, with each end-use fuel being disaggregated following the same method.
