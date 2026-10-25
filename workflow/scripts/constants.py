@@ -992,6 +992,18 @@ STATE_2_TIMEZONE = {
     "WY": "US/Mountain",
 }
 
+#: Hours each timezone's standard time runs behind UTC. Snapshots are UTC with
+#: no daylight saving, so a reader holding local-standard-time data rolls it
+#: forward by this many hours.
+UTC_OFFSET_HOURS: dict[str, int] = {
+    "US/Eastern": 5,
+    "US/Central": 6,
+    "US/Mountain": 7,
+    "US/Pacific": 8,
+    "US/Alaska": 9,
+    "Pacific/Honolulu": 10,
+}
+
 
 class Month(Enum):
     """Enums for Month of Year."""

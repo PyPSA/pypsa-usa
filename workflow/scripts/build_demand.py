@@ -28,18 +28,7 @@ STATE_2_CODE = const.STATE_2_CODE
 CODE_2_STATE = const.CODE_2_STATE
 STATE_TIMEZONE = const.STATE_2_TIMEZONE
 TBTU_2_MWH = const.TBTU_2_MWH
-
-#: Hours each timezone's standard time runs behind UTC. Snapshots are UTC with
-#: no daylight saving, so a reader holding local-standard-time data rolls it
-#: forward by this many hours.
-UTC_OFFSET_HOURS: dict[str, int] = {
-    "US/Eastern": 5,
-    "US/Central": 6,
-    "US/Mountain": 7,
-    "US/Pacific": 8,
-    "US/Alaska": 9,
-    "Pacific/Honolulu": 10,
-}
+UTC_OFFSET_HOURS = const.UTC_OFFSET_HOURS
 
 
 def _state_utc_offset(state: str) -> int:
