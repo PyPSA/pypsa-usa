@@ -129,7 +129,7 @@ def add_sector_co2_constraints(n, config):
             logger.warning(log_statement)
             return
 
-        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=n.snapshots[-1]).sum(dim="Store")
+        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=n.snapshots[-1]).sum(dim="name")
         rhs = value  # value in T CO2
 
         n.model.add_constraints(lhs <= rhs, name=name)
@@ -153,7 +153,7 @@ def add_sector_co2_constraints(n, config):
             logger.warning(f"No co2 stores found for USA {year} {sector}")
             return
 
-        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=n.snapshots[-1]).sum(dim="Store")
+        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=n.snapshots[-1]).sum(dim="name")
         rhs = value  # value in T CO2
 
         n.model.add_constraints(lhs <= rhs, name=name)
