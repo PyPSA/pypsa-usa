@@ -96,6 +96,8 @@ The following technologies are available to be modelled within the service secto
    :file: datatables/service_sector_techs.csv
 ```
 
+Technologies are PyPSA links whose capacity (`p_nom`) is on the input bus: fuel for furnaces, electricity for heat pumps and air conditioners. The EIA rates air conditioners and heat pumps by cooling capacity (tons), so their capital cost per MW of rated capacity is multiplied by the rated efficiency to give a cost per MW of input (`build_heat.capex_per_input`); the industrial direct-firing heaters and heat pumps, rated on heat output by the Danish Energy Agency, are converted the same way. EIA furnaces are rated on input capacity and are used as given.
+
 ### Heat Pumps
 
 Both air-source heat pumps (ASHP) and ground-source heat pumps (GSHP) can be modelled. ASHPs are used to meet urban heating/cooling loads, while GSHP are used to meet rural heating/cooling loads. This sector will describe how the HP coefficient of performances (COP) are exogenously calculated, how HPs are modelled to meet both heating and cooling loads, and how to constrain GSHP investment if aggregating urban and rural areas.

@@ -187,6 +187,17 @@ def get_link_marginal_costs(
     return pd.concat(dfs)
 
 
+def capex_per_input(costs: pd.DataFrame, costs_name: str) -> float:
+    """Capital cost per MW of link input (``p_nom``) for a technology rated on its output.
+
+    EIA rates air conditioners and heat pumps by cooling capacity (tons) and
+    the DEA rates industrial heaters by heat output, while a link's ``p_nom``
+    is on its input bus; one MW of input carries ``efficiency`` MW of output.
+    EIA furnaces are rated on input capacity and need no conversion.
+    """
+    return costs.at[costs_name, "capital_cost"] * costs.at[costs_name, "efficiency"]
+
+
 def add_industrial_heat(
     n: pypsa.Network,
     sector: str,
@@ -426,7 +437,7 @@ def add_air_cons(
         case _:
             raise NotImplementedError
 
-    capex = costs.at[costs_name, "capital_cost"].round(3)
+    capex = round(capex_per_input(costs, costs_name), 3)
     efficiency = costs.at[costs_name, "efficiency"].round(3)
     lifetime = costs.at[costs_name, "lifetime"]
     build_year = n.investment_periods[0]
@@ -1178,7 +1189,7 @@ def add_service_heat_pumps(
     else:
         efficiency = costs.at[costs_name, "efficiency"].round(3)
 
-    capex = round(costs.at[costs_name, "capital_cost"] * 0.7, 3)
+    capex = round(capex_per_input(costs, costs_name) * 0.7, 3)
     lifetime = costs.at[costs_name, "lifetime"]
     build_year = n.investment_periods[0]
 
@@ -1205,7 +1216,7 @@ def add_industrial_gas_furnace(
 ) -> None:
     sector = SecNames.INDUSTRY.value
 
-    capex = costs.at["direct firing gas", "capital_cost"].round(3)
+    capex = round(capex_per_input(costs, "direct firing gas"), 3)
     efficiency = costs.at["direct firing gas", "efficiency"].round(3)
     lifetime = costs.at["direct firing gas", "lifetime"]
     build_year = n.investment_periods[0]
@@ -1265,7 +1276,7 @@ def add_industrial_coal_furnace(
     # same source as tech-data, but its just not in latest version
 
     # capex approximated based on NG to incorporate fixed costs
-    capex = costs.at["direct firing coal", "capital_cost"].round(3)
+    capex = round(capex_per_input(costs, "direct firing coal"), 3)
     efficiency = costs.at["direct firing coal", "efficiency"].round(3)
     lifetime = costs.at["direct firing coal", "lifetime"].round(3)
     build_year = n.investment_periods[0]
@@ -1318,7 +1329,7 @@ def add_indusrial_heat_pump(
 ) -> None:
     sector = SecNames.INDUSTRY.value
 
-    capex = costs.at["industrial heat pump high temperature", "capital_cost"].round(3)
+    capex = round(capex_per_input(costs, "industrial heat pump high temperature"), 3)
     efficiency = costs.at["industrial heat pump high temperature", "efficiency"].round(
         3,
     )
