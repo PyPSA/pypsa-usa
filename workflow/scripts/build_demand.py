@@ -19,6 +19,7 @@ import pandas as pd
 import pypsa
 import xarray as xr
 from _helpers import configure_logging, get_multiindex_snapshots
+from build_servm_load_weights import compose_busmaps
 from constants_sector import FIPS_2_STATE, NAICS, VMT_UNIT_CONVERSION, DemandFuels
 from eia import EnergyDemand, TransportationDemand
 
@@ -2380,16 +2381,38 @@ class WriteServm(WritePopulation):
         return demand.dot(weights)
 
 
+def load_base_buses(network: str, busmap_b: str, busmap_s: str) -> pd.DataFrame:
+    """
+    County and demand weight of every base-network bus, plus its cluster bus.
+
+    ``aggregate_to_substations`` drops ``county`` from the buses, and a cluster
+    bus spans several counties anyway, so the county is read from
+    ``elec_base_network.nc`` and the two busmaps are composed to find the
+    cluster bus (column ``bus``) each base bus ends up in.
+    """
+    buses = pypsa.Network(network).buses[["county", "load_weight"]].copy()
+    busmap = compose_busmaps(
+        pd.read_csv(busmap_b, index_col=0, dtype=str).iloc[:, 0],
+        pd.read_csv(busmap_s, index_col=0, dtype=str).iloc[:, 0],
+    )
+    buses["bus"] = buses.index.astype(str).map(busmap)
+    return buses
+
+
 class WriteIndustrial(WriteStrategy):
     """
     Based on county level energy use from 2014.
 
     https://data.nrel.gov/submissions/97
+
+    Counties are matched to the base-network buses (``base_buses``, see
+    :func:`load_base_buses`), and the factors are summed onto the cluster buses.
     """
 
-    def __init__(self, n: pypsa.Network, filepath: str) -> None:
+    def __init__(self, n: pypsa.Network, filepath: str, base_buses: pd.DataFrame) -> None:
         super().__init__(n)
         self.data = self._read_data(filepath)
+        self.base_buses = base_buses
 
     def _get_load_allocation_factor(self, zone: str, **kwargs) -> pd.Series:
         logger.info("Setting load allocation factors based on industrial demand")
@@ -2423,6 +2446,15 @@ class WriteIndustrial(WriteStrategy):
             dfs.append(self.get_laf_per_bus(laf_per_county, county, buses))
 
         laf_load_buses = pd.concat(dfs)
+
+        # sum the base-bus factors onto the cluster bus each base bus maps to
+        cluster_bus = self.base_buses.bus.reindex(laf_load_buses.index)
+        if cluster_bus.isna().any():
+            logger.warning(
+                "%d industrial load buses have no cluster bus; their allocation factors are dropped.",
+                int(cluster_bus.isna().sum()),
+            )
+        laf_load_buses = laf_load_buses.groupby(cluster_bus).sum()
 
         laf_all_buses = pd.Series(index=self.n.buses.index).fillna(0)
         laf_all_buses[laf_load_buses.index] = laf_load_buses
@@ -2480,11 +2512,10 @@ class WriteIndustrial(WriteStrategy):
         """
         Gets a list of load buses, indexed by county.
 
-        Note, load buses are those carrying demand-allocation weight
-        (``n.buses.load_weight``).
+        Note, load buses are the base-network buses carrying demand-allocation
+        weight (``load_weight``).
         """
-        n = self.n
-        buses_per_county = n.buses[["load_weight", "county"]].fillna(0)
+        buses_per_county = self.base_buses[["load_weight", "county"]].fillna(0)
         buses_per_county = buses_per_county[buses_per_county.load_weight != 0]
 
         mapper = {}
@@ -3184,7 +3215,12 @@ if __name__ == "__main__":
         writer = WritePopulation(n)
     elif demand_disaggregation == "cliu":
         cliu_file = snakemake.input.dissagregate_files
-        writer = WriteIndustrial(n, cliu_file)
+        base_buses = load_base_buses(
+            snakemake.input.base_network,
+            snakemake.input.busmap_b,
+            snakemake.input.busmap_s,
+        )
+        writer = WriteIndustrial(n, cliu_file, base_buses)
     elif demand_disaggregation == "servm":
         writer = WriteServm(n, snakemake.input.dissagregate_files)
     else:
