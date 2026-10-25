@@ -13,7 +13,7 @@ Forecasted demand is sourced from the NREL Electrification Futures Study (EFS), 
 
 The EFS also provides electrification cases, with reference, medium, and high electrification cases, with slow, moderate, and rapid speeds. These scenarios can be controlled via the configuration `demand: scenario: efs_case: / efs_speed:`.
 
-EFS hours are in local standard time and are moved forward by each state's UTC offset. A state takes the single timezone listed in `STATE_2_TIMEZONE`, so a state that spans two timezones (Tennessee, Kentucky, Indiana, Florida, Idaho, Oregon, the Dakotas, ...) is up to an hour off in its minority part.
+EFS hours are in local standard time and are moved forward by each state's UTC offset. EFS lays every year on one synthetic calendar whose January 1 is a Saturday; the electricity profile keeps that calendar, so its weekends do not follow those of the weather year (`renewable_weather_years`). A state takes the single timezone listed in `STATE_2_TIMEZONE`, so a state that spans two timezones (Tennessee, Kentucky, Indiana, Florida, Idaho, Oregon, the Dakotas, ...) is up to an hour off in its minority part.
 
 A third source, selected with `profile: eer`, provides state-level hourly demand scenarios from
 the EER dataset (retrieved automatically from Zenodo). Three scenario files are available via

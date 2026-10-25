@@ -379,9 +379,18 @@ class ReadFERC714(ReadStrategy):
 class ReadEfs(ReadStrategy):
     """Reads in electrifications future study demand."""
 
-    def __init__(self, filepath: str | None = None) -> None:
+    # Every EFS year is laid on the same synthetic 8760-hour calendar, whose
+    # weekend falls on days 1-2, 8-9, ... of the year: January 1 is a Saturday
+    # whatever the year label (commercial load bottoms out on those days in
+    # every published year).
+    FIRST_WEEKDAY: ClassVar[int] = 5  # Saturday
+
+    def __init__(self, filepath: str | None = None, calendar_year: int | None = None) -> None:
         super().__init__(filepath)
         self._zone = "state"
+        # weekdays and weekends follow this year's calendar: the weather year,
+        # which the renewable and heat-pump profiles are dated by
+        self.calendar_year = calendar_year
 
     @property
     def zone(self):  # noqa: D102
@@ -423,9 +432,30 @@ class ReadEfs(ReadStrategy):
 
     def _build_snapshots(self, df: pd.DataFrame) -> pd.DataFrame:
         """Builds snapshots based on UTC time."""
+        df = self._align_weekdays(df)
         df = self._apply_timezones(df)
         df = self._build_datetime(df)
         return df.set_index("time").sort_index()
+
+    def weekday_shift_days(self) -> int:
+        """Days, within +-3, that move the EFS weekends onto the calendar year's."""
+        if not self.calendar_year:
+            return 0
+        jan_1 = pd.Timestamp(year=self.calendar_year, month=1, day=1).dayofweek
+        shift = (self.FIRST_WEEKDAY - jan_1) % 7
+        return shift - 7 if shift > 3 else shift
+
+    def _align_weekdays(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Roll each year's strip by whole days so its weekends match the calendar year.
+
+        The roll is circular within the year; seasonality moves by at most
+        three days and holidays keep their EFS position. As 365 days are not
+        whole weeks, the day where the year wraps can carry the wrong day type.
+        """
+        shift_hours = 24 * self.weekday_shift_days()
+        if shift_hours:
+            df["LocalHourID"] = (df.LocalHourID - 1 + shift_hours) % const.HOURS_PER_YEAR + 1
+        return df
 
     @staticmethod
     def _apply_timezones(df: pd.DataFrame) -> pd.DataFrame:
@@ -1047,29 +1077,30 @@ class ReadCliu(ReadStrategy):
     - https://github.com/NREL/Industry-Energy-Tool/
     """
 
-    # these are super rough and can be imporoved
-    # EPRI gives by old NERC regions, these are the mappings I used
-    # ECAR -> RFC and some MRO
-    # ERCOT -> ERCOT
-    # MAAC -> SERC and NPCC
-    # MAIN -> MRO
-    # MAPP -> SPP and some MRO
-    # WSCC -> WECC (but left seperate here)
+    # EPRI shapes are given for the pre-2006 NERC regions and WSCC sub-regions.
+    # Each contiguous state is assigned to exactly one region; a state split
+    # between regions goes to the one holding most of its load: MI (UP in MAIN),
+    # PA (west in ECAR), MO (west in SPP), MT (east in MAPP), NM (east in SPP),
+    # WY (west in NWP), NV (south in RA), TX (panhandle in SPP).
     EPRI_NERC_2_STATE: ClassVar[dict[str, list[str]]] = {
-        "ECAR": ["IL", "IN", "KY", "MI", "OH", "WI", "WV"],
+        "ECAR": ["IN", "KY", "MI", "OH", "WV"],
         "ERCOT": ["TX"],
-        "MAAC": ["MD"],
-        "MAIN": ["IA", "KS", "MN", "NE", "ND", "SD"],
-        "MAPP": ["AR", "DE", "MO", "MT", "NM", "OK"],
-        "NYPCC_NY": ["NJ", "NY"],
-        "NPCC_NE": ["CT", "ME", "MA", "NH", "PA", "RI", "VT"],
-        "SERC_STV": ["AL", "GA", "LA", "MS", "NC", "SC", "TN", "VA"],
+        "MAAC": ["DE", "MD", "NJ", "PA"],
+        "MAIN": ["IL", "MO", "WI"],
+        "MAPP": ["IA", "MN", "ND", "NE", "SD"],
+        "NYPCC_NY": ["NY"],
+        "NPCC_NE": ["CT", "MA", "ME", "NH", "RI", "VT"],
+        "SERC_STV": ["AL", "GA", "MS", "NC", "SC", "TN", "VA"],
         "SERC_FL": ["FL"],
-        "SPP": [],
-        "WSCC_NWP": ["ID", "OR", "WA"],
-        "WSCC_RA": ["AZ", "CO", "UT", "WY"],
+        "SPP": ["AR", "KS", "LA", "OK"],
+        "WSCC_NWP": ["ID", "MT", "OR", "UT", "WA"],
+        "WSCC_RA": ["AZ", "CO", "NM", "WY"],
         "WSCC_CNV": ["CA", "NV"],
     }
+
+    #: EPRI day type used for weekdays and for weekend days.
+    EPRI_WEEKDAY = "AverageWeekday"
+    EPRI_WEEKEND = "AverageWeekend"
 
     # https://www.epri.com/research/products/000000003002018167
     EPRI_SEASON_2_MONTH: ClassVar[dict[str, list[int]]] = {
@@ -1092,11 +1123,15 @@ class ReadCliu(ReadStrategy):
         epri_filepath: str | None = None,
         mecs_filepath: str | None = None,
         fips_filepath: str | None = None,
+        calendar_year: int | None = None,
     ) -> None:
         super().__init__(filepath)
         self._epri_filepath = epri_filepath
         self._mecs_filepath = mecs_filepath
         self._fips_filepath = fips_filepath
+        # weekdays and weekends follow this year's calendar: the weather year,
+        # which the renewable and heat-pump profiles are dated by
+        self._calendar_year = calendar_year if calendar_year else self.YEAR
         self._zone = "state"
 
     @property
@@ -1290,39 +1325,45 @@ class ReadCliu(ReadStrategy):
         abrv: bool = True
             Keep abreviated state name, else replace with full name
 
-        |       |       |      | electricity | heat    |
-        | state | month | hour |             |         |
-        |-------|-------|------|-------------|---------|
-        | AL    |   1   |   0  | 0.70        |  0.80   |
-        | AL    |   1   |   1  | 0.75        |  0.82   |
-        | ...   |       |      |             |         |
-        | WY    |   12  |  23  | 0.80        |  0.85   |
+        |       |       |                |      | electricity | heat    |
+        | state | month | day_type       | hour |             |         |
+        |-------|-------|----------------|------|-------------|---------|
+        | AL    |   1   | AverageWeekday |   0  | 0.70        |  0.80   |
+        | AL    |   1   | AverageWeekday |   1  | 0.75        |  0.82   |
+        | ...   |       |                |      |             |         |
+        | WY    |   12  | AverageWeekend |  23  | 0.40        |  0.45   |
 
-        Hours are UTC. EPRI shapes are in local time (every NERC region, Pacific
+        Weekend shapes are scaled against the weekday peak, so their lower
+        level is kept. Hours are UTC. EPRI shapes are in local time (every NERC region, Pacific
         to Eastern, bottoms out at HR5 and peaks at HR13), so each state's
         typical day is rotated forward by its UTC offset. The rotation wraps
         within the day; as every day of a season repeats the same shape, this
         only differs from a true roll in the few hours that straddle the
         Peak/OffPeak season change.
         """
-        df = data.copy()
+        day_types = [self.EPRI_WEEKDAY, self.EPRI_WEEKEND]
+        missing = set(day_types) - set(data["Day Type"])
+        if missing:
+            raise ValueError(
+                f"EPRI load shapes lack day type(s) {sorted(missing)}; re-run the retrieve_epri_load_shapes rule.",
+            )
+        df = data[data["Day Type"].isin(day_types)].copy()
         df["end_use"] = df["End Use"].map(self.EPRI_ENDUSE)
         df["state"] = df.Region.map(self.EPRI_NERC_2_STATE)
         df["month"] = df.Season.map(self.EPRI_SEASON_2_MONTH)
         df = (
-            df.explode("state")
+            df.rename(columns={"Day Type": "day_type"})
+            .explode("state")
             .explode("month")
             .drop(
                 columns=[
-                    "Day Type",
                     "Sector",
                     "End Use",
-                    # "Scale Multiplier",
                     "Region",
                     "Season",
                 ],
             )
-            .groupby(["state", "month", "end_use"])
+            .groupby(["state", "month", "day_type", "end_use"])
             .mean()
         )
         df = (
@@ -1330,9 +1371,9 @@ class ReadCliu(ReadStrategy):
                 columns={x: int(x.replace("HR", "")) - 1 for x in df.columns},
             )  # start hour is zero
             .reset_index()
-            .melt(id_vars=["state", "month", "end_use"], var_name="hour")
+            .melt(id_vars=["state", "month", "day_type", "end_use"], var_name="hour")
             .assign(hour=lambda x: (x.hour.astype(int) + x.state.map(_state_utc_offset)) % 24)
-            .pivot(index=["state", "month", "hour"], columns=["end_use"])
+            .pivot(index=["state", "month", "day_type", "hour"], columns=["end_use"])
         )
         df.columns = df.columns.droplevel(0)  # drops name "value"
         df.columns.name = ""
@@ -1352,6 +1393,12 @@ class ReadCliu(ReadStrategy):
         | AL    | 2014-01-01 01:00:00 | 0.75        |  0.82   |
         | ...   |                     |             |         |
         | WY    | 2014-12-31 23:00:00 | 0.80        |  0.85   |
+
+        A day takes the weekend shape when its date falls on a Saturday or
+        Sunday in the calendar year (the weather year), so industrial weekends
+        line up with the weekends of the weather the renewable profiles come
+        from. Snapshots are labelled in ``YEAR`` and later moved to each
+        planning horizon by month and day.
         """
 
         def get_days_in_month(year: int, month: int) -> list[int]:
@@ -1362,9 +1409,13 @@ class ReadCliu(ReadStrategy):
         df["year"] = self.YEAR
         df["day"] = df.month.map(lambda x: get_days_in_month(self.YEAR, x))
         df = df.explode("day")
+        weekday = pd.to_datetime(
+            pd.DataFrame({"year": self._calendar_year, "month": df.month.astype(int), "day": df.day.astype(int)}),
+        ).dt.dayofweek
+        df = df[df.day_type == np.where(weekday >= 5, self.EPRI_WEEKEND, self.EPRI_WEEKDAY)]
         df["snapshot"] = pd.to_datetime(df[["year", "month", "day", "hour"]])
         return df.set_index(["state", "snapshot"]).drop(
-            columns=["year", "month", "day", "hour"],
+            columns=["year", "month", "day", "hour", "day_type"],
         )
 
     @staticmethod
@@ -1510,18 +1561,21 @@ class ReadTransportEfsAeo(ReadStrategy):
         EIA API to extract national level VMT data
     - efs_path: str
         path to efs file to extract load profiles at a state level
+    - calendar_year: int
+        year whose weekdays the EFS charging profiles are aligned to
     """
 
     # TODO: extract this out directly from EFS
     efs_years: ClassVar[list[int]] = [2018, 2020, 2022, 2024, 2030, 2040, 2050]
 
-    def __init__(self, filepath: str, api: str, efs_path: str) -> None:
+    def __init__(self, filepath: str, api: str, efs_path: str, calendar_year: int | None = None) -> None:
         """Filepath is state level breakdown of VMT by vehicle type."""
         super().__init__(filepath)
         self._zone = "state"
         # self.units = "VMT"
         self.efs_path = efs_path
         self.api = api
+        self.calendar_year = calendar_year
 
         # read in annual demand and profiles
         self.aeo_demand = self._read_demand_aeo()
@@ -1619,7 +1673,7 @@ class ReadTransportEfsAeo(ReadStrategy):
         the year will equal **ONE THOUSAND** Its scaled from 1 to 1000
         just to avoid numerical issues.
         """
-        efs = ReadEfs(self.efs_path).read_demand()
+        efs = ReadEfs(self.efs_path, calendar_year=self.calendar_year).read_demand()
         transport = efs[efs.index.get_level_values("sector") == "transport"].droplevel(
             ["sector", "fuel"],
         )
@@ -2972,6 +3026,29 @@ def get_demand_params(
 ###
 
 
+def _get_calendar_year(renewable_weather_years: list[int] | None) -> int | None:
+    """Year whose weekdays activity-driven demand profiles are aligned to.
+
+    This is the weather year: the renewable and heat-pump profiles are dated by
+    it, and so are the weekdays a weather-year demand series carries.
+    """
+    if not renewable_weather_years:
+        return None
+    years = [int(year) for year in renewable_weather_years]
+    if len(set(years)) > 1:
+        logger.info(f"Several renewable weather years {years}; aligning demand weekdays to {years[0]}.")
+    return years[0]
+
+
+def _warn_profile_year_mismatch(profile_year: int, calendar_year: int | None) -> None:
+    """Historical demand carries the weather and weekdays of its own year."""
+    if calendar_year and profile_year != calendar_year:
+        logger.warning(
+            f"Demand profile year {profile_year} differs from renewable weather year {calendar_year}: "
+            "demand and renewable profiles come from different weather and their weekends do not line up.",
+        )
+
+
 def _get_closest_efs_year(efs_years, investment_period):
     filtered_values = [y for y in efs_years if y <= investment_period]
     if not filtered_values:
@@ -3072,6 +3149,7 @@ if __name__ == "__main__":
 
     planning_horizons = n.investment_periods.to_list()
     profile_year = snakemake.params.get("profile_year", None)
+    calendar_year = _get_calendar_year(snakemake.params.get("renewable_weather_years", None))
 
     demand_profile, demand_disaggregation, scaling_method = get_demand_params(
         end_use,
@@ -3100,13 +3178,14 @@ if __name__ == "__main__":
                 f"Planning horizon {min(planning_horizons)} not in EFS years. "
                 f"Using base year {base_year} for EFS data, will scale to planning horizon.",
             )
-        reader = ReadEfs(demand_files)
+        reader = ReadEfs(demand_files)  # electricity-only EFS keeps its own calendar
         sns = n.snapshots.get_level_values(1).map(
             lambda x: x.replace(year=base_year),
         )
 
     elif demand_profile == "eia":
         assert profile_year in range(2018, 2024)
+        _warn_profile_year_mismatch(profile_year, calendar_year)
 
         reader = ReadEia(demand_files)
         sns = n.snapshots.get_level_values(1).map(
@@ -3133,6 +3212,7 @@ if __name__ == "__main__":
 
     elif demand_profile == "ferc":
         assert profile_year in range(2018, 2024)
+        _warn_profile_year_mismatch(profile_year, calendar_year)
 
         reader = ReadFERC714(demand_files)
         sns = n.snapshots.get_level_values(1).map(
@@ -3158,6 +3238,7 @@ if __name__ == "__main__":
             epri_filepath=epri_file,
             mecs_filepath=mecs_file,
             fips_filepath=fips_file,
+            calendar_year=calendar_year,
         )
     elif demand_profile == "transport_efs_aeo":  # road vehicle transport
         efs_file = demand_files[0]
@@ -3171,6 +3252,7 @@ if __name__ == "__main__":
             vmt_ratios_file,
             efs_path=efs_file,
             api=eia_api,
+            calendar_year=calendar_year,
         )
     elif demand_profile == "transport_aeo":  # non-road vehicle transport
         vmt_ratios_file = demand_files[0]

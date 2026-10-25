@@ -100,16 +100,17 @@ def _epri_frame() -> pd.DataFrame:
     rows = []
     for region in ("WSCC_CNV", "NPCC_NE"):
         for season in ("Peak", "OffPeak"):
-            rows.append(
-                {
-                    "Region": region,
-                    "Season": season,
-                    "Day Type": "AverageWeekday",
-                    "Sector": "Industrial",
-                    "End Use": "Lighting",
-                    **hours,
-                },
-            )
+            for day_type in ("AverageWeekday", "AverageWeekend"):
+                rows.append(
+                    {
+                        "Region": region,
+                        "Season": season,
+                        "Day Type": day_type,
+                        "Sector": "Industrial",
+                        "End Use": "Lighting",
+                        **hours,
+                    },
+                )
     return pd.DataFrame(rows)
 
 
@@ -118,7 +119,7 @@ def test_epri_typical_day_rotated_to_utc():
     shapes = reader._format_epri_data(_epri_frame())["electricity"]
 
     def spike_hour(state: str) -> int:
-        day = shapes.xs((state, 1), level=["state", "month"])
+        day = shapes.xs((state, 1, "AverageWeekday"), level=["state", "month", "day_type"])
         return int(day.idxmax())
 
     assert spike_hour("CA") == 12 + 8  # PST noon is 20:00 UTC
@@ -126,7 +127,7 @@ def test_epri_typical_day_rotated_to_utc():
     assert spike_hour("MA") == 12 + 5  # EST noon is 17:00 UTC
 
     # Each typical day still has all 24 hours and the same energy.
-    day = shapes.xs(("CA", 1), level=["state", "month"])
+    day = shapes.xs(("CA", 1, "AverageWeekday"), level=["state", "month", "day_type"])
     assert sorted(day.index) == list(range(24))
     assert day.sum() == pytest.approx(1.0)
 
