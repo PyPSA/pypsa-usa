@@ -968,6 +968,7 @@ class ReadEulp(ReadStrategy):
                 "heating": "heat",
                 "water_heating": "water_heat",
                 "space_heating": "space_heat",
+                "gas_other": "gas_other",
             },
         )
         assert not df.fuel.isna().any()
@@ -2980,10 +2981,14 @@ def _get_sector_fuels(end_use: str, vehicle: str | None = None) -> list[str]:
     """
     demand = DemandFuels
     match end_use:
-        case "residential":
-            fuels = [demand.ELECTRICITY, demand.SPACE_HEATING, demand.SPACE_COOLING, demand.WATER_HEATING]
-        case "commercial":
-            fuels = [demand.ELECTRICITY, demand.SPACE_HEATING, demand.SPACE_COOLING, demand.WATER_HEATING]
+        case "residential" | "commercial":
+            fuels = [
+                demand.ELECTRICITY,
+                demand.SPACE_HEATING,
+                demand.SPACE_COOLING,
+                demand.WATER_HEATING,
+                demand.GAS_OTHER,
+            ]
         case "industry":
             fuels = [demand.ELECTRICITY, demand.HEATING]
         case "transport":

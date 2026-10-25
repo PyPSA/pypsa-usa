@@ -590,6 +590,7 @@ rule build_service_demand:
         space_heat=DEMAND + "{interconnect}/{end_use}_space-heating_s{simpl}.pkl",
         water_heat=DEMAND + "{interconnect}/{end_use}_water-heating_s{simpl}.pkl",
         cool=DEMAND + "{interconnect}/{end_use}_cooling_s{simpl}.pkl",
+        gas_other=DEMAND + "{interconnect}/{end_use}_gas-other_s{simpl}.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand_s{simpl}.log",
     benchmark:
@@ -699,6 +700,7 @@ def demand_to_add(wildcards):
             fuels = ["electricity", "cooling", "space-heating", "water-heating"]
         else:
             fuels = ["electricity", "cooling", "heating"]
+        fuels.append("gas-other")
         service_demands = [
             DEMAND + "{interconnect}/" + service + "_" + fuel + "_s{simpl}.pkl"
             for service in services

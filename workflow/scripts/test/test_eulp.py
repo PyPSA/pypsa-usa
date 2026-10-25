@@ -5,13 +5,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from build_demand import ReadEulp
 from build_eulp_loads import EQUIPMENT, J_TO_KWH, assert_delivered_loads, comstock_factors, read_comstock_metadata
 from eulp import Eulp
 
 pytestmark = pytest.mark.fast
 
 INTERVALS_PER_HOUR = 4
-END_USES = ["electricity", "heating", "space_heating", "water_heating", "cooling"]
+END_USES = ["electricity", "heating", "space_heating", "water_heating", "cooling", "gas_other"]
 
 
 def _write_profile(path: Path, values: dict[str, float]) -> Path:
@@ -48,9 +49,10 @@ def test_residential_loads_are_delivered_energy(tmp_path):
             "out.electricity.heating.energy_consumption.kwh": 50.0,
             "out.electricity.cooling.energy_consumption.kwh": 2.0,
             "out.natural_gas.hot_water.energy_consumption.kwh": 5.0,
-            # fuel end uses that are neither heating nor cooling are not modelled
+            # gas end uses other than heating stay final energy; propane ones are not modelled
             "out.natural_gas.range_oven.energy_consumption.kwh": 9.0,
             "out.natural_gas.lighting.energy_consumption.kwh": 7.0,
+            "out.propane.range_oven.energy_consumption.kwh": 11.0,
             # electricity end uses, including HVAC fans
             "out.electricity.plug_loads.energy_consumption.kwh": 3.0,
             "out.electricity.heating_fans_pumps.energy_consumption.kwh": 1.0,
@@ -66,6 +68,7 @@ def test_residential_loads_are_delivered_energy(tmp_path):
     np.testing.assert_allclose(data.cooling, _hourly_mwh(6.0 * k))
     np.testing.assert_allclose(data.heating, data.space_heating + data.water_heating)
     np.testing.assert_allclose(data.electricity, _hourly_mwh(3.0 + 1.0))
+    np.testing.assert_allclose(data.gas_other, _hourly_mwh(9.0 + 7.0))
 
 
 def test_residential_delivered_loads_clip_simulation_noise(tmp_path):
@@ -121,8 +124,9 @@ def test_commercial_final_energy_is_converted_once(tmp_path):
     np.testing.assert_allclose(data.water_heating, _hourly_mwh(2.0 * 0.8 + 3.0))
     np.testing.assert_allclose(data.cooling, _hourly_mwh(6.0 * 3.0 + 2.0))
     np.testing.assert_allclose(data.heating, data.space_heating + data.water_heating)
-    # electric water heating moved to water_heating; gas cooking is not modelled
+    # electric water heating moved to water_heating; gas cooking is its own final-energy load
     np.testing.assert_allclose(data.electricity, _hourly_mwh(5.0))
+    np.testing.assert_allclose(data.gas_other, _hourly_mwh(8.0))
 
 
 def test_commercial_requires_factors_for_every_column(tmp_path):
@@ -145,6 +149,25 @@ def test_building_types_sum(tmp_path):
     a = Eulp(_write_profile(tmp_path / "a.csv", values), stock="res")
     b = Eulp(_write_profile(tmp_path / "b.csv", values), stock="res")
     pd.testing.assert_frame_equal(sum([b], a).data, a.data * 2)
+
+
+def test_state_file_reads_into_every_service_fuel(tmp_path):
+    values = {
+        "out.load.heating.energy_delivered.kbtu": 1.0,
+        "out.load.hot_water.energy_delivered.kbtu": 1.0,
+        "out.load.cooling.energy_delivered.kbtu": 1.0,
+        "out.natural_gas.range_oven.energy_consumption.kwh": 1.0,
+        "out.electricity.plug_loads.energy_consumption.kwh": 1.0,
+    }
+    state_file = tmp_path / "CA.csv"
+    Eulp(_write_profile(tmp_path / "mobile_home.csv", values), stock="res").to_csv(state_file)
+
+    demand = ReadEulp(str(state_file), "res").read_demand()
+
+    fuels = set(demand.index.get_level_values("fuel"))
+    assert fuels == {"electricity", "heat", "space_heat", "water_heat", "cool", "gas_other"}
+    gas = demand.xs("gas_other", level="fuel").sum().sum()
+    assert gas == pytest.approx(_hourly_mwh(1.0) * 8760)
 
 
 def _write_metadata(path: Path, buildings: list[dict]) -> Path:

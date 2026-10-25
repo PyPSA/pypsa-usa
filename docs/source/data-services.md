@@ -48,7 +48,7 @@ Space heating, water heating and cooling loads are **useful energy**: the heat o
 - **Residential**: ResStock reports the delivered loads directly (`out.load.heating`, `out.load.hot_water` and `out.load.cooling`, `energy_delivered`). Heating and cooling fans and pumps count as electricity.
 - **Commercial**: ComStock reports final energy per fuel only. Each fuel's profile is multiplied by a state-level useful-energy factor (useful over final energy), summed over the state's baseline buildings from the equipment loads, energies and efficiencies in the ComStock annual results (`retrieve_comstock_metadata`). Boilers and fuel-fired coils carry their simulated efficiency, heat pumps, DX units and chillers their COP, electric resistance and district energy a factor of one, and fuel-fired service water heaters 0.80. The factor is an annual, stock-weighted value, so temperature-dependent COPs are not resolved within the year. Electric service water heating is part of the water heating load.
 
-Gas, propane and fuel-oil end uses that are neither space nor water heating, such as cooking, clothes drying, fireplaces and pool heaters, are not modelled; their electric counterparts are part of the electricity load.
+Natural gas used for cooking, clothes drying, fireplaces, grills, pools and spas (and commercial gas `interior_equipment`) is a separate `gas-other` load in final energy. It cannot be served by any heating technology: each load draws its state's gas through a fixed link that books the combustion CO2. Propane and fuel-oil uses other than heating are not modelled. The electric counterparts of all these end uses are part of the electricity load.
 
 #### Disaggregation
 

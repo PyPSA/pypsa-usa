@@ -22,14 +22,15 @@ class Eulp:
     - space_heating -> useful space heating
     - water_heating -> useful water heating
     - cooling -> useful space cooling
+    - gas_other -> natural gas, other than space and water heating
 
     Heating and cooling are useful energy because the service sector supplies
     them through furnaces, heat pumps and air conditioners at their efficiency.
     ResStock reports the delivered loads directly. ComStock reports only final
     energy per fuel, which is converted with state-level useful-energy factors
-    (see ``build_eulp_loads.py``). Gas, propane and fuel-oil end uses that are
-    neither space nor water heating (cooking, drying, fireplaces, pools) are
-    not modelled.
+    (see ``build_eulp_loads.py``). Gas used for cooking, drying, fireplaces and
+    pools is final energy drawn straight from the gas network; propane and
+    fuel-oil uses other than heating are not modelled.
     """
 
     KBTU_TO_KWH: ClassVar[float] = 0.29307107
@@ -57,6 +58,16 @@ class Eulp:
         "out.electricity.well_pump.energy_consumption.kwh",
     ]
 
+    _res_gas_other_group: ClassVar[list[str]] = [
+        "out.natural_gas.clothes_dryer.energy_consumption.kwh",
+        "out.natural_gas.fireplace.energy_consumption.kwh",
+        "out.natural_gas.grill.energy_consumption.kwh",
+        "out.natural_gas.lighting.energy_consumption.kwh",
+        "out.natural_gas.permanent_spa_heat.energy_consumption.kwh",
+        "out.natural_gas.pool_heater.energy_consumption.kwh",
+        "out.natural_gas.range_oven.energy_consumption.kwh",
+    ]
+
     # delivered loads, in kBtu
     _res_useful_groups: ClassVar[dict[str, list[str]]] = {
         "space_heating": ["out.load.heating.energy_delivered.kbtu"],
@@ -73,6 +84,10 @@ class Eulp:
         "out.electricity.interior_lighting.energy_consumption.kwh",
         "out.electricity.pumps.energy_consumption.kwh",
         "out.electricity.refrigeration.energy_consumption.kwh",
+    ]
+
+    _com_gas_other_group: ClassVar[list[str]] = [
+        "out.natural_gas.interior_equipment.energy_consumption.kwh",
     ]
 
     # final energy, weighted by the useful-energy factors
@@ -125,6 +140,7 @@ class Eulp:
                     "cooling",
                     "water_heating",
                     "space_heating",
+                    "gas_other",
                 ]
                 for x in self.data.columns
             )
@@ -198,11 +214,13 @@ class Eulp:
                 for end_use, cols in self._res_useful_groups.items()
             }
             electricity = aggregate_sector(df, self._res_elec_group)
+            gas_other = aggregate_sector(df, self._res_gas_other_group)
         else:
             useful = {
                 end_use: aggregate_sector(df, cols, self.factors) for end_use, cols in self._com_useful_groups.items()
             }
             electricity = aggregate_sector(df, self._com_elec_group)
+            gas_other = aggregate_sector(df, self._com_gas_other_group)
 
         data = pd.DataFrame(
             {
@@ -211,6 +229,7 @@ class Eulp:
                 "space_heating": useful["space_heating"],
                 "water_heating": useful["water_heating"],
                 "cooling": useful["cooling"],
+                "gas_other": gas_other,
             },
         )
         return data.mul(1e-3)  # kwh -> MWh
