@@ -26,7 +26,14 @@ import numpy as np
 import pandas as pd
 import pypsa
 import yaml
-from constants import CODE_2_STATE, EMPTY_STATES, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
+from constants import (
+    CODE_2_STATE,
+    EMPTY_STATES,
+    NG_MWH_2_MMCF,
+    NG_STORAGE_CHARGE_DISCHARGE_RATIO,
+    STATE_2_CODE,
+    STATES_INTERCONNECT_MAPPER,
+)
 from pypsa import Network
 
 logger = logging.getLogger(__name__)
@@ -38,10 +45,6 @@ logger = logging.getLogger(__name__)
 
 # for converting everthing into MWh_th
 MWH_2_MMCF = NG_MWH_2_MMCF
-
-# underground storage charge (injection) capacity as a share of its discharge
-# (withdrawal) capacity; ratio of the historical maximum charge and discharge rates
-STORAGE_CHARGE_DISCHARGE_RATIO = 0.3676
 
 STORAGE_AGGREGATIONS = ("state", "formation")
 
@@ -316,7 +319,7 @@ class GasStorage(GasData):
                 "DISCHARGE_MW": df.maximum_daily_delivery_mcf * mwh_per_mcf / 24,
             },
         )
-        df["CHARGE_MW"] = df.DISCHARGE_MW * STORAGE_CHARGE_DISCHARGE_RATIO
+        df["CHARGE_MW"] = df.DISCHARGE_MW * NG_STORAGE_CHARGE_DISCHARGE_RATIO
 
         by = ["STATE", "FORMATION"] if self.aggregation == "formation" else ["STATE"]
         df = df.groupby(by).sum(numeric_only=True).reset_index()

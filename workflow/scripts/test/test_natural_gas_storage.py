@@ -13,7 +13,8 @@ import pytest
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from build_natural_gas import STORAGE_CHARGE_DISCHARGE_RATIO, GasStorage
+from build_natural_gas import GasStorage
+from constants import NG_STORAGE_CHARGE_DISCHARGE_RATIO
 from summary_natural_gas import get_underground_storage
 
 pytestmark = pytest.mark.fast
@@ -71,7 +72,7 @@ def test_storage_sums_the_latest_active_reports_per_state(make_storage):
     assert ca.MIN_CAPACITY_MWH == pytest.approx((1.0e6 + 0.5e6 + 0.6e6) * MWH_PER_MCF)
     assert ca.WORKING_CAPACITY_MWH == pytest.approx((2.0e6 + 1.5e6 + 0.4e6) * MWH_PER_MCF)
     assert ca.DISCHARGE_MW == pytest.approx((240e3 + 120e3 + 48e3) * MWH_PER_MCF / 24)
-    assert ca.CHARGE_MW == pytest.approx(ca.DISCHARGE_MW * 0.3676)
+    assert ca.CHARGE_MW == pytest.approx(ca.DISCHARGE_MW * NG_STORAGE_CHARGE_DISCHARGE_RATIO)
     assert (tx.MAX_CAPACITY_MWH, tx.MIN_CAPACITY_MWH, tx.WORKING_CAPACITY_MWH) == pytest.approx(
         (2.0e6 * MWH_PER_MCF, 0.4e6 * MWH_PER_MCF, 1.6e6 * MWH_PER_MCF),
     )
@@ -116,7 +117,7 @@ def test_storage_components(base_network, make_storage, aggregation):
         assert (charge.bus0, charge.bus1) == (f"{row.STATE} gas", f"{name} gas storage")
         assert (discharge.bus0, discharge.bus1) == (f"{name} gas storage", f"{row.STATE} gas")
         assert discharge.p_nom == pytest.approx(row.DISCHARGE_MW)
-        assert charge.p_nom == pytest.approx(STORAGE_CHARGE_DISCHARGE_RATIO * row.DISCHARGE_MW)
+        assert charge.p_nom == pytest.approx(NG_STORAGE_CHARGE_DISCHARGE_RATIO * row.DISCHARGE_MW)
     assert n.buses.loc[storage.data.NAME + " gas storage", "country"].tolist() == storage.data.STATE.tolist()
 
 
