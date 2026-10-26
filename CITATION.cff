@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
+message: "If you use this software, please cite the article below."
 title: "PyPSA-USA: An Open-Source Energy System Optimization Model for the United States"
 version: 0.0.1
 repository: https://github.com/PyPSA/pypsa-usa
@@ -7,10 +7,10 @@ license: MIT
 authors:
 - family-names: "Tehranchi"
   given-names: "Kamran"
-  orchid: https://orcid.org/0009-0009-6186-6426
+  orcid: https://orcid.org/0009-0009-6186-6426
 - family-names: "Barnes"
   given-names: "Trevor"
-  orchid: https://orcid.org/0000-0003-2458-2968
+  orcid: https://orcid.org/0000-0003-2458-2968
 - family-names: "Frysztacki"
   given-names: "Martha"
 - family-names: "Hofmann"
@@ -18,3 +18,30 @@ authors:
 - family-names: "Azevedo"
   given-names: "Inês L."
 doi: 10.5281/zenodo.10815964
+preferred-citation:
+  type: article
+  title: "Costs and benefits of transmission investments in the United States under different policy scenarios"
+  authors:
+  - family-names: "Tehranchi"
+    given-names: "Kamran"
+    orcid: https://orcid.org/0009-0009-6186-6426
+  - family-names: "Barnes"
+    given-names: "Trevor"
+    orcid: https://orcid.org/0000-0003-2458-2968
+  - family-names: "Frysztacki"
+    given-names: "Martha"
+    orcid: https://orcid.org/0000-0002-0788-1328
+  - family-names: "Azevedo"
+    given-names: "Inês M. L."
+    orcid: https://orcid.org/0000-0002-4755-8656
+  journal: "Environmental Research Letters"
+  publisher:
+    name: "IOP Publishing"
+  volume: 21
+  issue: 19
+  start: 194039
+  year: 2026
+  month: 10
+  doi: 10.1088/1748-9326/aea586
+  url: "https://iopscience.iop.org/article/10.1088/1748-9326/aea586"
+  license: CC-BY-4.0
