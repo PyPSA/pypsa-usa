@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 from build_demand import ReadEulp
-from build_eulp_loads import EQUIPMENT, J_TO_KWH, assert_delivered_loads, comstock_factors, read_comstock_metadata
-from eulp import Eulp
+from build_eulp_loads import EQUIPMENT, J_TO_KWH, comstock_factors, read_comstock_metadata
+from eulp import ComEulp, ResEulp
 
 pytestmark = pytest.mark.fast
 
@@ -30,7 +30,7 @@ def _hourly_mwh(value_per_interval: float) -> float:
 
 
 def _com_factors(**overrides: float) -> pd.Series:
-    columns = [c for cols in Eulp._com_useful_groups.values() for c in cols]
+    columns = [c for cols in ComEulp._useful_groups.values() for c in cols]
     factors = pd.Series(1.0, index=columns)
     for column, value in overrides.items():
         factors[f"out.{column}.energy_consumption.kwh"] = value
@@ -58,11 +58,11 @@ def test_residential_loads_are_delivered_energy(tmp_path):
             "out.electricity.heating_fans_pumps.energy_consumption.kwh": 1.0,
         },
     )
-    data = Eulp(path, stock="res").data
+    data = ResEulp(path).data
 
     assert list(data.columns) == END_USES
     assert len(data) == 8760
-    k = Eulp.KBTU_TO_KWH
+    k = ResEulp.KBTU_TO_KWH
     np.testing.assert_allclose(data.space_heating, _hourly_mwh(10.0 * k))
     np.testing.assert_allclose(data.water_heating, _hourly_mwh(4.0 * k))
     np.testing.assert_allclose(data.cooling, _hourly_mwh(6.0 * k))
@@ -80,19 +80,35 @@ def test_residential_delivered_loads_clip_simulation_noise(tmp_path):
             "out.load.cooling.energy_delivered.kbtu": 1.0,
         },
     )
-    assert (Eulp(path, stock="res").space_heating == 0).all()
+    assert (ResEulp(path).space_heating == 0).all()
 
 
-def test_residential_file_without_delivered_loads_fails_the_build(tmp_path):
+def test_residential_file_without_delivered_loads_fails(tmp_path):
     path = _write_profile(
         tmp_path / "mobile_home.csv",
         {"out.natural_gas.heating.energy_consumption.kwh": 1.0},
     )
     with pytest.raises(AssertionError, match="delivered-load"):
-        assert_delivered_loads(path)
-    # Eulp itself reads such a file as residential with zero heating and cooling
-    data = Eulp(path).data
-    assert (data[["heating", "cooling"]] == 0).all().all()
+        ResEulp(path)
+
+
+def test_building_types_of_different_stocks_do_not_add(tmp_path):
+    res = ResEulp(
+        _write_profile(
+            tmp_path / "mobile_home.csv",
+            {
+                "out.load.heating.energy_delivered.kbtu": 1.0,
+                "out.load.hot_water.energy_delivered.kbtu": 1.0,
+                "out.load.cooling.energy_delivered.kbtu": 1.0,
+            },
+        ),
+    )
+    com = ComEulp(
+        _write_profile(tmp_path / "warehouse.csv", {"out.natural_gas.heating.energy_consumption.kwh": 1.0}),
+        factors=_com_factors(),
+    )
+    with pytest.raises(TypeError):
+        res + com
 
 
 def test_commercial_final_energy_is_converted_once(tmp_path):
@@ -118,7 +134,7 @@ def test_commercial_final_energy_is_converted_once(tmp_path):
             "electricity.cooling": 3.0,
         },
     )
-    data = Eulp(path, stock="com", factors=factors).data
+    data = ComEulp(path, factors=factors).data
 
     np.testing.assert_allclose(data.space_heating, _hourly_mwh(10.0 * 0.8 + 4.0 * 1.1 + 1.0))
     np.testing.assert_allclose(data.water_heating, _hourly_mwh(2.0 * 0.8 + 3.0))
@@ -135,9 +151,9 @@ def test_commercial_requires_factors_for_every_column(tmp_path):
         {"out.natural_gas.heating.energy_consumption.kwh": 1.0},
     )
     with pytest.raises(AssertionError, match="factors missing"):
-        Eulp(path, stock="com")
+        ComEulp(path)
     with pytest.raises(AssertionError, match="factors missing"):
-        Eulp(path, stock="com", factors=_com_factors().iloc[1:])
+        ComEulp(path, factors=_com_factors().iloc[1:])
 
 
 def test_building_types_sum(tmp_path):
@@ -146,8 +162,8 @@ def test_building_types_sum(tmp_path):
         "out.load.hot_water.energy_delivered.kbtu": 1.0,
         "out.load.cooling.energy_delivered.kbtu": 1.0,
     }
-    a = Eulp(_write_profile(tmp_path / "a.csv", values), stock="res")
-    b = Eulp(_write_profile(tmp_path / "b.csv", values), stock="res")
+    a = ResEulp(_write_profile(tmp_path / "a.csv", values))
+    b = ResEulp(_write_profile(tmp_path / "b.csv", values))
     pd.testing.assert_frame_equal(sum([b], a).data, a.data * 2)
 
 
@@ -160,7 +176,7 @@ def test_state_file_reads_into_every_service_fuel(tmp_path):
         "out.electricity.plug_loads.energy_consumption.kwh": 1.0,
     }
     state_file = tmp_path / "CA.csv"
-    Eulp(_write_profile(tmp_path / "mobile_home.csv", values), stock="res").to_csv(state_file)
+    ResEulp(_write_profile(tmp_path / "mobile_home.csv", values)).to_csv(state_file)
 
     demand = ReadEulp(str(state_file), "res").read_demand()
 
@@ -172,7 +188,7 @@ def test_state_file_reads_into_every_service_fuel(tmp_path):
 
 def _write_metadata(path: Path, buildings: list[dict]) -> Path:
     """ComStock annual results: final energy in kWh, equipment energy in J."""
-    final = [c.removesuffix(".kwh") for cols in Eulp._com_useful_groups.values() for c in cols]
+    final = [c.removesuffix(".kwh") for cols in ComEulp._useful_groups.values() for c in cols]
     rows = []
     for b in buildings:
         row = {"in.hvac_heat_type": b.get("type", "Furnace"), "weight": b.get("weight", 1.0)}
@@ -231,7 +247,7 @@ def test_comstock_factors_balance_each_building(tmp_path):
     factors = comstock_factors(read_comstock_metadata(path))
     col = "out.{}.energy_consumption.kwh".format
 
-    assert set(factors.index) == {c for cols in Eulp._com_useful_groups.values() for c in cols}
+    assert set(factors.index) == {c for cols in ComEulp._useful_groups.values() for c in cols}
     # gas: 2 x 100 x 0.8 + 50 x 0.8 + loop boiler 10 x 0.8, over 2 x 100 + 50 + 10
     assert factors[col("natural_gas.heating")] == pytest.approx((160 + 40 + 8) / 260)
     # electric: reheat 10 + heat pump 30 + supplemental 5 + resistance 5 + WSHP compressor 4

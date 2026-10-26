@@ -18,7 +18,7 @@ import logging
 
 import pandas as pd
 from _helpers import configure_logging
-from eulp import Eulp
+from eulp import ComEulp, ResEulp
 
 logger = logging.getLogger(__name__)
 
@@ -68,13 +68,6 @@ EQUIPMENT = [
 ]
 
 
-def assert_delivered_loads(path: str) -> None:
-    """ResStock releases without delivered-load columns would give zero heating and cooling."""
-    delivered = {c for cols in Eulp._res_useful_groups.values() for c in cols}
-    missing = delivered.difference(pd.read_csv(path, nrows=0).columns)
-    assert not missing, f"ResStock file {path} has no delivered-load columns {sorted(missing)}"
-
-
 def _final(column: str) -> str:
     """Annual-results column of a timeseries column (same name without the unit)."""
     return column.removesuffix(".kwh")
@@ -82,7 +75,7 @@ def _final(column: str) -> str:
 
 def read_comstock_metadata(path: str) -> pd.DataFrame:
     """Building weight, final energy (kWh) and equipment parameters (kWh or efficiency)."""
-    final = [_final(c) for cols in Eulp._com_useful_groups.values() for c in cols]
+    final = [_final(c) for cols in ComEulp._useful_groups.values() for c in cols]
     df = pd.read_parquet(path, columns=["in.hvac_heat_type", "weight", *final, *(f"out.params.{c}" for c in EQUIPMENT)])
     df = df.rename(columns=lambda c: c.removeprefix("out.params."))
     numeric = df.columns.difference(["in.hvac_heat_type"])
@@ -95,7 +88,7 @@ def read_comstock_metadata(path: str) -> pd.DataFrame:
 def comstock_useful_energy(df: pd.DataFrame, state_dx_cop: float) -> pd.DataFrame:
     """Useful energy (kWh per building) behind each final-energy timeseries column."""
     col = "out.{}.energy_consumption.kwh".format
-    final = {c: df[_final(c)] for cols in Eulp._com_useful_groups.values() for c in cols}
+    final = {c: df[_final(c)] for cols in ComEulp._useful_groups.values() for c in cols}
     u = pd.DataFrame(index=df.index)
 
     boiler_fuel = df["boiler_gas..j"] + df["boiler_electric..j"] + df["boiler_other_fuel..j"]
@@ -193,15 +186,12 @@ if __name__ == "__main__":
     stock = snakemake.wildcards.stock
     state = snakemake.wildcards.state
 
-    factors = None
     if stock == "com":
         factors = comstock_factors(read_comstock_metadata(snakemake.input.metadata))
         logger.info(f"ComStock useful-energy factors for {state}:\n{factors.round(3).to_string()}")
+        profiles = [ComEulp(f, factors=factors) for f in snakemake.input.profiles]
     else:
-        for f in snakemake.input.profiles:
-            assert_delivered_loads(f)
-
-    profiles = [Eulp(f, stock=stock, factors=factors) for f in snakemake.input.profiles]
+        profiles = [ResEulp(f) for f in snakemake.input.profiles]
     loads = sum(profiles[1:], profiles[0])
 
     logger.info(f"{stock} {state} annual loads (GWh): {loads.data.sum().div(1e3).round(1).to_dict()}")
