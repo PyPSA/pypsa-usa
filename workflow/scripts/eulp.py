@@ -217,11 +217,17 @@ class Eulp:
 
     @staticmethod
     def _resample_data(df: pd.DataFrame) -> pd.DataFrame:
-        """Locked to resampling at 1hr."""
+        """Locked to resampling at 1hr.
+
+        EULP stamps each 15-min interval at its end (00:15 ... next January 1
+        00:00), so intervals are binned right-closed and each hour is labelled
+        by its start: 00:00 sums the intervals ending 00:15 to 01:00. The year
+        is set after binning so the closing 00:00 stamp stays in the last hour.
+        """
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
-        df.index = df.index.map(lambda x: x.replace(year=2018))
-        resampled = df.resample("1h").sum()
+        resampled = df.resample("1h", closed="right", label="left").sum()
+        resampled.index = resampled.index.map(lambda x: x.replace(year=2018))
         assert len(resampled) == 8760, "Length of resampled != 8760 :("
         return resampled.sort_index()
 

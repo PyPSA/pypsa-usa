@@ -13,7 +13,9 @@ The demand methodology follows a similar methodology to that proposed by NREL in
 
 ### Demand Profiles
 
-Demand profiles are taken from the [EPRI Load Shape Library](https://loadshape.epri.com/enduse). Average profiles for on and off peak seasons at a NERC region level are extracted. EPRI does not give explicit electrical/heating/cooling/petrol demands, rather, they give demand by end-use. We manually group these into heating and electrical load. A sample of these profiles is given in the figure below.
+Demand profiles are taken from the [EPRI Load Shape Library](https://loadshape.epri.com/enduse). Average weekday and average weekend profiles for on and off peak seasons at a NERC region level are extracted. They are not redistributed with PyPSA-USA: the `retrieve_epri_load_shapes` rule downloads them from the library when the workflow runs. EPRI does not give explicit electrical/heating/cooling/petrol demands, rather, they give demand by end-use. We manually group these into heating and electrical load. Weekend shapes are scaled against the weekday peak, so their lower level is kept (weekend daily energy is roughly 45–60 % of a weekday's, depending on end use and region). A day takes the weekend shape when it is a Saturday or Sunday in the weather year (`renewable_weather_years`), so industrial weekends line up with the calendar the renewable profiles are dated by.
+
+EPRI regions are the pre-2006 NERC regions and WSCC sub-regions. Each contiguous state is assigned to one region; a state split between regions goes to the region holding most of its load. EPRI shapes are hourly typical days in **local time** (every NERC region, Pacific to Eastern, bottoms out at HR5 and peaks at HR13), so each state's typical day is rotated forward by its UTC offset onto the model's UTC snapshots (see [Temporal structure](./model-components.md#temporal-structure)). The rotation wraps within the day, which only differs from a continuous shift in the few hours that straddle the Peak/OffPeak season change. A sample of these profiles is given in the figure below.
 
 :::{figure} _static/industry/profiles.png
 :name: load-profile

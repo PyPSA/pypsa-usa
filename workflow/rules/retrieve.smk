@@ -103,6 +103,16 @@ rule retrieve_eer_demand_data:
         "../scripts/retrieve_eer_data.py"
 
 
+rule retrieve_epri_load_shapes:
+    output:
+        DATA + "industry_load/epri_load_shapes.csv",
+    log:
+        "logs/retrieve/retrieve_epri_load_shapes.log",
+    retries: 2
+    script:
+        "../scripts/retrieve_epri_load_shapes.py"
+
+
 CPUC_SERVM_URL = "https://files.cpuc.ca.gov/energy/modeling/2026_servm_updates/"
 
 
@@ -154,7 +164,6 @@ sector_datafiles = [
     "natural_gas/pipelines.geojson",
     # industrial demand
     "industry_load/2014_update_20170910-0116.csv",
-    "industry_load/epri_industrial_loads.csv",
     "industry_load/fips_codes.csv",
     "industry_load/table3_2.xlsx",
 ]

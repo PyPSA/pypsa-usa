@@ -21,6 +21,8 @@ The demand module for the service sector in PyPSA-USA can broadly be described i
 
 The service sector represents demand for electricity, cooling, space heating, and water heating for the residential and commercial sector separately. These loads retrieved at a state level from the [NREL End Use Load Profile](https://www.nrel.gov/buildings/end-use-load-profiles.html) (EULP) dataset. Loads are grouped based by end-use fuel aggregated to hourly values. Users must always include electrical load. Heating and cooling loads are optional. Heating loads can be modelled to include `space-heating` and `water-heating` separately, or aggregated together into a single `heat` load. The following figures show processed state level data for the residential and commercial sector in California.
 
+EULP data are 15-minute values stamped at the **end** of each interval, on **Eastern Standard Time (UTC−5) in every state**, not local time (the residential night-time minimum falls at 06:00 EST in California, 05:00 in Colorado and 04:00 in Texas, i.e. 03:00 local). Each interval is summed into the hour it starts in, and the hourly strip is rolled forward 5 hours onto the model's UTC snapshots (see [Temporal structure](./model-components.md#temporal-structure)).
+
 :::{figure} _static/service/res-profile.png
 :name: eulp-residential
 :width: 800px

@@ -99,6 +99,20 @@ balancing authority, recorded as bus attributes ({doc}`model-network-schema`).
 - **Snapshots.** A model year is an hourly (8,760-snapshot) series, configured under
   `snapshots:`. Weather- and demand-data years are aligned by configuration
   (`renewable_weather_years`, demand profile selection — {doc}`data-demand`).
+- **Clock.** Snapshots are in UTC with no daylight-saving transition, the
+  convention of the ERA5 weather data behind the renewable and heat-pump
+  profiles. Every time series is moved onto that clock before it is attached;
+  each source's native clock is documented with the source: electricity demand
+  ({doc}`data-demand`), buildings ({doc}`data-services`), industry
+  ({doc}`data-industrial`) and road transport ({doc}`data-transportation`).
+  Hour-of-day plots therefore show UTC hours.
+- **Weekdays.** Snapshot dates are labelled in the planning horizon, but the
+  weather behind them is the weather year's, so weekdays and weekends follow
+  the weather year's calendar. Demand profiles driven by activity rather than
+  weather (EFS road transport, EPRI industrial shapes) are aligned to it;
+  weather-year demand (EIA-930, FERC 714, EER) already carries it, SERVM keeps
+  its own weather-year dates, and the electricity-only EFS profile keeps EFS's
+  synthetic calendar.
 - **Temporal resolution.** Hourly snapshots can be coarsened — averaged to n-hourly
   (`3h`) or clustered into representative segments (`nSEG`) — either via
   `clustering: temporal:` in configuration or per-run with `{opts}` tokens
