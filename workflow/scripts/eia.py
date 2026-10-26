@@ -1732,6 +1732,8 @@ class _GasProduction(DataExtractor):
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df[~(df["area-name"] == "NA")].copy()
         df["period"] = self._format_period(df.period)
+        # the API end bound is inclusive, so the query also returns January of the next year
+        df = df[df.period.dt.year == self.year].copy()
         df["state"] = df["series-description"].map(self.extract_state).map(self.map_state_names)
 
         df = (

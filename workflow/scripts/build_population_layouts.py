@@ -108,6 +108,28 @@ def plot_county_data(
         fig.savefig(save)
 
 
+def population_per_cell(
+    counties: gpd.GeoDataFrame,
+    grid_cells: gpd.GeoSeries,
+    columns: dict[str, str],
+) -> dict[str, pd.Series]:
+    """
+    Spreads county populations over grid cells by area share.
+
+    ``columns`` maps an output key to a population column of ``counties``.
+    Each returned series is positional, in the order of ``grid_cells``.
+
+    atlite looks the county shapes up by integer position, which pandas 3 no
+    longer falls back to on a GEOID index, so the shapes and the populations
+    are both passed positionally.
+    """
+    indicator_matrix = atlite.cutout.compute_indicatormatrix(
+        counties.geometry.reset_index(drop=True),
+        grid_cells,
+    )
+    return {key: pd.Series(indicator_matrix.dot(counties[col].to_numpy())) for key, col in columns.items()}
+
+
 def plot_grid_data(da: xr.DataArray, title: str | None = None, save: str | None = None):
     """Plots gridded population layout."""
     fig, ax = plt.subplots(figsize=(5, 4))
@@ -166,23 +188,12 @@ if __name__ == "__main__":
     # merge population data with county information
     counties = counties.join(pop)
 
-    # Indicator matrix counties -> grid cells
-    indicator_matrix = atlite.cutout.compute_indicatormatrix(
-        counties.geometry,
-        grid_cells,
-    )
-
-    # population in each grid cell
-    cell_pop = pd.Series(indicator_matrix.dot(counties["population"]))
-    cell_rural_pop = pd.Series(indicator_matrix.dot(counties["rural_population"]))
-    cell_urban_pop = pd.Series(indicator_matrix.dot(counties["urban_population"]))
-
     # save total, rural, urban population
-    pops = {
-        "total": cell_pop,
-        "rural": cell_rural_pop,
-        "urban": cell_urban_pop,
-    }
+    pops = population_per_cell(
+        counties,
+        grid_cells,
+        {"total": "population", "rural": "rural_population", "urban": "urban_population"},
+    )
 
     for key, pop in pops.items():
         ycoords = ("y", cutout.coords["y"].data)

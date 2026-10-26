@@ -30,6 +30,13 @@ NG_Dol_MMBTU_2_MWH = 3.4129
 # AEO2026 prices are in 2025 dollars; model costs are in 2023 dollars
 USD_2025_2_USD_2023 = 1 / 1.06
 
+# underground gas storage charge (injection) capacity as a share of its discharge
+# (withdrawal) capacity. EIA-191 reports only the maximum daily delivery, so the
+# injection rate is scaled from it by the ratio of the largest weekly net injection
+# (132 Bcf) to the largest weekly net withdrawal (359 Bcf) in the Lower 48 storage
+# history: https://www.eia.gov/dnav/ng/hist/nw2_epg0_swo_r48_bcfw.htm
+NG_STORAGE_CHARGE_DISCHARGE_RATIO = 132 / 359
+
 LBS_TON = 2000  # lbs/ short ton
 COAL_BTU_LB = 9396  # BTU/lb - EIA US AVERAGE TODO: differentiate between coal types
 MMBTU_MWHthemal = 3.4129  # MMBTU to MWh_thermal

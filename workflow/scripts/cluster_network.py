@@ -591,6 +591,15 @@ def cluster_regions(busmaps, input=None, output=None):
 
     for which in ("regions_onshore", "regions_offshore"):
         regions = gpd.read_file(getattr(input, which))
+        out_path = getattr(output, which)
+
+        # A footprint far from the coast (e.g. model_topology.include:
+        # {reeds_state: [UT]}) has no offshore regions; the empty geojson then
+        # reads back without a "name" column. Pass it through unchanged.
+        if regions.empty:
+            regions.to_file(out_path)
+            plot_geojson(out_path)
+            continue
 
         # Check if name column contains float values before indexing
         try:
@@ -621,7 +630,6 @@ def cluster_regions(busmaps, input=None, output=None):
         )
         regions_c.index.name = "name"
         regions_c = regions_c.reset_index()
-        out_path = getattr(output, which)
         regions_c.to_file(out_path)
         plot_geojson(out_path)
 

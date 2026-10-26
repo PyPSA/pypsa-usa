@@ -41,6 +41,11 @@ def attach_demand(n: pypsa.Network, df: pd.DataFrame, carrier: str, suffix: str)
     )
 
 
+def parse_demand_file(demand_file: str, simpl: str) -> list[str]:
+    """Splits a ``{sector}_{end_use}_s{simpl}.pkl`` demand file name into its parts."""
+    return Path(demand_file).name.removesuffix(f"_s{simpl}.pkl").split("_")
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         snakemake = mock_snakemake("add_demand", interconnect="western")
@@ -74,8 +79,7 @@ if __name__ == "__main__":
 
     else:  # sector files
         for demand_file in demand_files:
-            parsed_name = Path(demand_file).name.split("_")
-            parsed_name[-1] = parsed_name[-1].split(".pkl")[0]
+            parsed_name = parse_demand_file(demand_file, snakemake.wildcards.simpl)
 
             if len(parsed_name) == 2:
                 sector = parsed_name[0].upper()

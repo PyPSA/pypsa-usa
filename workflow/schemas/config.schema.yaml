@@ -388,7 +388,7 @@ properties:
         additionalProperties: false
         required: [model_case, scenario]
         properties:
-          model_case: {enum: ["Market", "R&D"]}
+          model_case: {enum: ["R&D", "R&D + TC", "Exp", "Exp + TC"]}
           scenario: {enum: ["Advanced", "Conservative", "Moderate"]}
           overrides: {type: [object, "null"]}
       aeo:

@@ -129,10 +129,13 @@ if __name__ == "__main__":
             # n.buses.index — the invariant downstream consumers (e.g. the
             # godeeep path of build_renewable_profiles) rely on. The kmeans
             # branch gets the same normalization inside cluster_regions().
-            try:
-                regions["name"] = pd.to_numeric(regions["name"]).astype(int).astype(str)
-            except (ValueError, TypeError):
-                pass  # non-numeric names are already canonical
+            # An empty layer (no offshore regions for an inland footprint) has
+            # no "name" column; it is written through as is.
+            if not regions.empty:
+                try:
+                    regions["name"] = pd.to_numeric(regions["name"]).astype(int).astype(str)
+                except (ValueError, TypeError):
+                    pass  # non-numeric names are already canonical
             out_path = getattr(snakemake.output, which)
             regions.to_file(out_path)
             plot_geojson(out_path)

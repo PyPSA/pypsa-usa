@@ -19,7 +19,7 @@ You can create and export a data model to use in your own homebrewed optimizatio
 PyPSA-USA builds on and leverages the work of [PyPSA-EUR](https://pypsa-eur.readthedocs.io/en/latest/index.html) developed by TU Berlin. PyPSA-USA is actively developed by the [INES Research Group](https://ines.stanford.edu) at [Stanford University](https://www.stanford.edu/) and the [ΔE+ Research Group](https://www.sfu.ca/see/research/delta-e.html) at [Simon Fraser University](https://www.sfu.ca/).
 
 ```{note}
-This model is under active development. If you need assistance or would like to discuss using the model, please reach out to **ktehranchi@stanford.edu** and **trevor_barnes@sfu.ca**
+If you would like to discuss collaboration, model development, or using the model, please reach out to Kamran Tehranchi (**ktehranchi@stanford.edu**), Dr. Trevor Barnes (**trevor_barnes@sfu.ca**), or Professor Inês Azevedo (**iazevedo@stanford.edu**).
 ```
 
 ```{toctree}

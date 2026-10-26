@@ -106,3 +106,42 @@ def test_build_county_busmap_nan_county_raises(substation_network):
     substation_network.buses.loc["s2", "county"] = None
     with pytest.raises(ValueError, match="county"):
         build_county_busmap(substation_network)
+
+
+def test_cluster_regions_passes_empty_offshore_layer_through(tmp_path):
+    """An inland footprint (e.g. reeds_state: [UT]) has no offshore regions.
+
+    build_bus_regions then writes an empty FeatureCollection, which reads back
+    without a "name" column; cluster_regions must write it through instead of
+    raising KeyError, while still dissolving the onshore layer.
+    """
+    from types import SimpleNamespace
+
+    import geopandas as gpd
+    import pandas as pd
+    from cluster_network import cluster_regions
+    from shapely.geometry import box
+
+    onshore = gpd.GeoDataFrame(
+        {"name": ["1.0", "2.0"], "x": [0.5, 1.5], "y": [0.5, 0.5], "country": ["p1", "p1"]},
+        geometry=[box(0, 0, 1, 1), box(1, 0, 2, 1)],
+        crs="EPSG:4326",
+    )
+    onshore.to_file(tmp_path / "regions_onshore.geojson")
+    gpd.GeoDataFrame(geometry=[], crs="EPSG:4326").to_file(tmp_path / "regions_offshore.geojson")
+
+    inputs = SimpleNamespace(
+        regions_onshore=str(tmp_path / "regions_onshore.geojson"),
+        regions_offshore=str(tmp_path / "regions_offshore.geojson"),
+    )
+    outputs = SimpleNamespace(
+        regions_onshore=str(tmp_path / "regions_onshore_s1.geojson"),
+        regions_offshore=str(tmp_path / "regions_offshore_s1.geojson"),
+    )
+    busmap = pd.Series(["c0", "c0"], index=["1", "2"])
+
+    cluster_regions((busmap,), inputs, outputs)
+
+    assert gpd.read_file(outputs.regions_offshore).empty
+    clustered = gpd.read_file(outputs.regions_onshore)
+    assert clustered["name"].tolist() == ["c0"]
