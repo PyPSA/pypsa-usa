@@ -23,9 +23,10 @@ Berlin. PyPSA-USA is actively developed by the
 [Simon Fraser University](https://www.sfu.ca/).
 
 ```{note}
-This model is under active development. If you need assistance or would like to discuss
-using the model, please reach out to **ktehranchi@stanford.edu** and
-**trevor_barnes@sfu.ca**
+If you would like to discuss collaboration, model development, or using the model,
+please reach out to Kamran Tehranchi (**ktehranchi@stanford.edu**),
+Dr. Trevor Barnes (**trevor_barnes@sfu.ca**), or Professor Inês Azevedo
+(**iazevedo@stanford.edu**).
 ```
 
 ## What the model is
