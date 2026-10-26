@@ -338,6 +338,26 @@ class Production(EiaData):
 
 
 # concrete creator
+class SupplyCost(EiaData):
+    """Primary energy supply price projections."""
+
+    def __init__(self, fuel: str, api: str) -> None:
+        self.fuel = fuel  # (gas)
+        self.api = api
+
+    def data_creator(self) -> pd.DataFrame:
+        """Initializes data extractor."""
+        if self.fuel == "gas":
+            return _GasSupplyCost(self.api)
+        else:
+            raise InputPropertyError(
+                propery="Supply Cost",
+                valid_options=["gas"],
+                recived_option=self.fuel,
+            )
+
+
+# concrete creator
 class EnergyDemand(EiaData):
     """
     Energy demand at a annual national level.
@@ -1470,6 +1490,36 @@ class _FutureCosts(DataExtractor):
         df["series-description"] = df["series-description"].map(
             lambda x: x.split(" : ")[-1],
         )
+        df = df[["series-description", "value", "units", "state"]].sort_index()
+        return self._assign_dtypes(df)
+
+
+class _GasSupplyCost(DataExtractor):
+    """
+    Annual natural gas supply price projections.
+
+    Lower 48 Average Price of AEO2026 Table 59 (Lower 48 Natural Gas Production
+    and Supply Prices by Supply Region), in 2025$/MMBtu. AEO2026 has no
+    Reference case, so its Counterfactual Baseline case is used.
+    """
+
+    scenario_code: str = "cb2026"  # Counterfactual Baseline
+    series_id: str = "prce_sup_NA_NA_ng_NA_l48_y13dlrpmmbtu"
+
+    def __init__(self, api_key: str) -> None:
+        super().__init__(year=None, api_key=api_key)  # every AEO year is returned
+
+    def build_url(self) -> str:
+        base_url = "aeo/2026/data/"
+        facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_code}&facets[seriesId][]={self.series_id}&sort[0][column]=period&sort[0][direction]=asc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df.index = df.period.astype(int)
+        df = df.rename(
+            columns={"seriesName": "series-description", "unit": "units"},
+        )
+        df["state"] = "USA"
         df = df[["series-description", "value", "units", "state"]].sort_index()
         return self._assign_dtypes(df)
 
