@@ -383,8 +383,8 @@ def convert_generators_2_links(
     Links bus1 are the bus the generator is attached to. Links bus0 are state
     level followed by the suffix (ie. "WA gas" if " gas" is the bus0_suffix)
 
-    If eia api is provided, dynamic marginal costs are brought in from the API. This will
-    match the method end-use techs bring in dynamic marginal costs.
+    Fuel is priced on the state level bus, so the link only carries the plant's
+    VOM ('vom_cost' of the generator).
     """
     plants = n.generators[n.generators.carrier == carrier].copy()
 
@@ -393,18 +393,23 @@ def convert_generators_2_links(
 
     plants["STATE"] = plants.bus.map(n.buses.STATE)
 
+    # VOM is per MWh_el, while link costs apply to the fuel drawn (p0)
+    vom = plants.get("vom_cost", pd.Series(np.nan, index=plants.index))
+    if vom.isna().any():
+        logger.warning(f"No VOM for {vom.isna().sum()} {carrier} generators; using 0 $/MWh")
+    vom = vom.fillna(0)
+
     pnl = {}
 
     # copy over pnl parameters
     for c in [n.components["Generator"]]:
         for param, df in c.dynamic.items():
-            # skip result vars
+            # skip result vars, and marginal_cost as it holds fuel costs
             if param not in (
                 "p_min_pu",
                 "p_max_pu",
                 "p_set",
                 "q_set",
-                "marginal_cost",
                 "marginal_cost_quadratic",
                 "efficiency",
                 "stand_by_cost",
@@ -429,8 +434,7 @@ def convert_generators_2_links(
         ramp_limit_down=plants.ramp_limit_down,
         efficiency=plants.efficiency,
         efficiency2=co2_intensity,
-        marginal_cost=0,
-        # marginal_cost = plants.marginal_cost * plants.efficiency, # fuel costs rated at delievered
+        marginal_cost=vom * plants.efficiency,
         capital_cost=plants.capital_cost * plants.efficiency,  # links rated on input capacity
         lifetime=plants.lifetime,
         build_year=plants.build_year,

@@ -160,16 +160,23 @@ def apply_dynamic_pricing(
     carrier: str,
         carrier to apply fuel cost data to (ie. Gas)
     geography: str,
-        column of geography to search over (ie. balancing_area, state, reeds_zone, ...)
+        geography of the fuel cost columns: state (state names), balancing_area
+        (EIA balancing authorities), or any bus column (ie. reeds_zone)
     df: pd.DataFrame,
         Fuel costs data
     vom: float = 0
-        Additional flat $/MWh cost to add onto the fuel costs
+        Flat $/MWh added onto the fuel costs of generators without their own
+        'vom_cost'
     """
-    assert geography in n.buses.columns
-
     gens = n.generators.copy()
-    gens[geography] = gens.bus.map(n.buses[geography])
+    if geography == "state":
+        gens[geography] = gens.bus.map(n.buses.reeds_state).map(const.CODE_2_STATE)
+    elif geography == "balancing_area":
+        # plants carry their EIA balancing authority; buses only the ReEDS one
+        gens[geography] = gens.get("ba_eia", pd.Series(np.nan, index=gens.index))
+    else:
+        assert geography in n.buses.columns
+        gens[geography] = gens.bus.map(n.buses[geography])
     gens = gens[(gens.carrier == carrier) & (gens[geography].isin(df.columns))]
 
     if gens.empty:
@@ -184,8 +191,9 @@ def apply_dynamic_pricing(
     fuel_costs.index = pd.to_datetime(fuel_costs.index)
     fuel_costs = broadcast_investment_horizons_index(n, fuel_costs)
 
+    gen_vom = gens.get("vom_cost", pd.Series(np.nan, index=gens.index)).fillna(vom)
     marginal_costs = fuel_costs.div(eff, axis=1)
-    marginal_costs = marginal_costs + vom
+    marginal_costs = marginal_costs + gen_vom
 
     # drop any data that has been assigned at a coarser resolution
     n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"][
@@ -684,6 +692,14 @@ def attach_conventional_generators(
 
     plants["efficiency"] = plants.efficiency.astype(float).fillna(plants.efficiency_r)
 
+    # plant VOM (WECC ADS, imputed in build_powerplants); ATB where none was found
+    no_vom = plants.vom.isna()
+    plants["vom"] = plants.vom.fillna(plants.opex_variable_per_mwh)
+    plants.loc[no_vom, "marginal_cost"] = plants.vom + plants.fuel_cost * plants.heat_rate
+    if plants.marginal_cost.isna().any():
+        missing = plants[plants.marginal_cost.isna()].carrier.value_counts().to_dict()
+        logger.warning(f"No marginal cost for {missing} generators; pypsa will read it as 0 $/MWh")
+
     committable_fields = ["start_up_cost", "min_down_time", "min_up_time"]
     defaults = n.components["Generator"].defaults["default"]
     if unit_commitment:
@@ -752,9 +768,7 @@ def attach_conventional_generators(
     )
 
     # Add fuel and VOM costs to the network
-    n.generators.loc[plants.index, "vom_cost"] = plants.carrier.map(
-        costs.opex_variable_per_mwh,
-    )
+    n.generators.loc[plants.index, "vom_cost"] = plants.vom
     n.generators.loc[plants.index, "fuel_cost"] = plants.fuel_cost
     n.generators.loc[plants.index, "heat_rate"] = plants.heat_rate_mmbtu_per_mwh
     n.generators.loc[plants.index, "ba_eia"] = plants.balancing_authority_code
@@ -1235,6 +1249,7 @@ def _remote_unit_attributes(
         "min_down_time",
         "start_up_cost",
         "fuel_cost",
+        "vom",
     ]
     attrs = {field: weighted_avg(constituents, field, "p_nom") for field in fields}
 
@@ -1253,6 +1268,7 @@ def _remote_unit_attributes(
         ("summer_derate", 1.0),
         ("winter_derate", 1.0),
         ("fuel_cost", 0.0),
+        ("vom", _cost(costs, carrier, "opex_variable_per_mwh", 0.0)),
     ):
         if pd.isna(attrs[field]):
             attrs[field] = fallback
@@ -1652,9 +1668,7 @@ def _attach_remote_firm(
         lifetime=firm["carrier"].map(lambda c: _cost(costs, c, "lifetime", np.inf)),
         **kwargs,
     )
-    n.generators.loc[firm.index, "vom_cost"] = firm["carrier"].map(
-        lambda c: _cost(costs, c, "opex_variable_per_mwh", 0.0),
-    )
+    n.generators.loc[firm.index, "vom_cost"] = firm["vom"]
     n.generators.loc[firm.index, "fuel_cost"] = firm["fuel_cost"]
     n.generators.loc[firm.index, "heat_rate"] = firm["heat_rate"]
 
@@ -1960,7 +1974,6 @@ def attach_breakthrough_renewable_plants(
 def apply_pudl_fuel_costs(
     n,
     plants,
-    costs,
     pudl_fuel_costs_fn,
 ):
     # Apply PuDL Fuel Costs for plants where listed
@@ -1970,23 +1983,13 @@ def apply_pudl_fuel_costs(
     if not set(plants.index).intersection(pudl_fuel_costs.columns):
         return n
 
-    # Construct the VOM table for each generator by carrier
-    vom = pd.DataFrame(index=pudl_fuel_costs.columns)
-    for gen in pudl_fuel_costs.columns:
-        if gen not in plants.index:
-            continue
-        carrier = plants.loc[gen, "carrier"]
-        if carrier not in costs.index:
-            continue
-        vom.loc[gen, "VOM"] = costs.at[carrier, "opex_variable_per_mwh"]
-
-    # Apply the VOM to the fuel costs
-    pudl_fuel_costs = pudl_fuel_costs + vom.squeeze()
-    pudl_fuel_costs = broadcast_investment_horizons_index(n, pudl_fuel_costs)
-
     # Drop any columns that are not in the network
     pudl_fuel_costs.columns = "C" + pudl_fuel_costs.columns
     pudl_fuel_costs = pudl_fuel_costs[[x for x in pudl_fuel_costs.columns if x in n.generators.index]]
+
+    # Apply each plant's own VOM to the fuel costs
+    pudl_fuel_costs = pudl_fuel_costs + n.generators.loc[pudl_fuel_costs.columns, "vom_cost"].fillna(0)
+    pudl_fuel_costs = broadcast_investment_horizons_index(n, pudl_fuel_costs)
 
     # drop any data that has been assigned at a coarser resolution
     n.generators_t["marginal_cost"] = n.generators_t["marginal_cost"][
@@ -2255,7 +2258,7 @@ def main(snakemake):
                     )
 
         if params.conventional["dynamic_fuel_price"]["pudl"]:
-            n = apply_pudl_fuel_costs(n, plants, costs, snakemake.input["pudl_fuel_costs"])
+            n = apply_pudl_fuel_costs(n, plants, snakemake.input["pudl_fuel_costs"])
 
     # fix p_nom_min for extendable generators
     # The "- 0.001" is just to avoid numerical issues

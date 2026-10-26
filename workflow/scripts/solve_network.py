@@ -283,6 +283,7 @@ def _restore_original_nominal(n: pypsa.Network) -> None:
 
 def freeze_prior_periods(n: pypsa.Network, prior_period: int):
     renewable_carriers = set(n.config["electricity"].get("renewable_carriers", []))
+    economic = n.config["electricity"].get("retirement", "technical") == "economic"
     for c in (n.components[name] for name in ["Generator", "Link", "StorageUnit", "Store"]):
         # empty components carry an int64 index under pypsa v1, which breaks .str
         if c.static.empty:
@@ -291,13 +292,13 @@ def freeze_prior_periods(n: pypsa.Network, prior_period: int):
 
         prior = c.static.build_year <= prior_period
         # Only assets explicitly tagged "existing" in their name (split out by
-        # attach_multihorizon_existing_generators in add_extra_components.py) AND
-        # not on a renewable carrier are eligible for economic retirement. Renewables
-        # attrite via lifetime, not economics, so they're excluded even if their name
-        # happens to match.
+        # split_retirement_gens in add_extra_components.py) AND not on a renewable
+        # carrier are eligible for economic retirement, and only with
+        # `retirement: economic`. Renewables, and every asset under technical
+        # retirement, attrite via lifetime, not economics.
         existing = c.static.index.str.contains("existing", case=False, na=False)
         not_renewable = ~c.static["carrier"].isin(renewable_carriers)
-        retirable = prior & existing & not_renewable
+        retirable = prior & existing & not_renewable & economic
 
         # lock in the optimized capacity from the prior period as the starting point
         # for the next period — without this, p_nom still holds the pre-solve value
