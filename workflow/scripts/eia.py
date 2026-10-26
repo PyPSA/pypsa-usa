@@ -338,7 +338,7 @@ class Production(EiaData):
 
 
 # concrete creator
-class SupplyPrice(EiaData):
+class SupplyCost(EiaData):
     """Primary energy supply price projections."""
 
     def __init__(self, fuel: str, api: str) -> None:
@@ -348,10 +348,10 @@ class SupplyPrice(EiaData):
     def data_creator(self) -> pd.DataFrame:
         """Initializes data extractor."""
         if self.fuel == "gas":
-            return _GasSupplyPrice(self.api)
+            return _GasSupplyCost(self.api)
         else:
             raise InputPropertyError(
-                propery="Supply Price",
+                propery="Supply Cost",
                 valid_options=["gas"],
                 recived_option=self.fuel,
             )
@@ -1494,7 +1494,7 @@ class _FutureCosts(DataExtractor):
         return self._assign_dtypes(df)
 
 
-class _GasSupplyPrice(DataExtractor):
+class _GasSupplyCost(DataExtractor):
     """
     Annual natural gas supply price projections.
 

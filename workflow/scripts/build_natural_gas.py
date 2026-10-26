@@ -33,6 +33,7 @@ from constants import (
     NG_MWH_2_MMCF,
     STATE_2_CODE,
     STATES_INTERCONNECT_MAPPER,
+    USD_2025_2_USD_2023,
     NG_Dol_MMBTU_2_MWH,
 )
 from pypsa import Network
@@ -43,9 +44,6 @@ logger = logging.getLogger(__name__)
 ###
 # Constants
 ###
-
-# AEO2026 prices are in 2025 dollars; model costs are in 2023 dollars
-USD_2025_2_USD_2023 = 1 / 1.06
 
 # for converting everthing into MWh_th
 MWH_2_MMCF = NG_MWH_2_MMCF
@@ -497,10 +495,10 @@ def get_production_costs(api: str, investment_periods: Sequence[int]) -> pd.Seri
     Gas production marginal cost of each investment period in 2023$/MWh_th.
 
     The prices are the AEO2026 Lower 48 average supply price in 2025$/MMBtu
-    (see ``eia.SupplyPrice``). Periods outside the AEO years take the price of
+    (see ``eia.SupplyCost``). Periods outside the AEO years take the price of
     the nearest year.
     """
-    df = eia.SupplyPrice("gas", api).get_data()
+    df = eia.SupplyCost("gas", api).get_data()
     if not (df.units == "2025 $/MMBtu").all():
         raise ValueError(f"Expected AEO gas supply prices in 2025 $/MMBtu, got {df.units.unique().tolist()}")
     prices = df.value

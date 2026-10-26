@@ -44,7 +44,7 @@ PAYLOAD = {
 
 
 def _prices(units: str = "2025 $/MMBtu") -> pd.DataFrame:
-    """Formatted ``SupplyPrice`` data for 2025, 2030 and 2050."""
+    """Formatted ``SupplyCost`` data for 2025, 2030 and 2050."""
     return pd.DataFrame(
         {
             "series-description": "Natural Gas : Supply Prices : Lower 48 Average",
@@ -59,23 +59,23 @@ def _prices(units: str = "2025 $/MMBtu") -> pd.DataFrame:
 @pytest.fixture
 def patch_prices(monkeypatch):
     def _patch(df: pd.DataFrame) -> None:
-        monkeypatch.setattr(eia.SupplyPrice, "get_data", lambda self, pivot=False: df)
+        monkeypatch.setattr(eia.SupplyCost, "get_data", lambda self, pivot=False: df)
 
     return _patch
 
 
-def test_supply_price_url_targets_aeo2026_lower48_average():
-    url = eia.SupplyPrice("gas", "KEY").get_api_call()
+def test_supply_cost_url_targets_aeo2026_lower48_average():
+    url = eia.SupplyCost("gas", "KEY").get_api_call()
 
     assert url.startswith(f"{eia.API_BASE}aeo/2026/data/?api_key=KEY&")
     assert "facets[scenario][]=cb2026" in url
     assert "facets[seriesId][]=prce_sup_NA_NA_ng_NA_l48_y13dlrpmmbtu" in url
 
 
-def test_supply_price_is_indexed_by_year(monkeypatch):
+def test_supply_cost_is_indexed_by_year(monkeypatch):
     monkeypatch.setattr(eia.DataExtractor, "_request_eia_data", staticmethod(lambda url: PAYLOAD))
 
-    df = eia.SupplyPrice("gas", "KEY").get_data()
+    df = eia.SupplyCost("gas", "KEY").get_data()
 
     assert df.index.tolist() == [2025, 2030]
     assert df.value.tolist() == [2.710237, 3.76067]
