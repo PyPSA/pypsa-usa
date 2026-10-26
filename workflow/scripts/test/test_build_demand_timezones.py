@@ -28,7 +28,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import constants as const
 from build_demand import ReadCliu, ReadEfs, ReadEulp, _state_utc_offset
-from eulp import Eulp
+from eulp import ResEulp
 
 pytestmark = pytest.mark.fast
 
@@ -79,10 +79,12 @@ def test_eulp_interval_end_stamps_binned_into_their_starting_hour(tmp_path):
     kwh[:4] = 1000.0  # the four intervals of the first hour: ending 00:15 to 01:00
     kwh[-1] = 4000.0  # the last interval of the year, stamped 2019-01-01 00:00
     raw = pd.DataFrame({"out.electricity.plug_loads.energy_consumption.kwh": kwh}, index=stamps)
+    for columns in ResEulp._useful_groups.values():
+        raw[columns] = 0.0  # ResEulp requires the delivered-load columns
     path = tmp_path / "raw.csv"
     raw.to_csv(path)
 
-    elec = Eulp(str(path)).electric  # MWh per hour
+    elec = ResEulp(str(path)).electric  # MWh per hour
 
     assert len(elec) == HOURS
     assert elec.index[0] == pd.Timestamp("2018-01-01 00:00")
