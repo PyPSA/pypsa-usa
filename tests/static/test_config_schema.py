@@ -108,6 +108,7 @@ def test_typo_in_closed_subtree_is_rejected(schema):
         (("clustering", "cluster_network", "algorithm"), "hac"),
         (("solving", "solver", "name"), "gurbi"),
         (("costs", "atb", "scenario"), "moderate"),
+        (("costs", "atb", "model_case"), "Market"),  # 2024 ATB label, gone from the 2025 ATB
         (("renewable_land_access",), "refrence"),
     ],
 )

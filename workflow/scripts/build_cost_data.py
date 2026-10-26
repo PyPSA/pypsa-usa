@@ -62,6 +62,16 @@ LIFETIME_DATA = [
     {"pypsa-name": "10hr_battery_storage", "parameter": "lifetime", "value": 20},
 ]  # https://github.com/NREL/ReEDS-2.0/blob/e65ed5ed4ffff973071839481309f77d12d802cd/inputs/plant_characteristics/maxage.csv#L4
 
+# NREL ATB release read from PUDL (first carried by PUDL v2026.9.0). The 2025 ATB
+# replaced the Market / R&D financial cases with cost-driver cases crossed with a
+# tax-credit flag: R&D, R&D + TC, Exp (expanded cost drivers) and Exp + TC.
+ATB_REPORT_YEAR = 2025
+
+# Exp cases are only published for some technologies (utility PV, land-based wind,
+# utility-scale batteries); every other carrier takes the R&D cost-driver case with
+# the same tax-credit treatment.
+ATB_MODEL_CASE_FALLBACK = {"Exp": "R&D", "Exp + TC": "R&D + TC"}
+
 
 def create_duckdb_instance():
     """Set up DuckDB to read parquet files directly."""
@@ -95,7 +105,7 @@ def load_pudl_atb_data(parquet_path: str):
             AND atb.projection_year = finance.projection_year
             AND atb.cost_recovery_period_years = finance.cost_recovery_period_years
             AND atb.report_year = finance.report_year
-    WHERE atb.report_year = 2024
+    WHERE atb.report_year = {ATB_REPORT_YEAR}
     """
     return duckdb.query(query).to_df()
 
@@ -335,6 +345,36 @@ def build_aeo_fuel_costs(parquet_path: str, tech_year: int, aeo_scenario: str) -
     return pd.concat([aeo, tech_fuels], ignore_index=True)
 
 
+def complete_atb_slice(pudl_atb_year: pd.DataFrame, atb_scenario: str, atb_model_case: str) -> pd.DataFrame:
+    """Rows of one (atb_scenario, model_case) slice, completed from its fallback case.
+
+    Every carrier ATB covers in ``atb_scenario`` must end up in the slice: one left
+    out would reach ``load_costs`` without capex and be zero-filled there. Returns an
+    empty frame when ATB does not publish the case for this scenario at all.
+    """
+    in_scenario = pudl_atb_year[pudl_atb_year.scenario_atb == atb_scenario]
+    sub = in_scenario[in_scenario.model_case_nrelatb == atb_model_case]
+    if sub.empty:
+        return sub
+
+    fallback = ATB_MODEL_CASE_FALLBACK.get(atb_model_case)
+    if fallback is not None:
+        fill = in_scenario[
+            (in_scenario.model_case_nrelatb == fallback) & ~in_scenario["pypsa-name"].isin(sub["pypsa-name"])
+        ]
+        if not fill.empty:
+            logger.info(
+                f"ATB {atb_scenario} / {atb_model_case} is not published for "
+                f"{sorted(fill['pypsa-name'].unique())}; using {fallback}",
+            )
+            sub = pd.concat([sub, fill], ignore_index=True)
+
+    missing = set(in_scenario["pypsa-name"]) - set(sub["pypsa-name"])
+    if missing:
+        raise ValueError(f"ATB {atb_scenario} / {atb_model_case} has no data for {sorted(missing)}")
+    return sub
+
+
 def process_atb_scenario(pudl_atb_sub: pd.DataFrame, aeo: pd.DataFrame) -> pd.DataFrame:
     """Run the full cost pipeline for one (atb_scenario, model_case) slice.
 
@@ -526,9 +566,7 @@ if __name__ == "__main__":
     scenario_results = []
     for atb_scenario in scenarios:
         for atb_model_case in cases:
-            sub = pudl_atb_year[
-                (pudl_atb_year.scenario_atb == atb_scenario) & (pudl_atb_year.model_case_nrelatb == atb_model_case)
-            ]
+            sub = complete_atb_slice(pudl_atb_year, atb_scenario, atb_model_case)
             if sub.empty:
                 continue
             result = process_atb_scenario(sub, aeo)

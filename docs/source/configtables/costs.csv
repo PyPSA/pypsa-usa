@@ -1,7 +1,7 @@
 ,Unit,Values,Description
 atb,,,"NREL ATB scenario selection. ATB carries every (scenario, model_case) for each carrier — these settings choose which slice ``load_costs`` uses."
 -- scenario,--,``Moderate`` \| ``Advanced`` \| ``Conservative``,"Global default ATB cost trajectory. ``Advanced`` = optimistic / fastest cost decline; ``Conservative`` = pessimistic. See :ref:`data-costs`."
--- model_case,--,``Market`` \| ``R&D``,"Global default. ``Market`` bakes current policy incentives (PTC/ITC) into financing; ``R&D`` strips them out for a pure-learning view."
+-- model_case,--,``R&D + TC`` \| ``R&D`` \| ``Exp + TC`` \| ``Exp``,"Global default ATB 2025 case. ``R&D`` = research-and-development cost drivers, ``Exp`` = expanded cost drivers (published for utility PV, land-based wind and utility-scale batteries only; other carriers fall back to the matching ``R&D`` case). ``+ TC`` adds the tax credits enacted as of July 2025 to the financing assumptions."
 -- overrides,,Mapping,"Optional per-carrier overrides. Keys are pypsa-names (``solar``, ``onwind``, ``nuclear``, ``CCGT``, ``4hr_battery_storage``, …); each value may set ``scenario`` and/or ``model_case``. Anything unset falls back to the global default."
 aeo,,,"EIA AEO fuel-cost scenario."
 -- scenario,--,``reference`` \| ``high`` \| ``low``,"AEO case used to fetch projected fuel costs for the requested year."
