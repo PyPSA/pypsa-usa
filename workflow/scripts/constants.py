@@ -27,6 +27,16 @@ NG_MWH_2_MMCF = 303.5  # MWh / MMCF
 # $/MMBtu * (1 MMBtu / 0.293 MWh) = $/MWh_thermal
 NG_Dol_MMBTU_2_MWH = 3.4129
 
+# AEO2026 prices are in 2025 dollars; model costs are in 2023 dollars
+USD_2025_2_USD_2023 = 1 / 1.06
+
+# underground gas storage charge (injection) capacity as a share of its discharge
+# (withdrawal) capacity. EIA-191 reports only the maximum daily delivery, so the
+# injection rate is scaled from it by the ratio of the largest weekly net injection
+# (132 Bcf) to the largest weekly net withdrawal (359 Bcf) in the Lower 48 storage
+# history: https://www.eia.gov/dnav/ng/hist/nw2_epg0_swo_r48_bcfw.htm
+NG_STORAGE_CHARGE_DISCHARGE_RATIO = 132 / 359
+
 LBS_TON = 2000  # lbs/ short ton
 COAL_BTU_LB = 9396  # BTU/lb - EIA US AVERAGE TODO: differentiate between coal types
 MMBTU_MWHthemal = 3.4129  # MMBTU to MWh_thermal
@@ -990,6 +1000,18 @@ STATE_2_TIMEZONE = {
     "WV": "US/Eastern",
     "WI": "US/Central",
     "WY": "US/Mountain",
+}
+
+#: Hours each timezone's standard time runs behind UTC. Snapshots are UTC with
+#: no daylight saving, so a reader holding local-standard-time data rolls it
+#: forward by this many hours.
+UTC_OFFSET_HOURS: dict[str, int] = {
+    "US/Eastern": 5,
+    "US/Central": 6,
+    "US/Mountain": 7,
+    "US/Pacific": 8,
+    "US/Alaska": 9,
+    "Pacific/Honolulu": 10,
 }
 
 

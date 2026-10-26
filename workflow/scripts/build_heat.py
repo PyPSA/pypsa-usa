@@ -132,6 +132,8 @@ def reindex_cop(sns: pd.MultiIndex, da: xr.DataArray) -> pd.DataFrame:
     investment_years = sns.get_level_values(0).unique()
 
     # use first investment year, as weather profiles dont change between years
+    # (snapshots carry no leap day, and Feb 29 has no date in a non-leap year)
+    cop = cop[~((cop.index.month == 2) & (cop.index.day == 29))]
     cop.index = cop.index.map(lambda x: x.replace(year=investment_years[0]))
 
     # need to account for tsa with variable lengths per snapshot

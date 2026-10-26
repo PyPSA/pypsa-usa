@@ -59,7 +59,7 @@ Scenario settings as shipped: `interconnect: western`, `simpl: 75`, `clusters: 4
 | **Out-of-state contracts** | CPUC ledger of physically out-of-state units serving California load (75 rows, 11,173 MW) | `electricity: remote_contracted_resources: enable: true` | `workflow/repo_data/CPUC/servm_out_of_state_units.csv` |
 | **Emissions limit** | CARB 2022 Scoping Plan AB 32 trajectory, annual 2025-2050, import emissions factor 0.428 tCO2/MWh | `REM` token in `{opts}`; `electricity: regional_Co2_limits` | `config/policy_constraints/regional_Co2_limits.csv` (`CA_AB32` rows) |
 | **Benchmark reference** | CPUC Baseline Generator List (`BaselineGeneratorList_CAISO.xlsx`), plus the out-of-state exclusion ledger | `run: benchmark_cpuc: true` | `data/cpuc/BaselineGeneratorList_CAISO.xlsx`, `workflow/repo_data/CPUC/servm_benchmark_regions.csv`, `servm_tech_map.csv` |
-| **Costs** | NREL ATB (`Market` / `Moderate`) with IRA ITC/PTC modifiers; AEO reference fuel outlook | `costs:` block | see [Costs](data-costs.md) |
+| **Costs** | NREL ATB 2025 (`R&D + TC` / `Moderate`) with IRA ITC/PTC modifiers; AEO reference fuel outlook | `costs:` block | see [Costs](data-costs.md) |
 
 ### Demand regions
 

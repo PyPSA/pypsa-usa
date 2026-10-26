@@ -50,6 +50,7 @@ rule add_sectors:
         snapshots=config["snapshots"],
         api=config["api"],
         sector=config["sector"],
+        pudl_path=config_provider("pudl_path"),
     input:
         unpack(sector_input_files),
     output:

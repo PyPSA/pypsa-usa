@@ -840,6 +840,10 @@ def set_parameters(plants: pd.DataFrame):
     plants = impute_missing_plant_data(plants, ["technology_description", "build_decade"], data_fields)
     plants = impute_missing_plant_data(plants, ["prime_mover_code", "build_decade"], data_fields)
     plants = impute_missing_plant_data(plants, ["carrier", "build_decade"], data_fields)
+    # no VOM for any plant of the carrier and decade (very old units, or proposed
+    # ones without an operating date) would leave marginal_cost NaN, which pypsa
+    # reads as zero; add_electricity falls back to ATB if a whole carrier lacks it
+    plants = impute_missing_plant_data(plants, ["carrier"], ["vom"])
 
     plants["start_fuel_cost"] = plants.start_fuel_mmbtu * plants.fuel_cost
     plants["start_up_cost"] = plants.startup_cost_fixed + plants.start_fuel_cost
@@ -922,11 +926,15 @@ def filter_outliers_iqr_grouped(df, group_column, value_column):
 
 
 def filter_outliers_zscore(temporal_data, target_field_name):
-    """Filter outliers using Z-score."""
+    """Filter outliers using Z-score.
+
+    A generator with a single entry, or a constant series, has no spread to
+    score against, so its entries are kept.
+    """
     # Calculate mean and standard deviation for each generator
     stats = temporal_data.groupby(["generator_name"])[target_field_name].agg(["mean", "std"]).reset_index()
     stats["mean"] = stats["mean"].replace(np.inf, np.nan)
-    stats = stats.dropna()
+    stats = stats.dropna(subset=["mean"])
 
     # Merge mean and std back to the original dataframe
     temporal_stats = temporal_data.merge(
@@ -941,7 +949,9 @@ def filter_outliers_zscore(temporal_data, target_field_name):
 
     # Filter out the outliers using Z-score
     threshold = 3
-    filtered_temporal = temporal_stats[np.abs(temporal_stats["z_score"]) <= threshold]
+    no_spread = (temporal_stats["std"].isna() | (temporal_stats["std"] == 0)) & temporal_stats["mean"].notna()
+    keep = (np.abs(temporal_stats["z_score"]) <= threshold) | (no_spread & temporal_stats[target_field_name].notna())
+    filtered_temporal = temporal_stats[keep]
     filtered_temporal = filtered_temporal.drop(columns=["mean", "std", "z_score"])
     return filtered_temporal
 

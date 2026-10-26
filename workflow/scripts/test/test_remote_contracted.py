@@ -49,6 +49,7 @@ PLANT_COLUMNS = [
     "min_down_time",
     "start_up_cost",
     "fuel_cost",
+    "vom",
     "minimum_load_mw",
     "energy_storage_capacity_mwh",
     "build_year",
@@ -71,6 +72,7 @@ def _plant(name, carrier, plant_id, p_nom, **overrides):
         "min_down_time": 4.0,
         "start_up_cost": 1000.0,
         "fuel_cost": 3.0,
+        "vom": 4.0,  # marginal_cost = vom + fuel_cost * heat_rate
         "minimum_load_mw": p_nom * 0.4,
         "energy_storage_capacity_mwh": np.nan,
         "build_year": 2010.0,
@@ -356,11 +358,13 @@ def test_category_mismatch_uses_the_contracted_category_carrier(network, plants_
 def test_multi_plant_contract_pools_both_plants(network, plants_prefilter):
     """A ``;``-joined eia_plant_id (Hoover's NV + AZ halves) pools both plants."""
     plants = pd.concat(
-        [plants_prefilter, pd.DataFrame([_plant("ccgt_c", "CCGT", 1004, 600.0)])],
+        [plants_prefilter, pd.DataFrame([_plant("ccgt_c", "CCGT", 1004, 600.0, vom=1.0)])],
     )
     _attach(network, plants, _ledger([["POOLED_CC", "SCE", "Gas CC", 1400.0, "1001;1004"]]))
 
     assert network.generators.at[REMOTE_PREFIX + "POOLED_CC", "p_nom"] == pytest.approx(1400.0)
+    # the unit carries its plants' capacity-weighted VOM (900 MW at 4, 600 MW at 1)
+    assert network.generators.at[REMOTE_PREFIX + "POOLED_CC", "vom_cost"] == pytest.approx((900 * 4 + 600 * 1) / 1500)
 
 
 def test_disabled_flag_is_a_no_op(network, plants_prefilter):

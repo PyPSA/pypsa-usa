@@ -10,22 +10,34 @@ Specifically, it will do the following
 - Creates capacity constrained pipelines to states neighbouring the interconnect
 - Creates capacity and energy constrained import/exports to international connections
 - Adds import/export historical natural gas prices
+- Adds AEO2026 projected supply prices as the gas production marginal cost
 """
 
 import logging
 import math
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from math import pi
 from typing import Any
 
+import duckdb
 import eia
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
 import yaml
-from constants import CODE_2_STATE, EMPTY_STATES, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
+from constants import (
+    CODE_2_STATE,
+    EMPTY_STATES,
+    NG_MWH_2_MMCF,
+    NG_STORAGE_CHARGE_DISCHARGE_RATIO,
+    STATE_2_CODE,
+    STATES_INTERCONNECT_MAPPER,
+    USD_2025_2_USD_2023,
+    NG_Dol_MMBTU_2_MWH,
+)
 from pypsa import Network
 
 logger = logging.getLogger(__name__)
@@ -37,6 +49,8 @@ logger = logging.getLogger(__name__)
 
 # for converting everthing into MWh_th
 MWH_2_MMCF = NG_MWH_2_MMCF
+
+STORAGE_AGGREGATIONS = ("state", "formation")
 
 ###
 # Geolocation of Assets class
@@ -249,60 +263,83 @@ class GasBuses(GasData):
 
 
 class GasStorage(GasData):
-    """Creator for underground storage."""
+    """
+    Creator for underground storage.
 
-    def __init__(self, year: int, interconnect: str, api: str) -> None:
-        self.api = api
+    Capacities are the reservoir level design values in the latest month of the
+    EIA-191 monthly underground gas storage report (PUDL
+    ``core_eia191__monthly_gas_storage``): total field capacity, working gas
+    capacity and maximum daily delivery. The store spans the total field capacity
+    with the cushion above working gas capacity as its minimum level. Active
+    reservoirs are summed per state, or per state and formation (depleted field,
+    aquifer, salt dome) with ``aggregation="formation"``.
+    """
+
+    def __init__(self, year: int, interconnect: str, pudl_path: str, aggregation: str = "state") -> None:
+        if aggregation not in STORAGE_AGGREGATIONS:
+            raise ValueError(
+                f"Gas storage aggregation must be one of {STORAGE_AGGREGATIONS}; received '{aggregation}'.",
+            )
+        self.pudl_path = pudl_path
+        self.aggregation = aggregation
         super().__init__(year, interconnect)
 
-    def read_data(self):
-        """Read in data from EIA API."""
-        base = eia.Storage("gas", "base", self.year, self.api).get_data()
-        base["storage_type"] = "base_capacity"
-        total = eia.Storage("gas", "total", self.year, self.api).get_data()
-        total["storage_type"] = "total_capacity"
-        working = eia.Storage("gas", "working", self.year, self.api).get_data()
-        working["storage_type"] = "working_capacity"
+    def read_data(self) -> pd.DataFrame:
+        """Read in EIA-191 reservoir data from PUDL."""
+        duckdb.query("INSTALL httpfs;")
+        return duckdb.query(
+            f"""
+            SELECT storage_field_id_eia, report_date, state, field_type, operational_status,
+                base_gas_mcf, working_gas_capacity_mcf, total_field_capacity_mcf, maximum_daily_delivery_mcf
+            FROM read_parquet('{self.pudl_path}/core_eia191__monthly_gas_storage.parquet')
+            """,
+        ).to_df()
 
-        final = pd.concat([base, total, working])
-        final["value"] = pd.to_numeric(final.value)
-        return final
-
-    def format_data(self, data: pd.DataFrame):
+    def format_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """Format storage data."""
         df = data.copy()
-        df["value"] = df.value * MWH_2_MMCF
-        df = (
-            df.reset_index()
-            .drop(columns=["period", "series-description", "units"])  # units in MWh_th
-            .groupby(["state", "storage_type"])
-            .mean()  # get average yearly capacity
-            .reset_index()
-            .rename(columns={"value": "capacity"})
-            .pivot(columns="storage_type", index="state")
-        )
-        df.columns = df.columns.droplevel(0)
-        df.columns.name = ""
-        df = df.reset_index()
-        df = df.rename(
-            columns={
-                "base_capacity": "MIN_CAPACITY_MWH",
-                "total_capacity": "MAX_CAPACITY_MWH",
-                "working_capacity": "WORKING_CAPACITY_MWH",
-                "state": "STATE",
+        df["report_date"] = pd.to_datetime(df.report_date)
+
+        # use the latest month of the report; reservoir IDs change with ownership, so a
+        # reservoir whose last report is older is mostly reported again under a new ID
+        latest = df.report_date.max()
+        logger.info(f"Gas storage capacities from the EIA-191 report of {latest:%Y-%m}")
+        df = df[(df.report_date == latest) & (df.operational_status.str.lower() == "active")]
+
+        # total field and working gas capacity are design values, so the minimum level
+        # is the cushion they imply. Base gas is an end-of-month volume, not additive
+        # with the two, and only fills a missing capacity
+        total = df.total_field_capacity_mcf.fillna(df.base_gas_mcf + df.working_gas_capacity_mcf)
+        working = df.working_gas_capacity_mcf.fillna(total - df.base_gas_mcf)
+
+        mwh_per_mcf = MWH_2_MMCF / 1000
+        df = pd.DataFrame(
+            {
+                "STATE": df.state,
+                "FORMATION": df.field_type.str.lower().str.replace(" ", "-"),
+                "MAX_CAPACITY_MWH": total * mwh_per_mcf,
+                "MIN_CAPACITY_MWH": (total - working).clip(lower=0) * mwh_per_mcf,
+                "WORKING_CAPACITY_MWH": working * mwh_per_mcf,
+                "DISCHARGE_MW": df.maximum_daily_delivery_mcf * mwh_per_mcf / 24,
             },
         )
+        df["CHARGE_MW"] = df.DISCHARGE_MW * NG_STORAGE_CHARGE_DISCHARGE_RATIO
+
+        by = ["STATE", "FORMATION"] if self.aggregation == "formation" else ["STATE"]
+        df = df.groupby(by).sum(numeric_only=True).reset_index()
+        df = df[df.MAX_CAPACITY_MWH > 0]
+        df["NAME"] = df[by].agg(" ".join, axis=1)
+
         # REVIST THIS
         # start storage a 2/3 full
         df["e_initial"] = df.MIN_CAPACITY_MWH + (df.MAX_CAPACITY_MWH - df.MIN_CAPACITY_MWH).div(1.5)
 
-        return self.filter_on_interconnect(df, ["U.S."])
+        return self.filter_on_interconnect(df)
 
     def build_infrastructure(self, n: pypsa.Network, **kwargs):
         """Add pypsa components to network."""
         df = self.filter_on_state(n, self.data)
-        df.index = df.STATE
-        df["state_name"] = df.index.map(self.state_2_name)
+        df.index = df.NAME
 
         if "gas storage" not in n.carriers.index:
             n.add("Carrier", "gas storage", color="#d35050", nice_name="Gas Storage")
@@ -314,7 +351,7 @@ class GasStorage(GasData):
             carrier="gas storage",
             unit="MWh_th",
             interconnect=self.interconnect,
-            country=df.index,
+            country=df.STATE,
         )
 
         cyclic_storage = kwargs.get("cyclic_storage", True)
@@ -337,16 +374,15 @@ class GasStorage(GasData):
         )
 
         # must do two links, rather than a bidirectional one, to constrain charge limits
-        # Right now, chanrge limits are set at being able to drain the reservoir
-        # over one full month
+        # discharge is the maximum daily delivery; charge is a share of it
         n.add(
             "Link",
             name=df.index,
             suffix=" charge gas storage",
             carrier="gas storage",
-            bus0=df.index + " gas",
+            bus0=df.STATE + " gas",
             bus1=df.index + " gas storage",
-            p_nom=(df.MAX_CAPACITY_MWH - df.MIN_CAPACITY_MWH) / (30 * 24),
+            p_nom=df.CHARGE_MW,
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
@@ -361,8 +397,8 @@ class GasStorage(GasData):
             suffix=" discharge gas storage",
             carrier="gas storage",
             bus0=df.index + " gas storage",
-            bus1=df.index + " gas",
-            p_nom=(df.MAX_CAPACITY_MWH - df.MIN_CAPACITY_MWH) / (30 * 24),
+            bus1=df.STATE + " gas",
+            p_nom=df.DISCHARGE_MW,
             p_min_pu=0,
             p_max_pu=1,
             p_nom_extendable=False,
@@ -430,11 +466,14 @@ class GasProcessing(GasData):
             STATE=df.index,
         )
 
-        # marginal cost
-        # https://www.aer.ca/providing-information/data-and-reports/statistical-reports/st98/natural-gas/supply-costs
-        # Table S5.6 with Variable Operating Cost average of ~$63 CAD/ 1000 m3
-        # (63 CAD/ 1000 m3) (1 m3 / 35.5 CF) (1,000,000 CF / MMCF) (1 MMCF / 303.5 MWH) (1 USD / 0.75 CAD)
-        # ~7.5 $/MWh
+        # marginal cost is the Lower 48 average supply price of the investment
+        # period (see get_production_costs), the same in every state
+        production_costs = kwargs["production_costs"]
+        period_costs = pd.Series(
+            n.snapshots.get_level_values(0).map(production_costs),
+            index=n.snapshots,
+        )
+        marginal_cost = pd.concat({state: period_costs for state in df.index}, axis=1)
 
         n.add(
             "Link",
@@ -447,7 +486,7 @@ class GasProcessing(GasData):
             efficiency=1,
             p_nom_extendable=p_nom_extendable,
             capital_cost=0.01,  # to update
-            marginal_cost=7.5,
+            marginal_cost=marginal_cost,
             p_nom=(df.p_nom * p_nom_mult).round(2),
             p_nom_min=0,
             p_nom_max=df.p_nom * p_nom_max_mult,
@@ -475,6 +514,30 @@ class GasProcessing(GasData):
             lifetime=np.inf,
             build_year=n.investment_periods[0],
         )
+
+
+def get_production_costs(api: str, investment_periods: Sequence[int]) -> pd.Series:
+    """
+    Gas production marginal cost of each investment period in 2023$/MWh_th.
+
+    The prices are the AEO2026 Lower 48 average supply price in 2025$/MMBtu
+    (see ``eia.SupplyCost``). Periods outside the AEO years take the price of
+    the nearest year.
+    """
+    df = eia.SupplyCost("gas", api).get_data()
+    if not (df.units == "2025 $/MMBtu").all():
+        raise ValueError(f"Expected AEO gas supply prices in 2025 $/MMBtu, got {df.units.unique().tolist()}")
+    prices = df.value
+
+    periods = pd.Series(list(investment_periods), index=list(investment_periods))
+    years = periods.clip(prices.index.min(), prices.index.max())
+    if not years.equals(periods):
+        logger.warning(
+            f"AEO2026 gas supply prices cover {prices.index.min()}-{prices.index.max()}; "
+            f"using the nearest year for investment periods {periods[years != periods].tolist()}",
+        )
+
+    return years.map(prices) * USD_2025_2_USD_2023 * NG_Dol_MMBTU_2_MWH
 
 
 class _GasPipelineCapacity(GasData):
@@ -799,7 +862,11 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         for invesetment_period in n.investment_periods:
             # reindex to match any tsa
             cost = costs.copy()
+            # snapshots carry no leap day, and Feb 29 has no date in a non-leap period
+            cost = cost[~((cost.index.month == 2) & (cost.index.day == 29))]
             cost.index = cost.index.map(lambda x: x.replace(year=invesetment_period))
+            # EIA monthly data runs to January 1st of the next year, which the year swap duplicates
+            cost = cost[~cost.index.duplicated(keep="first")]
             cost = cost.reindex(n.snapshots.get_level_values(1), method="nearest")
             # set investment periods
             # https://stackoverflow.com/a/56278736/14961492
@@ -1038,6 +1105,7 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
 
         marginal_cost = pd.concat([import_costs, export_costs], axis=1)
         marginal_cost = self._expand_costs(n, marginal_cost)
+        marginal_cost = marginal_cost[template.index]  # pypsa 1.x matches columns to names in order
 
         marginal_cost_multiplier = kwargs.get("marginal_cost_multiplier", 1)
         marginal_cost = marginal_cost.mul(marginal_cost_multiplier).round(4)
@@ -1228,13 +1296,6 @@ class PipelineLinepack(GasData):
         )
 
 
-def _remove_marginal_costs(n: pypsa.Network):
-    """Removes marginal costs of CCGT and OCGT plants."""
-    links = n.links[n.links.carrier.str.contains("CCGT") | n.links.carrier.str.contains("OCGT")].index
-
-    n.links.loc[links, "marginal_cost"] = 0
-
-
 ###
 # MAIN FUNCTION TO EXECUTE
 ###
@@ -1244,6 +1305,7 @@ def build_natural_gas(
     n: pypsa.Network,
     year: int,
     api: str,
+    pudl_path: str,
     interconnect: str = "western",
     county_path: str = "../data/counties/cb_2020_us_county_500k.shp",
     pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
@@ -1258,15 +1320,17 @@ def build_natural_gas(
     standing_loss = options.get("standing_loss", 0)
     marginal_cost_multiplier = options.get("marginal_cost_multiplier", 1)
     capacity_multiplier = options.get("existing_pipeline_multiplier", 1)
+    storage_aggregation = options.get("storage_aggregation", "state")
 
     # add state level natural gas processing facilities
 
     production = GasProcessing(year, interconnect, api)
-    production.build_infrastructure(n, capacity_multiplier=1)
+    production_costs = get_production_costs(api, n.investment_periods)
+    production.build_infrastructure(n, capacity_multiplier=1, production_costs=production_costs)
 
     # add state level gas storage facilities
 
-    storage = GasStorage(year, interconnect, api)
+    storage = GasStorage(year, interconnect, pudl_path, aggregation=storage_aggregation)
     storage.build_infrastructure(n, cyclic_storage=cyclic_storage)
 
     # add interconnect pipelines
@@ -1303,8 +1367,6 @@ def build_natural_gas(
         standing_loss=standing_loss,
     )
 
-    _remove_marginal_costs(n)
-
     if not math.isclose(capacity_multiplier, 1):
         links = n.links[n.links.carrier.isin(["gas pipeline", "gas trade"])].index
         p_nom = n.links.loc[links, "p_nom"] * capacity_multiplier
@@ -1331,4 +1393,7 @@ if __name__ == "__main__":
     )
     # pipelines.build_infrastructure(n)
 
-    build_natural_gas(n=n, year=year, api=api)
+    with open("./../repo_data/config/config.common.yaml") as file:
+        pudl_path = yaml.safe_load(file)["pudl_path"]
+
+    build_natural_gas(n=n, year=year, api=api, pudl_path=pudl_path)

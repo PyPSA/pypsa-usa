@@ -435,7 +435,7 @@ def demand_raw_data(wildcards):
     elif profile == "cliu":
         return [
             DATA + "industry_load/2014_update_20170910-0116.csv",  # cliu data
-            DATA + "industry_load/epri_industrial_loads.csv",  # epri data
+            DATA + "industry_load/epri_load_shapes.csv",  # epri data
             DATA + "industry_load/table3_2.xlsx",  # mecs data
             DATA + "industry_load/fips_codes.csv",  # fips data
         ]
@@ -611,8 +611,13 @@ rule build_industry_demand:
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
         pudl_path=config_provider("pudl_path"),
+        renewable_weather_years=config["renewable_weather_years"],
     input:
         network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
+        # county-level loads are matched to base buses, then mapped to cluster buses
+        base_network=NETWORKS + "{interconnect}/elec_base_network.nc",
+        busmap_b=BUSMAPS + "{interconnect}/busmap_b.csv",
+        busmap_s=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
         demand_files=demand_raw_data,
         dissagregate_files=demand_disaggregate_data,
         demand_scaling_file=demand_scaling_data,
@@ -639,6 +644,7 @@ rule build_transport_road_demand:
         profile_year=pd.to_datetime(config["snapshots"]["start"]).year,
         eia_api=config_provider("api", "eia"),
         snapshots=config_provider("snapshots"),
+        renewable_weather_years=config["renewable_weather_years"],
     input:
         network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
         demand_files=demand_raw_data,
