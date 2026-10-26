@@ -34,7 +34,7 @@ instructions (environment setup, solver, EIA API key) and usage details.
 
 # Contributing
 
-We welcome your contributions to this project. Please see the [contributions](https://pypsa-usa.readthedocs.io/en/latest/contributing.html) guide in our readthedocs page for more information. Please do not hesitate to reachout to ktehranchi@stanford.edu with specific questions, requests, or feature ideas.
+We welcome your contributions to this project. Please see the [contributions](https://pypsa-usa.readthedocs.io/en/latest/contributing.html) guide in our readthedocs page for more information. Please do not hesitate to reach out to Kamran Tehranchi (ktehranchi@stanford.edu), Trevor Barnes (trevor_barnes@sfu.ca), or Inês Azevedo (iazevedo@stanford.edu) with specific questions, requests, or feature ideas.
 
 # License
 
