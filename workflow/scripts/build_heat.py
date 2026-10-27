@@ -1191,7 +1191,7 @@ def add_service_heat_pumps(
     else:
         efficiency = costs.at[costs_name, "efficiency"].round(3)
 
-    capex = round(capex_per_input(costs, costs_name) * 0.7, 3)
+    capex = round(capex_per_input(costs, costs_name), 3)
     lifetime = costs.at[costs_name, "lifetime"]
     build_year = n.investment_periods[0]
 
