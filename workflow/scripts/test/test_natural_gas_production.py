@@ -1,9 +1,10 @@
-"""Unit tests for the gas production marginal cost in ``build_natural_gas``.
+"""Unit tests for the gas production efficiency and marginal cost in ``build_natural_gas``.
 
 Gas production is priced at the AEO2026 Lower 48 average supply price, read
 from the EIA API in 2025$/MMBtu and converted to 2023$/MWh_th, one price per
-investment period. The EIA layer is patched throughout; nothing here touches
-the network.
+investment period. Its efficiency is the dry gas, net of lease and plant fuel,
+per unit of marketed production. The EIA layer is patched throughout; nothing
+here touches the network.
 """
 
 import logging
@@ -18,7 +19,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import eia
 from _helpers import get_multiindex_snapshots
-from build_natural_gas import GasProcessing, get_production_costs
+from build_natural_gas import GasProcessing, get_production_costs, get_production_efficiency
 from constants import NG_Dol_MMBTU_2_MWH
 
 pytestmark = pytest.mark.fast
@@ -60,6 +61,23 @@ def _prices(units: str = "2025 $/MMBtu") -> pd.DataFrame:
 def patch_prices(monkeypatch):
     def _patch(df: pd.DataFrame) -> None:
         monkeypatch.setattr(eia.SupplyCost, "get_data", lambda self, pivot=False: df)
+
+    return _patch
+
+
+@pytest.fixture
+def patch_balance(monkeypatch):
+    """Formatted ``GasBalance`` data holding one volume per item."""
+
+    def _patch(volumes: dict[str, float], units: str = "MMCF") -> None:
+        def get_data(self, pivot=False):
+            values = [volumes[self.item]] if self.item in volumes else []
+            return pd.DataFrame(
+                {"series-description": self.item, "value": values, "units": units, "state": "U.S."},
+                index=pd.Index([self.year] * len(values), name="period"),
+            )
+
+        monkeypatch.setattr(eia.GasBalance, "get_data", get_data)
 
     return _patch
 
@@ -110,7 +128,30 @@ def test_other_dollar_year_is_rejected(patch_prices):
         get_production_costs("KEY", [2030])
 
 
-def test_production_links_carry_cost_of_each_period():
+def test_production_efficiency_is_dry_gas_net_of_field_fuel(patch_balance):
+    patch_balance({"marketed": 100.0, "dry": 93.0, "lease_and_plant_fuel": 5.0})
+
+    assert get_production_efficiency("KEY", 2019) == pytest.approx(0.88)
+
+
+def test_production_efficiency_needs_every_balance_item(patch_balance):
+    patch_balance({"marketed": 100.0, "dry": 93.0})
+
+    with pytest.raises(ValueError, match="lease_and_plant_fuel"):
+        get_production_efficiency("KEY", 2019)
+
+
+def test_production_efficiency_rejects_other_units(patch_balance):
+    patch_balance({"marketed": 100.0, "dry": 93.0, "lease_and_plant_fuel": 5.0}, units="BCF")
+
+    with pytest.raises(ValueError, match="MMCF"):
+        get_production_efficiency("KEY", 2019)
+
+
+LINKS = ["TX gas production", "CA gas production"]
+
+
+def _build_production(**kwargs) -> pypsa.Network:
     n = pypsa.Network()
     n.snapshots = get_multiindex_snapshots(
         sns_config={"start": "2030-01-01 00:00", "end": "2030-01-01 01:00", "inclusive": "both"},
@@ -128,8 +169,46 @@ def test_production_links_carry_cost_of_each_period():
         n,
         capacity_multiplier=1,
         production_costs=pd.Series({2030: 10.0, 2040: 12.0}),
+        **kwargs,
     )
+    return n
 
-    marginal_cost = n.links_t.marginal_cost[["TX gas production", "CA gas production"]]
+
+KWARGS = {"efficiency": 0.88, "fom": 10725.4, "contraction": False}
+
+
+def test_production_links_pay_the_wellhead_price_of_each_period():
+    """The supply price is paid on the marketed gas the link draws, not scaled by its efficiency."""
+    n = _build_production(**KWARGS)
+
+    marginal_cost = n.links_t.marginal_cost[LINKS]
     assert marginal_cost.loc[2030].eq(10.0).all().all()
     assert marginal_cost.loc[2040].eq(12.0).all().all()
+
+
+def test_production_links_deliver_the_dry_share_of_marketed_gas():
+    n = _build_production(**KWARGS)
+
+    assert (n.links.loc[LINKS, "efficiency"] == 0.88).all()
+    # marketed production capacity is the input of the link
+    assert n.links.loc[LINKS, "p_nom"].tolist() == [100.0, 50.0]
+    assert (n.links.loc[LINKS, "capital_cost"] == 10725.4).all()
+    assert not n.links.loc[LINKS, "p_nom_extendable"].any()
+
+
+def test_production_contracts_down_to_zero():
+    n = _build_production(**(KWARGS | {"contraction": True}))
+
+    links = n.links.loc[LINKS]
+    assert links.p_nom_extendable.all()
+    assert (links.p_nom_min == 0).all()
+    assert links.p_nom_max.tolist() == [100.0, 50.0]
+
+
+@pytest.mark.parametrize("missing", list(KWARGS))
+def test_production_links_need_every_parameter(missing):
+    kwargs = KWARGS.copy()
+    del kwargs[missing]
+
+    with pytest.raises(KeyError, match=missing):
+        _build_production(**kwargs)

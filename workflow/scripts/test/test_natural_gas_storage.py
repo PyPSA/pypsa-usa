@@ -104,7 +104,7 @@ def test_storage_components(base_network, make_storage, aggregation):
     n.add("Bus", ["CA", "TX"], suffix=" gas", carrier="gas")
     storage = make_storage(aggregation)
 
-    storage.build_infrastructure(n)
+    storage.build_infrastructure(n, injection_loss=0.0103, compressor_fom=1277.7, contraction=False)
 
     for _, row in storage.data.iterrows():
         name = row.NAME
@@ -118,13 +118,40 @@ def test_storage_components(base_network, make_storage, aggregation):
         assert (discharge.bus0, discharge.bus1) == (f"{name} gas storage", f"{row.STATE} gas")
         assert discharge.p_nom == pytest.approx(row.DISCHARGE_MW)
         assert charge.p_nom == pytest.approx(NG_STORAGE_CHARGE_DISCHARGE_RATIO * row.DISCHARGE_MW)
+        # injection compressors burn part of the injected gas
+        assert charge.efficiency == pytest.approx(1 - 0.0103)
+        assert discharge.efficiency == 1
+        # the injection compressors carry the fixed O&M of the facility
+        assert charge.capital_cost == pytest.approx(1277.7)
+        assert store.capital_cost == discharge.capital_cost == 0
+        assert not (store.e_nom_extendable or charge.p_nom_extendable or discharge.p_nom_extendable)
     assert n.buses.loc[storage.data.NAME + " gas storage", "country"].tolist() == storage.data.STATE.tolist()
+
+
+def test_storage_contracts_down_to_zero(base_network, make_storage):
+    """The store, injection and withdrawal capacities are each optimised up to the existing one."""
+    n = base_network
+    n.add("Bus", ["CA", "TX"], suffix=" gas", carrier="gas")
+    storage = make_storage()
+
+    storage.build_infrastructure(n, injection_loss=0.0103, compressor_fom=1277.7, contraction=True)
+
+    data = storage.data.set_index("NAME")
+    stores = n.stores.loc[data.index + " gas storage"]
+    assert stores.e_nom_extendable.all()
+    assert (stores.e_nom_min == 0).all()
+    assert stores.e_nom_max.tolist() == pytest.approx(data.MAX_CAPACITY_MWH.tolist())
+    for suffix, capacity in [(" charge gas storage", data.CHARGE_MW), (" discharge gas storage", data.DISCHARGE_MW)]:
+        links = n.links.loc[data.index + suffix]
+        assert links.p_nom_extendable.all()
+        assert (links.p_nom_min == 0).all()
+        assert links.p_nom_max.tolist() == pytest.approx(capacity.tolist())
 
 
 def test_underground_storage_summary_sums_formations(base_network, make_storage):
     n = base_network
     n.add("Bus", ["CA", "TX"], suffix=" gas", carrier="gas")
-    make_storage("formation").build_infrastructure(n)
+    make_storage("formation").build_infrastructure(n, injection_loss=0.0103, compressor_fom=1277.7, contraction=False)
     stores = n.stores.index[n.stores.carrier == "gas storage"]
     n.stores_t.e = pd.DataFrame(1.0, index=n.snapshots, columns=stores)
 

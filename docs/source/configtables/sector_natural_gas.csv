@@ -10,6 +10,8 @@ natural_gas,,,Options when implementing natural gas networks
 -- standing_loss,per_unit,"float {0 <=, >= 1}","Leakage rate from pipelines. These leaks do NOT account towards emissions, just enforces gas production to replinish losses with cyclic constraints. "
 -- marginal_cost_multiplier,per_unit,"float {>=0}",Multiplier on the marginal cost of importing/exporting natural gas.
 -- existing_pipeline_multiplier,per_unit,"float {>=0}",Multiplier on the existing pipeline capacity. See issue https://github.com/PyPSA/pypsa-usa/issues/487
+-- pipeline_length_factor,per_unit,"float {>=1}","Ratio of pipeline route length to the great circle distance between the centers of the two states. The length scales the compressor fuel and leakage losses of the pipeline."
+-- infra_contraction,--,"bool {true, false}","If false, the capacities of gas production, underground storage (store, injection and withdrawal) and pipelines between states are fixed. If true, they are optimised between zero and the existing capacity, so assets whose fixed O&M outweighs their value can shrink. The injection of each storage keeps at least the share of its existing capacity that its store and withdrawal keep. Trade pipelines and linepack stay fixed."
 -- storage_aggregation,--,"{state, formation}","How underground storage reservoirs are aggregated. ``state`` builds one storage per state; ``formation`` builds one per state and formation (depleted field, aquifer, salt dome)."
 ,,,
 methane,,,Options of methane emission accounting attached to natural gas networks
