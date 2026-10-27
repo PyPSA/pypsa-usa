@@ -127,11 +127,15 @@ def match_technology(row, tech_dict):
 
 
 # Temperature rise (K) of the water in a storage water heater, from the DOE test
-# procedures behind the EIA efficiencies
-# (https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf):
-# - residential UEF test, 58 -> 125 F (10 CFR 430 Subpart B, Appendix E, 2.3-2.4)
+# procedures behind the EIA efficiencies (EIA, Updated Buildings Sector Appliance
+# and Equipment Costs and Efficiencies, 2023; page numbers as printed)
+# https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
+# - residential units are rated by UEF (EIA pp. 56, 59, 62 for gas, oil, electric),
+#   tested 58 -> 125 F (10 CFR 430 Subpart B, Appendix E, sections 2.3-2.4)
 #   https://www.ecfr.gov/current/title-10/chapter-II/subchapter-D/part-430/subpart-B/appendix-Appendix%20E%20to%20Subpart%20B%20of%20Part%20430
-# - commercial thermal efficiency test, 70 -> 140 F (10 CFR 431 Subpart G, Appendix A, 3.1.2 and 5.1.2)
+# - commercial units are rated by thermal efficiency (EIA pp. 148, 151, 156 for gas,
+#   electric, oil), tested 70 -> 140 F (10 CFR 431 Subpart G, Appendix A, sections
+#   3.1.2 and 5.1.2)
 #   https://www.ecfr.gov/current/title-10/chapter-II/subchapter-D/part-431/subpart-G/appendix-Appendix%20A%20to%20Subpart%20G%20of%20Part%20431
 WATER_HEATER_DELTA_T = {"Residential": 67 * 5 / 9, "Commercial": 70 * 5 / 9}
 KJ_PER_GALLON_KELVIN = 3.785 * 4.186  # 3.785 kg of water per gallon, cp of 4.186 kJ/kg/K
