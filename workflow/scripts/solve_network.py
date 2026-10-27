@@ -55,6 +55,7 @@ from opts.sector import (
     add_demand_response_constraint,
     add_ev_generation_constraint,
     add_fossil_generation_constraint,
+    add_gas_storage_contraction_constraints,
     add_gshp_capacity_constraint,
     add_ng_import_export_limits,
     add_sector_co2_constraints,
@@ -213,6 +214,10 @@ def extra_functionality(n, snapshots):
         # Natural gas import/export constraints
         if config["sector"]["natural_gas"].get("imports", False):
             add_ng_import_export_limits(n, config)
+
+        # A contracting gas storage keeps its injection at least as large as its other parts
+        if config["sector"]["natural_gas"].get("infra_contraction", False):
+            add_gas_storage_contraction_constraints(n)
 
         # Water heater constraints
         water_config = config["sector"]["service_sector"].get("water_heating", {})

@@ -15,6 +15,8 @@ sector:
     standing_loss: 0
     marginal_cost_multiplier: 1
     existing_pipeline_multiplier: 1
+    pipeline_length_factor: 1.25  # route length / distance between state centers
+    infra_contraction: false  # true = existing production, storage and pipelines may shrink to zero
     storage_aggregation: state  # state | formation
   methane:
     upstream_leakage_rate: 0.02 # per unit 

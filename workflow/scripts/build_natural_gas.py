@@ -3,9 +3,12 @@
 This module will add a state level copperplate natural gas network to the model.
 Specifically, it will do the following
 
-- Creates capacity constrained pipelines between state gas buses (links)
-- Creates capacity constraind natural gas processing facilites (generators)
-- Creates capacity and energy constrainted underground gas storage facilities
+- Creates capacity constrained pipelines between state gas buses (links), losing
+  compressor fuel and leakage with distance
+- Creates capacity constraind natural gas processing facilites (generators),
+  losing plant liquids and lease and plant fuel between wellhead and pipeline
+- Creates capacity and energy constrainted underground gas storage facilities,
+  losing compressor fuel on injection
 - Creates energy constrained linepack storage (storage units)
 - Creates capacity constrained pipelines to states neighbouring the interconnect
 - Creates capacity and energy constrained import/exports to international connections
@@ -355,14 +358,18 @@ class GasStorage(GasData):
         )
 
         cyclic_storage = kwargs.get("cyclic_storage", True)
+        # with contraction, every capacity is optimised between zero and the existing one
+        contraction = kwargs["contraction"]
         n.add(
             "Store",
             name=df.index,
             suffix=" gas storage",
             bus=df.index + " gas storage",
             carrier="gas storage",
-            e_nom_extendable=False,
+            e_nom_extendable=contraction,
             e_nom=df.MAX_CAPACITY_MWH,
+            e_nom_min=0,
+            e_nom_max=df.MAX_CAPACITY_MWH,
             e_cyclic=cyclic_storage,
             e_cyclic_per_period=cyclic_storage,  # pypsa v1 flipped this default to False
             e_min_pu=df.MIN_CAPACITY_MWH / df.MAX_CAPACITY_MWH,
@@ -375,6 +382,10 @@ class GasStorage(GasData):
 
         # must do two links, rather than a bidirectional one, to constrain charge limits
         # discharge is the maximum daily delivery; charge is a share of it
+        # injection loses a share of the gas, mostly burned by gas-fired compressors.
+        # The injection compressors carry the fixed O&M of the storage facility
+        injection_loss = kwargs["injection_loss"]
+        compressor_fom = kwargs["compressor_fom"]
         n.add(
             "Link",
             name=df.index,
@@ -382,10 +393,14 @@ class GasStorage(GasData):
             carrier="gas storage",
             bus0=df.STATE + " gas",
             bus1=df.index + " gas storage",
+            efficiency=1 - injection_loss,
+            capital_cost=compressor_fom,
             p_nom=df.CHARGE_MW,
+            p_nom_min=0,
+            p_nom_max=df.CHARGE_MW,
             p_min_pu=0,
             p_max_pu=1,
-            p_nom_extendable=False,
+            p_nom_extendable=contraction,
             marginal_cost=0,
             lifetime=np.inf,
             build_year=n.investment_periods[0],
@@ -399,9 +414,11 @@ class GasStorage(GasData):
             bus0=df.index + " gas storage",
             bus1=df.STATE + " gas",
             p_nom=df.DISCHARGE_MW,
+            p_nom_min=0,
+            p_nom_max=df.DISCHARGE_MW,
             p_min_pu=0,
             p_max_pu=1,
-            p_nom_extendable=False,
+            p_nom_extendable=contraction,
             marginal_cost=0,
             lifetime=np.inf,
             build_year=n.investment_periods[0],
@@ -442,8 +459,9 @@ class GasProcessing(GasData):
         df = df.set_index("STATE")
         df["bus"] = df.index + " gas"
 
+        # with contraction, the capacity is optimised between zero and the existing one
         capacity_mult = kwargs.get("capacity_multiplier", 1)
-        p_nom_extendable = False if capacity_mult == 1 else True
+        p_nom_extendable = kwargs["contraction"] or capacity_mult != 1
         p_nom_mult = 1 if capacity_mult >= 1 else capacity_mult
         p_nom_max_mult = capacity_mult
 
@@ -466,8 +484,13 @@ class GasProcessing(GasData):
             STATE=df.index,
         )
 
+        # the link takes marketed production at the wellhead and delivers dry gas to
+        # the transmission network (see get_production_efficiency)
+        efficiency = kwargs["efficiency"]
+
         # marginal cost is the Lower 48 average supply price of the investment
-        # period (see get_production_costs), the same in every state
+        # period (see get_production_costs), the same in every state. It is a
+        # wellhead price, so it is paid on the marketed gas the link draws
         production_costs = kwargs["production_costs"]
         period_costs = pd.Series(
             n.snapshots.get_level_values(0).map(production_costs),
@@ -483,9 +506,9 @@ class GasProcessing(GasData):
             unit="MW",
             bus0=df.index + " gas production",
             bus1=df.index + " gas",
-            efficiency=1,
+            efficiency=efficiency,
             p_nom_extendable=p_nom_extendable,
-            capital_cost=0.01,  # to update
+            capital_cost=kwargs["fom"],
             marginal_cost=marginal_cost,
             p_nom=(df.p_nom * p_nom_mult).round(2),
             p_nom_min=0,
@@ -538,6 +561,31 @@ def get_production_costs(api: str, investment_periods: Sequence[int]) -> pd.Seri
         )
 
     return years.map(prices) * USD_2025_2_USD_2023 * NG_Dol_MMBTU_2_MWH
+
+
+def get_production_efficiency(api: str, year: int) -> float:
+    """
+    Share of marketed production that enters the transmission network.
+
+    Between the wellhead and the transmission pipeline, processing plants extract
+    natural gas plant liquids (dry production is marketed production less this
+    extraction loss), and lease and processing plant operations burn part of the
+    gas as fuel. Both are read from the EIA natural gas balance of ``year`` as
+    U.S. totals, since lease and plant fuel is not published by state. The totals
+    include Alaska, which is under 1% of marketed production.
+    """
+    volumes = {}
+    for item in ("marketed", "dry", "lease_and_plant_fuel"):
+        df = eia.GasBalance(item, year, api).get_data()
+        if df.empty:
+            raise ValueError(f"No EIA natural gas {item} volume for {year}")
+        if not (df.units == "MMCF").all():
+            raise ValueError(f"Expected EIA natural gas {item} volume in MMCF, got {df.units.unique().tolist()}")
+        volumes[item] = df.value.sum()
+
+    efficiency = (volumes["dry"] - volumes["lease_and_plant_fuel"]) / volumes["marketed"]
+    logger.info(f"Gas production efficiency of {efficiency:.4f} from the EIA {year} natural gas balance")
+    return efficiency
 
 
 class _GasPipelineCapacity(GasData):
@@ -745,7 +793,7 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
             ]
         return df.reset_index(drop=True)
 
-    def build_infrastructure(self, n: pypsa.Network) -> None:
+    def build_infrastructure(self, n: pypsa.Network, **kwargs) -> None:
         """Add pypsa components to network."""
         df = self.filter_on_state(n, self.data, in_spatial_scope=True)
 
@@ -758,6 +806,24 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
             n.add("Carrier", "gas pipeline", color="#d35050", nice_name="Gas Pipeline")
 
         df.index = df.STATE_FROM + " " + df.STATE_TO
+        bus0 = df.STATE_FROM + " gas"
+        bus1 = df.STATE_TO + " gas"
+
+        # route length between the state gas buses (state centers). Gas-fired
+        # compressors burn, and the pipeline leaks, a share of the flow per distance.
+        # Fixed O&M is per MW of capacity and km of length
+        length_factor = kwargs["length_factor"]
+        loss_per_1000km = kwargs["loss_per_1000km"]
+        fom_per_km = kwargs["fom_per_km"]
+        # with contraction, the capacity is optimised between zero and the existing one
+        contraction = kwargs["contraction"]
+        length = (
+            pypsa.geo.haversine_pts(
+                n.buses.loc[bus0, ["x", "y"]].to_numpy(),
+                n.buses.loc[bus1, ["x", "y"]].to_numpy(),
+            )
+            * length_factor
+        )
 
         n.add(
             "Link",
@@ -765,12 +831,17 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
             suffix=" pipeline",
             carrier="gas pipeline",
             unit="MW",
-            bus0=df.STATE_FROM + " gas",
-            bus1=df.STATE_TO + " gas",
+            bus0=bus0,
+            bus1=bus1,
+            length=length,
+            efficiency=1 - loss_per_1000km * length / 1000,
+            capital_cost=fom_per_km * length,
             p_nom=df.CAPACITY_MW,
+            p_nom_min=0,
+            p_nom_max=df.CAPACITY_MW,
             p_min_pu=0,
             p_max_pu=1,
-            p_nom_extendable=False,
+            p_nom_extendable=contraction,
             lifetime=np.inf,
             build_year=n.investment_periods[0],
         )
@@ -1289,7 +1360,7 @@ class PipelineLinepack(GasData):
             e_cyclic_per_period=True,
             p_set=0,
             marginal_cost=0,
-            capital_cost=1,
+            capital_cost=0,
             standing_loss=standing_loss,
             lifetime=np.inf,
             build_year=n.investment_periods[0],
@@ -1306,6 +1377,7 @@ def build_natural_gas(
     year: int,
     api: str,
     pudl_path: str,
+    costs: pd.DataFrame,
     interconnect: str = "western",
     county_path: str = "../data/counties/cb_2020_us_county_500k.shp",
     pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
@@ -1313,6 +1385,7 @@ def build_natural_gas(
     options: dict[str, Any] | None = None,
     **kwargs,
 ) -> None:
+    """Add the natural gas network."""
     if not options:
         options = {}
 
@@ -1321,22 +1394,53 @@ def build_natural_gas(
     marginal_cost_multiplier = options.get("marginal_cost_multiplier", 1)
     capacity_multiplier = options.get("existing_pipeline_multiplier", 1)
     storage_aggregation = options.get("storage_aggregation", "state")
+    pipeline_length_factor = options.get("pipeline_length_factor", 1.25)
+    # existing production, storage and pipelines may shrink below their capacity
+    infra_contraction = options.get("infra_contraction", False)
+
+    # percent rates of the cost table
+    pipeline_loss_per_1000km = (costs.at["gas pipeline", "compressor-fuel"] + costs.at["gas pipeline", "leakage"]) / 100
+    storage_injection_loss = costs.at["gas storage", "injection-loss"] / 100
+    # fixed O&M of existing assets in 2023 USD per year, per MW and per MW-km
+    production_fom = costs.at["gas production", "fixed-om"]
+    pipeline_fom_per_km = costs.at["gas pipeline", "fixed-om"]
+    storage_compressor_fom = costs.at["gas storage compressor", "fixed-om"]
 
     # add state level natural gas processing facilities
 
     production = GasProcessing(year, interconnect, api)
     production_costs = get_production_costs(api, n.investment_periods)
-    production.build_infrastructure(n, capacity_multiplier=1, production_costs=production_costs)
+    production_efficiency = get_production_efficiency(api, year)
+    production.build_infrastructure(
+        n,
+        capacity_multiplier=1,
+        production_costs=production_costs,
+        efficiency=production_efficiency,
+        fom=production_fom,
+        contraction=infra_contraction,
+    )
 
     # add state level gas storage facilities
 
     storage = GasStorage(year, interconnect, pudl_path, aggregation=storage_aggregation)
-    storage.build_infrastructure(n, cyclic_storage=cyclic_storage)
+    storage.build_infrastructure(
+        n,
+        cyclic_storage=cyclic_storage,
+        injection_loss=storage_injection_loss,
+        compressor_fom=storage_compressor_fom,
+        contraction=infra_contraction,
+    )
 
     # add interconnect pipelines
 
     pipelines = InterconnectGasPipelineCapacity(year, interconnect, pipelines_path, api)
-    pipelines.build_infrastructure(n)
+    pipelines.build_infrastructure(
+        n,
+        length_factor=pipeline_length_factor,
+        loss_per_1000km=pipeline_loss_per_1000km,
+        fom_per_km=pipeline_fom_per_km,
+        contraction=infra_contraction,
+    )
 
     # add pipelines for imports/exports
     # TODO: have trade pipelines share data to only instantiate once
@@ -1368,9 +1472,9 @@ def build_natural_gas(
     )
 
     if not math.isclose(capacity_multiplier, 1):
+        # the upper bound of contracting pipelines scales with their capacity
         links = n.links[n.links.carrier.isin(["gas pipeline", "gas trade"])].index
-        p_nom = n.links.loc[links, "p_nom"] * capacity_multiplier
-        n.links.loc[links, "p_nom"] = p_nom
+        n.links.loc[links, ["p_nom", "p_nom_max"]] *= capacity_multiplier
 
 
 if __name__ == "__main__":
@@ -1396,4 +1500,10 @@ if __name__ == "__main__":
     with open("./../repo_data/config/config.common.yaml") as file:
         pudl_path = yaml.safe_load(file)["pudl_path"]
 
-    build_natural_gas(n=n, year=year, api=api, pudl_path=pudl_path)
+    costs = pd.read_csv("../resources/costs/sector_costs_2030.csv").pivot(
+        index="pypsa-name",
+        columns="parameter",
+        values="value",
+    )
+
+    build_natural_gas(n=n, year=year, api=api, pudl_path=pudl_path, costs=costs)

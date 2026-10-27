@@ -607,6 +607,7 @@ if __name__ == "__main__":
         year=sns[0].year,
         api=eia_api,
         pudl_path=snakemake.params.pudl_path,
+        costs=costs,
         interconnect=snakemake.wildcards.interconnect,
         county_path=snakemake.input.county,
         pipelines_path=snakemake.input.pipeline_capacity,

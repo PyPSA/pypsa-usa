@@ -5,6 +5,7 @@ Public Classes include:
 - FuelCosts(fuel, industry, year, api)
 - Trade(fuel, direction, year, api)
 - Production(fuel, production, year, api)
+- GasBalance(item, year, api)
 - EnergyDemand(sector, year, api, scenario)
 - Storage(fuel, storage, year, api)
 - Emissions(sector, year, api, fuel)
@@ -335,6 +336,20 @@ class Production(EiaData):
                 valid_options=["gas"],
                 recived_option=self.fuel,
             )
+
+
+# concrete creator
+class GasBalance(EiaData):
+    """Annual U.S. natural gas supply and disposition volumes."""
+
+    def __init__(self, item: str, year: int, api: str) -> None:
+        self.item = item  # (marketed|dry|lease_and_plant_fuel)
+        self.year = year
+        self.api = api
+
+    def data_creator(self) -> pd.DataFrame:
+        """Initializes data extractor."""
+        return _GasBalance(self.item, self.year, self.api)
 
 
 # concrete creator
@@ -1520,6 +1535,44 @@ class _GasSupplyCost(DataExtractor):
             columns={"seriesName": "series-description", "unit": "units"},
         )
         df["state"] = "USA"
+        df = df[["series-description", "value", "units", "state"]].sort_index()
+        return self._assign_dtypes(df)
+
+
+class _GasBalance(DataExtractor):
+    """
+    Annual U.S. total of one item of the natural gas supply and disposition balance.
+
+    Lease and plant fuel is only published as a U.S. total, so every item is
+    read at the national level.
+    """
+
+    # (API route, process code)
+    item_codes: ClassVar[dict[str, tuple[str, str]]] = {
+        "marketed": ("prod/sum", "VGM"),
+        "dry": ("prod/sum", "FPD"),  # marketed production less NGPL extraction loss
+        "lease_and_plant_fuel": ("cons/sum", "VGL"),
+    }
+
+    def __init__(self, item: str, year: int, api_key: str) -> None:
+        self.item = item
+        if self.item not in list(self.item_codes):
+            raise InputPropertyError(
+                propery="Natural Gas Balance",
+                valid_options=list(self.item_codes),
+                recived_option=item,
+            )
+        super().__init__(year, api_key)
+
+    def build_url(self) -> str:
+        route, process = self.item_codes[self.item]
+        base_url = f"natural-gas/{route}/data/"
+        facets = f"frequency=annual&data[0]=value&facets[process][]={process}&facets[duoarea][]=NUS&start={self.year}&end={self.year}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df.index = df.period.astype(int)
+        df["state"] = "U.S."
         df = df[["series-description", "value", "units", "state"]].sort_index()
         return self._assign_dtypes(df)
 

@@ -340,6 +340,76 @@ def add_gshp_capacity_constraint(n, config, snakemake):
     n.model.add_constraints(lhs >= rhs, name="Link-gshp_capacity_ratio")
 
 
+def add_gas_storage_contraction_constraints(n: pypsa.Network) -> None:
+    """
+    Keeps the injection of each gas storage at least as large as its other parts.
+
+    With ``infra_contraction``, every underground gas storage part is optimised
+    between zero and its existing capacity (``build_natural_gas.GasStorage``),
+    which is its ``p_nom_max`` or ``e_nom_max``. The injection of a storage keeps
+    at least the share of its existing capacity that the withdrawal and store keep::
+
+        charge / charge_0 >= discharge / discharge_0
+        charge / charge_0 >= store / store_0
+
+    This is written as two rows per storage, both in MW. With r the ratio of the
+    existing capacities, charge_0 / discharge_0 or charge_0 / store_0, each row::
+
+        charge / sqrt(r) - sqrt(r) * part >= 0
+
+    is ``charge - r * part >= 0`` scaled by its geometric mean, so its two
+    coefficients are reciprocal and centred on one. Cross-multiplying the existing
+    capacities would give coefficients up to ~1e8, dividing by them coefficients
+    down to ~1e-9, and writing the store row in MWh rows of ~1e8. Unscaled, the
+    store coefficient, one over the hours to fill the store at full injection
+    (1e-5 to 1e-3 in the EIA-191 data), lies below the rest of a sector model
+    (about 3e-3 to 2e1); scaled, the store rows span ~4e-3 to ~3e2, which keeps the
+    coefficient range of the model at ~1e5 whatever the storage durations. A
+    storage whose parts are not all extendable, such as one fixed after a prior
+    myopic horizon, or without finite, positive existing capacities, is left out.
+    """
+    stores = n.stores[(n.stores.carrier == "gas storage") & n.stores.e_nom_extendable]
+    names = stores.index.str.removesuffix(" gas storage")
+    charge = names + " charge gas storage"
+    discharge = names + " discharge gas storage"
+
+    extendable = n.links.p_nom_extendable
+    base = pd.DataFrame(
+        {
+            "charge": n.links.p_nom_max.reindex(charge).to_numpy(),
+            "discharge": n.links.p_nom_max.reindex(discharge).to_numpy(),
+            "store": stores.e_nom_max.to_numpy(),
+        },
+        index=names,
+    )
+    keep = (
+        extendable.reindex(charge, fill_value=False).to_numpy()
+        & extendable.reindex(discharge, fill_value=False).to_numpy()
+        & base.gt(0).all(axis=1).to_numpy()
+        & base.lt(float("inf")).all(axis=1).to_numpy()
+    )
+    if not keep.all():
+        logger.warning(f"Not tying the capacities of the parts of gas storages {names[~keep].tolist()}")
+    stores, charge, discharge, base = stores[keep], charge[keep], discharge[keep], base[keep]
+    if stores.empty:
+        return
+
+    charge_0, discharge_0, store_0 = base.charge.to_numpy(), base.discharge.to_numpy(), base.store.to_numpy()
+
+    # linopy combines the selections below by position, which the shared order of
+    # the store, charge and discharge names keeps aligned
+    p_nom = n.model["Link-p_nom"]
+    e_nom = n.model["Store-e_nom"]
+
+    sqrt_r = (charge_0 / discharge_0) ** 0.5
+    lhs = p_nom.loc[charge].mul(1 / sqrt_r) - p_nom.loc[discharge].mul(sqrt_r)
+    n.model.add_constraints(lhs >= 0, name="Link-gas_storage_discharge_contraction")
+
+    sqrt_r = (charge_0 / store_0) ** 0.5
+    lhs = p_nom.loc[charge].mul(1 / sqrt_r) - e_nom.loc[stores.index].mul(sqrt_r)
+    n.model.add_constraints(lhs >= 0, name="Link-gas_storage_store_contraction")
+
+
 def add_ng_import_export_limits(n, config):
     def _format_link_name(s: str) -> str:
         states = s.split("-")
