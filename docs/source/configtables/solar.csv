@@ -4,7 +4,7 @@ resource,,,
 -- method,--,Must be 'pv',A superordinate technology type.
 -- panel,--,"One of {'CSi', 'CdTe', 'KANENA'} as defined in `atlite <https://github.com/PyPSA/atlite/tree/master/atlite/resources/solarpanel>`__",Specifies the solar panel technology and its characteristic attributes.
 -- orientation,--,"``latitude_optimal``, ``flat``, or a dict with ``slope`` and ``azimuth``","Panel orientation. ``latitude_optimal`` tilts panels at the latitude-optimal angle; a custom dict sets tilt (``slope``) and compass orientation (``azimuth``, 180 = south) explicitly."
-capacity_per_sqkm,:math:`MW/km^2`,float,Allowable density of solar panel placement.
+capacity_per_sqkm,:math:`MW/km^2`,float,"Allowable density of solar panel placement, in AC (inverter) capacity."
 correction_factor,--,float,A correction factor for the capacity factor (availability) time series.
 corine,--,Any subset of the Copernicus Land Cover code list (see assumptions).,Specifies areas according to Land Cover codes which are generally eligible for solar panel placement.
 natura,bool,"{true, false}",Switch to exclude Protected Planet natural protection areas. Area is excluded if ``true``.

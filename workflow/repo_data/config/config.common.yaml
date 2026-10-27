@@ -78,7 +78,7 @@ renewable:
       method:  wind
       turbine: Vestas_V112_3MW             # atlite turbine config (see atlite.resource.windturbines)
       add_cutout_windspeed: true           # store raw windspeeds in profile output (used by GODEEEP scaling)
-    capacity_per_sqkm: 3                   # MW/km^2 of available land (conservative; ScholzPhD Tab 4.3.1 cites 10)
+    capacity_per_sqkm: 5.86                # MW/km^2; reference-access average, 9,702 GW / 1,654,972 km^2 (https://docs.nlr.gov/docs/fy25osti/91900.pdf, p. vii, Table ES-1)
     correction_factor: 1                   # scalar applied to CF (e.g. 0.93 for wake losses)
     # CORINE land-cover screen. NB: keys are labeled `corine` for
     # pypsa-eur parity, but the codes are actually Copernicus CGLS
@@ -100,7 +100,7 @@ renewable:
       method:  wind
       turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
       # add_cutout_windspeed: true
-    capacity_per_sqkm: 3                   # MW/km^2 (2021–2022 CAISO Transmission Plan)
+    capacity_per_sqkm: 4                   # MW/km^2 (https://docs.nlr.gov/docs/fy25osti/91900.pdf, p. 13, Table 3)
     correction_factor: 1                   # 0.8855 in 10.1016/j.energy.2018.08.153 for wake losses
     corine:
       grid_codes: [80, 200]                # offshore CGLS codes (open water)
@@ -121,7 +121,7 @@ renewable:
       method:  wind
       turbine: NREL_ReferenceTurbine_2020ATB_15MW_offshore
       add_cutout_windspeed: true
-    capacity_per_sqkm: 3                   # MW/km^2
+    capacity_per_sqkm: 4                   # MW/km^2 (https://docs.nlr.gov/docs/fy25osti/91900.pdf, p. 13, Table 3)
     correction_factor: 1                   # 0.8855 wake-loss proxy
     corine:
       grid_codes: [80, 200]
@@ -142,7 +142,7 @@ renewable:
       method: pv
       panel: CSi
       orientation: latitude_optimal        # latitude_optimal | flat | <custom dict>
-    capacity_per_sqkm: 4.6                 # MW/km^2 (raised from 1.7 per issue #361; revisit assumption)
+    capacity_per_sqkm: 32.09               # MW_AC/km^2 = 43 MW_DC/km^2 / ILR 1.34 (https://docs.nlr.gov/docs/fy25osti/91900.pdf, p. 15, Table 5)
     correction_factor: 1                   # 0.854337 in some references
     corine:
       grid_codes: [20, 30, 60, 90, 100]
