@@ -1265,6 +1265,14 @@ def add_service_brownfield(
             heater["p_nom"] = heater.p_nom.mul(percent).div(100).div(efficiency).round(2)
             heater = heater.set_index("name")
 
+            # fuel-fired heaters book their combustion CO2, as new ones do
+            emissions = {}
+            if fuel != "elec":
+                emissions = {
+                    "bus2": heater.state + f" {sector}-co2",
+                    "efficiency2": costs.at[fuel, "co2_emissions"],
+                }
+
             n.add(
                 "Link",
                 heater.index,
@@ -1278,6 +1286,7 @@ def add_service_brownfield(
                 p_nom=heater.p_nom,
                 lifetime=lifetime,
                 build_year=build_year,
+                **emissions,
             )
 
     def add_brownfield_water_heater(
