@@ -118,6 +118,9 @@ plotting:
     com-urban-cool: "#9CE7E2"
     com-rural-cool: "#9CE7E2"
 
+    res-gas-other: "#d35050"
+    com-gas-other: "#d35050"
+
     ind-elec: "#f9d002"
     ind-heat: "#E79CA2"
     trn-elec: "#f9d002"
@@ -359,6 +362,8 @@ plotting:
     com-total-cool: "Commercial Cooling"
     com-urban-cool: "Commercial Urban Cooling"
     com-rural-cool: "Commercial Rural Cooling"
+    res-gas-other: "Residential Other Gas"
+    com-gas-other: "Commercial Other Gas"
 
     ind-elec: "Industrial Electrical"
     ind-heat: "Industrial Heating"

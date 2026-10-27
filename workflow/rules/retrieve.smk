@@ -239,7 +239,6 @@ rule retrieve_res_eulp:
         save_dir=DATA + "eulp/res",
     output:
         expand(DATA + "eulp/res/{{state}}/{profile}.csv", profile=RESSTOCK_FILES),
-        DATA + "eulp/res/{state}.csv",
     script:
         "../scripts/retrieve_eulp.py"
 
@@ -254,9 +253,20 @@ rule retrieve_com_eulp:
         save_dir=DATA + "eulp/com",
     output:
         expand(DATA + "eulp/com/{{state}}/{profile}.csv", profile=COMSTOCK_FILES),
-        DATA + "eulp/com/{state}.csv",
     script:
         "../scripts/retrieve_eulp.py"
+
+
+rule retrieve_comstock_metadata:
+    wildcard_constraints:
+        state="[A-Z]{2}",
+    log:
+        "logs/retrieve/retrieve_comstock_metadata/{state}.log",
+    retries: 3
+    output:
+        DATA + "eulp/com/{state}/baseline_metadata_and_annual_results.parquet",
+    script:
+        "../scripts/retrieve_comstock_metadata.py"
 
 
 rule retrieve_ship_raster:

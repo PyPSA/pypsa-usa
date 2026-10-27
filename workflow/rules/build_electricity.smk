@@ -429,7 +429,7 @@ def demand_raw_data(wildcards):
         ]
     elif profile == "eulp":
         return [
-            DATA + f"eulp/{eulp_sector}/{state}.csv"
+            DEMAND + f"eulp/{eulp_sector}/{state}.csv"
             for state in INTERCONNECT_2_STATE[wildcards.interconnect]
         ]
     elif profile == "cliu":
@@ -539,6 +539,39 @@ rule build_electrical_demand:
         "../scripts/build_demand.py"
 
 
+def eulp_building_profiles(wildcards):
+    profiles = RESSTOCK_FILES if wildcards.stock == "res" else COMSTOCK_FILES
+    return expand(
+        DATA + "eulp/{stock}/{state}/{profile}.csv",
+        stock=wildcards.stock,
+        state=wildcards.state,
+        profile=profiles,
+    )
+
+
+rule build_eulp_loads:
+    wildcard_constraints:
+        stock="res|com",
+        state="[A-Z]{2}",
+    input:
+        profiles=eulp_building_profiles,
+        metadata=lambda wildcards: (
+            DATA
+            + f"eulp/com/{wildcards.state}/baseline_metadata_and_annual_results.parquet"
+            if wildcards.stock == "com"
+            else []
+        ),
+    output:
+        DEMAND + "eulp/{stock}/{state}.csv",
+    log:
+        LOGS + "demand/build_eulp_loads/{stock}_{state}.log",
+    resources:
+        mem_mb=4000,
+        walltime=config_provider("walltime", "build_eulp_loads", default="00:30:00"),
+    script:
+        "../scripts/build_eulp_loads.py"
+
+
 rule build_service_demand:
     wildcard_constraints:
         end_use="residential|commercial",
@@ -557,6 +590,7 @@ rule build_service_demand:
         space_heat=DEMAND + "{interconnect}/{end_use}_space-heating_s{simpl}.pkl",
         water_heat=DEMAND + "{interconnect}/{end_use}_water-heating_s{simpl}.pkl",
         cool=DEMAND + "{interconnect}/{end_use}_cooling_s{simpl}.pkl",
+        gas_other=DEMAND + "{interconnect}/{end_use}_gas-other_s{simpl}.pkl",
     log:
         LOGS + "{interconnect}/demand/{end_use}_build_demand_s{simpl}.log",
     benchmark:
@@ -672,6 +706,7 @@ def demand_to_add(wildcards):
             fuels = ["electricity", "cooling", "space-heating", "water-heating"]
         else:
             fuels = ["electricity", "cooling", "heating"]
+        fuels.append("gas-other")
         service_demands = [
             DEMAND + "{interconnect}/" + service + "_" + fuel + "_s{simpl}.pkl"
             for service in services

@@ -76,6 +76,7 @@ def build_heat(
             technologies=technologies,
             dr_config=dr_config,
         )
+        add_service_gas_other(n=n, sector=sector, costs=costs)
 
         assert not n.links_t.p_set.isna().any().any()
 
@@ -756,6 +757,37 @@ def add_service_furnace(
             build_year=build_year,
             # marginal_cost=mc,
         )
+
+
+def add_service_gas_other(n: pypsa.Network, sector: str, costs: pd.DataFrame) -> None:
+    """Supply gas end uses other than space and water heating from the gas network.
+
+    Cooking, drying, fireplaces and pools are final energy that no heating
+    technology can serve, so each load draws its state's gas through a fixed
+    link that books the combustion CO2.
+    """
+    carrier = f"{sector}-{SecCarriers.GAS_OTHER.value}"
+    loads = n.loads[n.loads.carrier == carrier]
+    if loads.empty:
+        return
+
+    df = loads[["bus"]].copy()
+    df["state"] = df.bus.map(n.buses.STATE)
+    df["p_nom"] = n.loads_t.p_set[df.index].max()
+    df.index = df.bus + "-supply"
+
+    n.add(
+        "Link",
+        df.index,
+        bus0=df.state + " gas",
+        bus1=df.bus,
+        bus2=df.state + f" {sector}-co2",
+        carrier=carrier,
+        efficiency=1.0,
+        efficiency2=costs.at["gas", "co2_emissions"],
+        p_nom=df.p_nom,
+        p_nom_extendable=False,
+    )
 
 
 def add_heat_dr(

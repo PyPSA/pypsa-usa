@@ -26,6 +26,7 @@ class SecCarriers(Enum):
     LPG = "lpg"
     SPACE_HEATING = "space-heat"
     WATER_HEATING = "water-heat"
+    GAS_OTHER = "gas-other"  # gas end uses other than space and water heating
 
 
 ######################
@@ -43,6 +44,7 @@ class DemandFuels(Enum):
     SPACE_COOLING = "cool"
     WATER_HEATING = "water_heat"
     HEATING = "heat"
+    GAS_OTHER = "gas_other"
 
     # transport
     LIGHT = "light_duty"
