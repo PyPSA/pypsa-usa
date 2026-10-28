@@ -11,6 +11,7 @@ from build_sector_costs import (
     EfsTechnologyData,
     EiaBuildingData,
 )
+from eia import ProjectedFuelCost
 
 logger = logging.getLogger(__name__)
 
@@ -106,16 +107,6 @@ def load_pudl_atb_data(parquet_path: str):
             AND atb.cost_recovery_period_years = finance.cost_recovery_period_years
             AND atb.report_year = finance.report_year
     WHERE atb.report_year = {ATB_REPORT_YEAR}
-    """
-    return duckdb.query(query).to_df()
-
-
-def load_pudl_aeo_data(parquet_path: str):
-    """Loads AEO data directly from parquet files."""
-    query = f"""
-    SELECT *
-    FROM read_parquet('{parquet_path}/core_eiaaeo__yearly_projected_fuel_cost_in_electric_sector_by_type.parquet') aeo
-    WHERE aeo.report_year = 2023
     """
     return duckdb.query(query).to_df()
 
@@ -308,23 +299,30 @@ ATB_VALUE_COLS = [
 ]
 
 
-def build_aeo_fuel_costs(parquet_path: str, tech_year: int, aeo_scenario: str) -> pd.DataFrame:
-    """Loads AEO fuel cost data, applies tech mappings, returns long-format frame."""
-    aeo = load_pudl_aeo_data(parquet_path)
-    aeo = aeo[aeo.projection_year == tech_year]
-    aeo = aeo[aeo.model_case_eiaaeo == aeo_scenario]
-    cols = ["fuel_type_eiaaeo", "fuel_cost_real_per_mmbtu_eiaaeo"]
-    aeo = aeo[cols]
-    aeo = aeo.groupby("fuel_type_eiaaeo").mean()
-    aeo["fuel_cost_real_per_mwhth"] = aeo["fuel_cost_real_per_mmbtu_eiaaeo"] * 3.412
-    aeo = pd.melt(
-        aeo.reset_index(),
-        id_vars="fuel_type_eiaaeo",
-        value_vars=["fuel_cost_real_per_mwhth"],
-        var_name="parameter",
-        value_name="value",
-    )
-    aeo = aeo.rename(columns={"fuel_type_eiaaeo": "pypsa-name"})
+def build_aeo_fuel_costs(api: str, tech_year: int, aeo_scenario: str) -> pd.DataFrame:
+    """
+    Loads AEO fuel cost data, applies tech mappings, returns long-format frame.
+
+    The fuel costs are the AEO2026 electric power prices of the tech year (see
+    ``eia.ProjectedFuelCost``), converted from 2025$/MMBtu to 2023$/MWh_th.
+    Years outside the AEO years take the price of the nearest year.
+    """
+    rows = []
+    for name, fuel in {"natural_gas": "gas", "coal": "coal", "distillate_fuel_oil": "oil"}.items():
+        df = ProjectedFuelCost(fuel, "power", api, aeo_scenario).get_data()
+        if not (df.units == "2025 $/MMBtu").all():
+            raise ValueError(f"Expected AEO {fuel} prices in 2025 $/MMBtu, got {df.units.unique().tolist()}")
+        year = min(df.index, key=lambda x: abs(x - tech_year))
+        if year != tech_year:
+            logger.warning(f"No AEO2026 {fuel} price for {tech_year}; using {year}")
+        rows.append(
+            {
+                "pypsa-name": name,
+                "parameter": "fuel_cost_real_per_mwhth",
+                "value": df.value.at[year] * const.USD_2025_2_USD_2023 * 3.412,
+            },
+        )
+    aeo = pd.DataFrame(rows)
 
     addnl_fuels = pd.DataFrame(
         [
@@ -567,7 +565,7 @@ if __name__ == "__main__":
 
     # Build AEO fuel cost data once — independent of ATB scenario / case
     aeo = build_aeo_fuel_costs(
-        parquet_path,
+        snakemake.params.eia_api,
         tech_year,
         aeo_params.get("scenario", "reference"),
     )

@@ -346,9 +346,9 @@ costs:
       #   scenario:   "Conservative"
       #   model_case: "R&D"
 
-  # EIA Annual Energy Outlook — used for fuel-price escalation
+  # EIA Annual Energy Outlook 2026 — electric power fuel prices of gas, coal and oil plants
   aeo:
-    scenario: "reference"                  # reference | high | low
+    scenario: "reference"                  # AEO2026 case; reference (= Counterfactual Baseline) | high_oil_and_gas_supply | low_oil_and_gas_supply | ...
 
   social_discount_rate: 0.02               # fraction; applied to annualization of capex
   ng_fuel_year: 2019                       # CAISO NG price vintage year; 2019..2023

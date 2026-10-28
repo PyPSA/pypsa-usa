@@ -373,6 +373,28 @@ class SupplyCost(EiaData):
 
 
 # concrete creator
+class ProjectedFuelCost(EiaData):
+    """Fuel price projections by sector."""
+
+    def __init__(self, fuel: str, sector: str, api: str, scenario: str = "reference") -> None:
+        self.fuel = fuel  # (gas|coal|oil)
+        self.sector = sector  # (power)
+        self.api = api
+        self.scenario = scenario  # AEO case (see _PowerFuelCost.scenario_codes)
+
+    def data_creator(self) -> pd.DataFrame:
+        """Initializes data extractor."""
+        if self.sector == "power":
+            return _PowerFuelCost(self.fuel, self.scenario, self.api)
+        else:
+            raise InputPropertyError(
+                propery="Projected Fuel Cost",
+                valid_options=["power"],
+                recived_option=self.sector,
+            )
+
+
+# concrete creator
 class EnergyDemand(EiaData):
     """
     Energy demand at a annual national level.
@@ -1527,6 +1549,69 @@ class _GasSupplyCost(DataExtractor):
     def build_url(self) -> str:
         base_url = "aeo/2026/data/"
         facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_code}&facets[seriesId][]={self.series_id}&sort[0][column]=period&sort[0][direction]=asc&offset=0&length=5000"
+        return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
+
+    def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df.index = df.period.astype(int)
+        df = df.rename(
+            columns={"seriesName": "series-description", "unit": "units"},
+        )
+        df["state"] = "USA"
+        df = df[["series-description", "value", "units", "state"]].sort_index()
+        return self._assign_dtypes(df)
+
+
+class _PowerFuelCost(DataExtractor):
+    """
+    Annual fuel price projections of the electric power sector.
+
+    Electric power prices of AEO2026 Table 3 (Energy Prices by Sector and
+    Source), United States, in 2025$/MMBtu: natural gas, steam coal and
+    distillate fuel oil. AEO2026 has no Reference case, so ``reference`` is
+    its Counterfactual Baseline case.
+    """
+
+    scenario_codes: ClassVar[dict[str, str]] = {
+        "reference": "cb2026",  # Counterfactual Baseline
+        "high_oil_and_gas_supply": "highogs",
+        "low_oil_and_gas_supply": "lowogs",
+        "high_economic_growth": "hm2026",
+        "low_economic_growth": "lm2026",
+        "high_zero_carbon_technology_cost": "highZTC",
+        "low_zero_carbon_technology_cost": "lowZTC",
+        "high_electricity_demand": "higheldmd",
+        "alternative_electricity": "altelec",
+        "alternative_transportation": "alttrnp",
+        "alternative_electricity_and_transportation": "electrnp",
+    }
+
+    fuel_codes: ClassVar[dict[str, str]] = {
+        "gas": "ng",  # natural gas
+        "coal": "stc",  # steam coal
+        "oil": "dfo",  # distillate fuel oil
+    }
+
+    def __init__(self, fuel: str, scenario: str, api_key: str) -> None:
+        if fuel not in self.fuel_codes:
+            raise InputPropertyError(
+                propery="Power Fuel Cost",
+                valid_options=list(self.fuel_codes),
+                recived_option=fuel,
+            )
+        if scenario not in self.scenario_codes:
+            raise InputPropertyError(
+                propery="AEO Scenario",
+                valid_options=list(self.scenario_codes),
+                recived_option=scenario,
+            )
+        self.fuel = fuel
+        self.scenario = scenario
+        super().__init__(year=None, api_key=api_key)  # every AEO year is returned
+
+    def build_url(self) -> str:
+        series_id = f"prce_real_elep_NA_{self.fuel_codes[self.fuel]}_NA_NA_y13dlrpmmbtu"
+        base_url = "aeo/2026/data/"
+        facets = f"frequency=annual&data[0]=value&facets[scenario][]={self.scenario_codes[self.scenario]}&facets[seriesId][]={series_id}&sort[0][column]=period&sort[0][direction]=asc&offset=0&length=5000"
         return f"{API_BASE}{base_url}?api_key={self.api_key}&{facets}"
 
     def format_data(self, df: pd.DataFrame) -> pd.DataFrame:
