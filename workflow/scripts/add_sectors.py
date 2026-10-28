@@ -183,6 +183,8 @@ def add_sector_foundation(
             e_min_pu=-1,
             e_max_pu=0,
             e_cyclic_per_period=False,
+            # the supply limit applies to each period, rather than accumulating over all of them
+            e_initial_per_period=True,
             carrier=carrier,
             unit="MWh_th",
             marginal_cost=marginal_cost,

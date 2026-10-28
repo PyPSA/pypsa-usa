@@ -7,6 +7,7 @@ from opts._helpers import (
     ceil_precision,
     filter_components,
     floor_precision,
+    get_last_snapshot,
     get_model_horizon,
     get_region_buses,
 )
@@ -587,9 +588,8 @@ def add_regional_co2limit(n, config):
         # CO2 Atmospheric Emissions
         if any(n.carriers.index.isin(["co2"])):
             co2_atm = n.stores.loc[["atmosphere" in name for name in n.stores.index]]
-            last_timestep = n.snapshots.get_level_values(1)[-1]
             end_co2_atm_storage = (
-                n.model["Store-e"].loc[:, co2_atm.index].sel(period=planning_horizon).sel(timestep=last_timestep)
+                n.model["Store-e"].loc[:, co2_atm.index].sel(snapshot=get_last_snapshot(n, planning_horizon))
             ).sum()
         else:
             end_co2_atm_storage = 0

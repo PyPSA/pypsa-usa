@@ -97,6 +97,8 @@ def _build_co2_store(n: pypsa.Network, states: list[str], sectors: list[str]):
         e_initial=0,
         e_cyclic=False,
         e_cyclic_per_period=False,
+        # emissions are counted per investment period, rather than accumulated over them
+        e_initial_per_period=True,
         standing_loss=0,
         e_min_pu=0,
         e_max_pu=1,
@@ -141,6 +143,8 @@ def _build_ch4_store(n: pypsa.Network, states: list[str]):
         e_initial=0,
         e_cyclic=False,
         e_cyclic_per_period=False,
+        # emissions are counted per investment period, rather than accumulated over them
+        e_initial_per_period=True,
         standing_loss=0,
         e_min_pu=0,
         e_max_pu=1,

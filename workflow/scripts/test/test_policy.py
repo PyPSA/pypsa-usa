@@ -11,10 +11,12 @@ import os
 import sys
 
 import pandas as pd
+import pypsa
 import pytest
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
+from _helpers import get_multiindex_snapshots
 from opts._helpers import get_region_buses
 from prepare_network import average_every_nhours
 from summary import get_node_emissions_timeseries
@@ -191,6 +193,89 @@ def test_add_regional_co2limit_clustered(clustered_policy_network, co2_config):
         region_buses = get_region_buses(n, region_list)
         constraint_emissions = emissions.loc[:, region_buses.index].sum().sum()
         assert constraint_emissions <= limit + epsilon, f"Emissions in region {row.name} exceed limit of {limit}"
+
+
+def test_regional_co2limit_caps_the_emissions_of_each_period(tmp_path):
+    """
+    Over two periods, each limit caps the emissions of its own period.
+
+    The CC plant vents to an atmosphere store built as ``add_co2_storage`` builds
+    it, which the limit reads at the end of its period. A binding 2040 limit must
+    leave 2030 alone, rather than also counting what was vented in 2030.
+    """
+    from opts.policy import add_regional_co2limit
+
+    n = pypsa.Network()
+    n.snapshots = get_multiindex_snapshots(
+        sns_config={"start": "2030-01-01 00:00", "end": "2030-01-01 01:00", "inclusive": "both"},
+        invest_periods=[2030, 2040],
+    )
+    n.set_investment_periods(periods=[2030, 2040])
+    for col in n.snapshot_weightings.columns:  # each period stands for one year
+        n.snapshot_weightings[col] = 8760 / 2
+    n.add(
+        "Bus",
+        "p1",
+        carrier="AC",
+        country="US",
+        reeds_zone="p1",
+        reeds_state="UT",
+        interconnect="western",
+        nerc_reg="WECC",
+    )
+    n.add("Load", "p1", bus="p1", p_set=10)
+    n.add("Generator", "p1 clean", bus="p1", carrier="clean", p_nom=100, marginal_cost=100)
+    # the limit only reads the atmosphere when an emitting generator is in the region
+    n.add("Carrier", "coal", co2_emissions=0.3)
+    n.add("Generator", "p1 coal", bus="p1", carrier="coal", p_nom=100, efficiency=0.4, marginal_cost=50)
+
+    # CC plant venting 0.04 t/MWh to the atmosphere store, as in add_co2_storage
+    n.add("Carrier", "co2")
+    n.add("Bus", ["p1 atmosphere", "p1 CCGT-95CC_2030"], carrier=["co2", "CCGT-95CC"])
+    n.add(
+        "Store",
+        "p1 atmosphere",
+        bus="p1 atmosphere",
+        e_nom_extendable=True,
+        e_min_pu=-1,
+        e_initial_per_period=True,
+        carrier="co2",
+    )
+    n.add("Generator", "p1 CCGT-95CC_2030", bus="p1 CCGT-95CC_2030", carrier="CCGT-95CC", p_nom=100, marginal_cost=15)
+    n.add(
+        "Link",
+        "p1 CCGT-95CC_2030",
+        bus0="p1 CCGT-95CC_2030",
+        bus1="p1",
+        bus2="p1 atmosphere",
+        efficiency2=0.04,
+        p_nom=100,
+        carrier="CCGT-95CC",
+    )
+
+    def vented(n):
+        flows = n.links_t.p2["p1 CCGT-95CC_2030"].mul(-1).mul(n.snapshot_weightings.generators)
+        return flows.groupby(level="period").sum()
+
+    # unconstrained, the CC plant meets the load in both periods
+    annual = 10 * 8760 * 0.04
+    limits = tmp_path / "regional_co2_limits.csv"
+    pd.DataFrame(
+        {"name": ["p1"] * 2, "regions": ["p1"] * 2, "planning_horizon": [2030, 2040], "limit": [1e9, annual / 2]}
+    ).to_csv(
+        limits,
+        index=False,
+    )
+
+    def extra_functionality(n, _):
+        add_regional_co2limit(n, {"electricity": {"regional_Co2_limits": str(limits)}})
+
+    n.optimize(solver_name="glpk", multi_investment_periods=True, extra_functionality=extra_functionality)
+
+    assert vented(n).tolist() == pytest.approx([annual, annual / 2])
+    # the atmosphere starts every period empty
+    atmosphere = n.stores_t.e["p1 atmosphere"].groupby(level="period").last()
+    assert atmosphere.tolist() == pytest.approx(vented(n).tolist())
 
 
 def test_add_rps_constraints(policy_network, rps_config):
