@@ -707,7 +707,7 @@ if __name__ == "__main__":
 
         scale_exising_stock = snakemake.params.sector["service_sector"].get("scale_exising_stock", True)
 
-        if snakemake.params.sector["service_sector"]["water_heating"]["split_space_water"]:
+        if snakemake.params.sector["service_sector"]["split_space_water_heating"]:
             fuels = ["space_heating", "water_heating", "cooling"]
         else:
             fuels = ["heating", "cooling"]

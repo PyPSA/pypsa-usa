@@ -48,7 +48,7 @@ def build_heat(
     if sector in ("res", "com", "srv"):
         split_urban_rural = options.get("split_urban_rural", False)
         technologies = options.get("technologies", {})
-        water_heating_config = options.get("water_heating", {})
+        split_space_water = options.get("split_space_water_heating", False)
 
         # gas costs are endogenous!
         gas_costs = 0
@@ -64,7 +64,7 @@ def build_heat(
             gshp_cop=gshp_cop,
             marginal_gas=gas_costs,
             # marginal_oil=heating_oil_costs,
-            water_heating_config=water_heating_config,
+            split_space_water=split_space_water,
             dr_config=dr_config,
         )
         add_service_cooling(
@@ -231,7 +231,7 @@ def add_service_heat(
     gshp_cop: pd.DataFrame | None = None,
     marginal_gas: pd.DataFrame | float | None = None,
     marginal_oil: pd.DataFrame | float | None = None,
-    water_heating_config: dict[str, Any] | None = None,
+    split_space_water: bool = False,
     dr_config: dict[str, Any] | None = None,
 ):
     """Adds heating links for residential and commercial sectors."""
@@ -251,11 +251,6 @@ def add_service_heat(
         heat_systems = ["total"]
         _format_total_load(n, sector, "space-heat")
         _format_total_load(n, sector, "water-heat")
-
-    if not water_heating_config:
-        water_heating_config = {}
-
-    split_space_water = water_heating_config.get("split_space_water", False)
 
     heat_carrier = "space-heat" if split_space_water else "heat"
 

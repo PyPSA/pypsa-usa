@@ -30,8 +30,6 @@ sector:
     dynamic_costs: True
     split_res_com: True # false to be implemented 
     split_urban_rural: False
-    water_heating: 
-      split_space_water: true
     split_space_water_heating: True
     brownfield: True
     scale_exising_stock: True
