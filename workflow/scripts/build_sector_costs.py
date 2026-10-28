@@ -8,7 +8,7 @@ https://data.nrel.gov/submissions/78
 from abc import ABC, abstractmethod
 
 import pandas as pd
-from constants import MMBTU_MWHthemal
+from constants import USD_2022_2_USD_2023, MMBTU_MWHthemal
 
 # Vehicle life assumptions for getting $/VMT capital cost
 # From https://atb.nrel.gov/transportation/2022/definitions
@@ -544,6 +544,8 @@ class EiaBuildingData:
 
     All data originates from this document:
         https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
+
+    Its costs are in 2022 dollars and are returned in 2023 dollars.
     """
 
     columns = COLUMN_ORDER
@@ -611,8 +613,9 @@ class EiaBuildingData:
             slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "investment")
         else:
             slicer = self.data.parameter == "investment"
-        df = self.data[slicer]
-        return self._correct_investment_units(df)[self.columns]
+        df = self._correct_investment_units(self.data[slicer])
+        df["value"] *= USD_2022_2_USD_2023
+        return df[self.columns]
 
     def _get_lifetime(self, sector: str | None = None):
         sector = self._check_sector(sector)
