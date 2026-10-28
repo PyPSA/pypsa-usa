@@ -1126,7 +1126,7 @@ rule add_extra_components:
         remote_units=NETWORKS + "{interconnect}/remote_units_s{simpl}.pkl",
         co2_storage=(
             CO2 + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
-            if config["scenario"]["sector"] == "" and config["co2"]["storage"] is True
+            if config["scenario"]["sector"] == "E" and config["co2"]["storage"] is True
             else []
         ),
         county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
