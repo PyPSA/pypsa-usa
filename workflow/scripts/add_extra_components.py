@@ -821,25 +821,24 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
             # specify links' bus4 to point to the CO2 capture bus of their node (e.g. "p9 co2 capture")
             n.links.loc[links, "bus4"] = n.links.loc[links, "bus1"] + " co2 capture"
 
-            # calculate efficiencies
+            # calculate efficiencies, per MWh of fuel the links draw (CO2 of the fuel burnt, emitted or captured)
             efficiency2 = []  # to node or state atmosphere bus (e.g. "p9 pwr atmosphere", "CA pwr atmosphere")
             efficiency4 = []  # to node co2 capture bus (e.g. "p9 co2 capture")
             for index in links:
-                link_efficiency = n.links.loc[index]["efficiency"]
                 if "CCGT" in index:
-                    efficiency = 1 / link_efficiency * gas_co2_intensity
+                    efficiency = gas_co2_intensity
                 elif "coal" in index:
-                    efficiency = 1 / link_efficiency * coal_co2_intensity
+                    efficiency = coal_co2_intensity
                 else:
                     logger.warning(
                         f"Assuming a CO2 intensity equal to 1 given that link '{index}' is not powered by gas or coal",
                     )
-                    efficiency = 1 / link_efficiency * 1
+                    efficiency = 1
                 cc_level = (
                     int(index.split("-")[1].split("CC")[0]) / 100
                 )  # extract CC level from index (e.g. index "p1 CCGT-95CCS_2030" returns 0.95)
-                efficiency2.append(efficiency * (1 - cc_level) / cc_level)
-                efficiency4.append(efficiency)
+                efficiency2.append(efficiency * (1 - cc_level))
+                efficiency4.append(efficiency * cc_level)
 
             # set links' bus2 and bus4 efficiencies
             n.links.loc[links, "efficiency2"] = efficiency2
@@ -919,7 +918,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 carrier="co2",
             )
 
-            # calculate efficiencies
+            # calculate efficiencies, per MWh of electricity (CO2 of the fuel burnt, emitted or captured)
             efficiency2 = []  # to node or state atmosphere bus (e.g. "p9 atmosphere", "CA atmosphere")
             efficiency3 = []  # to node co2 capture bus (e.g. "p9 co2 capture")
             for index in indexes:
@@ -936,8 +935,8 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 cc_level = (
                     int(index.split("-")[1].split("CC")[0]) / 100
                 )  # extract CC level from index (e.g. index "p1 CCGT-95CCS_2030" returns 0.95)
-                efficiency2.append(efficiency)
-                efficiency3.append(efficiency * (1 - cc_level) / cc_level)
+                efficiency2.append(efficiency * (1 - cc_level))
+                efficiency3.append(efficiency * cc_level)
 
             # add links to represent sending electricity (in MW) to the electricity bus (e.g. "p9" if ReEDS or "p100 0" if TAMU) as well as sending emitted CO2 (by the generator) to both the atmosphere bus and the co2 capture bus
             n.add(

@@ -500,7 +500,7 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
             ccs_level = int(carrier.split("-")[1].replace("CCS", ""))
             return (1 - ccs_level / 100) * base
         case "coal-95CCS" | "coal-99CCS":
-            base = costs.at["gas", "co2_emissions"]
+            base = costs.at["coal", "co2_emissions"]
             ccs_level = int(carrier.split("-")[1].replace("CCS", ""))
             return (1 - ccs_level / 100) * base
         case _:

@@ -166,3 +166,35 @@ def test_ccs_links_capture_at_their_node(sector_network, storage_csv):
     assert cc.carrier.tolist() == ["CCGT-95CC", "coal-99CC"]
     assert n.links_t.p_max_pu.columns.tolist() == ["p1 CCGT-95CC_2030"]
     n.consistency_check(strict=["unknown_buses"])
+
+
+# CO2 of the CCS plants
+
+
+def test_cc_generators_vent_the_uncaptured_share(elec_network, storage_csv):
+    """Per MWh of electricity, a plant burns CO2 intensity / efficiency, of which it captures its CC level."""
+    n = elec_network
+    add_co2_storage(n, config(), storage_csv, COSTS, sector=False)
+
+    cc = n.links.loc[["p1 CCGT-95CC_2030", "p1 coal-99CC_2030"]]
+    burnt = pd.Series([GAS / 0.5, COAL / 0.4], index=cc.index)
+    assert cc.efficiency2.tolist() == pytest.approx((burnt * [0.05, 0.01]).tolist())
+    assert cc.efficiency3.tolist() == pytest.approx((burnt * [0.95, 0.99]).tolist())
+
+
+def test_ccs_links_vent_the_uncaptured_share(sector_network, storage_csv):
+    """Per MWh of fuel drawn, a link burns the fuel's CO2 intensity, of which it captures its CC level."""
+    n = sector_network
+    add_co2_storage(n, config(), storage_csv, COSTS, sector=True)
+
+    cc = n.links.loc[["p1 CCGT-95CC_2030", "p2 coal-99CC_2030"]]
+    assert cc.efficiency2.tolist() == pytest.approx([GAS * 0.05, COAL * 0.01])
+    assert cc.efficiency4.tolist() == pytest.approx([GAS * 0.95, COAL * 0.99])
+
+
+def test_coal_ccs_links_emit_coal_co2():
+    from add_sectors import get_pwr_co2_intensity
+
+    costs = pd.DataFrame({"co2_emissions": [GAS, COAL]}, index=["gas", "coal"])
+    assert get_pwr_co2_intensity("coal-99CCS", costs) == pytest.approx(COAL * 0.01)
+    assert get_pwr_co2_intensity("CCGT-95CCS", costs) == pytest.approx(GAS * 0.05)
