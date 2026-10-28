@@ -142,3 +142,34 @@ def test_interface_limits_input_follows_config_key(tmp_path):
     inputs = _solve_network_inputs([f"electricity={{transmission_interface_limits: '{custom}'}}"])
     assert str(custom) in inputs
     assert default_path not in inputs
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("sector", ["", "E"])
+def test_co2_storage_input_in_electricity_studies(tmp_path, sector):
+    """``co2: storage`` gives ``add_extra_components`` the CO2 storage CSV in electricity-only studies.
+
+    The rules are parsed before the Snakefile pads an empty ``sector`` to ``E``,
+    so the rule sees either spelling and must give the input for both.
+    """
+    configfile = tmp_path / "co2_storage.yaml"
+    configfile.write_text(f"scenario:\n  sector: '{sector}'\nco2:\n  storage: true\n")
+    result = subprocess.run(
+        [
+            "snakemake",
+            "-n",
+            "--configfile",
+            "repo_data/config/config.tutorial.yaml",
+            str(configfile),
+            "--until",
+            "add_extra_components",
+        ],
+        cwd=WORKFLOW_DIR,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, f"snakemake -n failed\nstderr:\n{result.stderr}"
+    match = re.search(r"^rule add_extra_components:\n\s*input: (.*)$", result.stdout, re.MULTILINE)
+    assert match, f"no add_extra_components job in the dry run output:\n{result.stdout}"
+    assert "co2_storage_s" in match.group(1)

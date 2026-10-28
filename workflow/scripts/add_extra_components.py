@@ -759,7 +759,8 @@ def rename_components(n: pypsa.Network, component: str, names: dict[str, str]) -
     Renames components, along with their time series.
 
     pypsa's rename_component_names also renames the references to them in the other components, but fails for
-    generators (it looks for a "generator" column in every component), which nothing refers to anyway.
+    any component but buses (it looks for e.g. a "generator" or "link" column in every component), and nothing
+    refers to generators or links by name anyway.
     """
     c = n.components[component]
     c.static = c.static.rename(index=names)
