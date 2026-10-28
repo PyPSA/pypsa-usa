@@ -787,6 +787,20 @@ def add_demand_response(
     )
 
 
+def rename_components(n: pypsa.Network, component: str, names: dict[str, str]) -> None:
+    """
+    Renames components, along with their time series.
+
+    pypsa's rename_component_names also renames the references to them in the other components, but fails for
+    any component but buses (it looks for e.g. a "generator" or "link" column in every component), and nothing
+    refers to generators or links by name anyway.
+    """
+    c = n.components[component]
+    c.static = c.static.rename(index=names)
+    for attr, df in c.dynamic.items():
+        c.dynamic[attr] = df.rename(columns=names)
+
+
 def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs: pd.DataFrame, sector: bool):
     """Adds node level CO2 (underground) storage."""
     # get node level CO2 (underground) storage potential and cost from CSV file
@@ -821,11 +835,12 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
     )
 
     # add carrier to represent CC only (i.e. without S)
-    carriers = n.carriers.query("Carrier.str.endswith('CCS')")
+    carriers = n.carriers[n.carriers.index.str.endswith("CCS")]
     if not carriers.empty:
+        carriers = carriers.rename(index=lambda x: x.replace("CCS", "CC"))
         n.add(
             "Carrier",
-            carriers.index.str.replace("CCS", "CC", regex=True),
+            carriers.index,
             color=carriers["color"],
             nice_name=carriers["nice_name"].str.replace("Ccs", "Cc", regex=True),
         )
@@ -835,97 +850,90 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
     coal_co2_intensity = costs.loc["coal"]["co2_emissions"]
 
     if sector:
-        links = n.links.index.str.contains("CCS")
-        if links.any():  # found links equipped with CCS
-            # specify links' bus4 to point to their respective CO2 capture buses
-            n.links.loc[links, "bus4"] = co2_storage.index + " co2 capture"
+        links = n.links.index[n.links.index.str.contains("CCS")]
+        if not links.empty:  # found links equipped with CCS
+            # specify links' bus4 to point to the CO2 capture bus of their node (e.g. "p9 co2 capture")
+            n.links.loc[links, "bus4"] = n.links.loc[links, "bus1"] + " co2 capture"
 
-            # calculate efficiencies
+            # calculate efficiencies, per MWh of fuel the links draw (CO2 of the fuel burnt, emitted or captured)
             efficiency2 = []  # to node or state atmosphere bus (e.g. "p9 pwr atmosphere", "CA pwr atmosphere")
             efficiency4 = []  # to node co2 capture bus (e.g. "p9 co2 capture")
-            for index in n.links.loc[links].index:
-                link_efficiency = n.links.loc[index]["efficiency"]
+            for index in links:
                 if "CCGT" in index:
-                    efficiency = 1 / link_efficiency * gas_co2_intensity
+                    efficiency = gas_co2_intensity
                 elif "coal" in index:
-                    efficiency = 1 / link_efficiency * coal_co2_intensity
+                    efficiency = coal_co2_intensity
                 else:
                     logger.warning(
                         f"Assuming a CO2 intensity equal to 1 given that link '{index}' is not powered by gas or coal",
                     )
-                    efficiency = 1 / link_efficiency * 1
+                    efficiency = 1
                 cc_level = (
                     int(index.split("-")[1].split("CC")[0]) / 100
                 )  # extract CC level from index (e.g. index "p1 CCGT-95CCS_2030" returns 0.95)
-                efficiency2.append(efficiency * (1 - cc_level) / cc_level)
-                efficiency4.append(efficiency)
+                efficiency2.append(efficiency * (1 - cc_level))
+                efficiency4.append(efficiency * cc_level)
 
             # set links' bus2 and bus4 efficiencies
             n.links.loc[links, "efficiency2"] = efficiency2
             n.links.loc[links, "efficiency4"] = efficiency4
+            # other links have no fourth output
+            n.links["bus4"] = n.links.bus4.fillna("")
+            n.links["efficiency4"] = n.links.efficiency4.fillna(0)
 
             # remove storage cost from links' capital cost (given that they do not require technology to store CO2 anymore as this is done underground)
             n.links.loc[links, "capital_cost"] *= (
                 0.95  # TODO: replace with a concrete storage cost (reducing 5% capital cost for the time being)
             )
 
-            # replace substring "CCS" with just "CC" in links' names and carriers
+            # replace substring "CCS" with just "CC" in links' names (and their time series) and carriers
             n.links.loc[links, "carrier"] = n.links.loc[links].carrier.str.replace("CCS", "CC", regex=True)
-            n.links.index = n.links.index.str.replace("CCS", "CC", regex=True)
+            rename_components(n, "Link", {x: x.replace("CCS", "CC") for x in links})
 
     else:  # sector-less
-        generators = n.generators.index.str.contains("CCS")
-        if generators.any():  # found generators equipped with CCS
+        generators = n.generators.index[n.generators.index.str.contains("CCS")]
+        if not generators.empty:  # found generators equipped with CCS
             # remove storage cost from generators' capital cost (given that they do not require technology to store CO2 anymore as this is done underground)
             n.generators.loc[generators, "capital_cost"] *= (
                 0.95  # TODO: replace with a concrete storage cost (reducing 5% capital cost for the time being)
             )
 
-            # replace "CCS" with "CC" in generators' indexes/carriers description
+            # replace "CCS" with "CC" in generators' indexes (and their time series) and carriers description
             n.generators.loc[generators, "carrier"] = n.generators.loc[generators].carrier.str.replace(
                 "CCS",
                 "CC",
                 regex=True,
             )
-            n.generators.index = n.generators.index.str.replace("CCS", "CC", regex=True)
+            indexes = generators.str.replace("CCS", "CC", regex=True)
+            rename_components(n, "Generator", dict(zip(generators, indexes)))
+            nodes = n.generators.loc[indexes, "bus"]  # node level electricity buses (e.g. "p9")
 
             # add buses to represent node level electricity CC generator
-            indexes = n.generators.loc[generators].index
             n.add(
                 "Bus",
                 indexes,
-                carrier=n.generators.loc[generators].carrier,
+                carrier=n.generators.loc[indexes].carrier,
             )
 
             # add buses to represent node level emitted CO2 by different processes
             granularity = config["dac"]["granularity"]
             if granularity == "nation":
-                buses_atmosphere_unique = ["atmosphere"]
-                buses_atmosphere = buses_atmosphere_unique
-            else:
-                if config["model_topology"]["transmission_network"] == "reeds":
-                    elements = 1
-                else:  # TAMU
-                    elements = 2
-                if granularity == "state":
-                    buses = n.buses[["x", "y"]].query("x != 0 and y != 0").copy()
-                    buses["geometry"] = buses.apply(lambda x: Point(x.x, x.y), axis=1)
-                    buses_gdf = gpd.GeoDataFrame(buses, crs="EPSG:4269")
-                    states_gdf = gpd.GeoDataFrame(
-                        gpd.read_file(snakemake.input.county_shapes).dissolve("STUSPS")["geometry"],
-                    )
-                    buses_projected = buses_gdf.to_crs("EPSG:3857")
-                    states_projected = states_gdf.to_crs("EPSG:3857")
-                    states = gpd.sjoin_nearest(buses_projected, states_projected, how="left")["STUSPS"]
-                    buses_atmosphere_unique = states.unique() + " atmosphere"
-                    buses_atmosphere = [
-                        "{} atmosphere".format(states.loc[" ".join(index.split(" ")[:elements])]) for index in indexes
-                    ]
-                else:  # node
-                    buses_atmosphere_unique = [
-                        "{} atmosphere".format(" ".join(index.split(" ")[:elements])) for index in indexes
-                    ]
-                    buses_atmosphere = buses_atmosphere_unique
+                buses_atmosphere = pd.Series("atmosphere", index=indexes)
+            elif granularity == "state":
+                buses = n.buses[["x", "y"]].query("x != 0 and y != 0").copy()
+                buses["geometry"] = buses.apply(lambda x: Point(x.x, x.y), axis=1)
+                buses_gdf = gpd.GeoDataFrame(buses, crs="EPSG:4269")
+                states_gdf = gpd.GeoDataFrame(
+                    gpd.read_file(snakemake.input.county_shapes).dissolve("STUSPS")["geometry"],
+                )
+                buses_projected = buses_gdf.to_crs("EPSG:3857")
+                states_projected = states_gdf.to_crs("EPSG:3857")
+                states = gpd.sjoin_nearest(buses_projected, states_projected, how="left")["STUSPS"]
+                buses_atmosphere = nodes.map(states) + " atmosphere"
+            else:  # node
+                buses_atmosphere = nodes + " atmosphere"
+            # one atmosphere bus per node, state or nation, however many CC generators vent to it
+            buses_atmosphere_unique = buses_atmosphere.unique()
 
             # add buses to represent (air) atmosphere where CO2 emissions are sent to
             n.add(
@@ -946,7 +954,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 carrier="co2",
             )
 
-            # calculate efficiencies
+            # calculate efficiencies, per MWh of electricity (CO2 of the fuel burnt, emitted or captured)
             efficiency2 = []  # to node or state atmosphere bus (e.g. "p9 atmosphere", "CA atmosphere")
             efficiency3 = []  # to node co2 capture bus (e.g. "p9 co2 capture")
             for index in indexes:
@@ -963,35 +971,35 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 cc_level = (
                     int(index.split("-")[1].split("CC")[0]) / 100
                 )  # extract CC level from index (e.g. index "p1 CCGT-95CCS_2030" returns 0.95)
-                efficiency2.append(efficiency)
-                efficiency3.append(efficiency * (1 - cc_level) / cc_level)
+                efficiency2.append(efficiency * (1 - cc_level))
+                efficiency3.append(efficiency * cc_level)
 
             # add links to represent sending electricity (in MW) to the electricity bus (e.g. "p9" if ReEDS or "p100 0" if TAMU) as well as sending emitted CO2 (by the generator) to both the atmosphere bus and the co2 capture bus
             n.add(
                 "Link",
                 indexes,
                 bus0=indexes,
-                bus1=n.generators.loc[generators]["bus"],
+                bus1=nodes,
                 bus2=buses_atmosphere,
-                bus3=co2_storage.index + " co2 capture",
+                bus3=nodes + " co2 capture",
                 efficiency=1,
                 efficiency2=efficiency2,
                 efficiency3=efficiency3,
                 p_nom_extendable=True,
                 capital_cost=0,
                 marginal_cost=0,
-                carrier=n.generators.loc[generators].carrier,
+                carrier=n.generators.loc[indexes].carrier,
             )
 
             # (re-)attach generators to new buses (that represent node level CC generator)
-            n.generators.loc[generators, "bus"] = indexes
+            n.generators.loc[indexes, "bus"] = indexes
 
 
 def add_co2_network(n: pypsa.Network, config: dict):
     """Adds CO2 (transportation) network."""
     # get electricity connections
     if config["model_topology"]["transmission_network"] == "reeds":
-        connections = n.links.query("carrier == 'AC' and not Link.str.endswith('exp')")
+        connections = n.links[(n.links.carrier == "AC") & ~n.links.index.str.endswith("exp")]
     else:  # TAMU
         connections = n.lines
 
@@ -1158,11 +1166,17 @@ def add_dac(n: pypsa.Network, config: dict, sector: bool):
         n.links.loc[links.index, "bus2"] = buses_atmosphere_all
 
     else:  # sector-less
-        # set buses needed to create DAC links properly afterwards
-        buses_atmosphere = n.links.query("bus2.str.endswith('atmosphere')")["bus2"].values
-        buses_co2_capture = n.buses.query("Bus.str.endswith(' co2 capture')").index
-        buses_ac = buses_co2_capture.str.replace(" co2 capture", "")
-        links_dac = buses_co2_capture.str.replace(" co2 capture", " dac")
+        # set buses needed to create DAC links properly afterwards: one DAC per node with a CC generator, taking
+        # CO2 from the atmosphere bus the generator vents to and sending it to the node's co2 capture bus
+        cc_links = n.links[n.links.bus2.str.endswith("atmosphere") & n.links.bus3.str.endswith(" co2 capture")]
+        cc_links = cc_links.drop_duplicates(subset="bus1")
+        if cc_links.empty:
+            logger.warning("Not adding DAC capabilities given that no CC generator vents to an atmosphere bus")
+            return
+        buses_atmosphere = cc_links.bus2.values
+        buses_co2_capture = cc_links.bus3.values
+        buses_ac = cc_links.bus1.values
+        links_dac = cc_links.bus1.values + " dac"
 
     # add carrier to represent DAC
     n.add(

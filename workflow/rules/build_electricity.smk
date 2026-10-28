@@ -1125,9 +1125,11 @@ rule add_extra_components:
         flowgates=flowgates_for_extra_components,
         reeds_memberships="repo_data/ReEDS_Constraints/membership.csv",
         remote_units=NETWORKS + "{interconnect}/remote_units_s{simpl}.pkl",
+        # rules are parsed before the Snakefile pads an empty sector to "E"
         co2_storage=(
             CO2 + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
-            if config["scenario"]["sector"] == "" and config["co2"]["storage"] is True
+            if config["scenario"]["sector"] in ("", "E")
+            and config["co2"]["storage"] is True
             else []
         ),
         county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
