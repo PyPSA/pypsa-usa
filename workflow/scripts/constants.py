@@ -30,6 +30,9 @@ NG_Dol_MMBTU_2_MWH = 3.4129
 # AEO2026 prices are in 2025 dollars; model costs are in 2023 dollars
 USD_2025_2_USD_2023 = 1 / 1.06
 
+# EIA building equipment costs are in 2022 dollars; CPI-U 2023/2022 (FRED CPIAUCSL)
+USD_2022_2_USD_2023 = 1.0413
+
 # underground gas storage charge (injection) capacity as a share of its discharge
 # (withdrawal) capacity. EIA-191 reports only the maximum daily delivery, so the
 # injection rate is scaled from it by the ratio of the largest weekly net injection

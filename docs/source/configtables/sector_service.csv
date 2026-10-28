@@ -3,7 +3,7 @@ service_sector,,,Options when implementing the service sector (Residential and C
 -- dynamic_costs,--,"bool {true, false}",Apply sector specific time varrying natural gas and heating fuel oil costs.
 -- split_res_com,--,"bool {true, false}","Model the residential and commercial network seperatly, or aggregate into a single service sector. (Only False implemented)"
 -- split_urban_rural,--,"bool {true, false}","Model the urban and rural areas seperatly within each sector, or aggregate into a single region. If aggregated, constraints on GSHP capacity are implemented based on population. "
--- split_space_water_heating,--,"bool {true, false}","Model space heat and water heat seperatly, or aggregate together. If aggregated, only space-heat technologyies are represented. "
+-- split_space_water_heating,--,"bool {true, false}","Model space heat and water heat separately, or aggregate them into one ``heat`` load. If aggregated, only space heating technologies are represented."
 -- brownfield,--,"bool {true, false}",Include brownfield end-use capacity
 -- scale_exising_stock,--,"bool {true, false}",Scales exisitng stock to equal capacity. If not the existing stock may not be enough to meet historical load. Needed as existing stock values are survay based..
 -- gas_connection,,,"Option on amount of area connected to the gas network. 1 represnets 100% of buildings connected, 0 represents 0% connected. "
@@ -32,5 +32,5 @@ service_sector,,,Options when implementing the service sector (Residential and C
 -- -- -- electricity,$/MWh,float {0 <=},Cost applied to shifted electricity load.
 -- -- -- space-heat,$/MWh,float {0 <=},Cost applied to shifted space-heating load.
 -- -- -- cool,$/MWh,float {0 <=},Cost applied to shifted cooling load.
--- -- -- heat,$/MWh,float {0 <=},"Cost applied to shifted heat load on the combined ``heat`` carrier, used when ``water_heating: split_space_water`` is false."
+-- -- -- heat,$/MWh,float {0 <=},"Cost applied to shifted heat load on the combined ``heat`` carrier, used when ``split_space_water_heating`` is false."
 -- -- by_carrier,--,"bool {true, false}","Optional; defaults to false and is absent from the shipped ``config.sector.yaml``. When true, ``demand_response`` instead carries one sub-mapping per end-use carrier (``elec``, ``heat``, ``space-heat``, ``water-heat``, ``cool``), each with its own ``shift`` and ``marginal_cost``; see the note below the table."

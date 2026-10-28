@@ -571,10 +571,9 @@ the sector pages and are only listed here:
   ranges around historical volumes, per link and investment period; only when
   `sector: natural_gas: imports` is set; upper bounds given as `inf` are skipped; see the
   [natural-gas sector page](./data-naturalgas.md).
-- **Water-heater storage** — forces water-heating demand to be served through the storage
-  buffer; only when `sector: service_sector: water_heating: simple_storage` is **false**
-  (the default is true, so it is off by default); see the
-  [service sector page](./data-services.md).
+- **Water-heater tank size** — sets the tank of each new storage water heater to its
+  heater capacity times the energy to power ratio of the unit; always on when water
+  heating is modelled; see the [service sector page](./data-services.md).
 - **EV generation policy** — caps electric-vehicle-served transport demand per mode and
   horizon as an unweighted sum over snapshots; only when
   `sector: transport_sector: ev_policy` is non-empty; see the

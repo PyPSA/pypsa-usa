@@ -558,26 +558,29 @@ def add_ng_import_export_limits(n, config):
         add_export_limits(n, trade, "max", export_max)
 
 
-def add_water_heater_constraints(n, config):
-    """Adds constraint so energy to meet water demand must flow through store."""
-    links = n.links[(n.links.index.str.contains("-water-")) & (n.links.index.str.contains("-discharger"))]
+def add_water_heater_tank_constraints(n: pypsa.Network) -> None:
+    """
+    Sizes the tank of each new storage water heater to its heater.
 
-    link_names = links.index
-    store_names = [x.replace("-discharger", "") for x in links.index]
+    A water heater tank holds ``energy_to_power_ratio`` MWh of heat per MW of
+    heater input, the ratio of the unit the cost is for. The heater is the
+    ``-charger`` link of the tank store (``build_heat.add_service_water_store``).
+    """
+    if "energy_to_power_ratio" not in n.links.columns:
+        return
+    chargers = n.links[n.links.p_nom_extendable & n.links.energy_to_power_ratio.notna()]
+    if chargers.empty:
+        return
 
-    for period in n.investment_periods:
-        # first snapshot does not respect constraint
-        e_previous = n.model["Store-e"].loc[period, store_names]
-        e_previous = e_previous.roll(timestep=1)
-        e_previous = e_previous.mul(n.snapshot_weightings.stores.loc[period])
+    stores = chargers.index.str.removesuffix("-charger")
+    assert stores.isin(n.stores.index[n.stores.e_nom_extendable]).all(), "Water heater without an extendable tank"
 
-        p_current = n.model["Link-p"].loc[period, link_names]
-        p_current = p_current.mul(n.snapshot_weightings.objective.loc[period])
-
-        lhs = e_previous - p_current
-        rhs = 0
-
-        n.model.add_constraints(lhs >= rhs, name=f"water_heater-{period}")
+    # linopy combines the selections below by position, which the shared order of
+    # the charger and store names keeps aligned
+    p_nom = n.model["Link-p_nom"].loc[chargers.index]
+    e_nom = n.model["Store-e_nom"].loc[stores]
+    lhs = e_nom - p_nom.mul(chargers.energy_to_power_ratio.to_numpy())
+    n.model.add_constraints(lhs == 0, name="Store-water_heater_tank")
 
 
 def add_sector_demand_response_constraints(n, config):

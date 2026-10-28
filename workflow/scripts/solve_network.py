@@ -60,7 +60,7 @@ from opts.sector import (
     add_ng_import_export_limits,
     add_sector_co2_constraints,
     add_sector_demand_response_constraints,
-    add_water_heater_constraints,
+    add_water_heater_tank_constraints,
 )
 
 logger_gurobi = logging.getLogger("gurobipy")
@@ -219,10 +219,8 @@ def extra_functionality(n, snapshots):
         if config["sector"]["natural_gas"].get("infra_contraction", False):
             add_gas_storage_contraction_constraints(n)
 
-        # Water heater constraints
-        water_config = config["sector"]["service_sector"].get("water_heating", {})
-        if not water_config.get("simple_storage", True):
-            add_water_heater_constraints(n, config)
+        # Water heater tanks are sized to their heaters
+        add_water_heater_tank_constraints(n)
 
         # EV generation constraints
         if config["sector"]["transport_sector"].get("ev_policy", {}):

@@ -48,7 +48,7 @@ def build_heat(
     if sector in ("res", "com", "srv"):
         split_urban_rural = options.get("split_urban_rural", False)
         technologies = options.get("technologies", {})
-        water_heating_config = options.get("water_heating", {})
+        split_space_water = options.get("split_space_water_heating", False)
 
         # gas costs are endogenous!
         gas_costs = 0
@@ -64,7 +64,7 @@ def build_heat(
             gshp_cop=gshp_cop,
             marginal_gas=gas_costs,
             # marginal_oil=heating_oil_costs,
-            water_heating_config=water_heating_config,
+            split_space_water=split_space_water,
             dr_config=dr_config,
         )
         add_service_cooling(
@@ -231,7 +231,7 @@ def add_service_heat(
     gshp_cop: pd.DataFrame | None = None,
     marginal_gas: pd.DataFrame | float | None = None,
     marginal_oil: pd.DataFrame | float | None = None,
-    water_heating_config: dict[str, Any] | None = None,
+    split_space_water: bool = False,
     dr_config: dict[str, Any] | None = None,
 ):
     """Adds heating links for residential and commercial sectors."""
@@ -251,11 +251,6 @@ def add_service_heat(
         heat_systems = ["total"]
         _format_total_load(n, sector, "space-heat")
         _format_total_load(n, sector, "water-heat")
-
-    if not water_heating_config:
-        water_heating_config = {}
-
-    split_space_water = water_heating_config.get("split_space_water", False)
 
     heat_carrier = "space-heat" if split_space_water else "heat"
 
@@ -338,9 +333,6 @@ def add_service_heat(
 
         # check if water heat is needed
         if split_space_water:
-            simple_storage = water_heating_config.get("simple_storage", False)
-            n_hours = water_heating_config.get("n_hours", None)
-
             elec_extendable = True if include_elec_water_furnace else False
             gas_extendable = True if include_gas_water_furnace else False
             oil_extendable = True if include_oil_water_furnace else False
@@ -353,8 +345,6 @@ def add_service_heat(
                 costs=costs,
                 standing_loss=standing_loss_water_heat,
                 extendable=elec_extendable,
-                simple_storage=simple_storage,
-                n_hours=n_hours,
             )
             add_service_water_store(
                 n=n,
@@ -365,8 +355,6 @@ def add_service_heat(
                 marginal_cost=marginal_gas,
                 standing_loss=standing_loss_water_heat,
                 extendable=gas_extendable,
-                simple_storage=simple_storage,
-                n_hours=n_hours,
             )
             add_service_water_store(
                 n=n,
@@ -374,11 +362,9 @@ def add_service_heat(
                 heat_system=heat_system,
                 fuel="oil",
                 costs=costs,
-                marginal_cost=marginal_gas,
+                marginal_cost=marginal_oil,
                 standing_loss=standing_loss_water_heat,
                 extendable=oil_extendable,
-                simple_storage=simple_storage,
-                n_hours=n_hours,
             )
 
 
@@ -989,22 +975,19 @@ def add_service_water_store(
     marginal_cost: pd.DataFrame | float | None = None,
     standing_loss: float | None = None,
     extendable: bool | None = True,
-    simple_storage: bool | None = True,
-    n_hours: int | float | None = None,
 ) -> None:
     """
-    Adds end-use water heat storage system.
+    Adds storage water heaters.
 
-    Will add a watner-heat-store-bus, a oe-way link to connect the heat-
-    store-bus to the water-heat-bus. A store to connect to the heat-store-bus.
+    fuel -[charger]-> tank bus (store) -[discharger]-> water-heat bus
 
-    These are non-investable, non-restrictied components. Cost parameters are
-    attached to the links going from primary energy carrier to the heat-store-bus.
-
-    simple_storage:
-        If False, costs are applied to store and energy flows are directed through
-        stores. If True, costs are applied to the discharging link based on
-        4hr storage capacity.
+    The charger is the heater: it converts fuel or electricity to heat at the
+    heater efficiency, books the CO2 of fuel, and carries the cost of the whole
+    unit per MW of input. The store is the hot water in the tank. Its size is
+    tied to the heater by the energy to power ratio of the unit, which is kept
+    on the charger and enforced by ``opts.sector.add_water_heater_tank_constraints``.
+    The discharger draws hot water from the tank without a limit and at a
+    nominal cost.
     """
     assert sector in ("res", "com")
     assert heat_system in ("urban", "rural", "total")
@@ -1046,10 +1029,11 @@ def add_service_water_store(
 
     if fuel == "elec":
         df["bus0"] = df.index.map(lambda x: f"{x.split('-water')[0]}-{SecCarriers.ELECTRICITY.value}")
+        emissions = {}
     else:
         fuel_name = "oil" if fuel == "lpg" else fuel
         df["bus0"] = df.state + " " + fuel_name
-        efficiency2 = costs.at[fuel_name, "co2_emissions"]
+        emissions = {"bus2": df.bus3, "efficiency2": costs.at[fuel_name, "co2_emissions"]}
 
     if isinstance(marginal_cost, pd.DataFrame):
         assert "state" in df.columns
@@ -1062,19 +1046,7 @@ def add_service_water_store(
     if not standing_loss:
         standing_loss = 0
 
-    # the tank cost is per MWh of heat, while the store holds the fuel ahead of the heater
-    tank_capex = capex_per_input(costs, cost_name)
-    if simple_storage:
-        if not n_hours:
-            logger.info("Setting water storage capacity costs to 2 hours")
-            n_hours = 2
-        link_capex = tank_capex / n_hours
-        store_capex = 0
-    else:
-        link_capex = 0
-        store_capex = tank_capex
-
-    lifetime = (costs.at[cost_name, "lifetime"],)
+    lifetime = costs.at[cost_name, "lifetime"]
     build_year = n.investment_periods[0]
 
     buses = df.copy().set_index("bus1")
@@ -1087,56 +1059,42 @@ def add_service_water_store(
         unit="MWh",
     )
 
-    # limitless one directional link from primary energy to water store
-    if fuel == "elec":
-        n.add(
-            "Link",
-            df.index,
-            suffix=f"-{fuel}-heater-charger",
-            bus0=df.bus0,
-            bus1=df.bus1,
-            efficiency=1,
-            carrier=df.carrier,
-            p_nom_extendable=extendable,
-            capital_cost=0,
-            marginal_cost=mc,
-            lifetime=lifetime,
-            build_year=build_year,
-        )
-    else:  # emission tracking
-        n.add(
-            "Link",
-            df.index,
-            suffix=f"-{fuel}-heater-charger",
-            bus0=df.bus0,
-            bus1=df.bus1,
-            bus2=df.bus3,
-            efficiency=1,
-            efficiency2=efficiency2,
-            carrier=df.carrier,
-            p_nom_extendable=extendable,
-            capital_cost=0,
-            marginal_cost=mc,
-            lifetime=lifetime,
-            build_year=build_year,
-        )
+    # heater from primary energy to the hot water in the tank
+    n.add(
+        "Link",
+        df.index,
+        suffix=f"-{fuel}-heater-charger",
+        bus0=df.bus0,
+        bus1=df.bus1,
+        efficiency=costs.at[cost_name, "efficiency"],
+        carrier=df.carrier,
+        p_nom_extendable=extendable,
+        capital_cost=costs.at[cost_name, "capital_cost"],
+        marginal_cost=mc,
+        lifetime=lifetime,
+        build_year=build_year,
+        energy_to_power_ratio=costs.at[cost_name, "energy to power ratio"],
+        **emissions,
+    )
 
-    # limitless one directional link from water store to water demand
+    # one directional link from water store to water demand, also for the existing
+    # heaters, which are built before it and retire before it. Its capacity costs
+    # nothing; a nominal 1 USD/MW/yr settles it at the peak draw.
     n.add(
         "Link",
         df.index,
         suffix=f"-{fuel}-heater-discharger",
         bus0=df.bus1,
         bus1=df.bus2,
-        efficiency=costs.at[cost_name, "efficiency"],
+        efficiency=1,
         carrier=df.carrier,
-        p_nom_extendable=extendable,
-        capital_cost=link_capex,
+        p_nom_extendable=True,
+        capital_cost=1,
         lifetime=lifetime,
         build_year=build_year,
     )
 
-    # limitless water store.
+    # hot water in the tank, sized to the heater
     n.add(
         "Store",
         df.index,
@@ -1147,8 +1105,7 @@ def add_service_water_store(
         e_nom_extendable=extendable,
         carrier=df.carrier,
         standing_loss=standing_loss,
-        efficiency=1,
-        capital_cost=store_capex,
+        capital_cost=0,
         lifetime=lifetime,
         build_year=build_year,
     )

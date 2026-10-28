@@ -8,7 +8,7 @@ https://data.nrel.gov/submissions/78
 from abc import ABC, abstractmethod
 
 import pandas as pd
-from constants import MMBTU_MWHthemal
+from constants import USD_2022_2_USD_2023, MMBTU_MWHthemal
 
 # Vehicle life assumptions for getting $/VMT capital cost
 # From https://atb.nrel.gov/transportation/2022/definitions
@@ -544,6 +544,8 @@ class EiaBuildingData:
 
     All data originates from this document:
         https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
+
+    Its costs are in 2022 dollars and are returned in 2023 dollars.
     """
 
     columns = COLUMN_ORDER
@@ -563,7 +565,8 @@ class EiaBuildingData:
             for param in raw.parameter.unique():
                 # print(tech, param)
                 sliced = raw[(raw.technology == tech) & (raw.parameter == param)]
-                dfs.append(self._interpolate(sliced))
+                if not sliced.empty:  # only storage water heaters have a tank volume
+                    dfs.append(self._interpolate(sliced))
         return pd.concat(dfs)
 
     def _interpolate(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -586,7 +589,7 @@ class EiaBuildingData:
         """
         Convert kBTU to units of MWh.
 
-        NOTE: Some storage is still given in gallons!
+        NOTE: Storage water heaters are given per unit, see ``_get_water_heater_sizes``.
         """
         df.loc[df.unit.str.contains("/kBtu/hr"), "value"] *= 1e3 * MMBTU_MWHthemal
         df2 = df.copy()  # SettingWithCopyWarning
@@ -594,7 +597,7 @@ class EiaBuildingData:
         return df2
 
     def get_data(self, sector: str | None = None) -> pd.DataFrame:
-        """Get capex, lifetime, efficiency, and fixed cost data."""
+        """Get capex, lifetime, efficiency, fixed cost, and water heater size data."""
         sector = self._check_sector(sector)
         return pd.concat(
             [
@@ -602,6 +605,7 @@ class EiaBuildingData:
                 self._get_lifetime(sector),
                 self._get_efficiency(sector),
                 self._get_fixed_costs(sector),
+                self._get_water_heater_sizes(sector),
             ],
         )
 
@@ -611,8 +615,9 @@ class EiaBuildingData:
             slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "investment")
         else:
             slicer = self.data.parameter == "investment"
-        df = self.data[slicer]
-        return self._correct_investment_units(df)[self.columns]
+        df = self._correct_investment_units(self.data[slicer])
+        df["value"] *= USD_2022_2_USD_2023
+        return df[self.columns]
 
     def _get_lifetime(self, sector: str | None = None):
         sector = self._check_sector(sector)
@@ -636,6 +641,16 @@ class EiaBuildingData:
             slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "FOM")
         else:
             slicer = self.data.parameter == "FOM"
+        return self.data[slicer][self.columns]
+
+    def _get_water_heater_sizes(self, sector: str | None = None):
+        """Tank volume (gal) and input capacity (kW) of the unit a storage water heater cost is for."""
+        sector = self._check_sector(sector)
+        sizes = self.data.parameter.isin(["tank volume", "input capacity"])
+        if sector:
+            slicer = (self.data.technology.str.startswith(sector)) & sizes
+        else:
+            slicer = sizes
         return self.data[slicer][self.columns]
 
 
