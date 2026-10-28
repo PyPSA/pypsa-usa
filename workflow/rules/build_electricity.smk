@@ -131,6 +131,7 @@ rule build_bus_regions:
 rule build_cost_data:
     params:
         aeo=config_provider("costs", "aeo"),
+        eia_api=config_provider("api", "eia"),
         pudl_path=config_provider("pudl_path"),
     input:
         efs_tech_costs="repo_data/costs/EFS_Technology_Data.xlsx",

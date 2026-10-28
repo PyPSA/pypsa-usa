@@ -395,7 +395,8 @@ properties:
         type: object
         additionalProperties: false
         properties:
-          scenario: {enum: [reference, high, low]}
+          scenario:
+            enum: [reference, high_oil_and_gas_supply, low_oil_and_gas_supply, high_economic_growth, low_economic_growth, high_zero_carbon_technology_cost, low_zero_carbon_technology_cost, high_electricity_demand, alternative_electricity, alternative_transportation, alternative_electricity_and_transportation]
       social_discount_rate: {type: number}
       ng_fuel_year: {type: integer}
       emission_prices:

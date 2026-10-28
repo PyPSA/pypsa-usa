@@ -23,7 +23,7 @@ In production cost-minimizing optimization models, a generator’s marginal cost
     - For technologies like biomass and nuclear, where fuel prices are not available from other sources, projected fuel costs from the NREL ATB are used.
 
 - **Future Fuel Costs**:
-    - Forecasted annual fuel prices are imported from the EIA's Annual Energy Outlook (AEO).
+    - By default, gas, coal and oil plants, existing and new, pay the electric power prices of the EIA's [Annual Energy Outlook 2026](https://www.eia.gov/outlooks/aeo/) Table 3 (Energy Prices by Sector and Source, United States) for natural gas, steam coal and distillate fuel oil, in the AEO case set by `costs: aeo: scenario` (`reference` is the Counterfactual Baseline). Each investment period gets the price of its year, or of the nearest AEO year outside 2025-2050, converted from 2025 to 2023 dollars. The plant level and historical prices above are used instead when `conventional: dynamic_fuel_price: enable` is true.
 
 (remote_contracted_resources)=
 ## Out-of-State Contracted Resources (California)
