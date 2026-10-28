@@ -103,3 +103,13 @@ def floor_precision(a, precision=0):
 
 def get_model_horizon(model: linopy.Model) -> list[int]:
     return model.variables.indexes["snapshot"].get_level_values(0).unique()
+
+
+def get_last_snapshot(n: pypsa.Network, period: int) -> tuple[int, pd.Timestamp]:
+    """
+    Last snapshot of an investment period.
+
+    The emission stores start every period empty, so their level there is the
+    emissions of that period alone.
+    """
+    return n.snapshots[n.snapshots.get_level_values("period") == period][-1]

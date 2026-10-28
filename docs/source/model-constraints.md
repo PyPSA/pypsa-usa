@@ -136,13 +136,15 @@ For each limit row with region set {math}`R`, horizon {math}`y`, and cap {math}`
     &\ \hspace{1cm} G_R^{em} \hspace{0.9cm} \text{Emitting generators at buses in } R \text{ (carrier CO2 intensity} \neq 0) \\
     &\ \hspace{1cm} \epsilon_{c} = \text{CO2 intensity of carrier } c \text{ [t/MWh}_{th}] \\
     &\ \hspace{1cm} \eta_{g,t} = \text{Generator efficiency [MWh}_{el}\text{/MWh}_{th}] \\
-    &\ \hspace{1cm} e^{atm}_{y} = \text{End-of-horizon level of all CO2 atmosphere stores in the network, if present} \\
+    &\ \hspace{1cm} e^{atm}_{y} = \text{Level of all CO2 atmosphere stores in the network at the end of horizon } y \text{, if present} \\
     &\ s.t. \\
     &\ \hspace{1cm} \sum_{g \in G_R^{em}} \sum_{t \in T_y} w_t \, \frac{\epsilon_{c(g)}}{\eta_{g,t}} \, p_{g,t} + e^{atm}_{y} \;\leq\; E_{R,y}
 \end{align*}
 
-The atmosphere-store term applies only when the network tracks CO2 explicitly with a `co2`
-carrier (sector networks). In sector-coupled studies the `REM` token instead dispatches
+The atmosphere stores, and so this term, exist only in electricity-only studies with CO2
+storage (`co2: storage`), whose carbon capture plants vent the CO2 they do not capture to
+them. The stores start every horizon empty, so their level at its end is the CO2 vented in
+that horizon alone. In sector-coupled studies the `REM` token instead dispatches
 sector-specific CO2 constraints that allow different end-use sectors to decarbonize at
 different rates; see {ref}`sector emission targets <data-sector-coupling>`.
 

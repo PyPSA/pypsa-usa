@@ -6,6 +6,7 @@ import pypsa
 import xarray as xr
 from constants import HOURS_PER_YEAR, NG_MWH_2_MMCF
 from eia import Trade
+from opts._helpers import get_last_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +130,7 @@ def add_sector_co2_constraints(n, config):
             logger.warning(log_statement)
             return
 
-        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=n.snapshots[-1]).sum(dim="name")
+        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=get_last_snapshot(n, year)).sum(dim="name")
         rhs = value  # value in T CO2
 
         n.model.add_constraints(lhs <= rhs, name=name)
@@ -153,7 +154,7 @@ def add_sector_co2_constraints(n, config):
             logger.warning(f"No co2 stores found for USA {year} {sector}")
             return
 
-        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=n.snapshots[-1]).sum(dim="name")
+        lhs = n.model["Store-e"].loc[:, stores].sel(snapshot=get_last_snapshot(n, year)).sum(dim="name")
         rhs = value  # value in T CO2
 
         n.model.add_constraints(lhs <= rhs, name=name)

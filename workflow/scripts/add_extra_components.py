@@ -901,13 +901,15 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                 carrier="co2",
             )
 
-            # add stores to represent (air) atmosphere where CO2 emissions are stored
+            # add stores to represent (air) atmosphere where CO2 emissions are stored,
+            # counted per investment period (as the regional co2 limits read them)
             n.add(
                 "Store",
                 buses_atmosphere_unique,
                 bus=buses_atmosphere_unique,
                 e_nom_extendable=True,
                 e_min_pu=-1,
+                e_initial_per_period=True,
                 carrier="co2",
             )
 

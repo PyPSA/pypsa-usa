@@ -29,6 +29,8 @@ Simple representation of the sectoral interactions in PyPSA-USA
 
 Sector coupled studies implement emission limits different from power sector studies. The difference comes from allowing different sectors to decarbonize at different rates. Often hard-to-decarbonize sectors, like particular industrial applications, will have slower decarbonization targets compared to sectors with commercialized solutions (like electric vehicles). See the [configuration page](./config-sectors.md#carbon-limits) for details on how to implement these emission targets.
 
+Each target caps the emissions of its own year. The state and sector CO2 (and CH4) tracking stores start every investment period empty, and a target reads them at the last snapshot of its period, so emissions of earlier periods do not count against it.
+
 ## Demand Response
 
 Demand response is implemented the same for all end-use sectors, so it is covered here. Demand response is energy carrier agnostic, and can be applied to any end use demand. For example, both electrical loads and space-heating can participate in demand response.
