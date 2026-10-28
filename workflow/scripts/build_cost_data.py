@@ -347,6 +347,7 @@ def build_aeo_fuel_costs(api: str, tech_year: int, aeo_scenario: str) -> pd.Data
         "CCGT-97CCS": "natural_gas",
         "coal-95CCS": "coal",
         "coal-99CCS": "coal",
+        "oil": "distillate_fuel_oil",
         "SMR": "nuclear",
     }
     tech_fuels = pd.DataFrame(

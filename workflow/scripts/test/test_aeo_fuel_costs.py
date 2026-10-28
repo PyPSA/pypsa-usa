@@ -85,3 +85,56 @@ def test_other_dollar_year_is_rejected(patch_prices):
 
     with pytest.raises(ValueError, match="2025 \\$/MMBtu"):
         build_aeo_fuel_costs("KEY", 2030, "reference")
+
+
+# every gas, coal and oil plant pays the AEO fuel costs
+
+
+def test_oil_plants_take_the_distillate_cost(patch_prices):
+    patch_prices()
+
+    costs = fuel_costs(build_aeo_fuel_costs("KEY", 2030, "reference"))
+
+    assert costs["oil"] == pytest.approx(21.0 * TO_MWH)
+
+
+def test_plants_pay_the_aeo_fuel_cost_of_each_period():
+    import pypsa
+    from _helpers import get_multiindex_snapshots
+    from add_extra_components import apply_power_fuel_prices
+
+    n = pypsa.Network()
+    n.snapshots = get_multiindex_snapshots(
+        sns_config={"start": "2030-01-01 00:00", "end": "2030-01-01 01:00", "inclusive": "both"},
+        invest_periods=[2030, 2050],
+    )
+    n.set_investment_periods(periods=[2030, 2050])
+    n.add("Bus", "p1")
+    n.add(
+        "Generator",
+        ["p1 CCGT existing", "p1 coal-95CCS_2050", "p1 oil", "p1 solar"],
+        bus="p1",
+        carrier=["CCGT", "coal-95CCS", "oil", "solar"],
+        efficiency=[0.5, 0.4, 0.25, 1],
+        marginal_cost=[30, 40, 100, 0],
+    )
+    # an existing plant's own fuel cost is replaced
+    n.generators["fuel_cost"] = [3.0, float("nan"), 15.0, 0.0]
+    n.generators["vom_cost"] = [2.0, float("nan"), 3.0, 0.0]
+    costs_dict = {
+        period: pd.DataFrame(
+            {"fuel_cost_real_per_mwhth": fuel, "opex_variable_per_mwh": [0.0, 4.0, 0.0]},
+            index=["CCGT", "coal-95CCS", "oil"],
+        )
+        for period, fuel in {2030: [10.0, 5.0, 50.0], 2050: [20.0, 6.0, 60.0]}.items()
+    }
+
+    apply_power_fuel_prices(n, costs_dict)
+
+    mc = n.generators_t.marginal_cost.groupby(level="period").first()
+    assert mc["p1 CCGT existing"].tolist() == pytest.approx([2 + 10 / 0.5, 2 + 20 / 0.5])
+    # without a VOM of its own, a plant takes the VOM of its carrier's cost data
+    assert mc["p1 coal-95CCS_2050"].tolist() == pytest.approx([4 + 5 / 0.4, 4 + 6 / 0.4])
+    assert mc["p1 oil"].tolist() == pytest.approx([3 + 50 / 0.25, 3 + 60 / 0.25])
+    assert "p1 solar" not in mc
+    assert n.generators.at["p1 CCGT existing", "marginal_cost"] == pytest.approx(2 + 10 / 0.5)
