@@ -32,8 +32,6 @@ sector:
     split_urban_rural: False
     water_heating: 
       split_space_water: true
-      simple_storage: true
-      n_hours: 4
     split_space_water_heating: True
     brownfield: True
     scale_exising_stock: True

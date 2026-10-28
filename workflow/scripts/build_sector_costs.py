@@ -565,7 +565,8 @@ class EiaBuildingData:
             for param in raw.parameter.unique():
                 # print(tech, param)
                 sliced = raw[(raw.technology == tech) & (raw.parameter == param)]
-                dfs.append(self._interpolate(sliced))
+                if not sliced.empty:  # only storage water heaters have a tank volume
+                    dfs.append(self._interpolate(sliced))
         return pd.concat(dfs)
 
     def _interpolate(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -588,7 +589,7 @@ class EiaBuildingData:
         """
         Convert kBTU to units of MWh.
 
-        NOTE: Some storage is still given in gallons!
+        NOTE: Storage water heaters are given per unit, see ``_get_water_heater_sizes``.
         """
         df.loc[df.unit.str.contains("/kBtu/hr"), "value"] *= 1e3 * MMBTU_MWHthemal
         df2 = df.copy()  # SettingWithCopyWarning
@@ -596,7 +597,7 @@ class EiaBuildingData:
         return df2
 
     def get_data(self, sector: str | None = None) -> pd.DataFrame:
-        """Get capex, lifetime, efficiency, and fixed cost data."""
+        """Get capex, lifetime, efficiency, fixed cost, and water heater size data."""
         sector = self._check_sector(sector)
         return pd.concat(
             [
@@ -604,6 +605,7 @@ class EiaBuildingData:
                 self._get_lifetime(sector),
                 self._get_efficiency(sector),
                 self._get_fixed_costs(sector),
+                self._get_water_heater_sizes(sector),
             ],
         )
 
@@ -639,6 +641,16 @@ class EiaBuildingData:
             slicer = (self.data.technology.str.startswith(sector)) & (self.data.parameter == "FOM")
         else:
             slicer = self.data.parameter == "FOM"
+        return self.data[slicer][self.columns]
+
+    def _get_water_heater_sizes(self, sector: str | None = None):
+        """Tank volume (gal) and input capacity (kW) of the unit a storage water heater cost is for."""
+        sector = self._check_sector(sector)
+        sizes = self.data.parameter.isin(["tank volume", "input capacity"])
+        if sector:
+            slicer = (self.data.technology.str.startswith(sector)) & sizes
+        else:
+            slicer = sizes
         return self.data[slicer][self.columns]
 
 

@@ -151,10 +151,33 @@ WATER_HEATER_DELTA_T = {"Residential": 67 * 5 / 9, "Commercial": 70 * 5 / 9}
 KJ_PER_GALLON_KELVIN = 3.785 * 4.186  # 3.785 kg of water per gallon, cp of 4.186 kJ/kg/K
 
 
-def gallon_cost_factor(technology: pd.Series) -> pd.Series:
-    """USD/gal -> USD/MWh of heat a water heater tank holds across its test temperature rise."""
-    delta_t = technology.str.split().str[0].map(WATER_HEATER_DELTA_T)
-    return 3.6e6 / (KJ_PER_GALLON_KELVIN * delta_t)
+def size_water_heaters(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Prices storage water heaters per MW of input and adds the energy to power ratio of their tank.
+
+    A storage water heater costs a fixed amount per unit (USD/unit), for a unit of the
+    given tank volume (gal) and input capacity (kW). The energy to power ratio is the
+    heat the tank holds across its test temperature rise, in MWh per MW of input.
+    """
+    sizes = df[df.parameter.isin(["tank volume", "input capacity"])]
+    sizes = sizes.pivot(index="technology", columns="parameter", values="value")
+
+    per_unit = df.unit == "USD/unit"
+    techs = df.technology[per_unit]
+    assert techs.isin(sizes.index).all(), "No tank volume and input capacity for a USD/unit cost"
+    df.loc[per_unit, "value"] /= techs.map(sizes["input capacity"]).to_numpy() / 1e3
+    df.loc[per_unit, "unit"] = "USD/MW"
+
+    delta_t = sizes.index.str.split().str[0].map(WATER_HEATER_DELTA_T).to_numpy()
+    tank_mwh = sizes["tank volume"] * KJ_PER_GALLON_KELVIN * delta_t / 3.6e6
+    ratio = tank_mwh / (sizes["input capacity"] / 1e3)
+
+    rows = df[df.parameter == "tank volume"].copy()
+    rows["parameter"] = "energy to power ratio"
+    rows["value"] = rows.technology.map(ratio).to_numpy()
+    rows["unit"] = "MWh/MW"
+    rows["further_description"] = "Heat the tank holds across its test temperature rise per MW of input capacity"
+    return pd.concat([df, rows])
 
 
 def get_sector_costs(
@@ -167,11 +190,7 @@ def get_sector_costs(
     """Gets end-use tech costs for sector coupling studies."""
 
     def correct_units(df: pd.DataFrame) -> pd.DataFrame:
-        gallons = df.unit.str.contains("USD/gal")
-        factor = gallon_cost_factor(df.technology[gallons])
-        assert factor.notna().all(), "No water heater temperature rise for a USD/gal cost"
-        df.loc[gallons, "value"] *= factor.to_numpy()
-        df.unit = df.unit.str.replace("USD/gal", "USD/MWh")
+        df = size_water_heaters(df)
 
         df.unit = df.unit.str.replace("$/", "USD/")
 

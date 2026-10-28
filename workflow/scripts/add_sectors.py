@@ -711,12 +711,11 @@ if __name__ == "__main__":
             fuels = ["space_heating", "water_heating", "cooling"]
         else:
             fuels = ["heating", "cooling"]
+        # existing water heater tanks lose heat like new ones
+        technologies = snakemake.params.sector["service_sector"].get("technologies", {})
+        standing_losses = technologies.get("standing_losses", {})
+        water_standing_loss = standing_losses.get("water", 0)
         for fuel in fuels:
-            if fuel == "water_heating":
-                simple_storage = snakemake.params.sector["service_sector"]["water_heating"].get("simple_storage", False)
-            else:
-                simple_storage = None
-
             # residential sector
             ratios = get_residential_stock(res_stock_dir, fuel)
             ratios.index = ratios.index.map(STATE_2_CODE)
@@ -730,7 +729,7 @@ if __name__ == "__main__":
                 growth_multiplier=growth_multiplier,
                 ratios=ratios,
                 costs=costs,
-                simple_storage=simple_storage,
+                standing_loss=water_standing_loss,
             )
 
             # commercial sector
@@ -746,7 +745,7 @@ if __name__ == "__main__":
                 growth_multiplier=growth_multiplier,
                 ratios=ratios,
                 costs=costs,
-                simple_storage=simple_storage,
+                standing_loss=water_standing_loss,
             )
 
     if snakemake.params.sector["industrial_sector"]["brownfield"]:
