@@ -22,6 +22,7 @@ RPS_CARRIERS = [
     "hydro",
     "geothermal",
     "biomass",
+    "biomass-CCS",
     "EGS",
 ]
 CES_CARRIERS = [

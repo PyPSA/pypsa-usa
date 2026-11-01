@@ -68,6 +68,8 @@ plotting:
     "trn-elec": "#f9d002"
     "coal-95CCS": "#4b4b4b"
     "coal-99CCS": "#2e2e2e"
+    "biomass-CCS": "#073d0c"
+    "biomass supply": "#baa741"
     "SMR": "#ff5733"
     "CCGT-95CCS": "#800000"
     "8hr_PHS": "#069686"
@@ -309,6 +311,7 @@ plotting:
     trn-elec-veh-dr: "#45ba75"
 
   nice_names:
+    biomass-CCS: "Biomass CCS"
     OCGT: "Open-Cycle Gas"
     CCGT: "Combined-Cycle Gas"
     offwind: "Fixed Bottom Offshore Wind"

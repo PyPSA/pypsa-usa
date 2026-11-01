@@ -7,6 +7,11 @@ def sector_input_files(wildcards):
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
         "tech_costs": RESOURCES
         + f"costs/sector_costs_{config['scenario']['planning_horizons'][0]}.csv",
+        # each investment period's costs, for the fuel price of biomass power with carbon capture
+        "tech_costs_by_year": expand(
+            COSTS + "costs_{year}.csv",
+            year=config["scenario"]["planning_horizons"],
+        ),
     }
     sectors = wildcards.sector.split("-")
     if "G" in sectors:
@@ -51,6 +56,8 @@ rule add_sectors:
         api=config["api"],
         sector=config["sector"],
         pudl_path=config_provider("pudl_path"),
+        costs=config_provider("costs"),
+        planning_horizons=config_provider("scenario", "planning_horizons"),
     input:
         unpack(sector_input_files),
     output:

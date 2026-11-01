@@ -30,7 +30,7 @@ from build_stock_data import (
     scale_existing_stock,
 )
 from build_transportation import build_transportation
-from constants import CODE_2_STATE, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
+from constants import BECCS_CO2_REMOVAL, CODE_2_STATE, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from constants_sector import RoadTransport
 from eia import FuelCosts
 from money import dollar_year_from_config
@@ -95,6 +95,8 @@ def add_sector_foundation(
     elif carrier == "lpg":
         carrier_kwargs = {"color": "#d35050", "nice_name": "Liquid Petroleum Gas"}
         co2_carrier = "oil"
+    elif carrier == "biomass":
+        carrier_kwargs = {"color": "#0c6013", "nice_name": "Biomass"}
     else:
         raise ValueError(f"Unknown carrier of {carrier}")
 
@@ -192,6 +194,80 @@ def add_sector_foundation(
             lifetime=np.inf,
             build_year=n.investment_periods[0],
         )
+
+
+def get_period_fuel_price(
+    n: pypsa.Network,
+    carrier: str,
+    costs: dict[int, pd.DataFrame],
+    cost_carrier: str,
+) -> pd.DataFrame:
+    """
+    Price (USD/MWh_th) of the state level buses of a fuel, by snapshot and bus.
+
+    For power plants of sector models that keep buying their fuel at the price of
+    the electricity only model: the fuel cost of ``cost_carrier`` in each
+    investment period's cost data (``fuel_cost_real_per_mwhth``), as in
+    ``add_extra_components.apply_power_fuel_prices``.
+    """
+    prices = pd.Series({period: costs[period].at[cost_carrier, "fuel_cost_real_per_mwhth"] for period in costs})
+    if prices.isna().any():
+        raise ValueError(
+            f"No fuel cost of {cost_carrier} for investment periods {prices.index[prices.isna()].tolist()}"
+        )
+
+    period_price = n.snapshots.get_level_values("period").map(prices)
+    buses = n.buses.index[n.buses.carrier == carrier]
+    return pd.DataFrame({bus: period_price for bus in buses}, index=n.snapshots)
+
+
+def add_biomass_supply(n: pypsa.Network, marginal_cost: pd.DataFrame) -> None:
+    """
+    Adds an unlimited biomass supply to the state biomass buses, priced at ``marginal_cost`` (USD/MWh_th by bus).
+
+    Like the gas production of ``build_natural_gas``, the supply is a store on a
+    state 'biomass supply' bus feeding the state biomass bus through a link. The
+    store holds the supply limit of each investment period, which is not binding;
+    there is no biomass supply curve.
+    """
+    buses = n.buses[n.buses.carrier == "biomass"]
+    if buses.empty:
+        return
+
+    supply = buses.index + " supply"
+    location = ["x", "y", "interconnect", "country", "STATE", "STATE_NAME"]
+    n.add(
+        "Bus",
+        supply,
+        carrier="biomass supply",
+        unit="MWh_th",
+        **{attr: buses[attr].values for attr in location if attr in buses},
+    )
+    n.add(
+        "Store",
+        supply,
+        bus=supply,
+        carrier="biomass supply",
+        e_nom=1e9,
+        e_min_pu=-1,
+        e_max_pu=0,
+        e_cyclic_per_period=False,
+        # the supply limit applies to each period, rather than accumulating over all of them
+        e_initial_per_period=True,
+        lifetime=np.inf,
+        build_year=n.investment_periods[0],
+    )
+    n.add(
+        "Link",
+        supply,
+        bus0=supply,
+        bus1=buses.index,
+        carrier="biomass supply",
+        p_nom=1e7,
+        marginal_cost=marginal_cost.set_axis(supply, axis=1),
+        lifetime=np.inf,
+        build_year=n.investment_periods[0],
+    )
 
 
 def get_dynamic_marginal_costs(
@@ -568,6 +644,10 @@ if __name__ == "__main__":
     sns = get_snapshots(snakemake.params.snapshots)
 
     costs = load_costs(snakemake.input.tech_costs)
+    costs_by_year = {
+        year: load_costs(path, snakemake.params.costs)
+        for year, path in zip(snakemake.params.planning_horizons, snakemake.input.tech_costs_by_year)
+    }
 
     ###
     # Sector addition starts here
@@ -601,6 +681,15 @@ if __name__ == "__main__":
     for carrier in ["oil"]:
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
         convert_generators_2_links(n, carrier, " lpg", co2_intensity)
+
+    # biomass power with carbon capture draws biomass from the state, at the fuel
+    # cost of the electricity only model; the CO2 it removes counts towards the power
+    # sector, whose emissions may then be net negative
+    if (n.generators.carrier == "biomass-CCS").any():
+        add_sector_foundation(n, "biomass", False, costs, center_points)
+        add_biomass_supply(n, get_period_fuel_price(n, "biomass", costs_by_year, "biomass-CCS"))
+        convert_generators_2_links(n, "biomass-CCS", " biomass", -BECCS_CO2_REMOVAL)
+        n.stores.loc[n.stores.index.str.endswith(" pwr-co2"), "e_min_pu"] = -1
 
     ng_options = snakemake.params.sector["natural_gas"]
 
