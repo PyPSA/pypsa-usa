@@ -105,7 +105,7 @@ def test_cc_generators_vent_and_capture_at_their_node(elec_network, storage_csv)
     n = elec_network
     add_co2_storage(n, config(), storage_csv, COSTS, sector=False)
 
-    cc = n.links.loc[["p1 CCGT-95CC_2030", "p1 coal-99CC_2030", "p2 CCGT-95CC_2030"]]
+    cc = n.links.loc[["p1 CCGT-95CCS_2030", "p1 coal-99CCS_2030", "p2 CCGT-95CCS_2030"]]
     assert cc.bus1.tolist() == ["p1", "p1", "p2"]
     assert cc.bus2.tolist() == ["p1 atmosphere", "p1 atmosphere", "p2 atmosphere"]
     assert cc.bus3.tolist() == ["p1 co2 capture", "p1 co2 capture", "p2 co2 capture"]
@@ -113,15 +113,17 @@ def test_cc_generators_vent_and_capture_at_their_node(elec_network, storage_csv)
     assert sorted(n.stores.index[n.stores.index.str.endswith("atmosphere")]) == ["p1 atmosphere", "p2 atmosphere"]
 
 
-def test_cc_generators_are_renamed_with_their_time_series(elec_network, storage_csv):
+def test_cc_generators_keep_their_name_carrier_and_cost(elec_network, storage_csv):
+    """Carrier-keyed policies (RPS, CES, capacity targets) must still find the plants (#869)."""
     n = elec_network
     add_co2_storage(n, config(), storage_csv, COSTS, sector=False)
 
-    assert not n.generators.index.str.contains("CCS").any()
-    assert n.generators.at["p1 CCGT-95CC_2030", "bus"] == "p1 CCGT-95CC_2030"
-    assert n.generators.at["p1 CCGT-95CC_2030", "carrier"] == "CCGT-95CC"
-    assert n.generators_t.p_max_pu.columns.tolist() == ["p1 CCGT-95CC_2030"]
-    assert {"CCGT-95CC", "coal-99CC"} <= set(n.carriers.index)
+    assert n.generators.at["p1 CCGT-95CCS_2030", "bus"] == "p1 CCGT-95CCS_2030"
+    assert n.generators.at["p1 CCGT-95CCS_2030", "carrier"] == "CCGT-95CCS"
+    assert n.generators_t.p_max_pu.columns.tolist() == ["p1 CCGT-95CCS_2030"]
+    # the capital cost excludes CO2 transport and storage to begin with
+    assert (n.generators.capital_cost == 100).all()
+    assert not n.carriers.index.str.endswith("CC").any()
     n.consistency_check(strict=["unknown_buses"])
 
 
@@ -161,10 +163,12 @@ def test_ccs_links_capture_at_their_node(sector_network, storage_csv):
     n = sector_network
     add_co2_storage(n, config(), storage_csv, COSTS, sector=True)
 
-    cc = n.links.loc[["p1 CCGT-95CC_2030", "p2 coal-99CC_2030"]]
+    cc = n.links.loc[["p1 CCGT-95CCS_2030", "p2 coal-99CCS_2030"]]
     assert cc.bus4.tolist() == ["p1 co2 capture", "p2 co2 capture"]
-    assert cc.carrier.tolist() == ["CCGT-95CC", "coal-99CC"]
-    assert n.links_t.p_max_pu.columns.tolist() == ["p1 CCGT-95CC_2030"]
+    # the links keep their name, carrier and capital cost (#869)
+    assert cc.carrier.tolist() == ["CCGT-95CCS", "coal-99CCS"]
+    assert (cc.capital_cost == 100).all()
+    assert n.links_t.p_max_pu.columns.tolist() == ["p1 CCGT-95CCS_2030"]
     n.consistency_check(strict=["unknown_buses"])
 
 
@@ -176,7 +180,7 @@ def test_cc_generators_vent_the_uncaptured_share(elec_network, storage_csv):
     n = elec_network
     add_co2_storage(n, config(), storage_csv, COSTS, sector=False)
 
-    cc = n.links.loc[["p1 CCGT-95CC_2030", "p1 coal-99CC_2030"]]
+    cc = n.links.loc[["p1 CCGT-95CCS_2030", "p1 coal-99CCS_2030"]]
     burnt = pd.Series([GAS / 0.5, COAL / 0.4], index=cc.index)
     assert cc.efficiency2.tolist() == pytest.approx((burnt * [0.05, 0.01]).tolist())
     assert cc.efficiency3.tolist() == pytest.approx((burnt * [0.95, 0.99]).tolist())
@@ -187,7 +191,7 @@ def test_ccs_links_vent_the_uncaptured_share(sector_network, storage_csv):
     n = sector_network
     add_co2_storage(n, config(), storage_csv, COSTS, sector=True)
 
-    cc = n.links.loc[["p1 CCGT-95CC_2030", "p2 coal-99CC_2030"]]
+    cc = n.links.loc[["p1 CCGT-95CCS_2030", "p2 coal-99CCS_2030"]]
     assert cc.efficiency2.tolist() == pytest.approx([GAS * 0.05, COAL * 0.01])
     assert cc.efficiency4.tolist() == pytest.approx([GAS * 0.95, COAL * 0.99])
 
