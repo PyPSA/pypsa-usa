@@ -22,8 +22,21 @@ idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
 
-# carriers of the gas, coal and oil plants, which pay the AEO fuel costs of the cost data
-POWER_FUEL_CARRIERS = ["OCGT", "CCGT", "CCGT-95CCS", "CCGT-97CCS", "coal", "coal-95CCS", "coal-99CCS", "oil"]
+# carriers of the plants paying the fuel costs of the cost data: the AEO fuel costs
+# of gas, coal and oil plants, the ATB fuel costs of nuclear and biomass plants
+POWER_FUEL_CARRIERS = [
+    "OCGT",
+    "CCGT",
+    "CCGT-95CCS",
+    "CCGT-97CCS",
+    "coal",
+    "coal-95CCS",
+    "coal-99CCS",
+    "oil",
+    "nuclear",
+    "SMR",
+    "biomass",
+]
 
 
 def add_co2_emissions(n, costs, carriers):
@@ -547,12 +560,14 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year):
 
 def apply_power_fuel_prices(n: pypsa.Network, costs_dict: dict[int, pd.DataFrame]) -> None:
     """
-    Prices the fuel of gas, coal and oil plants, existing and new, at the AEO fuel costs of each investment period.
+    Prices the fuel of plants, existing and new, at the fuel costs of each investment period.
 
-    A plant's marginal cost in a period becomes its VOM plus the AEO fuel cost
-    of its carrier in that period's cost data (``fuel_cost_real_per_mwhth``,
-    see build_cost_data) over its efficiency. This replaces the plant level fuel
-    costs of the existing fleet, which new units copied from it also carry.
+    A plant's marginal cost in a period becomes its VOM plus the fuel cost of its
+    carrier in that period's cost data (``fuel_cost_real_per_mwhth``, see
+    build_cost_data) over its efficiency: the AEO fuel cost of gas, coal and oil
+    plants, the ATB fuel cost of nuclear and biomass plants. This replaces the
+    plant level fuel costs of the existing fleet, which new units copied from it
+    also carry.
     """
     plants = n.generators[n.generators.carrier.isin(POWER_FUEL_CARRIERS)]
     if plants.empty:
@@ -572,7 +587,7 @@ def apply_power_fuel_prices(n: pypsa.Network, costs_dict: dict[int, pd.DataFrame
         axis=1,
     )
     n.generators.loc[plants.index, "marginal_cost"] = marginal_cost.iloc[0]
-    logger.info(f"Priced the fuel of {len(plants)} gas, coal and oil plants at the AEO fuel costs")
+    logger.info(f"Priced the fuel of {len(plants)} plants at the fuel costs of the cost data")
 
 
 def apply_itc(n, itc_modifier, monitization_cost=0.1):
@@ -1289,7 +1304,8 @@ def main(snakemake) -> None:
         # and compound across periods.
         n.remove("Generator", egs_gens.index)
 
-    # gas, coal and oil plants pay the AEO fuel costs, unless dynamic fuel prices are enabled
+    # gas, coal and oil plants pay the AEO fuel costs, nuclear and biomass plants the ATB
+    # fuel costs, unless dynamic fuel prices are enabled
     if not snakemake.config["conventional"]["dynamic_fuel_price"].get("enable", False):
         apply_power_fuel_prices(n, costs_dict)
 
