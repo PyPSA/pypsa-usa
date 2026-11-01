@@ -305,9 +305,8 @@ TRANSMISSION_DATA = [
 # Technologies paying the ATB fuel cost of their scenario rather than an AEO price
 ATB_FUEL_CARRIERS = ["nuclear", "SMR", "biomass"]
 
-# Biomass power with carbon capture: the "beccs_mod" case of ReEDS
-# inputs/plant_characteristics/beccs_reference.csv, in 2010 USD
-BECCS_REEDS_CASE = "beccs_mod"
+# Biomass power with carbon capture: repo_data/costs/reeds_beccs_reference.csv holds
+# the "beccs_mod" rows of ReEDS inputs/plant_characteristics/beccs_reference.csv, in 2010 USD
 USD_2010_2_USD_2023 = 304.703 / 218.076  # CPI-U annual mean (FRED CPIAUCSL), 2023 / 2010
 
 ATB_VALUE_COLS = [
@@ -416,11 +415,10 @@ def get_beccs_reference(beccs_reference: str, year: int) -> pd.Series:
     ReEDS BECCS costs and heat rate of ``year``, in 2023 USD.
 
     Overnight capital cost (USD/kW), fixed O&M (USD/kW-year), variable O&M
-    (USD/MWh) and heat rate (MMBtu/MWh) of ``BECCS_REEDS_CASE``, linearly
-    interpolated between the ReEDS years and held constant outside them.
+    (USD/MWh) and heat rate (MMBtu/MWh) of the ReEDS ``beccs_mod`` plant,
+    linearly interpolated between the ReEDS years and held constant outside them.
     """
-    df = pd.read_csv(beccs_reference)
-    df = df[df.i == BECCS_REEDS_CASE].set_index("t").sort_index()
+    df = pd.read_csv(beccs_reference, index_col="t").sort_index()
     data = df[["capcost", "fom", "vom", "heatrate"]].apply(lambda x: float(np.interp(year, x.index, x)))
     data[["capcost", "fom", "vom"]] *= USD_2010_2_USD_2023
     return data
