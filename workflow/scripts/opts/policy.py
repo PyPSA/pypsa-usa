@@ -24,7 +24,16 @@ RPS_CARRIERS = [
     "biomass",
     "EGS",
 ]
-CES_CARRIERS = [*RPS_CARRIERS, "nuclear", "SMR", "hydrogen_ct", "CCGT-95CCS", "CCGT-99CCS", "Coal-95CCS"]
+CES_CARRIERS = [
+    *RPS_CARRIERS,
+    "nuclear",
+    "SMR",
+    "hydrogen_ct",
+    "CCGT-95CCS",
+    "CCGT-97CCS",
+    "coal-95CCS",
+    "coal-99CCS",
+]
 
 
 def add_technology_capacity_target_constraints(n, config):

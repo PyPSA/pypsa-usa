@@ -653,3 +653,15 @@ def test_add_rps_constraints_zone_without_eligible_gens_does_not_stop_others(pol
     rps = [c for c in n.model.constraints if c.endswith("_rps_limit")]
     assert rps, "the non-empty zone lost its constraint"
     assert not any(c.startswith("GlobalConstraint-CA") for c in rps)
+
+
+def test_portfolio_standard_carriers_are_model_carriers():
+    """Portfolio standards match carriers by exact name, so a misspelt one silently gets no credit (#871)."""
+    from constants import ATB_TECH_MAPPER
+    from opts.policy import CES_CARRIERS, RPS_CARRIERS
+
+    # ATB technologies, plus the hydrogen turbine build_cost_data derives from the gas turbine
+    model_carriers = set(ATB_TECH_MAPPER) | {"hydrogen_ct"}
+    assert set(RPS_CARRIERS) <= model_carriers
+    assert set(CES_CARRIERS) <= model_carriers
+    assert {"CCGT-95CCS", "CCGT-97CCS", "coal-95CCS", "coal-99CCS"} <= set(CES_CARRIERS)
