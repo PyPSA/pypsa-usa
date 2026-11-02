@@ -432,8 +432,8 @@ def build_beccs(pivot_atb: pd.DataFrame, beccs: pd.Series) -> pd.DataFrame:
     (``get_beccs_reference``) and the rest of the biomass plant: its fuel cost
     per MWh of biomass, grid connection, financing, cost recovery period and
     lifetime. The ReEDS capital cost is an overnight cost; the construction
-    financing (``capex_construction_finance_factor``, USD/kW in the ATB) is kept
-    the same share of the overnight and grid connection costs as for biomass.
+    financing cost of biomass (``capex_construction_finance_factor``, USD/kW in
+    the ATB) is added to it as it is, like the grid connection.
     Every MWh of biomass burnt removes ``constants.BECCS_CO2_REMOVAL`` of CO2.
     """
     df = pivot_atb[pivot_atb["pypsa-name"] == "biomass"].copy()
@@ -441,9 +441,7 @@ def build_beccs(pivot_atb: pd.DataFrame, beccs: pd.Series) -> pd.DataFrame:
         return df
     df["pypsa-name"] = "biomass-CCS"
     grid = df["capex_grid_connection_per_kw"].fillna(0)
-    financing_share = df["capex_construction_finance_factor"] / (df["capex_overnight_per_kw"] + grid)
     df["capex_overnight_per_kw"] = beccs.capcost
-    df["capex_construction_finance_factor"] = financing_share * (df["capex_overnight_per_kw"] + grid)
     df["capex_per_kw"] = df["capex_overnight_per_kw"] + grid + df["capex_construction_finance_factor"]
     df["opex_fixed_per_kw"] = beccs.fom
     df["opex_variable_per_mwh"] = beccs.vom

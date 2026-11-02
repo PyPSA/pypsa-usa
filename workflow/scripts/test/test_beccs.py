@@ -59,8 +59,8 @@ def test_beccs_costs_build_on_the_biomass_plant():
     costs = process_atb_scenario(atb, aeo, beccs).pivot(index="pypsa-name", columns="parameter", values="value")
 
     row = costs.loc["biomass-CCS"]
-    # the overnight cost of ReEDS, the grid connection and financing share of biomass
-    assert row.capex_per_kw == pytest.approx((7000 + 100) * 1.1, abs=0.01)
+    # the overnight cost of ReEDS plus the grid connection and construction financing costs of biomass
+    assert row.capex_per_kw == pytest.approx(7000 + 100 + 410, abs=0.01)
     assert row.opex_fixed_per_kw == pytest.approx(200.0)
     assert row.opex_variable_per_mwh == pytest.approx(20.0)
     assert row.efficiency == pytest.approx(3.412 / 15.0, abs=0.01)
