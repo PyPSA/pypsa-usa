@@ -88,6 +88,20 @@ def test_storage_by_formation(make_storage):
     assert data.at["CA depleted-field", "MAX_CAPACITY_MWH"] == pytest.approx(5.0e6 * MWH_PER_MCF)
 
 
+def test_storage_keeps_the_shares_of_its_formations(make_storage):
+    state = make_storage().data.set_index("STATE")
+    # CA: depleted fields hold 2.0e6 + 1.5e6 of the 3.9e6 mcf working gas, 360e3 of the 408e3 mcf/d withdrawal
+    assert state.at["CA", "working_share_depleted-field"] == pytest.approx(3.5 / 3.9)
+    assert state.at["CA", "working_share_aquifer"] == pytest.approx(0.4 / 3.9)
+    assert state.at["CA", "withdrawal_share_depleted-field"] == pytest.approx(360 / 408)
+    assert state.at["CA", "withdrawal_share_salt-dome"] == 0
+    assert state.at["TX", "working_share_salt-dome"] == 1
+
+    formation = make_storage("formation").data.set_index("NAME")
+    assert formation.at["CA aquifer", "working_share_aquifer"] == 1
+    assert formation.at["CA aquifer", "withdrawal_share_depleted-field"] == 0
+
+
 def test_latest_report_does_not_depend_on_model_year(make_storage):
     pd.testing.assert_frame_equal(make_storage(year=2018).data, make_storage(year=2030).data)
 

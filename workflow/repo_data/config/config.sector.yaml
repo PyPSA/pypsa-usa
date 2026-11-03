@@ -16,12 +16,31 @@ sector:
     marginal_cost_multiplier: 1
     existing_pipeline_multiplier: 1
     pipeline_length_factor: 1.25  # route length / distance between state centers
-    infra_contraction: false  # true = existing production, storage and pipelines may shrink to zero
+    infra_contraction:  # true = the existing capacity may shrink to zero; retrofitting to hydrogen sets it for storage and pipelines
+      production: false
+      pipeline: false
+      storage: false
     storage_aggregation: state  # state | formation
   methane:
     upstream_leakage_rate: 0.02 # per unit 
     downstream_leakage_rate: 0.02 # per unit 
     gwp: 0 
+  # docs-hydrogen
+  hydrogen:
+    # Exogenous non-power hydrogen demand of EER ADP 2024 (HHV; DC in MD), national totals
+    # 2030 / 2040 / 2050:
+    #   central:        10.7 / 20.6 / 40.9 Mt =  421 /  810 / 1612 TWh
+    #   current policy: 10.7 / 13.6 / 13.4 Mt =  423 /  536 /  528 TWh
+    #   baseline:        9.9 / 10.1 / 10.1 Mt =  389 /  399 /  398 TWh
+    #   (all three about 9.6 Mt = 378 TWh in 2024)
+    demand_scenario: central  # central | current policy | baseline
+    production: [h2_electrolysis, h2_smr, h2_smr_ccs]
+    pipelines: true  # new pipelines between states joined by AC transmission or a gas pipeline
+    storage: true  # new underground storage; salt cavern, hard rock or pipe as available (ReEDS)
+    pipeline_length_factor: 1.25  # route length / distance between state centers
+    retrofit:  # natural gas infrastructure retrofitted to hydrogen, in the first investment period (E-G-H)
+      storage: false  # salt dome, depleted field and aquifer gas storage; costs by formation, weighted by state
+      pipelines: false  # gas pipelines between states
   # docs-heating
   heating:
     heat_pump_sink_T: 55.

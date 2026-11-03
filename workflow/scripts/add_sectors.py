@@ -12,12 +12,13 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, get_snapshots, load_costs, log_network_schema
+from _helpers import configure_logging, get_gas_infra_contraction, get_snapshots, load_costs, log_network_schema
 from add_electricity import sanitize_carriers
 from add_extra_components import add_co2_network, add_co2_storage, add_dac
 from build_electricity_sector import build_electricty
 from build_emission_tracking import build_ch4_tracking, build_co2_tracking
 from build_heat import build_heat
+from build_hydrogen import build_hydrogen, get_gas_pipelines
 from build_natural_gas import StateGeometry, build_natural_gas
 from build_stock_data import (
     add_industrial_brownfield,
@@ -196,6 +197,30 @@ def add_sector_foundation(
         )
 
 
+def get_plant_fuel_price(n: pypsa.Network, carrier: str, plant_carriers: list[str]) -> pd.Series:
+    """
+    Price (USD/MWh_th) of the state level buses of a fuel, by bus.
+
+    For sector models without natural gas, whose power plants keep buying their
+    fuel at the price of the electricity only model: the capacity weighted
+    ``fuel_cost`` of the plants burning it in the state, else in the network.
+    """
+    buses = n.buses[n.buses.carrier == carrier]
+
+    fuel_cost = n.generators.get("fuel_cost", pd.Series(np.nan, index=n.generators.index))
+    plants = n.generators[n.generators.carrier.isin(plant_carriers) & (fuel_cost > 0)]
+    if plants.empty:
+        logger.warning(f"No {plant_carriers} plants with a fuel cost to price {carrier}; supplying it for free")
+        return pd.Series(0.0, index=buses.index)
+
+    weight = plants.p_nom if plants.p_nom.sum() > 0 else pd.Series(1.0, index=plants.index)
+    state = plants.bus.map(n.buses.STATE)
+    cost = fuel_cost[plants.index] * weight
+    state_price = cost.groupby(state).sum() / weight.groupby(state).sum()
+    price = buses.STATE.map(state_price.dropna()).fillna(cost.sum() / weight.sum())
+    return price * 3.412  # USD/MMBtu -> USD/MWh_th
+
+
 def get_period_fuel_price(
     n: pypsa.Network,
     carrier: str,
@@ -207,7 +232,8 @@ def get_period_fuel_price(
 
     For power plants of sector models that keep buying their fuel at the price of
     the electricity only model: the fuel cost of ``cost_carrier`` in each
-    investment period's cost data (``fuel_cost_real_per_mwhth``), as in
+    investment period's cost data (``fuel_cost_real_per_mwhth``, the AEO fuel
+    cost of gas, coal and oil, the ATB fuel cost of biomass), as in
     ``add_extra_components.apply_power_fuel_prices``.
     """
     prices = pd.Series({period: costs[period].at[cost_carrier, "fuel_cost_real_per_mwhth"] for period in costs})
@@ -267,6 +293,23 @@ def add_biomass_supply(n: pypsa.Network, marginal_cost: pd.DataFrame) -> None:
         marginal_cost=marginal_cost.set_axis(supply, axis=1),
         lifetime=np.inf,
         build_year=n.investment_periods[0],
+    )
+
+
+def add_fuel_supply(n: pypsa.Network, carrier: str, marginal_cost: pd.Series | pd.DataFrame) -> None:
+    """Adds an unlimited supply, at ``marginal_cost`` (USD/MWh_th by bus), to the state level buses of a fuel."""
+    buses = n.buses.index[n.buses.carrier == carrier]
+    if buses.empty:
+        return
+
+    n.add(
+        "Generator",
+        buses,
+        suffix=" supply",
+        bus=buses,
+        carrier=f"{carrier} supply",
+        p_nom=1e7,
+        marginal_cost=marginal_cost,
     )
 
 
@@ -518,6 +561,10 @@ def convert_generators_2_links(
         lifetime=plants.lifetime,
         build_year=plants.build_year,
     )
+    # retrofits of existing plants keep the plant they are retrofitted from
+    for attr in ("retrofit_from", "retrofit_factor"):
+        if attr in plants:
+            n.links.loc[plants.index, attr] = plants[attr]
 
     for param, df in pnl.items():
         n.links_t[param] = n.links_t[param].join(df, how="inner")
@@ -574,7 +621,7 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
             return costs.at["gas", "co2_emissions"]
         case "lpg":
             return costs.at["oil", "co2_emissions"]
-        case "CCGT-95CCS" | "CCGT-97CCS":
+        case "CCGT-90CCS" | "CCGT-95CCS" | "CCGT-97CCS":
             base = costs.at["gas", "co2_emissions"]
             ccs_level = int(carrier.split("-")[1].replace("CCS", ""))
             return (1 - ccs_level / 100) * base
@@ -654,22 +701,46 @@ if __name__ == "__main__":
     ###
 
     # add sector specific emission tracking
-    build_co2_tracking(n)
+    co2_sectors = ["pwr"]
+    if "G" in sectors:
+        co2_sectors += ["trn", "res", "com", "ind"]
+    if "H" in sectors:
+        co2_sectors.append("h2")
+    build_co2_tracking(n, sectors=co2_sectors)
 
     # break out loads into sector specific buses
-    split_loads_by_carrier(n)
+    if "G" in sectors:
+        split_loads_by_carrier(n)
 
     # add primary energy carriers for each state
-    center_points = StateGeometry(snakemake.input.county).state_center_points.set_index(
-        "STATE",
-    )
-    # oil in this context is heating_oil
-    for carrier in ("oil", "lpg", "coal", "gas"):
-        add_supply = False if carrier == "gas" else True  # gas added in build_ng()
-        api = None if carrier == "gas" else eia_api  # ng cost endogenously defined
-        add_sector_foundation(n, carrier, add_supply, costs, center_points, api)
+    state_geometry = StateGeometry(snakemake.input.county)
+    center_points = state_geometry.state_center_points.set_index("STATE")
+    if "G" in sectors:
+        # oil in this context is heating_oil
+        for carrier in ("oil", "lpg", "coal", "gas"):
+            add_supply = False if carrier == "gas" else True  # gas added in build_ng()
+            api = None if carrier == "gas" else eia_api  # ng cost endogenously defined
+            add_sector_foundation(n, carrier, add_supply, costs, center_points, api)
+    else:
+        # gas, coal and oil are bought, by power plants and hydrogen production
+        # alike, at the price the power plants pay in the electricity only model:
+        # the AEO electric power fuel costs of each period, or their own fuel costs
+        # with dynamic fuel prices
+        dynamic_fuel_price = snakemake.config["conventional"]["dynamic_fuel_price"].get("enable", False)
+        fuel_plants = {
+            "gas": ["OCGT", "CCGT", "CCGT-90CCS", "CCGT-95CCS", "CCGT-97CCS"],
+            "coal": ["coal"],
+            "lpg": ["oil"],
+        }
+        for carrier, plants in fuel_plants.items():
+            add_sector_foundation(n, carrier, False, costs, center_points)
+            if dynamic_fuel_price:
+                price = get_plant_fuel_price(n, carrier, plants)
+            else:
+                price = get_period_fuel_price(n, carrier, costs_by_year, plants[0])
+            add_fuel_supply(n, carrier, price)
 
-    for carrier in ("OCGT", "CCGT", "CCGT-95CCS", "CCGT-97CCS"):
+    for carrier in ("OCGT", "CCGT", "CCGT-90CCS", "CCGT-95CCS", "CCGT-97CCS"):
         co2_intensity = get_pwr_co2_intensity(carrier, costs)
         convert_generators_2_links(n, carrier, " gas", co2_intensity)
 
@@ -691,192 +762,213 @@ if __name__ == "__main__":
         convert_generators_2_links(n, "biomass-95CCS", " biomass", -BECCS_CO2_REMOVAL)
         n.stores.loc[n.stores.index.str.endswith(" pwr-co2"), "e_min_pu"] = -1
 
-    ng_options = snakemake.params.sector["natural_gas"]
+    # natural gas comes with the end-use sectors (service, transport, industry)
+    if "G" in sectors:
+        ng_options = snakemake.params.sector["natural_gas"]
 
-    # add natural gas infrastructure and data
-    build_natural_gas(
-        n=n,
-        year=sns[0].year,
-        api=eia_api,
-        pudl_path=snakemake.params.pudl_path,
-        costs=costs,
-        dollar_year=dollar_year_from_config(snakemake.config),
-        interconnect=snakemake.wildcards.interconnect,
-        county_path=snakemake.input.county,
-        pipelines_path=snakemake.input.pipeline_capacity,
-        pipeline_shape_path=snakemake.input.pipeline_shape,
-        options=ng_options,
-    )
-
-    pop_layout_path = snakemake.input.clustered_pop_layout
-    cop_ashp_path = snakemake.input.cop_air_total
-    cop_gshp_path = snakemake.input.cop_soil_total
-
-    split_res_com = snakemake.params.sector["service_sector"].get(
-        "split_res_com",
-        False,
-    )
-
-    # add electricity infrastructure
-    # transport added seperatly to account for different mode demands
-    elec_sectors = ["res", "com", "ind"] if split_res_com else ["srv", "ind"]
-    for elec_sector in elec_sectors:
-        if elec_sector in ["res", "com"]:
-            options = snakemake.params.sector["service_sector"]
-            build_electricty(
-                n=n,
-                sector=elec_sector,
-                pop_layout_path=pop_layout_path,
-                options=options,
-            )
-        else:
-            options = snakemake.params.sector["industrial_sector"]
-            build_electricty(n=n, sector=elec_sector, options=options)
-
-    dynamic_cost_year = sns.year.min()
-
-    # add heating and cooling
-    heat_sectors = ["res", "com", "ind"] if split_res_com else ["srv", "ind"]
-    for heat_sector in heat_sectors:
-        if heat_sector == "srv":
-            raise NotImplementedError
-        elif heat_sector in ["res", "com"]:
-            options = snakemake.params.sector["service_sector"]
-        elif heat_sector == "ind":
-            options = snakemake.params.sector["industrial_sector"]
-        else:
-            logger.warning(f"No config options found for {heat_sector}")
-            options = {}
-
-        build_heat(
+        # add natural gas infrastructure and data
+        build_natural_gas(
             n=n,
+            year=sns[0].year,
+            api=eia_api,
+            pudl_path=snakemake.params.pudl_path,
             costs=costs,
-            sector=heat_sector,
-            pop_layout_path=pop_layout_path,
-            cop_ashp_path=cop_ashp_path,
-            cop_gshp_path=cop_gshp_path,
-            options=options,
-            eia=eia_api,
-            year=dynamic_cost_year,
+            dollar_year=dollar_year_from_config(snakemake.config),
+            interconnect=snakemake.wildcards.interconnect,
+            county_path=snakemake.input.county,
+            pipelines_path=snakemake.input.pipeline_capacity,
+            pipeline_shape_path=snakemake.input.pipeline_shape,
+            options=ng_options,
+            # what is retrofitted to hydrogen is taken from the gas storage and pipelines
+            contraction=get_gas_infra_contraction(snakemake.params.sector, "H" in sectors),
         )
 
-    # add transportation
-    trn_options = snakemake.params.sector["transport_sector"]
-    must_run_evs = trn_options.get("must_run_evs", True)
-    dr_config = trn_options.get("demand_response", {})
-    build_transportation(
-        n=n,
-        costs=costs,
-        must_run_evs=must_run_evs,
-        dr_config=dr_config,
-    )
+        pop_layout_path = snakemake.input.clustered_pop_layout
+        cop_ashp_path = snakemake.input.cop_air_total
+        cop_gshp_path = snakemake.input.cop_soil_total
 
-    # check for end-use brownfield requirements
+        split_res_com = snakemake.params.sector["service_sector"].get(
+            "split_res_com",
+            False,
+        )
 
-    if all(n.investment_periods > 2023):
-        # this is quite crude assumption and should get updated
-        # assume a 0.5% energy growth per year
-        # https://www.eia.gov/todayinenergy/detail.php?id=56040
-        base_year = 2023
-        growth_multiplier = 1 - (min(n.investment_periods) - 2023) * (0.005)
-    else:
-        base_year = min(n.investment_periods)
-        growth_multiplier = 1
+        # add electricity infrastructure
+        # transport added seperatly to account for different mode demands
+        elec_sectors = ["res", "com", "ind"] if split_res_com else ["srv", "ind"]
+        for elec_sector in elec_sectors:
+            if elec_sector in ["res", "com"]:
+                options = snakemake.params.sector["service_sector"]
+                build_electricty(
+                    n=n,
+                    sector=elec_sector,
+                    pop_layout_path=pop_layout_path,
+                    options=options,
+                )
+            else:
+                options = snakemake.params.sector["industrial_sector"]
+                build_electricty(n=n, sector=elec_sector, options=options)
 
-    if snakemake.params.sector["transport_sector"]["brownfield"]:
-        ratios = get_transport_stock(snakemake.params.api["eia"], base_year)
-        for vehicle in RoadTransport:
-            add_road_transport_brownfield(
-                n,
-                vehicle.value,
-                growth_multiplier,
-                ratios,
-                costs,
+        dynamic_cost_year = sns.year.min()
+
+        # add heating and cooling
+        heat_sectors = ["res", "com", "ind"] if split_res_com else ["srv", "ind"]
+        for heat_sector in heat_sectors:
+            if heat_sector == "srv":
+                raise NotImplementedError
+            elif heat_sector in ["res", "com"]:
+                options = snakemake.params.sector["service_sector"]
+            elif heat_sector == "ind":
+                options = snakemake.params.sector["industrial_sector"]
+            else:
+                logger.warning(f"No config options found for {heat_sector}")
+                options = {}
+
+            build_heat(
+                n=n,
+                costs=costs,
+                sector=heat_sector,
+                pop_layout_path=pop_layout_path,
+                cop_ashp_path=cop_ashp_path,
+                cop_gshp_path=cop_gshp_path,
+                options=options,
+                eia=eia_api,
+                year=dynamic_cost_year,
             )
 
-    if snakemake.params.sector["service_sector"]["brownfield"]:
-        res_stock_dir = snakemake.input.residential_stock
-        com_stock_dir = snakemake.input.commercial_stock
+        # add transportation
+        trn_options = snakemake.params.sector["transport_sector"]
+        must_run_evs = trn_options.get("must_run_evs", True)
+        dr_config = trn_options.get("demand_response", {})
+        build_transportation(
+            n=n,
+            costs=costs,
+            must_run_evs=must_run_evs,
+            dr_config=dr_config,
+        )
 
-        scale_exising_stock = snakemake.params.sector["service_sector"].get("scale_exising_stock", True)
+        # check for end-use brownfield requirements
 
-        if snakemake.params.sector["service_sector"]["split_space_water_heating"]:
-            fuels = ["space_heating", "water_heating", "cooling"]
+        if all(n.investment_periods > 2023):
+            # this is quite crude assumption and should get updated
+            # assume a 0.5% energy growth per year
+            # https://www.eia.gov/todayinenergy/detail.php?id=56040
+            base_year = 2023
+            growth_multiplier = 1 - (min(n.investment_periods) - 2023) * (0.005)
         else:
-            fuels = ["heating", "cooling"]
-        # existing water heater tanks lose heat like new ones
-        technologies = snakemake.params.sector["service_sector"].get("technologies", {})
-        standing_losses = technologies.get("standing_losses", {})
-        water_standing_loss = standing_losses.get("water", 0)
-        for fuel in fuels:
-            # residential sector
-            ratios = get_residential_stock(res_stock_dir, fuel)
-            ratios.index = ratios.index.map(STATE_2_CODE)
-            ratios = ratios.dropna()  # na is USA
+            base_year = min(n.investment_periods)
+            growth_multiplier = 1
+
+        if snakemake.params.sector["transport_sector"]["brownfield"]:
+            ratios = get_transport_stock(snakemake.params.api["eia"], base_year)
+            for vehicle in RoadTransport:
+                add_road_transport_brownfield(
+                    n,
+                    vehicle.value,
+                    growth_multiplier,
+                    ratios,
+                    costs,
+                )
+
+        if snakemake.params.sector["service_sector"]["brownfield"]:
+            res_stock_dir = snakemake.input.residential_stock
+            com_stock_dir = snakemake.input.commercial_stock
+
+            scale_exising_stock = snakemake.params.sector["service_sector"].get("scale_exising_stock", True)
+
+            if snakemake.params.sector["service_sector"]["split_space_water_heating"]:
+                fuels = ["space_heating", "water_heating", "cooling"]
+            else:
+                fuels = ["heating", "cooling"]
+            # existing water heater tanks lose heat like new ones
+            technologies = snakemake.params.sector["service_sector"].get("technologies", {})
+            standing_losses = technologies.get("standing_losses", {})
+            water_standing_loss = standing_losses.get("water", 0)
+            for fuel in fuels:
+                # residential sector
+                ratios = get_residential_stock(res_stock_dir, fuel)
+                ratios.index = ratios.index.map(STATE_2_CODE)
+                ratios = ratios.dropna()  # na is USA
+                if scale_exising_stock:
+                    ratios = scale_existing_stock(ratios)
+                add_service_brownfield(
+                    n=n,
+                    sector="res",
+                    fuel=fuel,
+                    growth_multiplier=growth_multiplier,
+                    ratios=ratios,
+                    costs=costs,
+                    standing_loss=water_standing_loss,
+                )
+
+                # commercial sector
+                ratios = get_commercial_stock(com_stock_dir, fuel)
+                ratios.index = ratios.index.map(STATE_2_CODE)
+                ratios = ratios.dropna()  # na is USA
+                if scale_exising_stock:
+                    ratios = scale_existing_stock(ratios)
+                add_service_brownfield(
+                    n=n,
+                    sector="com",
+                    fuel=fuel,
+                    growth_multiplier=growth_multiplier,
+                    ratios=ratios,
+                    costs=costs,
+                    standing_loss=water_standing_loss,
+                )
+
+        if snakemake.params.sector["industrial_sector"]["brownfield"]:
+            mecs_file = snakemake.input.industrial_stock
+            ratios = get_industrial_stock(mecs_file)
             if scale_exising_stock:
                 ratios = scale_existing_stock(ratios)
-            add_service_brownfield(
-                n=n,
-                sector="res",
-                fuel=fuel,
-                growth_multiplier=growth_multiplier,
-                ratios=ratios,
-                costs=costs,
-                standing_loss=water_standing_loss,
-            )
+            fuels = ["heat"]
 
-            # commercial sector
-            ratios = get_commercial_stock(com_stock_dir, fuel)
-            ratios.index = ratios.index.map(STATE_2_CODE)
-            ratios = ratios.dropna()  # na is USA
-            if scale_exising_stock:
-                ratios = scale_existing_stock(ratios)
-            add_service_brownfield(
-                n=n,
-                sector="com",
-                fuel=fuel,
-                growth_multiplier=growth_multiplier,
-                ratios=ratios,
-                costs=costs,
-                standing_loss=water_standing_loss,
-            )
-
-    if snakemake.params.sector["industrial_sector"]["brownfield"]:
-        mecs_file = snakemake.input.industrial_stock
-        ratios = get_industrial_stock(mecs_file)
-        if scale_exising_stock:
-            ratios = scale_existing_stock(ratios)
-        fuels = ["heat"]
-
-        for fuel in fuels:
-            ratio = ratios.loc[fuel]
-            add_industrial_brownfield(
-                n=n,
-                fuel=fuel,
-                growth_multiplier=growth_multiplier,
-                ratios=ratio,
-                costs=costs,
-            )
-
-    # add methane tracking - if leakage rate is included
-    # this must happen after all technologies and nat gas is built
-    methane_options = snakemake.params.sector["methane"]
-    upstream_leakage_rate = methane_options.get("upstream_leakage_rate", 0)
-    downstream_leakage_rate = methane_options.get("downstream_leakage_rate", 0)
-    gwp = methane_options.get("gwp", 0)
-    build_ch4_tracking(n, gwp, upstream_leakage_rate, downstream_leakage_rate)
-
-    # Needed as loads may be split off to urban/rural
-    sanitize_carriers(n, snakemake.config)
+            for fuel in fuels:
+                ratio = ratios.loc[fuel]
+                add_industrial_brownfield(
+                    n=n,
+                    fuel=fuel,
+                    growth_multiplier=growth_multiplier,
+                    ratios=ratio,
+                    costs=costs,
+                )
 
     co2_storage = snakemake.config.get("co2", {}).get("storage", False)
     co2_network_enable = snakemake.config.get("co2", {}).get("network", {}).get("enable", False)
     dac_enable = snakemake.config.get("dac", {}).get("enable", False)
 
-    # add node level CO2 (underground) storage
+    # add node level CO2 (underground) storage, before the hydrogen production capturing CO2
     if co2_storage:
         logger.info("Adding node level CO2 (underground) storage")
         add_co2_storage(n, snakemake.config, snakemake.input.co2_storage, costs, True)
+
+    if "H" in sectors:
+        build_hydrogen(
+            n=n,
+            costs=costs_by_year,
+            demand_path=snakemake.input.h2_demand,
+            storage_sites_path=snakemake.input.h2_storage_sites,
+            gas_pipelines=get_gas_pipelines(snakemake.input.pipeline_capacity),
+            states_geometry=state_geometry.states,
+            center_points=center_points,
+            options=snakemake.params.sector["hydrogen"],
+        )
+
+        # hydrogen turbines draw from the state hydrogen buses
+        for carrier in ("OCHT", "CCHT"):
+            convert_generators_2_links(n, carrier, " H2")
+
+    if "G" in sectors:
+        # add methane tracking - if leakage rate is included
+        # this must happen after all technologies and nat gas is built, hydrogen production included
+        methane_options = snakemake.params.sector["methane"]
+        upstream_leakage_rate = methane_options.get("upstream_leakage_rate", 0)
+        downstream_leakage_rate = methane_options.get("downstream_leakage_rate", 0)
+        gwp = methane_options.get("gwp", 0)
+        build_ch4_tracking(n, gwp, upstream_leakage_rate, downstream_leakage_rate)
+
+    # Needed as loads may be split off to urban/rural
+    sanitize_carriers(n, snakemake.config)
 
     # add CO2 (transportation) network
     if co2_network_enable:
