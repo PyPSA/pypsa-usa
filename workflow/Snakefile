@@ -76,7 +76,7 @@ wildcard_constraints:
     clusters="[0-9]+[msac]?|all",
     ll="(v|c)([0-9\.]+|opt|all)|all",
     opts="[-+a-zA-Z0-9\.]*",
-    sector="([EG]-)*[EG]",
+    sector="E(-G)?(-H)?",
 
 
 # -------------------------- Config and Subworkflows ------------------------- #
