@@ -21,12 +21,20 @@ on:
 env:
   DATA_CACHE_NUMBER: 3
 
+# No permissions by default; each job asks for what it needs. Actions are
+# pinned to commit SHAs (the tag is in the comment); Dependabot bumps them.
+permissions: {}
+
 jobs:
   fast-tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       with:
         python-version: '3.11'
     - name: Install GLPK (solver for the auto-marked unit tests)
@@ -46,16 +54,20 @@ jobs:
 
   e2e-tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         shell: bash -l {0}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
     - name: Setup secrets
       run: |
         echo -ne "url: ${CDSAPI_URL}\nkey: ${CDSAPI_TOKEN}\n" > ~/.cdsapirc
     - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@v1
+      uses: mamba-org/setup-micromamba@4b9113af4fba0e9e1124b252dd6497a419e7396d # v1.11.0
       with:
         micromamba-version: latest
         environment-file: workflow/envs/environment.yaml
@@ -66,7 +78,7 @@ jobs:
     - name: Set cache dates
       run: echo "WEEK=$(date +'%Y%U')" >> $GITHUB_ENV
     - name: Cache data and cutouts folders
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: |
           workflow/data
@@ -78,7 +90,7 @@ jobs:
       run: pytest -m integration --tb=short -ra
     - name: Upload artifacts on failure
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: failed-resources
         path: |
@@ -90,12 +102,16 @@ jobs:
   upstream-regression:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         shell: bash -l {0}
     steps:
-    - uses: actions/checkout@v4
-    - uses: mamba-org/setup-micromamba@v1
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
+    - uses: mamba-org/setup-micromamba@4b9113af4fba0e9e1124b252dd6497a419e7396d # v1.11.0
       with:
         environment-file: workflow/envs/environment.yaml
         cache-environment: true
