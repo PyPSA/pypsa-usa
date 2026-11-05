@@ -38,9 +38,9 @@ from constants import (
     NG_STORAGE_CHARGE_DISCHARGE_RATIO,
     STATE_2_CODE,
     STATES_INTERCONNECT_MAPPER,
-    USD_2025_2_USD_2023,
     NG_Dol_MMBTU_2_MWH,
 )
+from money import deflator, parse_unit_year
 from pypsa import Network
 
 logger = logging.getLogger(__name__)
@@ -539,17 +539,21 @@ class GasProcessing(GasData):
         )
 
 
-def get_production_costs(api: str, investment_periods: Sequence[int]) -> pd.Series:
+def get_production_costs(api: str, investment_periods: Sequence[int], dollar_year: int) -> pd.Series:
     """
-    Gas production marginal cost of each investment period in 2023$/MWh_th.
+    Gas production marginal cost of each investment period in $/MWh_th of ``dollar_year``.
 
-    The prices are the AEO2026 Lower 48 average supply price in 2025$/MMBtu
-    (see ``eia.SupplyCost``). Periods outside the AEO years take the price of
-    the nearest year.
+    The prices are the AEO2026 Lower 48 average supply price (see
+    ``eia.SupplyCost``) in $/MMBtu of the dollar year named in their unit.
+    Periods outside the AEO years take the price of the nearest year.
     """
     df = eia.SupplyCost("gas", api).get_data()
-    if not (df.units == "2025 $/MMBtu").all():
-        raise ValueError(f"Expected AEO gas supply prices in 2025 $/MMBtu, got {df.units.unique().tolist()}")
+    units = df.units.unique().tolist()
+    if len(units) != 1:
+        raise ValueError(f"AEO gas supply prices mix units: {units}")
+    source_year, unit = parse_unit_year(units[0])
+    if unit != "$/MMBtu":
+        raise ValueError(f"Expected AEO gas supply prices in $/MMBtu, got {units[0]}")
     prices = df.value
 
     periods = pd.Series(list(investment_periods), index=list(investment_periods))
@@ -560,7 +564,7 @@ def get_production_costs(api: str, investment_periods: Sequence[int]) -> pd.Seri
             f"using the nearest year for investment periods {periods[years != periods].tolist()}",
         )
 
-    return years.map(prices) * USD_2025_2_USD_2023 * NG_Dol_MMBTU_2_MWH
+    return years.map(prices) * deflator(source_year, dollar_year) * NG_Dol_MMBTU_2_MWH
 
 
 def get_production_efficiency(api: str, year: int) -> float:
@@ -1378,6 +1382,7 @@ def build_natural_gas(
     api: str,
     pudl_path: str,
     costs: pd.DataFrame,
+    dollar_year: int,
     interconnect: str = "western",
     county_path: str = "../data/counties/cb_2020_us_county_500k.shp",
     pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
@@ -1409,7 +1414,7 @@ def build_natural_gas(
     # add state level natural gas processing facilities
 
     production = GasProcessing(year, interconnect, api)
-    production_costs = get_production_costs(api, n.investment_periods)
+    production_costs = get_production_costs(api, n.investment_periods, dollar_year)
     production_efficiency = get_production_efficiency(api, year)
     production.build_infrastructure(
         n,

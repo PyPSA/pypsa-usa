@@ -33,6 +33,7 @@ from build_transportation import build_transportation
 from constants import CODE_2_STATE, NG_MWH_2_MMCF, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
 from constants_sector import RoadTransport
 from eia import FuelCosts
+from money import dollar_year_from_config
 from shapely.geometry import Point
 
 logger = logging.getLogger(__name__)
@@ -610,6 +611,7 @@ if __name__ == "__main__":
         api=eia_api,
         pudl_path=snakemake.params.pudl_path,
         costs=costs,
+        dollar_year=dollar_year_from_config(snakemake.config),
         interconnect=snakemake.wildcards.interconnect,
         county_path=snakemake.input.county,
         pipelines_path=snakemake.input.pipeline_capacity,

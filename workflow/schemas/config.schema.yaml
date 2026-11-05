@@ -381,8 +381,9 @@ properties:
   costs:
     type: object
     additionalProperties: false
-    required: [atb, aeo]
+    required: [atb, aeo, dollar_year]
     properties:
+      dollar_year: {type: integer}
       atb:
         type: object
         additionalProperties: false

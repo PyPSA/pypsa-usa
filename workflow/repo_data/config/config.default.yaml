@@ -335,6 +335,8 @@ dac:
 # ====================================================================
 # docs : COSTS
 costs:
+  dollar_year: 2023                        # every cost in the model is in real US dollars of this year; inputs in other dollar years or currencies are converted by scripts/money.py
+
   # NREL Annual Technology Baseline (ATB) — primary capex/fom source
   atb:
     model_case: "R&D + TC"                 # R&D | R&D + TC | Exp | Exp + TC  (TC = with tax credits; Exp = expanded cost drivers)
