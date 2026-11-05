@@ -4,6 +4,10 @@
 
  In PyPSA-USA, candidate resource forecasted capital and operating costs are defined by the NREL Annual Technology Baseline (ATB) accessed through the PUDL project. The model currently uses the 2025 ATB; costs are taken for the years 2024 - 2050 (planning horizons earlier than 2024 use the 2024 costs, later ones the 2050 costs). The full ATB scenario grid is exported by `build_cost_data` for every planning horizon, and the configuration below selects which slice of that grid each carrier ultimately uses.
 
+### Dollar year
+
+Every cost in the model is in real US dollars of one base year, `costs: dollar_year` (2023 by default). The 2025 ATB is published in 2023 dollars and passes through unconverted; inputs in other dollar years, such as the AEO2026 fuel prices (2025 dollars) and the EIA building equipment costs (2022 dollars), are converted by `scripts/money.py`. A foreign-currency value is exchanged at the annual-average rate of its own year and then inflated in US dollars with the CPI-U annual average (FRED CPIAUCNS); both tables live in `repo_data/costs/`. Nominal time series are deflated by the year of each observation, so every investment period is priced in real base-year dollars. The config, including the dollar year, is stored on the solved network in `n.meta`.
+
 ### Selecting an ATB scenario and model case
 
 ATB exposes two orthogonal axes that bound the cost trajectory of every technology:

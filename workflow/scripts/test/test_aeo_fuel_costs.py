@@ -3,7 +3,8 @@ Test the AEO fuel costs of the cost data.
 
 ``build_cost_data`` reads the AEO2026 electric power prices of natural gas,
 steam coal and distillate fuel oil (Table 3) for the case of ``costs: aeo:
-scenario`` from the EIA API, in 2025$/MMBtu, and writes them in 2023$/MWh_th.
+scenario`` from the EIA API, in $/MMBtu of the dollar year named in their
+unit, and writes them in $/MWh_th of the model's dollar year (2023 here).
 The EIA layer is patched throughout.
 """
 
@@ -17,10 +18,12 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import eia
 from build_cost_data import build_aeo_fuel_costs
+from money import deflator
 
 # 2025$/MMBtu of each fuel in 2025, 2030 and 2050
 AEO_PRICES = {"gas": [4.0, 5.0, 6.0], "coal": [2.0, 2.5, 3.0], "oil": [20.0, 21.0, 22.0]}
-TO_MWH = 3.412 / 1.06  # 2025$/MMBtu -> 2023$/MWh_th
+DOLLAR_YEAR = 2023
+TO_MWH = 3.412 * deflator(2025, DOLLAR_YEAR)  # 2025$/MMBtu -> 2023$/MWh_th
 
 
 @pytest.fixture
@@ -65,7 +68,7 @@ def test_unknown_case_is_rejected():
 def test_fuel_costs_are_2023_usd_per_mwh_th(patch_prices):
     patch_prices()
 
-    costs = fuel_costs(build_aeo_fuel_costs("KEY", 2030, "reference"))
+    costs = fuel_costs(build_aeo_fuel_costs("KEY", 2030, "reference", DOLLAR_YEAR))
 
     assert costs["natural_gas"] == pytest.approx(5.0 * TO_MWH)
     assert costs["coal"] == pytest.approx(2.5 * TO_MWH)
@@ -77,14 +80,31 @@ def test_fuel_costs_are_2023_usd_per_mwh_th(patch_prices):
 def test_years_outside_the_aeo_take_the_nearest_year(patch_prices):
     patch_prices()
 
-    assert fuel_costs(build_aeo_fuel_costs("KEY", 2024, "reference"))["natural_gas"] == pytest.approx(4.0 * TO_MWH)
+    assert fuel_costs(build_aeo_fuel_costs("KEY", 2024, "reference", DOLLAR_YEAR))["natural_gas"] == pytest.approx(
+        4.0 * TO_MWH
+    )
 
 
-def test_other_dollar_year_is_rejected(patch_prices):
+def test_other_dollar_year_is_converted(patch_prices):
     patch_prices(units="2024 $/MMBtu")
 
-    with pytest.raises(ValueError, match="2025 \\$/MMBtu"):
-        build_aeo_fuel_costs("KEY", 2030, "reference")
+    costs = fuel_costs(build_aeo_fuel_costs("KEY", 2030, "reference", DOLLAR_YEAR))
+
+    assert costs["natural_gas"] == pytest.approx(5.0 * 3.412 * deflator(2024, DOLLAR_YEAR))
+
+
+def test_unit_without_dollar_year_is_rejected(patch_prices):
+    patch_prices(units="$/MMBtu")
+
+    with pytest.raises(ValueError, match="No dollar year"):
+        build_aeo_fuel_costs("KEY", 2030, "reference", DOLLAR_YEAR)
+
+
+def test_other_unit_is_rejected(patch_prices):
+    patch_prices(units="2025 $/MWh")
+
+    with pytest.raises(ValueError, match="\\$/MMBtu"):
+        build_aeo_fuel_costs("KEY", 2030, "reference", DOLLAR_YEAR)
 
 
 # every gas, coal and oil plant pays the AEO fuel costs
@@ -93,7 +113,7 @@ def test_other_dollar_year_is_rejected(patch_prices):
 def test_oil_plants_take_the_distillate_cost(patch_prices):
     patch_prices()
 
-    costs = fuel_costs(build_aeo_fuel_costs("KEY", 2030, "reference"))
+    costs = fuel_costs(build_aeo_fuel_costs("KEY", 2030, "reference", DOLLAR_YEAR))
 
     assert costs["oil"] == pytest.approx(21.0 * TO_MWH)
 

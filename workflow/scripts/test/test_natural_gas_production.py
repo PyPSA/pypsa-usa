@@ -1,7 +1,8 @@
 """Unit tests for the gas production efficiency and marginal cost in ``build_natural_gas``.
 
 Gas production is priced at the AEO2026 Lower 48 average supply price, read
-from the EIA API in 2025$/MMBtu and converted to 2023$/MWh_th, one price per
+from the EIA API in $/MMBtu of the dollar year named in its unit and converted
+to $/MWh_th of the model's dollar year (2023 here), one price per
 investment period. Its efficiency is the dry gas, net of lease and plant fuel,
 per unit of marketed production. The EIA layer is patched throughout; nothing
 here touches the network.
@@ -21,6 +22,10 @@ import eia
 from _helpers import get_multiindex_snapshots
 from build_natural_gas import GasProcessing, get_production_costs, get_production_efficiency
 from constants import NG_Dol_MMBTU_2_MWH
+from money import deflator
+
+DOLLAR_YEAR = 2023
+TO_2023 = deflator(2025, DOLLAR_YEAR)
 
 pytestmark = pytest.mark.fast
 
@@ -103,29 +108,37 @@ def test_supply_cost_is_indexed_by_year(monkeypatch):
 def test_production_costs_are_2023_usd_per_mwh(patch_prices):
     patch_prices(_prices())
 
-    costs = get_production_costs("KEY", [2030, 2050])
+    costs = get_production_costs("KEY", [2030, 2050], DOLLAR_YEAR)
 
     assert costs.index.tolist() == [2030, 2050]
-    assert costs[2030] == pytest.approx(3.0 / 1.06 * NG_Dol_MMBTU_2_MWH)
-    assert costs[2050] == pytest.approx(4.0 / 1.06 * NG_Dol_MMBTU_2_MWH)
+    assert costs[2030] == pytest.approx(3.0 * TO_2023 * NG_Dol_MMBTU_2_MWH)
+    assert costs[2050] == pytest.approx(4.0 * TO_2023 * NG_Dol_MMBTU_2_MWH)
 
 
 def test_periods_outside_aeo_years_take_nearest_year(patch_prices, caplog):
     patch_prices(_prices())
 
     with caplog.at_level(logging.WARNING):
-        costs = get_production_costs("KEY", [2020, 2030, 2060])
+        costs = get_production_costs("KEY", [2020, 2030, 2060], DOLLAR_YEAR)
 
-    assert costs[2020] == pytest.approx(2.0 / 1.06 * NG_Dol_MMBTU_2_MWH)
-    assert costs[2060] == pytest.approx(4.0 / 1.06 * NG_Dol_MMBTU_2_MWH)
+    assert costs[2020] == pytest.approx(2.0 * TO_2023 * NG_Dol_MMBTU_2_MWH)
+    assert costs[2060] == pytest.approx(4.0 * TO_2023 * NG_Dol_MMBTU_2_MWH)
     assert "[2020, 2060]" in caplog.text
 
 
-def test_other_dollar_year_is_rejected(patch_prices):
-    patch_prices(_prices(units="2026 $/MMBtu"))
+def test_other_dollar_year_is_converted(patch_prices):
+    patch_prices(_prices(units="2024 $/MMBtu"))
 
-    with pytest.raises(ValueError, match="2025 \\$/MMBtu"):
-        get_production_costs("KEY", [2030])
+    costs = get_production_costs("KEY", [2030], DOLLAR_YEAR)
+
+    assert costs[2030] == pytest.approx(3.0 * deflator(2024, DOLLAR_YEAR) * NG_Dol_MMBTU_2_MWH)
+
+
+def test_unit_without_dollar_year_is_rejected(patch_prices):
+    patch_prices(_prices(units="$/MMBtu"))
+
+    with pytest.raises(ValueError, match="No dollar year"):
+        get_production_costs("KEY", [2030], DOLLAR_YEAR)
 
 
 def test_production_efficiency_is_dry_gas_net_of_field_fuel(patch_balance):

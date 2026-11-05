@@ -8,7 +8,8 @@ https://data.nrel.gov/submissions/78
 from abc import ABC, abstractmethod
 
 import pandas as pd
-from constants import USD_2022_2_USD_2023, MMBTU_MWHthemal
+from constants import MMBTU_MWHthemal
+from money import deflator
 
 # Vehicle life assumptions for getting $/VMT capital cost
 # From https://atb.nrel.gov/transportation/2022/definitions
@@ -545,13 +546,16 @@ class EiaBuildingData:
     All data originates from this document:
         https://www.eia.gov/analysis/studies/buildings/equipcosts/pdf/full.pdf
 
-    Its costs are in 2022 dollars and are returned in 2023 dollars.
+    Its costs are in 2022 dollars ("All costs are shown in 2022 dollars",
+    EIA, March 2023) and are returned in US dollars of ``dollar_year``.
     """
 
     columns = COLUMN_ORDER
+    SOURCE_DOLLAR_YEAR = 2022
 
-    def __init__(self, file_path: str) -> None:
+    def __init__(self, file_path: str, dollar_year: int) -> None:
         self.file_path = file_path
+        self.dollar_year = dollar_year
         self._raw = self._read_eia()
         self.data = self._expand_data()
 
@@ -616,7 +620,7 @@ class EiaBuildingData:
         else:
             slicer = self.data.parameter == "investment"
         df = self._correct_investment_units(self.data[slicer])
-        df["value"] *= USD_2022_2_USD_2023
+        df["value"] *= deflator(self.SOURCE_DOLLAR_YEAR, self.dollar_year)
         return df[self.columns]
 
     def _get_lifetime(self, sector: str | None = None):
@@ -660,7 +664,7 @@ if __name__ == "__main__":
     file_path = "../repo_data/costs/efs_icev_costs.csv"
     ice = EfsIceTransportationData(file_path)
     file_path = "../repo_data/costs/eia_tech_costs.csv"
-    eia = EiaBuildingData(file_path)
+    eia = EiaBuildingData(file_path, 2023)
     print(bev.get_data("Transportation"))
     print(ice.get_data())
     print(eia.get_data())
