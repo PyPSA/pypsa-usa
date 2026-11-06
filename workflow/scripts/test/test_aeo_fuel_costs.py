@@ -132,21 +132,21 @@ def test_plants_pay_the_aeo_fuel_cost_of_each_period():
     n.add("Bus", "p1")
     n.add(
         "Generator",
-        ["p1 CCGT existing", "p1 coal-95CCS_2050", "p1 oil", "p1 solar"],
+        ["p1 CCGT existing", "p1 coal-95CCS_2050", "p1 oil", "p1 nuclear existing", "p1 biomass existing", "p1 solar"],
         bus="p1",
-        carrier=["CCGT", "coal-95CCS", "oil", "solar"],
-        efficiency=[0.5, 0.4, 0.25, 1],
-        marginal_cost=[30, 40, 100, 0],
+        carrier=["CCGT", "coal-95CCS", "oil", "nuclear", "biomass", "solar"],
+        efficiency=[0.5, 0.4, 0.25, 0.32, 0.25, 1],
+        marginal_cost=[30, 40, 100, 10, 30, 0],
     )
     # an existing plant's own fuel cost is replaced
-    n.generators["fuel_cost"] = [3.0, float("nan"), 15.0, 0.0]
-    n.generators["vom_cost"] = [2.0, float("nan"), 3.0, 0.0]
+    n.generators["fuel_cost"] = [3.0, float("nan"), 15.0, 0.71, 2.0, 0.0]
+    n.generators["vom_cost"] = [2.0, float("nan"), 3.0, 2.5, 5.0, 0.0]
     costs_dict = {
         period: pd.DataFrame(
-            {"fuel_cost_real_per_mwhth": fuel, "opex_variable_per_mwh": [0.0, 4.0, 0.0]},
-            index=["CCGT", "coal-95CCS", "oil"],
+            {"fuel_cost_real_per_mwhth": fuel, "opex_variable_per_mwh": [0.0, 4.0, 0.0, 0.0, 0.0]},
+            index=["CCGT", "coal-95CCS", "oil", "nuclear", "biomass"],
         )
-        for period, fuel in {2030: [10.0, 5.0, 50.0], 2050: [20.0, 6.0, 60.0]}.items()
+        for period, fuel in {2030: [10.0, 5.0, 50.0, 3.3, 19.9], 2050: [20.0, 6.0, 60.0, 3.3, 19.9]}.items()
     }
 
     apply_power_fuel_prices(n, costs_dict)
@@ -156,5 +156,42 @@ def test_plants_pay_the_aeo_fuel_cost_of_each_period():
     # without a VOM of its own, a plant takes the VOM of its carrier's cost data
     assert mc["p1 coal-95CCS_2050"].tolist() == pytest.approx([4 + 5 / 0.4, 4 + 6 / 0.4])
     assert mc["p1 oil"].tolist() == pytest.approx([3 + 50 / 0.25, 3 + 60 / 0.25])
+    # nuclear and biomass plants pay the (ATB) fuel cost of the cost data too
+    assert mc["p1 nuclear existing"].tolist() == pytest.approx([2.5 + 3.3 / 0.32] * 2)
+    assert mc["p1 biomass existing"].tolist() == pytest.approx([5 + 19.9 / 0.25] * 2)
     assert "p1 solar" not in mc
     assert n.generators.at["p1 CCGT existing", "marginal_cost"] == pytest.approx(2 + 10 / 0.5)
+
+
+# nuclear, SMR and biomass pay the ATB fuel cost
+
+
+def test_nuclear_and_biomass_pay_the_atb_fuel_cost():
+    import numpy as np
+    from build_cost_data import ATB_VALUE_COLS, process_atb_scenario
+
+    atb = pd.DataFrame(
+        {
+            "pypsa-name": ["nuclear", "SMR", "biomass", "solar", "OCGT"],
+            "fuel_cost_per_mwh": [10.0, 11.0, 78.0, np.nan, np.nan],  # USD/MWh_el
+            "heat_rate_mmbtu_per_mwh": [10.5, 9.2, 13.3, np.nan, 9.7],
+            "opex_variable_per_mwh": [2.0, 3.0, 5.0, 0.0, 5.0],
+            "capex_per_kw": [7000.0, 9000.0, 5000.0, 1000.0, 1000.0],
+            "cost_recovery_period_years": [30.0] * 5,
+            "wacc_real": [0.05] * 5,
+        },
+    )
+    for col in ATB_VALUE_COLS:
+        if col not in atb:
+            atb[col] = np.nan
+    aeo = pd.DataFrame({"pypsa-name": ["natural_gas"], "parameter": ["fuel_cost_real_per_mwhth"], "value": [15.0]})
+
+    costs = process_atb_scenario(atb, aeo).pivot(index="pypsa-name", columns="parameter", values="value")
+
+    expected = [10.0 * 3.412 / 10.5, 11.0 * 3.412 / 9.2, 78.0 * 3.412 / 13.3]
+    # the cost data is rounded to cents
+    assert costs.loc[["nuclear", "SMR", "biomass"], "fuel_cost_real_per_mwhth"].tolist() == pytest.approx(
+        expected, abs=0.01
+    )
+    # per MWh of electricity, the plants pay the ATB fuel cost
+    assert costs.loc[["nuclear", "SMR", "biomass"], "fuel_cost"].tolist() == pytest.approx([10.0, 11.0, 78.0], abs=0.01)

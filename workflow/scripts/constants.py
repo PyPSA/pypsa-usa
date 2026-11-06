@@ -498,7 +498,7 @@ ATB_TECH_MAPPER = {
         "display_name": "Biopower - Dedicated",
         "technology": "Biopower",
         "techdetail": "Dedicated",
-        "crp": 45,
+        "crp": 30,
     },
     "coal": {
         "display_name": "Coal-new",

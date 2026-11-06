@@ -301,6 +301,9 @@ TRANSMISSION_DATA = [
 ]
 
 
+# Technologies paying the ATB fuel cost of their scenario rather than an AEO price
+ATB_FUEL_CARRIERS = ["nuclear", "SMR", "biomass"]
+
 ATB_VALUE_COLS = [
     "cost_recovery_period_years",
     "capacity_factor",
@@ -350,22 +353,6 @@ def build_aeo_fuel_costs(api: str, tech_year: int, aeo_scenario: str, dollar_yea
         )
     aeo = pd.DataFrame(rows)
 
-    addnl_fuels = pd.DataFrame(
-        [
-            {
-                "pypsa-name": "nuclear",
-                "parameter": "fuel_cost_real_per_mwhth",
-                "value": 2.782,
-            },
-            {
-                "pypsa-name": "biomass",
-                "parameter": "fuel_cost_real_per_mwhth",
-                "value": 7.49,
-            },
-        ],
-    )
-    aeo = pd.concat([aeo, addnl_fuels], ignore_index=True)
-
     tech_fuel_map = {
         "CCGT": "natural_gas",
         "OCGT": "natural_gas",
@@ -374,7 +361,6 @@ def build_aeo_fuel_costs(api: str, tech_year: int, aeo_scenario: str, dollar_yea
         "coal-95CCS": "coal",
         "coal-99CCS": "coal",
         "oil": "distillate_fuel_oil",
-        "SMR": "nuclear",
     }
     tech_fuels = pd.DataFrame(
         [
@@ -422,7 +408,8 @@ def complete_atb_slice(pudl_atb_year: pd.DataFrame, atb_scenario: str, atb_model
 def process_atb_scenario(pudl_atb_sub: pd.DataFrame, aeo: pd.DataFrame) -> pd.DataFrame:
     """Run the full cost pipeline for one (atb_scenario, model_case) slice.
 
-    Concatenates static data (emissions, transmission, lifetime, AEO fuels), pivots,
+    Concatenates static data (emissions, transmission, lifetime, AEO fuels), takes the
+    ATB fuel costs of nuclear, SMR and biomass, pivots,
     derives hydrogen_ct, marginal cost, annualized capex etc., and returns a long-form
     DataFrame with columns [pypsa-name, parameter, value] for this scenario+case.
     """
@@ -454,6 +441,12 @@ def process_atb_scenario(pudl_atb_sub: pd.DataFrame, aeo: pd.DataFrame) -> pd.Da
         columns="parameter",
         values="value",
     ).reset_index()
+
+    # ATB fuel costs are per MWh of electricity
+    atb_fuel = pivot_atb["pypsa-name"].isin(ATB_FUEL_CARRIERS)
+    pivot_atb.loc[atb_fuel, "fuel_cost_real_per_mwhth"] = (
+        pivot_atb.loc[atb_fuel, "fuel_cost_per_mwh"] * 3.412 / pivot_atb.loc[atb_fuel, "heat_rate_mmbtu_per_mwh"]
+    )
 
     # Create Hydrogen Combustion Turbine from OCGT using assumptions per ReEDS
     # https://nrel.github.io/ReEDS-2.0/model_documentation.html#hydrogen
