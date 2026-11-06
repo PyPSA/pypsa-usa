@@ -22,23 +22,42 @@ Convention
 
 Data
 ----
-``repo_data/costs/cpi_u.csv`` (year, annual-average index, months averaged)
-and ``repo_data/costs/exchange_rates.csv`` (year, currency, USD per unit).
-Both are annual averages. The 2025 CPI-U is the mean of 11 months, as October
-2025 was never published.
+Both series come from packages pinned in the environment, so no table in the
+repository has to be kept current:
+
+- ``cpi`` (https://github.com/palewire/cpi) ships the BLS CPI-U series
+  CUUR0000SA0, whose annual values are the published BLS annual averages
+  (1913 onward). The package data is as of its release; ``cpi.update()`` is
+  never called, so a run depends only on the pinned package version.
+- ``currencyconverter`` (https://github.com/alexprengere/currencyconverter)
+  ships the ECB daily reference rates (1999 onward, EUR base). The annual
+  average exchange rate of a currency is the mean of its daily USD cross rates
+  over the calendar year, which agrees with the FRED annual averages to about
+  0.05 %.
 """
 
 from __future__ import annotations
 
+import datetime
+import logging
 import re
-from functools import lru_cache
-from pathlib import Path
+import warnings
+from functools import cache, lru_cache
 
 import pandas as pd
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "repo_data" / "costs"
-CPI_FILE = DATA_DIR / "cpi_u.csv"
-EXCHANGE_RATE_FILE = DATA_DIR / "exchange_rates.csv"
+with warnings.catch_warnings():
+    # the package warns at import whenever its bundled data is more than 90
+    # days old; the data is as of the pinned release and is never updated
+    warnings.simplefilter("ignore")
+    _cpi_logger = logging.getLogger("cpi")
+    _cpi_level = _cpi_logger.level
+    _cpi_logger.setLevel(logging.ERROR)
+    import cpi
+
+    _cpi_logger.setLevel(_cpi_level)
+
+from currency_converter import CurrencyConverter, RateNotFoundError
 
 # dollar year of each NREL ATB report year. PUDL's ATB tables carry no dollar
 # year, so it is pinned here; see https://atb.nrel.gov/electricity/<year>/changes_in_<year>
@@ -54,40 +73,59 @@ _UNIT_YEAR = re.compile(
 
 @lru_cache(maxsize=1)
 def cpi_index() -> pd.Series:
-    """CPI-U annual averages by year (FRED CPIAUCNS, the BLS annual averages)."""
-    df = pd.read_csv(CPI_FILE)
-    return df.set_index("year")["index"].astype(float)
+    """CPI-U annual averages by year (BLS series CUUR0000SA0, from the ``cpi`` package)."""
+    df = cpi.series.get().to_dataframe()
+    annual = df[df["period_type"] == "annual"]
+    return annual.set_index(annual["year"].astype(int))["value"].astype(float).sort_index().rename("index")
 
 
 @lru_cache(maxsize=1)
-def exchange_rates() -> pd.Series:
-    """US dollars per unit of currency, indexed by (currency, year)."""
-    df = pd.read_csv(EXCHANGE_RATE_FILE)
-    return df.set_index(["currency", "year"])["usd_per_unit"].astype(float)
+def _converter() -> CurrencyConverter:
+    return CurrencyConverter()
+
+
+@cache
+def fx_to_usd(currency: str, year: int) -> float:
+    """
+    US dollars per unit of ``currency`` at the annual-average rate of ``year``.
+
+    The mean of the ECB daily reference rates of the calendar year, expressed
+    in US dollars per unit of ``currency``. Raises when the ECB publishes no
+    rate for the currency in that year.
+    """
+    currency = currency.upper()
+    if currency == "USD":
+        return 1.0
+    converter = _converter()
+    if currency not in converter.currencies:
+        raise ValueError(
+            f"No exchange rate for {currency}; the ECB reference rates cover {sorted(converter.currencies)}"
+        )
+    rates = []
+    day = datetime.date(year, 1, 1)
+    while day.year == year:
+        try:
+            rates.append(converter.convert(1.0, currency, "USD", date=day))
+        except RateNotFoundError:
+            pass
+        day += datetime.timedelta(days=1)
+    if not rates:
+        first, last = converter.bounds[currency]
+        raise ValueError(
+            f"No {currency} exchange rate for {year}; the ECB reference rates cover {first}-{last} for {currency}"
+        )
+    return float(sum(rates) / len(rates))
 
 
 def deflator(from_year: int, to_year: int) -> float:
     """Factor that takes a value in US dollars of ``from_year`` to dollars of ``to_year``."""
-    cpi = cpi_index()
+    index = cpi_index()
     for year in (from_year, to_year):
-        if year not in cpi.index:
-            raise ValueError(f"No CPI-U value for {year}; {CPI_FILE.name} covers {cpi.index.min()}-{cpi.index.max()}")
-    return float(cpi.at[to_year] / cpi.at[from_year])
-
-
-def fx_to_usd(currency: str, year: int) -> float:
-    """US dollars per unit of ``currency`` at the annual-average rate of ``year``."""
-    currency = currency.upper()
-    if currency == "USD":
-        return 1.0
-    rates = exchange_rates()
-    if (currency, year) not in rates.index:
-        covered = rates.loc[currency].index if currency in rates.index.get_level_values(0) else pd.Index([])
-        raise ValueError(
-            f"No {currency} exchange rate for {year}; {EXCHANGE_RATE_FILE.name} covers "
-            f"{covered.min() if len(covered) else 'no years'}-{covered.max() if len(covered) else ''} for {currency}",
-        )
-    return float(rates.at[(currency, year)])
+        if year not in index.index:
+            raise ValueError(
+                f"No CPI-U value for {year}; the annual averages cover {index.index.min()}-{index.index.max()}"
+            )
+    return float(index.at[to_year] / index.at[from_year])
 
 
 def conversion_factor(year: int, to_year: int, currency: str = "USD") -> float:
@@ -150,12 +188,14 @@ def deflate_timeseries(data: pd.Series | pd.DataFrame, to_year: int) -> pd.Serie
     """
     if not isinstance(data.index, pd.DatetimeIndex):
         raise TypeError("deflate_timeseries needs a DatetimeIndex, so each observation has a year")
-    cpi = cpi_index()
+    index = cpi_index()
     years = pd.Index(data.index.year)
-    missing = sorted(set(years) - set(cpi.index))
+    missing = sorted(set(years) - set(index.index))
     if missing:
-        raise ValueError(f"No CPI-U value for {missing}; {CPI_FILE.name} covers {cpi.index.min()}-{cpi.index.max()}")
-    factors = pd.Series((cpi.at[to_year] / cpi.reindex(years)).to_numpy(), index=data.index)
+        raise ValueError(
+            f"No CPI-U value for {missing}; the annual averages cover {index.index.min()}-{index.index.max()}"
+        )
+    factors = pd.Series((index.at[to_year] / index.reindex(years)).to_numpy(), index=data.index)
     return data.mul(factors, axis=0) if isinstance(data, pd.DataFrame) else data * factors
 
 
@@ -190,5 +230,5 @@ def dollar_year_from_config(config: dict) -> int:
     except (KeyError, TypeError) as e:
         raise KeyError("config needs costs: dollar_year, the base dollar year of every cost in the model") from e
     if year not in cpi_index().index:
-        raise ValueError(f"costs: dollar_year {year} has no CPI-U value in {CPI_FILE.name}")
+        raise ValueError(f"costs: dollar_year {year} has no CPI-U annual average yet")
     return year
