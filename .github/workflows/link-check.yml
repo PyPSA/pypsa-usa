@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# Weekly check of the http(s) links in docs, scripts and configs with lychee,
+# through the PyPSA reusable workflow. The reusable repo has no release tag
+# yet, so it is pinned to a commit of its main branch; Dependabot bumps it.
+# Only 404 and 410 count as broken; other status codes and timeouts pass.
+# Run it by hand from the Actions tab (workflow_dispatch) after editing links.
+
+name: Link check
+
+on:
+  schedule:
+  - cron: "0 6 * * MON"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  link-check:
+    uses: PyPSA/reusable-github-workflows/.github/workflows/link-check.yml@32c3d98d89f348173f2817c47c308ca179eaa561 # main 2026-11-05
+    permissions:
+      contents: read
