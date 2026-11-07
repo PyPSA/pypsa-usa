@@ -4,6 +4,7 @@ import logging
 
 import constants as const
 import duckdb
+import numpy as np
 import pandas as pd
 from _helpers import calculate_annuity
 from build_sector_costs import (
@@ -12,7 +13,7 @@ from build_sector_costs import (
     EiaBuildingData,
 )
 from eia import ProjectedFuelCost
-from money import deflator, dollar_year_from_config, parse_unit_year
+from money import deflator, dollar_year_from_config, parse_unit_year, to_dollars
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ LIFETIME_DATA = [
     {"pypsa-name": "coal-99CCS", "parameter": "lifetime", "value": 70},
     {"pypsa-name": "SMR", "parameter": "lifetime", "value": 40},
     {"pypsa-name": "nuclear", "parameter": "lifetime", "value": 60},
-    {"pypsa-name": "biomass", "parameter": "lifetime", "value": 30},
+    {"pypsa-name": "biomass", "parameter": "lifetime", "value": 45},
     {"pypsa-name": "offwind_floating", "parameter": "lifetime", "value": 30},
     {"pypsa-name": "offwind", "parameter": "lifetime", "value": 30},
     {"pypsa-name": "onwind", "parameter": "lifetime", "value": 30},
@@ -304,6 +305,18 @@ TRANSMISSION_DATA = [
 # Technologies paying the ATB fuel cost of their scenario rather than an AEO price
 ATB_FUEL_CARRIERS = ["nuclear", "SMR", "biomass"]
 
+# Biomass power with 95% carbon capture: Case 8 of Sargent & Lundy for the EIA, Capital Cost
+# and Performance Characteristic Estimates for Utility Scale Electric Power Generating
+# Technologies (2024), a 50 MW bubbling fluidized bed burning wood chips with amine capture.
+# https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2025.pdf
+BECCS_DOLLAR_YEAR = 2023
+BECCS_DATA = {
+    "capcost": 12631.0,  # USD/kW; with owner's costs, land and grid connection, without CO2 transport and storage
+    "fom": 261.18,  # USD/kW-year
+    "vom": 9.65,  # USD/MWh
+    "heatrate": 19.965,  # MMBtu/MWh, HHV
+}
+
 ATB_VALUE_COLS = [
     "cost_recovery_period_years",
     "capacity_factor",
@@ -405,11 +418,56 @@ def complete_atb_slice(pudl_atb_year: pd.DataFrame, atb_scenario: str, atb_model
     return sub
 
 
-def process_atb_scenario(pudl_atb_sub: pd.DataFrame, aeo: pd.DataFrame) -> pd.DataFrame:
+def get_beccs_data(dollar_year: int) -> pd.Series:
+    """``BECCS_DATA`` with its costs in US dollars of ``dollar_year``."""
+    data = pd.Series(BECCS_DATA)
+    costs = ["capcost", "fom", "vom"]
+    data[costs] = to_dollars(data[costs], year=BECCS_DOLLAR_YEAR, to_year=dollar_year)
+    return data
+
+
+def build_beccs(pivot_atb: pd.DataFrame, beccs: pd.Series) -> pd.DataFrame:
+    """
+    Biomass power with 95% carbon capture (biomass-95CCS) from dedicated biomass power (ATB Biopower).
+
+    It takes the capital cost, O&M and heat rate of ``get_beccs_data`` and the rest
+    of the biomass plant: its fuel cost per MWh of biomass, WACC, lifetime, cost
+    recovery period and construction financing. The capital cost is an overnight cost that already
+    holds the grid connection. The construction financing cost
+    (``capex_construction_finance_factor``, USD/kW in the ATB) keeps its share of
+    the overnight and grid connection costs of biomass.
+    Every MWh of biomass burnt removes ``constants.BECCS_CO2_REMOVAL`` of CO2.
+    """
+    df = pivot_atb[pivot_atb["pypsa-name"] == "biomass"].copy()
+    if df.empty:
+        return df
+    df["pypsa-name"] = "biomass-95CCS"
+    financing_share = df["capex_construction_finance_factor"] / (
+        df["capex_overnight_per_kw"] + df["capex_grid_connection_per_kw"].fillna(0)
+    )
+    df["capex_overnight_per_kw"] = beccs.capcost
+    df["capex_grid_connection_per_kw"] = 0.0
+    df["capex_construction_finance_factor"] = financing_share * beccs.capcost
+    df["capex_per_kw"] = df["capex_overnight_per_kw"] + df["capex_construction_finance_factor"]
+    df["opex_fixed_per_kw"] = beccs.fom
+    df["opex_variable_per_mwh"] = beccs.vom
+    df["heat_rate_mmbtu_per_mwh"] = beccs.heatrate
+    df["co2_emissions"] = -const.BECCS_CO2_REMOVAL
+    # ATB figures of the biomass plant that do not hold for it
+    df[["fuel_cost_per_mwh", "capacity_factor", "levelized_cost_of_energy_per_mwh"]] = np.nan
+    return df
+
+
+def process_atb_scenario(
+    pudl_atb_sub: pd.DataFrame,
+    aeo: pd.DataFrame,
+    beccs: pd.Series | None = None,
+) -> pd.DataFrame:
     """Run the full cost pipeline for one (atb_scenario, model_case) slice.
 
     Concatenates static data (emissions, transmission, lifetime, AEO fuels), takes the
-    ATB fuel costs of nuclear, SMR and biomass, pivots,
+    ATB fuel costs of nuclear, SMR and biomass, derives biomass-95CCS from ``beccs``
+    (``get_beccs_data``) if given, pivots,
     derives hydrogen_ct, marginal cost, annualized capex etc., and returns a long-form
     DataFrame with columns [pypsa-name, parameter, value] for this scenario+case.
     """
@@ -447,6 +505,9 @@ def process_atb_scenario(pudl_atb_sub: pd.DataFrame, aeo: pd.DataFrame) -> pd.Da
     pivot_atb.loc[atb_fuel, "fuel_cost_real_per_mwhth"] = (
         pivot_atb.loc[atb_fuel, "fuel_cost_per_mwh"] * 3.412 / pivot_atb.loc[atb_fuel, "heat_rate_mmbtu_per_mwh"]
     )
+
+    if beccs is not None:
+        pivot_atb = pd.concat([pivot_atb, build_beccs(pivot_atb, beccs)], ignore_index=True)
 
     # Create Hydrogen Combustion Turbine from OCGT using assumptions per ReEDS
     # https://nrel.github.io/ReEDS-2.0/model_documentation.html#hydrogen
@@ -592,6 +653,9 @@ if __name__ == "__main__":
         dollar_year,
     )
 
+    # BECCS costs and performance, independent of ATB scenario / case
+    beccs = get_beccs_data(dollar_year)
+
     # Iterate over every (atb_scenario, model_case) so that the final CSV holds
     # the entire ATB scenario grid; downstream selects the correct slice via
     # `costs.atb.scenario`/`model_case` (with optional per-carrier overrides).
@@ -608,7 +672,7 @@ if __name__ == "__main__":
             sub = complete_atb_slice(pudl_atb_year, atb_scenario, atb_model_case)
             if sub.empty:
                 continue
-            result = process_atb_scenario(sub, aeo)
+            result = process_atb_scenario(sub, aeo, beccs)
             result["atb_scenario"] = atb_scenario
             result["atb_model_case"] = atb_model_case
             scenario_results.append(result)

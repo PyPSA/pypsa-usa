@@ -9,7 +9,7 @@ import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging, load_costs, log_network_schema
 from add_electricity import add_missing_carriers
-from constants import HOURS_PER_YEAR
+from constants import BECCS_CO2_REMOVAL, HOURS_PER_YEAR
 from external_regions import (
     add_external_regions,
     convert_flowgates_to_state,
@@ -37,6 +37,7 @@ POWER_FUEL_CARRIERS = [
     "nuclear",
     "SMR",
     "biomass",
+    "biomass-95CCS",
 ]
 
 
@@ -58,6 +59,9 @@ def add_co2_emissions(n, costs, carriers):
     if any("CCS" in carrier for carrier in carriers):
         ccs_carriers = [carrier for carrier in carriers if "CCS" in carrier]
         for ccs_carrier in ccs_carriers:
+            if ccs_carrier.startswith("biomass"):  # biomass has no base emissions: the removal of the cost data
+                n.carriers.loc[ccs_carrier, "co2_emissions"] = costs.at[ccs_carrier, "co2_emissions"]
+                continue
             base_carrier = ccs_carrier.split("-")[0]
             base_emissions = n.carriers.loc[base_carrier, "co2_emissions"]
             ccs_level = int(ccs_carrier.split("-")[1].replace("CCS", ""))
@@ -892,6 +896,10 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
             efficiency2 = []  # to node or state atmosphere bus (e.g. "p9 pwr atmosphere", "CA pwr atmosphere")
             efficiency4 = []  # to node co2 capture bus (e.g. "p9 co2 capture")
             for index in links:
+                if "biomass" in index:  # BECCS: the CO2 captured is removed from the atmosphere
+                    efficiency2.append(-BECCS_CO2_REMOVAL)
+                    efficiency4.append(BECCS_CO2_REMOVAL)
+                    continue
                 if "CCGT" in index:
                     efficiency = gas_co2_intensity
                 elif "coal" in index:
@@ -973,6 +981,10 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
             efficiency3 = []  # to node co2 capture bus (e.g. "p9 co2 capture")
             for index in indexes:
                 generator_efficiency = n.generators.loc[index]["efficiency"]
+                if "biomass" in index:  # BECCS: the CO2 captured is removed from the atmosphere
+                    efficiency2.append(-BECCS_CO2_REMOVAL / generator_efficiency)
+                    efficiency3.append(BECCS_CO2_REMOVAL / generator_efficiency)
+                    continue
                 if "CCGT" in index:
                     efficiency = 1 / generator_efficiency * gas_co2_intensity
                 elif "coal" in index:
