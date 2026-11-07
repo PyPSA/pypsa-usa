@@ -878,17 +878,6 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
         carrier="co2",
     )
 
-    # add carrier to represent CC only (i.e. without S)
-    carriers = n.carriers[n.carriers.index.str.endswith("CCS")]
-    if not carriers.empty:
-        carriers = carriers.rename(index=lambda x: x.replace("CCS", "CC"))
-        n.add(
-            "Carrier",
-            carriers.index,
-            color=carriers["color"],
-            nice_name=carriers["nice_name"].str.replace("Ccs", "Cc", regex=True),
-        )
-
     # get CO2 intensity for gas and coal
     gas_co2_intensity = costs.loc["gas"]["co2_emissions"]
     coal_co2_intensity = costs.loc["coal"]["co2_emissions"]
@@ -925,31 +914,12 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
             n.links["bus4"] = n.links.bus4.fillna("")
             n.links["efficiency4"] = n.links.efficiency4.fillna(0)
 
-            # remove storage cost from links' capital cost (given that they do not require technology to store CO2 anymore as this is done underground)
-            n.links.loc[links, "capital_cost"] *= (
-                0.95  # TODO: replace with a concrete storage cost (reducing 5% capital cost for the time being)
-            )
-
-            # replace substring "CCS" with just "CC" in links' names (and their time series) and carriers
-            n.links.loc[links, "carrier"] = n.links.loc[links].carrier.str.replace("CCS", "CC", regex=True)
-            rename_components(n, "Link", {x: x.replace("CCS", "CC") for x in links})
-
     else:  # sector-less
         generators = n.generators.index[n.generators.index.str.contains("CCS")]
         if not generators.empty:  # found generators equipped with CCS
-            # remove storage cost from generators' capital cost (given that they do not require technology to store CO2 anymore as this is done underground)
-            n.generators.loc[generators, "capital_cost"] *= (
-                0.95  # TODO: replace with a concrete storage cost (reducing 5% capital cost for the time being)
-            )
-
-            # replace "CCS" with "CC" in generators' indexes (and their time series) and carriers description
-            n.generators.loc[generators, "carrier"] = n.generators.loc[generators].carrier.str.replace(
-                "CCS",
-                "CC",
-                regex=True,
-            )
-            indexes = generators.str.replace("CCS", "CC", regex=True)
-            rename_components(n, "Generator", dict(zip(generators, indexes)))
+            # the plants keep their CCS name and carrier, so that carrier-keyed policies still apply, and
+            # their capital cost, which excludes CO2 transport and storage (charged by the storage store)
+            indexes = generators
             nodes = n.generators.loc[indexes, "bus"]  # node level electricity buses (e.g. "p9")
 
             # add buses to represent node level electricity CC generator
