@@ -19,6 +19,25 @@ from constants import HOURS_PER_YEAR
 from snakemake.utils import update_config
 
 
+def sector_letters(sector):
+    """Sectors of a ``{sector}`` wildcard or ``scenario.sector`` ("" is electricity only)."""
+    return set(filter(None, str(sector).split("-"))) | {"E"}
+
+
+def sector_on(sector):
+    """Every sector but electricity only ("" or E) is a sector coupled model."""
+    return sector_letters(sector) != {"E"}
+
+
+def gas_sector_on(sector):
+    """Natural gas and the end-use (service, transport, industry) sectors."""
+    return "G" in sector_letters(sector)
+
+
+def hydrogen_sector_on(sector):
+    return "H" in sector_letters(sector)
+
+
 def get_config(config, keys, default=None):
     """Retrieve a nested value from a dictionary using a tuple of keys."""
     value = config

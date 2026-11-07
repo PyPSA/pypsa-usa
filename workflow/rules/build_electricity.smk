@@ -139,6 +139,8 @@ rule build_cost_data:
         eia_tech_costs="repo_data/costs/eia_tech_costs.csv",
         egs_costs="repo_data/costs/egs_costs.csv",
         additional_costs="repo_data/costs/additional_costs.csv",
+        hydrogen_costs="repo_data/costs/hydrogen_costs.csv",
+        gas_ccs_retrofit_costs="repo_data/costs/reeds_gas_ccs_retrofit_costs.csv",
     output:
         tech_costs=COSTS + "costs_{year}.csv",
         sector_costs=COSTS + "sector_costs_{year}.csv",
@@ -698,7 +700,7 @@ rule build_transport_other_demand:
 
 def demand_to_add(wildcards):
 
-    if config["scenario"]["sector"] == "E":
+    if not gas_sector_on(config["scenario"]["sector"]):
         return DEMAND + "{interconnect}/power_electricity_s{simpl}.csv"
     else:
         # service demand
@@ -1128,7 +1130,7 @@ rule add_extra_components:
         # rules are parsed before the Snakefile pads an empty sector to "E"
         co2_storage=(
             CO2 + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
-            if config["scenario"]["sector"] in ("", "E")
+            if not sector_on(config["scenario"]["sector"])
             and config["co2"]["storage"] is True
             else []
         ),

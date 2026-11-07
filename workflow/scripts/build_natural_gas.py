@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 import yaml
+from _helpers import get_gas_infra_contraction
 from constants import (
     CODE_2_STATE,
     EMPTY_STATES,
@@ -328,8 +329,19 @@ class GasStorage(GasData):
         )
         df["CHARGE_MW"] = df.DISCHARGE_MW * NG_STORAGE_CHARGE_DISCHARGE_RATIO
 
+        # the working gas and withdrawal of each formation, whose shares weigh the
+        # costs of retrofitting the storage to hydrogen
+        formations = sorted(df.FORMATION.dropna().unique())
+        for formation in formations:
+            in_formation = df.FORMATION == formation
+            df[f"WORKING_{formation}"] = df.WORKING_CAPACITY_MWH.where(in_formation, 0)
+            df[f"WITHDRAWAL_{formation}"] = df.DISCHARGE_MW.where(in_formation, 0)
+
         by = ["STATE", "FORMATION"] if self.aggregation == "formation" else ["STATE"]
         df = df.groupby(by).sum(numeric_only=True).reset_index()
+        for formation in formations:
+            df[f"working_share_{formation}"] = (df.pop(f"WORKING_{formation}") / df.WORKING_CAPACITY_MWH).fillna(0)
+            df[f"withdrawal_share_{formation}"] = (df.pop(f"WITHDRAWAL_{formation}") / df.DISCHARGE_MW).fillna(0)
         df = df[df.MAX_CAPACITY_MWH > 0]
         df["NAME"] = df[by].agg(" ".join, axis=1)
 
@@ -378,6 +390,9 @@ class GasStorage(GasData):
             marginal_cost=0,  # to update
             lifetime=np.inf,
             build_year=n.investment_periods[0],
+            # the geology, for retrofitting the storage to hydrogen
+            **({"formation": df.FORMATION} if "FORMATION" in df else {}),
+            **{column: df[column] for column in df.columns if "_share_" in column},
         )
 
         # must do two links, rather than a bidirectional one, to constrain charge limits
@@ -1388,9 +1403,16 @@ def build_natural_gas(
     pipelines_path: str = "../data/natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
     pipeline_shape_path: str = "../data/natural_gas/pipelines.geojson",
     options: dict[str, Any] | None = None,
+    contraction: dict[str, bool] | None = None,
     **kwargs,
 ) -> None:
-    """Add the natural gas network."""
+    """
+    Add the natural gas network.
+
+    ``contraction`` tells whether the existing production, pipelines and storage
+    may shrink below their capacity (``_helpers.get_gas_infra_contraction``); it
+    defaults to ``options["infra_contraction"]``.
+    """
     if not options:
         options = {}
 
@@ -1400,8 +1422,8 @@ def build_natural_gas(
     capacity_multiplier = options.get("existing_pipeline_multiplier", 1)
     storage_aggregation = options.get("storage_aggregation", "state")
     pipeline_length_factor = options.get("pipeline_length_factor", 1.25)
-    # existing production, storage and pipelines may shrink below their capacity
-    infra_contraction = options.get("infra_contraction", False)
+    if contraction is None:
+        contraction = get_gas_infra_contraction({"natural_gas": options})
 
     # percent rates of the cost table
     pipeline_loss_per_1000km = (costs.at["gas pipeline", "compressor-fuel"] + costs.at["gas pipeline", "leakage"]) / 100
@@ -1422,7 +1444,7 @@ def build_natural_gas(
         production_costs=production_costs,
         efficiency=production_efficiency,
         fom=production_fom,
-        contraction=infra_contraction,
+        contraction=contraction["production"],
     )
 
     # add state level gas storage facilities
@@ -1433,7 +1455,7 @@ def build_natural_gas(
         cyclic_storage=cyclic_storage,
         injection_loss=storage_injection_loss,
         compressor_fom=storage_compressor_fom,
-        contraction=infra_contraction,
+        contraction=contraction["storage"],
     )
 
     # add interconnect pipelines
@@ -1444,7 +1466,7 @@ def build_natural_gas(
         length_factor=pipeline_length_factor,
         loss_per_1000km=pipeline_loss_per_1000km,
         fom_per_km=pipeline_fom_per_km,
-        contraction=infra_contraction,
+        contraction=contraction["pipeline"],
     )
 
     # add pipelines for imports/exports

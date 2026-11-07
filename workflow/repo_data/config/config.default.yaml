@@ -76,7 +76,7 @@ scenario:
   simpl: [75]                            # pre-clustering kmeans granularity; alphanumeric or "all"
   ll: [v1.0]                             # line-limit scenario; v|c + number/opt/all (e.g. v1.0, copt)
   opts: [REM-3h]                         # dash/plus-separated options string (REM = renewable-energy mix, 3h = 3-hour temporal resolution)
-  sector: ""                             # sector-coupling; "" (electricity-only) | E | G | E-G
+  sector: ""                             # sector-coupling; "" or E (electricity-only) | E-G | E-H | E-G-H (G = natural gas and end-use sectors, H = hydrogen)
 
 foresight: 'perfect'                     # multi-horizon solve mode; perfect (monolithic) | myopic (sequential)
 
@@ -161,11 +161,20 @@ electricity:
   retirement: economic                   # economic = allow early retirement at fixed cost; technical = existing capacity fixed until its lifetime ends
   honor_planned_retirements: true        # drop existing/proposed units at their EIA planned_generator_retirement_date (false = keep every existing unit indefinitely)
 
+  # Retrofits of existing gas plants (ReEDS upgrades): OCGT to OCHT, CCGT to CCHT or to
+  # 90% carbon capture (CCGT-90CCS). A retrofit runs for `lifetime` years from the period
+  # it is built in; its cost is annualized over min(lifetime, ATB cost recovery period).
+  # Plants that can be retrofitted retire economically.
+  retrofit:
+    OCHT:       {enable: false, lifetime: 30}
+    CCHT:       {enable: false, lifetime: 30}
+    CCGT-90CCS: {enable: false, lifetime: 30}
+
   # Capacity-expansion candidates. Carriers listed here get extendable
   # p_nom and pay annualized capex; carriers listed only above are
   # fixed (brownfield-only).
   extendable_carriers:
-    Generator:    [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, coal, nuclear, hydrogen_ct]
+    Generator:    [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, coal, nuclear, OCHT]
     StorageUnit:  [4hr_battery_storage, 8hr_battery_storage]                            # Xhr_battery_storage (X = 2..10)
     Store: []                              # candidate Store carriers (e.g. H2_tank); requires sector coupling
     Link:  []                              # candidate Link carriers (e.g. HVDC)
@@ -383,7 +392,8 @@ costs:
     12hr_PHS: 0.3
 
   min_year:                                # earliest commercial-availability year per carrier; carrier excluded before this year
-    hydrogen_ct: 2040
+    OCHT: 2040
+    CCHT: 2040
   # null and {} are equivalent here (add_extra_components short-circuits on
   # None and would otherwise iterate an empty mapping); null is kept as the
   # "nothing configured" spelling used by the other optional maps.

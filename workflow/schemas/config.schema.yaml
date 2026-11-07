@@ -76,7 +76,11 @@ properties:
       simpl: {type: array}
       ll: {type: array}
       opts: {type: array}
-      sector: {type: string}
+      sector:
+        description: >-
+          "" or E is electricity only; G adds natural gas and the end-use
+          sectors, H hydrogen. E is implied, the order is fixed.
+        enum: ["", E, G, H, G-H, E-G, E-H, E-G-H]
       scope: {enum: [urban, rural, total]}
 
   foresight:
@@ -224,6 +228,20 @@ properties:
       retirement: {enum: [economic, technical]}
       honor_planned_retirements: {type: boolean}
 
+      retrofit:
+        description: Retrofits of existing gas plants, by the technology retrofitted to.
+        type: object
+        additionalProperties: false
+        properties:
+          OCHT: &retrofit
+            type: object
+            additionalProperties: false
+            properties:
+              enable: {type: boolean}
+              lifetime: {type: number, exclusiveMinimum: 0, description: "Years the retrofit runs for; its cost is annualized over them, at most over the ATB cost recovery period"}
+          CCHT: *retrofit
+          CCGT-90CCS: *retrofit
+
       remote_contracted_resources:
         description: Attach CA-contracted out-of-state units at CA buses (see data-generators.md).
         type: object
@@ -366,6 +384,37 @@ properties:
           marginal_cost: {type: number}
           lifetime: {type: number}
           discount_rate: {type: number}
+
+  sector:
+    type: object
+    properties:
+      natural_gas:
+        type: object
+        properties:
+          infra_contraction:
+            type: object
+            additionalProperties: false
+            properties:
+              production: {type: boolean}
+              pipeline: {type: boolean}
+              storage: {type: boolean}
+      hydrogen:
+        type: object
+        additionalProperties: false
+        properties:
+          demand_scenario: {enum: [central, current policy, baseline]}
+          production:
+            type: array
+            items: {enum: [h2_electrolysis, h2_smr, h2_smr_ccs]}
+          pipelines: {type: boolean}
+          storage: {type: boolean}
+          pipeline_length_factor: {type: number, exclusiveMinimum: 0}
+          retrofit:
+            type: object
+            additionalProperties: false
+            properties:
+              storage: {type: boolean}
+              pipelines: {type: boolean}
 
   dac:
     type: object

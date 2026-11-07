@@ -31,6 +31,7 @@ import pypsa
 import yaml
 from _helpers import (
     configure_logging,
+    get_gas_infra_contraction,
     log_network_schema,
     update_config_from_wildcards,
 )
@@ -50,6 +51,7 @@ from opts.reserves import (
     add_ERM_constraints,
     store_ERM_duals,
 )
+from opts.retrofit import add_retrofit_constraints, retrofitted
 from opts.sector import (
     add_cooling_heat_pump_constraints,
     add_demand_response_constraint,
@@ -144,6 +146,9 @@ def extra_functionality(n, snapshots):
     opts = n.opts
     config = n.config
     sector_enabled = "sector" in opts
+    # natural gas and the end-use sectors; a hydrogen only sector model keeps the
+    # electricity demand as one load, as the electricity only model does
+    gas_enabled = "natural_gas" in opts
 
     # Make snakemake available in function scope if it exists in global scope
     global_snakemake = globals().get("snakemake")
@@ -183,27 +188,30 @@ def extra_functionality(n, snapshots):
     # Always apply bidirectional link constraints
     add_bidirectional_link_constraints(n)
 
+    # Natural gas storage, pipelines and plants share their capacity with what is retrofitted from them
+    add_retrofit_constraints(n)
+
     # Apply demand response if configured
     dr_config = config["electricity"].get("demand_response", {})
     if dr_config:
-        add_demand_response_constraint(n, config, sector_enabled)
+        add_demand_response_constraint(n, config, gas_enabled)
 
     # Apply interchange constraints if configured
     if config["electricity"].get("imports", {}).get("enable", False):
         if config["electricity"].get("imports", {}).get("volume_limit", False):
-            add_interchange_constraints(n, config, "imports", sector_enabled)
+            add_interchange_constraints(n, config, "imports", gas_enabled)
 
     # Apply interchange constraints if configured
     if config["electricity"].get("exports", {}).get("enable", False):
         if config["electricity"].get("exports", {}).get("volume_limit", False):
-            add_interchange_constraints(n, config, "exports", sector_enabled)
+            add_interchange_constraints(n, config, "exports", gas_enabled)
 
     # Apply aggregate interface transmission limits if configured
     if config["model_topology"].get("interface_transmission_limits", False):
         add_interface_transmission_limits(n, global_snakemake.input.interface_limits)
 
-    # Apply sector-specific constraints if sector is enabled
-    if sector_enabled:
+    # Apply natural gas and end-use sector constraints
+    if gas_enabled:
         # Heat pump constraints
         add_cooling_heat_pump_constraints(n, config)
 
@@ -216,7 +224,7 @@ def extra_functionality(n, snapshots):
             add_ng_import_export_limits(n, config)
 
         # A contracting gas storage keeps its injection at least as large as its other parts
-        if config["sector"]["natural_gas"].get("infra_contraction", False):
+        if get_gas_infra_contraction(config["sector"], "hydrogen" in opts)["storage"]:
             add_gas_storage_contraction_constraints(n)
 
         # Water heater tanks are sized to their heaters
@@ -287,6 +295,7 @@ def _restore_original_nominal(n: pypsa.Network) -> None:
 def freeze_prior_periods(n: pypsa.Network, prior_period: int):
     renewable_carriers = set(n.config["electricity"].get("renewable_carriers", []))
     economic = n.config["electricity"].get("retirement", "technical") == "economic"
+    originals = retrofitted(n)
     for c in (n.components[name] for name in ["Generator", "Link", "StorageUnit", "Store"]):
         # empty components carry an int64 index under pypsa v1, which breaks .str
         if c.static.empty:
@@ -302,6 +311,8 @@ def freeze_prior_periods(n: pypsa.Network, prior_period: int):
         existing = c.static.index.str.contains("existing", case=False, na=False)
         not_renewable = ~c.static["carrier"].isin(renewable_carriers)
         retirable = prior & existing & not_renewable & economic
+        # what can be retrofitted retires economically whatever the retirement
+        retirable |= prior & c.static.index.isin(originals)
 
         # lock in the optimized capacity from the prior period as the starting point
         # for the next period — without this, p_nom still holds the pre-solve value
@@ -406,8 +417,13 @@ if __name__ == "__main__":
     solve_opts = snakemake.params.solving["options"]
 
     # sector specific co2 options
-    if snakemake.wildcards.sector != "E":
+    sectors = snakemake.wildcards.sector.split("-")
+    if sectors != ["E"]:
         opts.append("sector")
+    if "G" in sectors:
+        opts.append("natural_gas")
+    if "H" in sectors:
+        opts.append("hydrogen")
 
     np.random.seed(solve_opts.get("seed", 123))
 

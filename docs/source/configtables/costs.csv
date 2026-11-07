@@ -17,6 +17,6 @@ ptc_modifier,,,"Production Tax Credit, subtracted from the marginal cost of the 
 itc_modifier,,,"Investment Tax Credit, applied as a fractional reduction of the capital cost of the listed carriers."
 -- {carrier},p.u.,"float in [0, 1]; e.g. ``solar: 0.3``","Per-carrier ITC fraction (e.g. ``solar``, ``offwind_floating``, ``EGS``, ``4hr_battery_storage``, ``8hr_PHS``)."
 min_year,,,"Earliest commercial-availability year per carrier; the carrier is excluded from investment periods before this year."
--- {carrier},--,int; e.g. ``hydrogen_ct: 2040``,"Per-carrier first-available year."
+-- {carrier},--,int; e.g. ``OCHT: 2040``,"Per-carrier first-available year."
 max_growth,,,"Optional per-carrier annual build-rate caps limiting how fast a technology can be deployed."
 -- {carrier},,"Mapping ``{base: MW, rate: fraction}``","Base build rate in MW and fractional annual growth allowed on top of it."
