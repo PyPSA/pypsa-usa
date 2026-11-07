@@ -1,5 +1,6 @@
 """Adds extra extendable components to the clustered and simplified network."""
 
+import functools
 import logging
 
 import geopandas as gpd
@@ -22,8 +23,21 @@ idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
 
-# carriers of the gas, coal and oil plants, which pay the AEO fuel costs of the cost data
-POWER_FUEL_CARRIERS = ["OCGT", "CCGT", "CCGT-95CCS", "CCGT-97CCS", "coal", "coal-95CCS", "coal-99CCS", "oil"]
+# carriers of the plants paying the fuel costs of the cost data: the AEO fuel costs
+# of gas, coal and oil plants, the ATB fuel costs of nuclear and biomass plants
+POWER_FUEL_CARRIERS = [
+    "OCGT",
+    "CCGT",
+    "CCGT-95CCS",
+    "CCGT-97CCS",
+    "coal",
+    "coal-95CCS",
+    "coal-99CCS",
+    "oil",
+    "nuclear",
+    "SMR",
+    "biomass",
+]
 
 
 def add_co2_emissions(n, costs, carriers):
@@ -547,12 +561,14 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year):
 
 def apply_power_fuel_prices(n: pypsa.Network, costs_dict: dict[int, pd.DataFrame]) -> None:
     """
-    Prices the fuel of gas, coal and oil plants, existing and new, at the AEO fuel costs of each investment period.
+    Prices the fuel of plants, existing and new, at the fuel costs of each investment period.
 
-    A plant's marginal cost in a period becomes its VOM plus the AEO fuel cost
-    of its carrier in that period's cost data (``fuel_cost_real_per_mwhth``,
-    see build_cost_data) over its efficiency. This replaces the plant level fuel
-    costs of the existing fleet, which new units copied from it also carry.
+    A plant's marginal cost in a period becomes its VOM plus the fuel cost of its
+    carrier in that period's cost data (``fuel_cost_real_per_mwhth``, see
+    build_cost_data) over its efficiency: the AEO fuel cost of gas, coal and oil
+    plants, the ATB fuel cost of nuclear and biomass plants. This replaces the
+    plant level fuel costs of the existing fleet, which new units copied from it
+    also carry.
     """
     plants = n.generators[n.generators.carrier.isin(POWER_FUEL_CARRIERS)]
     if plants.empty:
@@ -572,7 +588,7 @@ def apply_power_fuel_prices(n: pypsa.Network, costs_dict: dict[int, pd.DataFrame
         axis=1,
     )
     n.generators.loc[plants.index, "marginal_cost"] = marginal_cost.iloc[0]
-    logger.info(f"Priced the fuel of {len(plants)} gas, coal and oil plants at the AEO fuel costs")
+    logger.info(f"Priced the fuel of {len(plants)} plants at the fuel costs of the cost data")
 
 
 def apply_itc(n, itc_modifier, monitization_cost=0.1):
@@ -785,6 +801,48 @@ def add_demand_response(
         carrier="demand_response",
         marginal_cost_storage=marginal_cost_storage * (-1),
     )
+
+
+@functools.cache
+def pypsa_renames_non_bus_components() -> bool:
+    """
+    Whether pypsa's rename_component_names can rename components other than buses.
+
+    Up to and including pypsa 1.4.0, renaming e.g. a link renames it and its time series, then raises a KeyError
+    while updating the references to it, because it looks for "link0", "link1", ... columns in every other component
+    (PyPSA/PyPSA#2057). PyPSA/PyPSA#2058 fixed this after 1.4.0, but no release includes the fix yet, so rather than
+    guess the version it will ship in, this tries a rename on a tiny network.
+    """
+    n = pypsa.Network()
+    n.add("Bus", ["bus0", "bus1"])
+    n.add("Link", "link", bus0="bus0", bus1="bus1")
+    try:
+        n.rename_component_names("Link", link="renamed")
+    except KeyError:
+        return False
+    return n.links.index.tolist() == ["renamed"]
+
+
+def rename_components(n: pypsa.Network, component: str, names: dict[str, str]) -> None:
+    """
+    Renames components, along with their time series and the references to them in other components.
+
+    Uses pypsa's rename_component_names wherever it works: always for buses, and for every other component once pypsa
+    includes PyPSA/PyPSA#2058 (see pypsa_renames_non_bus_components). With older pypsa versions, this renames the
+    component and its time series itself, which leaves no stale references for the generators and links renamed in
+    this module, since nothing refers to them by name.
+
+    TODO: once the pinned pypsa includes PyPSA/PyPSA#2058, call n.rename_component_names(component, **names) at the
+    call sites and drop this helper and pypsa_renames_non_bus_components.
+    """
+    if component == "Bus" or pypsa_renames_non_bus_components():
+        n.rename_component_names(component, **names)
+        return
+
+    c = n.components[component]
+    c.static = c.static.rename(index=names)
+    for attr, df in c.dynamic.items():
+        c.dynamic[attr] = df.rename(columns=names)
 
 
 def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs: pd.DataFrame, sector: bool):
@@ -1245,7 +1303,8 @@ def main(snakemake) -> None:
         # and compound across periods.
         n.remove("Generator", egs_gens.index)
 
-    # gas, coal and oil plants pay the AEO fuel costs, unless dynamic fuel prices are enabled
+    # gas, coal and oil plants pay the AEO fuel costs, nuclear and biomass plants the ATB
+    # fuel costs, unless dynamic fuel prices are enabled
     if not snakemake.config["conventional"]["dynamic_fuel_price"].get("enable", False):
         apply_power_fuel_prices(n, costs_dict)
 

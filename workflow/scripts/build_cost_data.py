@@ -12,6 +12,7 @@ from build_sector_costs import (
     EiaBuildingData,
 )
 from eia import ProjectedFuelCost
+from money import deflator, dollar_year_from_config, parse_unit_year
 
 logger = logging.getLogger(__name__)
 
@@ -176,9 +177,10 @@ def get_sector_costs(
     efs_icev_costs: str,
     eia_tech_costs,
     year: int,
+    dollar_year: int,
     additional_costs_csv: str | None = None,
 ) -> pd.DataFrame:
-    """Gets end-use tech costs for sector coupling studies."""
+    """Gets end-use tech costs for sector coupling studies, in US dollars of ``dollar_year``."""
 
     def correct_units(df: pd.DataFrame) -> pd.DataFrame:
         df = size_water_heaters(df)
@@ -235,7 +237,7 @@ def get_sector_costs(
 
     bev = EfsTechnologyData(efs_tech_costs).get_data("Transportation")
     ice = EfsIceTransportationData(efs_icev_costs).get_data()
-    builidng = EiaBuildingData(eia_tech_costs).get_data()
+    builidng = EiaBuildingData(eia_tech_costs, dollar_year).get_data()
 
     df = pd.concat([bev, ice, builidng])
     df = get_investment_year_data(df, year)
@@ -299,6 +301,9 @@ TRANSMISSION_DATA = [
 ]
 
 
+# Technologies paying the ATB fuel cost of their scenario rather than an AEO price
+ATB_FUEL_CARRIERS = ["nuclear", "SMR", "biomass"]
+
 ATB_VALUE_COLS = [
     "cost_recovery_period_years",
     "capacity_factor",
@@ -318,19 +323,24 @@ ATB_VALUE_COLS = [
 ]
 
 
-def build_aeo_fuel_costs(api: str, tech_year: int, aeo_scenario: str) -> pd.DataFrame:
+def build_aeo_fuel_costs(api: str, tech_year: int, aeo_scenario: str, dollar_year: int) -> pd.DataFrame:
     """
     Loads AEO fuel cost data, applies tech mappings, returns long-format frame.
 
     The fuel costs are the AEO2026 electric power prices of the tech year (see
-    ``eia.ProjectedFuelCost``), converted from 2025$/MMBtu to 2023$/MWh_th.
-    Years outside the AEO years take the price of the nearest year.
+    ``eia.ProjectedFuelCost``) in $/MMBtu of the dollar year named in their
+    unit, converted to $/MWh_th of the model's ``dollar_year``. Years outside
+    the AEO years take the price of the nearest year.
     """
     rows = []
     for name, fuel in {"natural_gas": "gas", "coal": "coal", "distillate_fuel_oil": "oil"}.items():
         df = ProjectedFuelCost(fuel, "power", api, aeo_scenario).get_data()
-        if not (df.units == "2025 $/MMBtu").all():
-            raise ValueError(f"Expected AEO {fuel} prices in 2025 $/MMBtu, got {df.units.unique().tolist()}")
+        units = df.units.unique().tolist()
+        if len(units) != 1:
+            raise ValueError(f"AEO {fuel} prices mix units: {units}")
+        source_year, unit = parse_unit_year(units[0])
+        if unit != "$/MMBtu":
+            raise ValueError(f"Expected AEO {fuel} prices in $/MMBtu, got {units[0]}")
         year = min(df.index, key=lambda x: abs(x - tech_year))
         if year != tech_year:
             logger.warning(f"No AEO2026 {fuel} price for {tech_year}; using {year}")
@@ -338,26 +348,10 @@ def build_aeo_fuel_costs(api: str, tech_year: int, aeo_scenario: str) -> pd.Data
             {
                 "pypsa-name": name,
                 "parameter": "fuel_cost_real_per_mwhth",
-                "value": df.value.at[year] * const.USD_2025_2_USD_2023 * 3.412,
+                "value": df.value.at[year] * deflator(source_year, dollar_year) * 3.412,
             },
         )
     aeo = pd.DataFrame(rows)
-
-    addnl_fuels = pd.DataFrame(
-        [
-            {
-                "pypsa-name": "nuclear",
-                "parameter": "fuel_cost_real_per_mwhth",
-                "value": 2.782,
-            },
-            {
-                "pypsa-name": "biomass",
-                "parameter": "fuel_cost_real_per_mwhth",
-                "value": 7.49,
-            },
-        ],
-    )
-    aeo = pd.concat([aeo, addnl_fuels], ignore_index=True)
 
     tech_fuel_map = {
         "CCGT": "natural_gas",
@@ -367,7 +361,6 @@ def build_aeo_fuel_costs(api: str, tech_year: int, aeo_scenario: str) -> pd.Data
         "coal-95CCS": "coal",
         "coal-99CCS": "coal",
         "oil": "distillate_fuel_oil",
-        "SMR": "nuclear",
     }
     tech_fuels = pd.DataFrame(
         [
@@ -415,7 +408,8 @@ def complete_atb_slice(pudl_atb_year: pd.DataFrame, atb_scenario: str, atb_model
 def process_atb_scenario(pudl_atb_sub: pd.DataFrame, aeo: pd.DataFrame) -> pd.DataFrame:
     """Run the full cost pipeline for one (atb_scenario, model_case) slice.
 
-    Concatenates static data (emissions, transmission, lifetime, AEO fuels), pivots,
+    Concatenates static data (emissions, transmission, lifetime, AEO fuels), takes the
+    ATB fuel costs of nuclear, SMR and biomass, pivots,
     derives hydrogen_ct, marginal cost, annualized capex etc., and returns a long-form
     DataFrame with columns [pypsa-name, parameter, value] for this scenario+case.
     """
@@ -447,6 +441,12 @@ def process_atb_scenario(pudl_atb_sub: pd.DataFrame, aeo: pd.DataFrame) -> pd.Da
         columns="parameter",
         values="value",
     ).reset_index()
+
+    # ATB fuel costs are per MWh of electricity
+    atb_fuel = pivot_atb["pypsa-name"].isin(ATB_FUEL_CARRIERS)
+    pivot_atb.loc[atb_fuel, "fuel_cost_real_per_mwhth"] = (
+        pivot_atb.loc[atb_fuel, "fuel_cost_per_mwh"] * 3.412 / pivot_atb.loc[atb_fuel, "heat_rate_mmbtu_per_mwh"]
+    )
 
     # Create Hydrogen Combustion Turbine from OCGT using assumptions per ReEDS
     # https://nrel.github.io/ReEDS-2.0/model_documentation.html#hydrogen
@@ -537,6 +537,7 @@ if __name__ == "__main__":
         rootpath = "."
 
     aeo_params = snakemake.params.aeo or {}
+    dollar_year = dollar_year_from_config(snakemake.config)
 
     tech_year = snakemake.wildcards.year
     if int(tech_year) < 2024:
@@ -588,6 +589,7 @@ if __name__ == "__main__":
         snakemake.params.eia_api,
         tech_year,
         aeo_params.get("scenario", "reference"),
+        dollar_year,
     )
 
     # Iterate over every (atb_scenario, model_case) so that the final CSV holds
@@ -630,6 +632,7 @@ if __name__ == "__main__":
         snakemake.input.efs_icev_costs,
         snakemake.input.eia_tech_costs,
         tech_year,
+        dollar_year,
         snakemake.input.additional_costs,
     )
     sector_costs.to_csv(snakemake.output.sector_costs, index=False)

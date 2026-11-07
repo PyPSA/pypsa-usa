@@ -155,6 +155,7 @@ links:
   max_extension: 20000
 
 costs:
+  dollar_year: 2023  # base dollar year; required by build_cost_data and add_sectors (money.py). Mirrors config.default.yaml.
   ng_fuel_year: 2019
   # Required by build_cost_data on both branches: without it the script falls
   # back to "Reference" (capital R), which matches zero rows in PUDL's
