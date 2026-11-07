@@ -685,10 +685,10 @@ if __name__ == "__main__":
     # biomass power with carbon capture draws biomass from the state, at the fuel
     # cost of the electricity only model; the CO2 it removes counts towards the power
     # sector, whose emissions may then be net negative
-    if (n.generators.carrier == "biomass-CCS").any():
+    if (n.generators.carrier == "biomass-95CCS").any():
         add_sector_foundation(n, "biomass", False, costs, center_points)
-        add_biomass_supply(n, get_period_fuel_price(n, "biomass", costs_by_year, "biomass-CCS"))
-        convert_generators_2_links(n, "biomass-CCS", " biomass", -BECCS_CO2_REMOVAL)
+        add_biomass_supply(n, get_period_fuel_price(n, "biomass", costs_by_year, "biomass-95CCS"))
+        convert_generators_2_links(n, "biomass-95CCS", " biomass", -BECCS_CO2_REMOVAL)
         n.stores.loc[n.stores.index.str.endswith(" pwr-co2"), "e_min_pu"] = -1
 
     ng_options = snakemake.params.sector["natural_gas"]

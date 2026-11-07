@@ -27,10 +27,10 @@ NG_MWH_2_MMCF = 303.5  # MWh / MMCF
 # $/MMBtu * (1 MMBtu / 0.293 MWh) = $/MWh_thermal
 NG_Dol_MMBTU_2_MWH = 3.4129
 
-# CO2 removed by biomass power with carbon capture (biomass-CCS) per MWh of biomass:
-# ReEDS inputs/emission_constraints/emitrate.csv gives beccs_mod a process CO2 of
-# -0.06 t/MMBtu, all of it captured (the biogenic CO2 burnt is taken up again by the feedstock)
-BECCS_CO2_REMOVAL = 0.06 * 3.412  # tCO2/MWh_th
+# CO2 removed by biomass power with 95% carbon capture (biomass-95CCS) per MWh of biomass:
+# Sargent & Lundy for the EIA (2024), Case 8, captures 95% of a base CO2 rate of 206 lb/MMBtu
+# (40 CFR 98 Subpart C, Table C-1); the biogenic CO2 burnt is taken up again by the feedstock
+BECCS_CO2_REMOVAL = 206 * 0.95 * 0.45359237 / 1000 * 3.412  # tCO2/MWh_th
 
 # underground gas storage charge (injection) capacity as a share of its discharge
 # (withdrawal) capacity. EIA-191 reports only the maximum daily delivery, so the

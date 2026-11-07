@@ -139,7 +139,6 @@ rule build_cost_data:
         eia_tech_costs="repo_data/costs/eia_tech_costs.csv",
         egs_costs="repo_data/costs/egs_costs.csv",
         additional_costs="repo_data/costs/additional_costs.csv",
-        beccs_reference="repo_data/costs/reeds_beccs_reference.csv",
     output:
         tech_costs=COSTS + "costs_{year}.csv",
         sector_costs=COSTS + "sector_costs_{year}.csv",

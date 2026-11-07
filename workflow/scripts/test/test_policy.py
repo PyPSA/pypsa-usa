@@ -660,8 +660,8 @@ def test_portfolio_standard_carriers_are_model_carriers():
     from constants import ATB_TECH_MAPPER
     from opts.policy import CES_CARRIERS, RPS_CARRIERS
 
-    # ATB technologies, plus the hydrogen turbine build_cost_data derives from the gas turbine
-    model_carriers = set(ATB_TECH_MAPPER) | {"hydrogen_ct"}
+    # ATB technologies, plus the carriers build_cost_data derives from the gas turbine and the biomass plant
+    model_carriers = set(ATB_TECH_MAPPER) | {"hydrogen_ct", "biomass-95CCS"}
     assert set(RPS_CARRIERS) <= model_carriers
     assert set(CES_CARRIERS) <= model_carriers
     assert {"CCGT-95CCS", "CCGT-97CCS", "coal-95CCS", "coal-99CCS"} <= set(CES_CARRIERS)

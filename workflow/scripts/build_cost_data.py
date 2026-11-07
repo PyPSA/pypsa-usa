@@ -13,7 +13,7 @@ from build_sector_costs import (
     EiaBuildingData,
 )
 from eia import ProjectedFuelCost
-from money import deflator, dollar_year_from_config, parse_unit_year
+from money import deflator, dollar_year_from_config, parse_unit_year, to_dollars
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ LIFETIME_DATA = [
     {"pypsa-name": "coal-99CCS", "parameter": "lifetime", "value": 70},
     {"pypsa-name": "SMR", "parameter": "lifetime", "value": 40},
     {"pypsa-name": "nuclear", "parameter": "lifetime", "value": 60},
-    {"pypsa-name": "biomass", "parameter": "lifetime", "value": 30},
+    {"pypsa-name": "biomass", "parameter": "lifetime", "value": 45},
     {"pypsa-name": "offwind_floating", "parameter": "lifetime", "value": 30},
     {"pypsa-name": "offwind", "parameter": "lifetime", "value": 30},
     {"pypsa-name": "onwind", "parameter": "lifetime", "value": 30},
@@ -305,9 +305,17 @@ TRANSMISSION_DATA = [
 # Technologies paying the ATB fuel cost of their scenario rather than an AEO price
 ATB_FUEL_CARRIERS = ["nuclear", "SMR", "biomass"]
 
-# Biomass power with carbon capture: repo_data/costs/reeds_beccs_reference.csv holds
-# the "beccs_mod" rows of ReEDS inputs/plant_characteristics/beccs_reference.csv, in 2010 USD
-USD_2010_2_USD_2023 = 304.703 / 218.076  # CPI-U annual mean (FRED CPIAUCSL), 2023 / 2010
+# Biomass power with 95% carbon capture: Case 8 of Sargent & Lundy for the EIA, Capital Cost
+# and Performance Characteristic Estimates for Utility Scale Electric Power Generating
+# Technologies (2024), a 50 MW bubbling fluidized bed burning wood chips with amine capture.
+# https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2025.pdf
+BECCS_DOLLAR_YEAR = 2023
+BECCS_DATA = {
+    "capcost": 12631.0,  # USD/kW; with owner's costs, land and grid connection, without CO2 transport and storage
+    "fom": 261.18,  # USD/kW-year
+    "vom": 9.65,  # USD/MWh
+    "heatrate": 19.965,  # MMBtu/MWh, HHV
+}
 
 ATB_VALUE_COLS = [
     "cost_recovery_period_years",
@@ -410,39 +418,37 @@ def complete_atb_slice(pudl_atb_year: pd.DataFrame, atb_scenario: str, atb_model
     return sub
 
 
-def get_beccs_reference(beccs_reference: str, year: int) -> pd.Series:
-    """
-    ReEDS BECCS costs and heat rate of ``year``, in 2023 USD.
-
-    Overnight capital cost (USD/kW), fixed O&M (USD/kW-year), variable O&M
-    (USD/MWh) and heat rate (MMBtu/MWh) of the ReEDS ``beccs_mod`` plant,
-    linearly interpolated between the ReEDS years and held constant outside them.
-    """
-    df = pd.read_csv(beccs_reference, index_col="t").sort_index()
-    data = df[["capcost", "fom", "vom", "heatrate"]].apply(lambda x: float(np.interp(year, x.index, x)))
-    data[["capcost", "fom", "vom"]] *= USD_2010_2_USD_2023
+def get_beccs_data(dollar_year: int) -> pd.Series:
+    """``BECCS_DATA`` with its costs in US dollars of ``dollar_year``."""
+    data = pd.Series(BECCS_DATA)
+    costs = ["capcost", "fom", "vom"]
+    data[costs] = to_dollars(data[costs], year=BECCS_DOLLAR_YEAR, to_year=dollar_year)
     return data
 
 
 def build_beccs(pivot_atb: pd.DataFrame, beccs: pd.Series) -> pd.DataFrame:
     """
-    Biomass power with carbon capture (biomass-CCS) from dedicated biomass power (ATB Biopower).
+    Biomass power with 95% carbon capture (biomass-95CCS) from dedicated biomass power (ATB Biopower).
 
-    It takes the capital cost, O&M and heat rate of the ReEDS BECCS plant
-    (``get_beccs_reference``) and the rest of the biomass plant: its fuel cost
-    per MWh of biomass, grid connection, financing, cost recovery period and
-    lifetime. The ReEDS capital cost is an overnight cost; the construction
-    financing cost of biomass (``capex_construction_finance_factor``, USD/kW in
-    the ATB) is added to it as it is, like the grid connection.
+    It takes the capital cost, O&M and heat rate of ``get_beccs_data`` and the rest
+    of the biomass plant: its fuel cost per MWh of biomass, WACC, lifetime, cost
+    recovery period and construction financing. The capital cost is an overnight cost that already
+    holds the grid connection. The construction financing cost
+    (``capex_construction_finance_factor``, USD/kW in the ATB) keeps its share of
+    the overnight and grid connection costs of biomass.
     Every MWh of biomass burnt removes ``constants.BECCS_CO2_REMOVAL`` of CO2.
     """
     df = pivot_atb[pivot_atb["pypsa-name"] == "biomass"].copy()
     if df.empty:
         return df
-    df["pypsa-name"] = "biomass-CCS"
-    grid = df["capex_grid_connection_per_kw"].fillna(0)
+    df["pypsa-name"] = "biomass-95CCS"
+    financing_share = df["capex_construction_finance_factor"] / (
+        df["capex_overnight_per_kw"] + df["capex_grid_connection_per_kw"].fillna(0)
+    )
     df["capex_overnight_per_kw"] = beccs.capcost
-    df["capex_per_kw"] = df["capex_overnight_per_kw"] + grid + df["capex_construction_finance_factor"]
+    df["capex_grid_connection_per_kw"] = 0.0
+    df["capex_construction_finance_factor"] = financing_share * beccs.capcost
+    df["capex_per_kw"] = df["capex_overnight_per_kw"] + df["capex_construction_finance_factor"]
     df["opex_fixed_per_kw"] = beccs.fom
     df["opex_variable_per_mwh"] = beccs.vom
     df["heat_rate_mmbtu_per_mwh"] = beccs.heatrate
@@ -460,8 +466,8 @@ def process_atb_scenario(
     """Run the full cost pipeline for one (atb_scenario, model_case) slice.
 
     Concatenates static data (emissions, transmission, lifetime, AEO fuels), takes the
-    ATB fuel costs of nuclear, SMR and biomass, derives biomass-CCS from ``beccs``
-    (``get_beccs_reference``) if given, pivots,
+    ATB fuel costs of nuclear, SMR and biomass, derives biomass-95CCS from ``beccs``
+    (``get_beccs_data``) if given, pivots,
     derives hydrogen_ct, marginal cost, annualized capex etc., and returns a long-form
     DataFrame with columns [pypsa-name, parameter, value] for this scenario+case.
     """
@@ -647,8 +653,8 @@ if __name__ == "__main__":
         dollar_year,
     )
 
-    # BECCS costs of ReEDS, independent of ATB scenario / case
-    beccs = get_beccs_reference(snakemake.input.beccs_reference, tech_year)
+    # BECCS costs and performance, independent of ATB scenario / case
+    beccs = get_beccs_data(dollar_year)
 
     # Iterate over every (atb_scenario, model_case) so that the final CSV holds
     # the entire ATB scenario grid; downstream selects the correct slice via

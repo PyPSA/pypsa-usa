@@ -37,7 +37,7 @@ POWER_FUEL_CARRIERS = [
     "nuclear",
     "SMR",
     "biomass",
-    "biomass-CCS",
+    "biomass-95CCS",
 ]
 
 
@@ -59,13 +59,13 @@ def add_co2_emissions(n, costs, carriers):
     if any("CCS" in carrier for carrier in carriers):
         ccs_carriers = [carrier for carrier in carriers if "CCS" in carrier]
         for ccs_carrier in ccs_carriers:
-            ccs_level = ccs_carrier.split("-")[1].replace("CCS", "")
-            if not ccs_level:  # no capture level in the name (biomass-CCS): emissions of the cost data
+            if ccs_carrier.startswith("biomass"):  # biomass has no base emissions: the removal of the cost data
                 n.carriers.loc[ccs_carrier, "co2_emissions"] = costs.at[ccs_carrier, "co2_emissions"]
                 continue
             base_carrier = ccs_carrier.split("-")[0]
             base_emissions = n.carriers.loc[base_carrier, "co2_emissions"]
-            ccs_emissions = (1 - int(ccs_level) / 100) * base_emissions
+            ccs_level = int(ccs_carrier.split("-")[1].replace("CCS", ""))
+            ccs_emissions = (1 - ccs_level / 100) * base_emissions
             n.carriers.loc[ccs_carrier, "co2_emissions"] = ccs_emissions
 
 
