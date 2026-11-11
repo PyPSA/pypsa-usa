@@ -390,8 +390,10 @@ def add_service_cooling(
         heat_systems = ["total"]
         _format_total_load(n, sector, "cool")
 
-    air_con_extendable = technologies.get("air_con", True)
-    hp_extendable = technologies.get("heat_pump", True)
+    # the cooling switches live next to the heating ones, under `space_heating`
+    space_heating_techs = technologies.get("space_heating", {})
+    air_con_extendable = space_heating_techs.get("air_con", True)
+    hp_extendable = space_heating_techs.get("heat_pump", True)
 
     # add cooling technologies
     for heat_system in heat_systems:
