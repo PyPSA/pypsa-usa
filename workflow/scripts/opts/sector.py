@@ -1,6 +1,7 @@
 import logging  # noqa: D100
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
@@ -208,6 +209,37 @@ def add_sector_co2_constraints(n, config):
                         apply_state_limit(n, year, state, value, sector)
 
 
+def _link_capacity(n: pypsa.Network, links: pd.Index, names: pd.Index):
+    """
+    Nominal capacity of ``links``, labelled by ``names`` on the link dimension.
+
+    An extendable link contributes its ``Link-p_nom`` variable; a link with a fixed
+    capacity contributes its ``p_nom`` as a constant. Fixed capacities are normal in
+    a sector run: ``heat_pump: false`` builds non-extendable heat pumps, and under
+    myopic foresight ``solve_network.freeze_prior_periods`` fixes every asset built
+    in an earlier horizon, so ``Link-p_nom`` cannot be indexed by those links.
+
+    Relabelling by ``names`` puts the capacities of two different sets of links (a
+    heat pump and its cooling twin, say) on one shared coordinate, so that they
+    combine by label and never by position.
+
+    Returns a ``linopy.LinearExpression``, or a plain ``xr.DataArray`` when none of
+    the links is extendable.
+    """
+    dim = n.model.variables["Link-p"].dims[-1]
+    extendable = n.links.loc[links, "p_nom_extendable"].to_numpy(dtype=bool)
+    fixed = xr.DataArray(
+        np.where(extendable, 0.0, n.links.loc[links, "p_nom"].to_numpy(dtype=float)),
+        dims=[dim],
+        coords={dim: names.to_numpy()},
+    )
+    if not extendable.any():
+        return fixed
+
+    variable = n.model["Link-p_nom"].loc[links[extendable]].assign_coords({dim: names[extendable].to_numpy()})
+    return variable.to_linexpr().reindex({dim: names.to_numpy()}) + fixed
+
+
 def add_cooling_heat_pump_constraints(n, config):
     """
     Adds constraints to the cooling heat pumps.
@@ -226,81 +258,105 @@ def add_cooling_heat_pump_constraints(n, config):
 
     Cooling HPs are named after the heating HP they are derived from, with a ``-cool``
     suffix (``build_heat.add_service_heat_pumps_cooling``).
+
+    A heat pump may be extendable or have a fixed capacity (see ``_link_capacity``).
+    A fixed capacity enters the constraints as a constant. A pair in which both
+    capacities are fixed needs no capacity equality, but its dispatch is still held
+    to the shared limit.
+
+    Raises
+    ------
+    ValueError
+        If a heating heat pump has no ``-cool`` twin, a ``-cool`` link has no heating
+        heat pump, or both capacities of a pair are fixed to different values.
     """
+    link_dim = n.model.variables["Link-p"].dims[-1]
+    snapshots = n.model.variables["Link-p"].indexes["snapshot"]
 
     def get_hp_pairs(n, hp_type):
         """
         Heating heat pump links and their cooling twins, in matching order.
 
         ``build_heat.add_service_heat_pumps_cooling`` names each cooling link after
-        its heating link with a ``-cool`` suffix. Deriving the cooling names from the
-        heating ones (rather than filtering ``n.links`` a second time) guarantees the
-        two indices line up element by element, which is what the constraints below
-        rely on: linopy combines two variable selections by position, not by label.
+        its heating link with a ``-cool`` suffix, so the cooling names are derived
+        from the heating ones. Matching on ``-{hp_type}`` keeps brownfield units
+        (``...-ashp-existing``), which have no cooling twin, out of the selection.
         """
-        heating_hps = n.links[n.links.index.str.endswith(hp_type)].index
+        heating_hps = n.links.index[n.links.index.str.endswith(f"-{hp_type}")]
         cooling_hps = pd.Index([f"{x}-cool" for x in heating_hps], name=heating_hps.name)
+        actual_cooling = n.links.index[n.links.index.str.endswith(f"-{hp_type}-cool")]
+
+        missing = cooling_hps.difference(actual_cooling)
+        unmatched = actual_cooling.difference(cooling_hps)
+        if not missing.empty or not unmatched.empty:
+            raise ValueError(
+                f"Unpaired {hp_type} heat pumps. Cooling links missing: {missing.tolist()}. "
+                f"Cooling links without a heating heat pump: {unmatched.tolist()}.",
+            )
         return heating_hps, cooling_hps
 
-    def get_cop(n, links):
+    def get_cop(n, links, names):
         """
-        COP profiles of ``links`` as a (snapshot, link) array on the model's index.
+        COP profiles of ``links`` as a (snapshot, link) array labelled by ``names``.
 
         ``n.links_t["efficiency"]`` is indexed by the snapshots MultiIndex, whose
-        ``period``/``timestep`` levels do not broadcast onto a variable that has no
-        snapshot dimension (``Link-p_nom``). Building the array on the model's own
-        snapshot index keeps both sides of the constraint aligned, and follows the
-        model when it is built over a subset of the snapshots.
+        ``period``/``timestep`` levels do not broadcast onto a capacity that has no
+        snapshot dimension. Building the array on the model's own snapshot index
+        keeps both sides of the constraint aligned, and follows the model when it is
+        built over a subset of the snapshots (a myopic horizon).
         """
-        snapshots = n.model.variables["Link-p"].indexes["snapshot"]
-        link_dim = n.model.variables["Link-p_nom"].dims[0]
-        cop = n.links_t["efficiency"].reindex(index=snapshots)[links]
+        cop = n.get_switchable_as_dense("Link", "efficiency", snapshots=snapshots, inds=links)[links]
         return xr.DataArray(
             cop.to_numpy(),
             dims=("snapshot", link_dim),
-            coords={"snapshot": snapshots, link_dim: links},
+            coords={"snapshot": snapshots, link_dim: names.to_numpy()},
         )
 
-    def add_hp_capacity_constraint(n, hp_type):
-        assert hp_type in ("ashp", "gshp")
+    def add_hp_capacity_constraint(n, hp_type, heating_hps, cooling_hps):
+        heating_extendable = n.links.loc[heating_hps, "p_nom_extendable"].to_numpy(dtype=bool)
+        cooling_extendable = n.links.loc[cooling_hps, "p_nom_extendable"].to_numpy(dtype=bool)
+        any_extendable = heating_extendable | cooling_extendable
 
-        heating_hps, cooling_hps = get_hp_pairs(n, hp_type)
-        if heating_hps.empty:
+        # Both capacities fixed: nothing to optimize, but they must already agree.
+        # The tolerance absorbs solver noise in a p_nom_opt frozen by a myopic run.
+        heating_p_nom = n.links.loc[heating_hps, "p_nom"].to_numpy(dtype=float)
+        cooling_p_nom = n.links.loc[cooling_hps, "p_nom"].to_numpy(dtype=float)
+        unequal = ~any_extendable & ~np.isclose(heating_p_nom, cooling_p_nom, rtol=1e-3, atol=1e-3)
+        if unequal.any():
+            raise ValueError(
+                f"Fixed heating and cooling capacities differ for {hp_type} heat pumps: "
+                f"{heating_hps[unequal].tolist()}",
+            )
+        if not any_extendable.any():
             return
 
-        assert cooling_hps.isin(n.links.index).all()
+        pairs = heating_hps[any_extendable]
+        heating_capacity = _link_capacity(n, pairs, pairs)
+        cooling_capacity = _link_capacity(n, cooling_hps[any_extendable], pairs)
 
-        lhs = n.model["Link-p_nom"].loc[heating_hps] - n.model["Link-p_nom"].loc[cooling_hps]
-        rhs = 0
+        n.model.add_constraints(
+            heating_capacity - cooling_capacity == 0,
+            name=f"Link-{hp_type}_cooling_capacity",
+        )
 
-        n.model.add_constraints(lhs == rhs, name=f"Link-{hp_type}_cooling_capacity")
-
-    def add_hp_generation_constraint(n, hp_type):
-        heating_hps, cooling_hps = get_hp_pairs(n, hp_type)
-        if heating_hps.empty:
-            return
-
+    def add_hp_generation_constraint(n, hp_type, heating_hps, cooling_hps):
         heating_hp_p = n.model["Link-p"].loc[:, heating_hps]
-        cooling_hp_p = n.model["Link-p"].loc[:, cooling_hps]
+        cooling_hp_p = n.model["Link-p"].loc[:, cooling_hps].assign_coords({link_dim: heating_hps.to_numpy()})
 
-        heating_hps_cop = get_cop(n, heating_hps)
-        cooling_hps_cop = get_cop(n, cooling_hps)
+        heating_hps_cop = get_cop(n, heating_hps, heating_hps)
+        cooling_hps_cop = get_cop(n, cooling_hps, heating_hps)
 
-        heating_hps_gen = heating_hp_p.mul(heating_hps_cop)
-        cooling_hps_gen = cooling_hp_p.mul(cooling_hps_cop)
-
-        lhs = heating_hps_gen + cooling_hps_gen
-
-        heating_hp_p_nom = n.model["Link-p_nom"].loc[heating_hps]
-        max_gen = heating_hp_p_nom.mul(heating_hps_cop)
-
-        rhs = max_gen
+        lhs = heating_hp_p.mul(heating_hps_cop) + cooling_hp_p.mul(cooling_hps_cop)
+        rhs = _link_capacity(n, heating_hps, heating_hps) * heating_hps_cop
 
         n.model.add_constraints(lhs <= rhs, name=f"Link-{hp_type}_cooling_generation")
 
     for hp_type in ("ashp", "gshp"):
-        add_hp_capacity_constraint(n, hp_type)
-        add_hp_generation_constraint(n, hp_type)
+        heating_hps, cooling_hps = get_hp_pairs(n, hp_type)
+        if heating_hps.empty:
+            continue
+        add_hp_capacity_constraint(n, hp_type, heating_hps, cooling_hps)
+        add_hp_generation_constraint(n, hp_type, heating_hps, cooling_hps)
 
 
 def add_gshp_capacity_constraint(n, config, snakemake):
@@ -316,26 +372,45 @@ def add_gshp_capacity_constraint(n, config, snakemake):
     - We want to enforce that at max, only 0.33 unit of GSHP can be installed for every unit of ASHP
     - The constraint is: [ASHP - (urban / rural) * GSHP >= 0]
     - ie. for every unit of GSHP, we need to install 3 units of ASHP
+
+    Each GSHP is paired by name with the ASHP at the same node and sector. A pair
+    whose capacities are both fixed (``heat_pump: false``, or frozen by an earlier
+    myopic horizon) has nothing left to constrain and is skipped.
     """
     pop = pd.read_csv(snakemake.input.pop_layout)
     pop["urban_rural_fraction"] = (pop.urban_fraction / pop.rural_fraction).round(2)
     fraction = pop.set_index("name")["urban_rural_fraction"].to_dict()
 
-    ashp = n.links[n.links.index.str.endswith("ashp")].copy()
-    gshp = n.links[n.links.index.str.endswith("gshp")].copy()
+    gshp = n.links[n.links.index.str.endswith("-gshp")].copy()
     if gshp.empty:
         return
 
-    assert len(ashp) == len(gshp)
+    ashp_names = pd.Index(gshp.index.str.removesuffix("-gshp") + "-ashp", name=gshp.index.name)
+    missing = ashp_names.difference(n.links.index)
+    if not missing.empty:
+        raise ValueError(f"Ground source heat pumps without an air source heat pump: {missing.tolist()}")
+
+    extendable = n.links.loc[ashp_names, "p_nom_extendable"].to_numpy(dtype=bool) | gshp["p_nom_extendable"].to_numpy(
+        dtype=bool
+    )
+    if not extendable.any():
+        return
+    gshp = gshp[extendable]
+    ashp_names = ashp_names[extendable]
 
     gshp["node"] = gshp.bus0.str.split(" ").str[0]
     gshp["urban_rural_fraction"] = gshp.node.map(fraction)
 
-    ashp_capacity = n.model["Link-p_nom"].loc[ashp.index]
-    gshp_capacity = n.model["Link-p_nom"].loc[gshp.index]
-    gshp_multiplier = gshp["urban_rural_fraction"]
+    ashp_capacity = _link_capacity(n, ashp_names, gshp.index)
+    gshp_capacity = _link_capacity(n, gshp.index, gshp.index)
+    link_dim = n.model.variables["Link-p"].dims[-1]
+    gshp_multiplier = xr.DataArray(
+        gshp["urban_rural_fraction"].to_numpy(dtype=float),
+        dims=[link_dim],
+        coords={link_dim: gshp.index.to_numpy()},
+    )
 
-    lhs = ashp_capacity - gshp_capacity.mul(gshp_multiplier.values)
+    lhs = ashp_capacity - gshp_capacity * gshp_multiplier
     rhs = 0
 
     n.model.add_constraints(lhs >= rhs, name="Link-gshp_capacity_ratio")
