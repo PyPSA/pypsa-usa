@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 import shapely
-from constants import CODE_2_STATE, HOURS_PER_YEAR, STATE_2_CODE, STATES_INTERCONNECT_MAPPER
+from constants import CODE_2_STATE, HOURS_PER_YEAR, STATES_INTERCONNECT_MAPPER
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +67,8 @@ def build_hydrogen(
     storage_sites_path: str
         ``repo_data/hydrogen/h2_storage_sites.gpkg``
     gas_pipelines: pd.DataFrame
-        State to state natural gas pipelines ('STATE_FROM', 'STATE_TO'), see
-        ``get_gas_pipelines``
+        State to state natural gas pipelines ('STATE_FROM', 'STATE_TO'), as the
+        natural gas sector builds them (``build_natural_gas.InterconnectGasPipelineCapacity``)
     states_geometry: gpd.GeoDataFrame
         State boundaries with a 'STATE' column
     center_points: pd.DataFrame
@@ -363,7 +363,7 @@ def get_pipeline_routes(n: pypsa.Network, states: list[str], gas_pipelines: pd.D
 
     AC transmission: a line, or a link of carrier 'AC' (transport models), between
     AC buses of the two states in the network. DC links do not count.
-    Gas: a pipeline between the two states in ``gas_pipelines`` (``get_gas_pipelines``).
+    Gas: a pipeline between the two states in ``gas_pipelines``.
     """
     ac_state = n.buses.loc[n.buses.carrier == "AC", "STATE"]
     branches = pd.concat([n.lines[["bus0", "bus1"]], n.links.loc[n.links.carrier == "AC", ["bus0", "bus1"]]])
@@ -378,22 +378,6 @@ def get_pipeline_routes(n: pypsa.Network, states: list[str], gas_pipelines: pd.D
         f"{len(gas)} along natural gas pipelines",
     )
     return routes
-
-
-def get_gas_pipelines(path: str) -> pd.DataFrame:
-    """
-    State to state natural gas pipelines with capacity in the latest year of the
-    EIA state to state capacity data, as used by the natural gas sector.
-    """
-    df = pd.read_excel(path, sheet_name="Pipeline State2State Capacity", skiprows=1, index_col=0)
-    df.columns = df.columns.str.strip()
-    df = df[(df.index == df.index.max()) & (df["Capacity (mmcfd)"] > 0)]
-    return pd.DataFrame(
-        {
-            "STATE_FROM": df["State From"].astype(str).str.strip().map(STATE_2_CODE),
-            "STATE_TO": df["State To"].astype(str).str.strip().map(STATE_2_CODE),
-        },
-    )
 
 
 def _state_pairs(a: pd.Series, b: pd.Series, states: list[str]) -> set[tuple[str, str]]:

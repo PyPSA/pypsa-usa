@@ -18,8 +18,8 @@ from add_extra_components import add_co2_network, add_co2_storage, add_dac
 from build_electricity_sector import build_electricty
 from build_emission_tracking import build_ch4_tracking, build_co2_tracking
 from build_heat import build_heat
-from build_hydrogen import build_hydrogen, get_gas_pipelines
-from build_natural_gas import StateGeometry, build_natural_gas
+from build_hydrogen import build_hydrogen
+from build_natural_gas import InterconnectGasPipelineCapacity, StateGeometry, build_natural_gas
 from build_stock_data import (
     add_industrial_brownfield,
     add_road_transport_brownfield,
@@ -948,7 +948,13 @@ if __name__ == "__main__":
             costs=costs_by_year,
             demand_path=snakemake.input.h2_demand,
             storage_sites_path=snakemake.input.h2_storage_sites,
-            gas_pipelines=get_gas_pipelines(snakemake.input.pipeline_capacity),
+            # the natural gas pipelines between states, as the natural gas sector builds them
+            gas_pipelines=InterconnectGasPipelineCapacity(
+                sns[0].year,
+                snakemake.wildcards.interconnect,
+                snakemake.input.pipeline_capacity,
+                eia_api,
+            ).data,
             states_geometry=state_geometry.states,
             center_points=center_points,
             options=snakemake.params.sector["hydrogen"],

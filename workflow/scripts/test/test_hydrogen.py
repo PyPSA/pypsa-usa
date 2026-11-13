@@ -21,7 +21,6 @@ from build_hydrogen import (
     add_retrofitted_pipelines,
     add_retrofitted_storage,
     build_hydrogen,
-    get_gas_pipelines,
     get_pipeline_routes,
     get_storage_types,
     read_geopackage,
@@ -226,23 +225,6 @@ def test_pipeline_routes_follow_transmission_and_gas_pipelines():
 
     # NV-CA is joined both ways, but is one route
     assert routes == [("AZ", "UT"), ("CA", "NV"), ("CA", "OR")]
-
-
-def test_gas_pipelines_of_the_latest_eia_year(monkeypatch):
-    eia_table = pd.DataFrame(
-        {
-            "State From": ["Nevada", "Oregon ", "Gulf of Mexico", "Utah", "Arizona"],
-            "State To": ["California", "California", "Arizona", "Nevada", "Nevada"],
-            "Capacity (mmcfd) ": [50.0, 80.0, 10.0, 30.0, 0.0],
-        },
-        index=pd.Index([2023, 2023, 2023, 2022, 2023], name="year"),
-    )
-    monkeypatch.setattr(pd, "read_excel", lambda *args, **kwargs: eia_table.copy())
-
-    gas = get_gas_pipelines("EIA-StatetoStateCapacity.xlsx")
-
-    # the 2022 pipeline and the one without capacity are dropped; the Gulf of Mexico is no state
-    assert gas.fillna("").values.tolist() == [["NV", "CA"], ["OR", "CA"], ["", "AZ"]]
 
 
 def test_demand_is_interpolated_and_spread_over_the_year(network, demand, storage_sites):
