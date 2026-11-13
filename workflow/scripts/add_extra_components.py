@@ -9,7 +9,7 @@ import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging, load_costs, log_network_schema
 from add_electricity import add_missing_carriers
-from constants import BECCS_CO2_REMOVAL, HOURS_PER_YEAR
+from constants import BECCS_CO2_REMOVAL, HOURS_PER_YEAR, RETROFITS
 from external_regions import (
     add_external_regions,
     convert_flowgates_to_state,
@@ -40,9 +40,6 @@ POWER_FUEL_CARRIERS = [
     "biomass",
     "biomass-95CCS",
 ]
-
-# technologies existing gas plants can be retrofitted to, and the plants they are retrofitted from
-RETROFITS = {"OCHT": "OCGT", "CCHT": "CCGT", "CCGT-90CCS": "CCGT"}
 
 
 def add_co2_emissions(n, costs, carriers):
