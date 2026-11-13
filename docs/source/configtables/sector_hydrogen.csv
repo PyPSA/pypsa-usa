@@ -2,9 +2,9 @@
 hydrogen,,,"Options of the hydrogen sector, enabled by ``H`` in the ``sector`` wildcard (``E-H``, ``E-G-H``)"
 -- demand_scenario,--,"{central, current policy, baseline}",EER ADP 2024 scenario of the exogenous non-power hydrogen demand. The national totals are listed in ``config.sector.yaml``.
 -- production,--,"list of {h2_electrolysis, h2_smr, h2_smr_ccs}",New hydrogen production that can be built.
--- pipelines,--,bool,Allow new hydrogen pipelines between states joined by AC transmission in the network or by a natural gas pipeline (EIA state to state capacity).
+-- pipelines,--,bool,Allow new hydrogen pipelines between states already connected by AC transmission or natural gas pipelines.
 -- storage,--,bool,"Allow new underground hydrogen storage, in salt caverns, hard rock caverns or underground pipes depending on the state's geology."
 -- pipeline_length_factor,--,float {>0},Route length of a new pipeline over the distance between the state centers.
--- retrofit,,,"Natural gas infrastructure retrofitted to hydrogen in the first investment period, with the natural gas sector (``E-G-H``). What is retrofitted is taken from the natural gas capacity, so the retrofitted parts always contract (``natural_gas: infra_contraction``)."
+-- retrofit,,,"Natural gas infrastructure retrofitted to hydrogen in the first investment period, with the natural gas sector (``E-G-H``). The model optimizes how much of the existing capacity to retrofit, from zero to all. What is retrofitted is taken from the natural gas capacity, so the parts that can be retrofitted always contract (``natural_gas: infra_contraction``)."
 -- -- storage,--,bool,"Allow retrofitting salt dome, depleted field and aquifer gas storage. With ``natural_gas: storage_aggregation: state``, a state's storage takes the mean costs and conversion factors of its formations."
 -- -- pipelines,--,bool,Allow retrofitting the natural gas pipelines between states.

@@ -13,10 +13,13 @@ Hydrogen can be produced by the technologies listed in `sector: hydrogen: produc
 - steam methane reforming without (`h2_smr`) or with carbon capture (`h2_smr_ccs`), at every AC
   bus, drawing gas from the state gas bus and electricity from the AC bus.
 
-It can be stored underground in each state (`storage`; a store that keeps 30% of its capacity as
-cushion gas, with separately sized injection and withdrawal) and piped between states joined by
-AC transmission or by a natural gas pipeline
-(`pipelines`). The hydrogen turbines (`OCHT`, `CCHT`) are generators burning a drop-in fuel when
+It can be stored underground in each state (`storage`) and piped between states already
+connected by AC transmission or natural gas pipelines (`pipelines`). New
+storage is a salt cavern where the state overlaps the salt sites of ReEDS, else a hard rock cavern
+where it overlaps the hard rock sites, else an underground pipe. New storage is separate from
+the existing natural gas storage, which holds hydrogen only when retrofitted (below). Every store keeps 30% of its capacity as cushion gas
+([EIA AEO2026 HMM Assumptions](https://www.eia.gov/outlooks/aeo/assumptions/pdf/HMM_Assumptions.pdf),
+Table 6), with separately sized injection and withdrawal. The hydrogen turbines (`OCHT`, `CCHT`) are generators burning a drop-in fuel when
 the hydrogen sector is off, extendable when listed in `electricity: extendable_carriers` (`OCHT`
 by default); with it, they draw from the state hydrogen bus. Existing OCGT and CCGT can also be
 retrofitted to them (`electricity: retrofit`, see {ref}`data-costs`). Hydrogen capacity is new,
@@ -36,9 +39,10 @@ storage and pipelines to hydrogen. The natural gas infrastructure is sized once 
 periods, so it is retrofitted in the first one.
 
 - `storage`: salt dome, depleted field and aquifer reservoirs. A retrofitted share of a reservoir
-  holds 0.2551 times its natural gas energy as hydrogen, with the same cushion share, and its
-  wells withdraw 0.8 (salt domes) or 0.4 (depleted fields and aquifers) times their natural gas
-  rate: the hydrogen withdrawal takes the share of the gas withdrawal that the hydrogen energy
+  holds 0.2551 times its natural gas energy as hydrogen ([Lackey et al., 2023](https://doi.org/10.1029/2022GL101420)), with the same cushion
+  share, and its wells withdraw 0.8 (salt domes, assuming turbulent flow through the wells) or 0.4
+  (depleted fields and aquifers, [Amid et al., 2016](https://doi.org/10.1016/j.ijhydene.2016.02.036))
+  times their natural gas rate: the hydrogen withdrawal takes the share of the gas withdrawal that the hydrogen energy
   takes of the gas energy. New compressors inject the hydrogen through these wells, at most at
   the hydrogen withdrawal rate; the gas left injects at most at its own withdrawal rate. With the
   gas storage aggregated by state
@@ -46,7 +50,9 @@ periods, so it is retrofitted in the first one.
   conversion factors and costs of its formations, weighted by their working gas (energy, store)
   or their withdrawal (rates, injection and withdrawal).
 - `pipelines`: each natural gas pipeline between states can carry 0.6 times its natural gas
-  capacity as hydrogen, in either direction, losing as much along the way as a new hydrogen
+  capacity as hydrogen
+  ([European Hydrogen Backbone, 2020](https://gasforclimate2050.eu/wp-content/uploads/2020/07/2020_European-Hydrogen-Backbone_Report.pdf)),
+  in either direction, losing as much along the way as a new hydrogen
   pipeline.
 
 What is retrofitted is taken from the natural gas capacity: the gas capacity left plus the
