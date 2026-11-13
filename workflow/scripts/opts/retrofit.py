@@ -35,7 +35,7 @@ def _retrofits(static: pd.DataFrame) -> pd.DataFrame:
     return static[static.retrofit_from.fillna("") != ""]
 
 
-def _identity(names, dim: str) -> pd.Series:
+def _identity(names: pd.Index, dim: str) -> pd.Series:
     """Groups components by their own name, as ``dim``."""
     return pd.Series(names, index=pd.Index(names, name="name"), name=dim)
 
@@ -66,19 +66,24 @@ def add_retrofit_constraints(n: pypsa.Network) -> None:
         static = n.components[component].static
         retrofits = _retrofits(static)
         own = static.index.intersection(originals)
+        # the original of each retrofit, and of each original itself
         original = pd.concat([retrofits.retrofit_from, _identity(own, "original")]).rename("original")
         if original.empty:
             continue
         units = static.loc[original.index]
+        # generators count by fuel input
         scale = 1 / units.efficiency if component == "Generator" else pd.Series(1.0, index=units.index)
+        # retrofits count by capacity / retrofit_factor, originals by capacity
         factor = units.retrofit_factor.where(units.index.isin(retrofits.index), 1) if "retrofit_factor" in units else 1
 
         extendable = units.index[units[f"{attr}_extendable"]]
         own_extendable = extendable.intersection(own)
+        # the existing capacity is the original's upper bound
         existing[own_extendable] += units.loc[own_extendable, f"{attr}_max"] * scale[own_extendable]
         if extendable.empty:
             continue
         capacity = n.model[f"{component}-{attr}"].sel(name=extendable)
+        # sum each original with its retrofits
         expr = (capacity * DataArray((scale / factor)[extendable])).groupby(original[extendable]).sum()
         # the originals of each component are a subset of all: align them by name, not position
         lhs.append(expr.reindex(original=originals))
@@ -93,10 +98,17 @@ def _add_reservoir_constraints(n: pypsa.Network) -> None:
     """
     Shares the wells of reservoirs retrofitted to hydrogen between hydrogen and natural gas.
 
-    The hydrogen withdrawal takes the share of the gas withdrawal that the
-    hydrogen energy takes of the gas energy. The hydrogen injection, by new
-    compressors, is at most the hydrogen withdrawal, and the gas injection at
-    most the gas withdrawal: each injects through the wells it keeps.
+    ``retrofit-capacity`` shares the volume; this ties the rates to it. For each
+    reservoir:
+
+        h2_withdrawal / h2_withdrawal_whole == h2_energy / h2_energy_whole
+        h2_injection <= h2_withdrawal
+        gas_injection <= gas_withdrawal
+
+    where ``*_whole`` is the whole reservoir retrofitted (``retrofit_factor``
+    times the gas capacity). The wells go with the volume, so the withdrawal is
+    fixed by the retrofitted share. Injection runs through the same wells, so it
+    is capped by the withdrawal of its side.
     """
     stores = _retrofits(n.stores)
     links = _retrofits(n.links)
@@ -104,18 +116,16 @@ def _add_reservoir_constraints(n: pypsa.Network) -> None:
         return
     p_nom = n.model["Link-p_nom"]
 
-    # hydrogen withdrawal
+    # hydrogen withdrawal: each discharger and the retrofitted store on its bus
     store_of_bus = pd.Series(stores.index, index=stores.bus)
     discharger = links[links.bus0.isin(store_of_bus.index)]
     store = discharger.bus0.map(store_of_bus).rename("store")
     reservoirs = stores.loc[store]
     whole_rate = discharger.retrofit_factor * n.links.loc[discharger.retrofit_from, "p_nom_max"].to_numpy()
     whole_energy = reservoirs.retrofit_factor * n.stores.loc[reservoirs.retrofit_from, "e_nom_max"].to_numpy()
-    # rate / whole_rate == energy / whole_energy is rate - r * energy == 0 for
-    # r = whole_rate / whole_energy, written as rate / sqrt(r) - sqrt(r) * energy
-    # so that its coefficients are reciprocal and centred on one, as in
-    # opts.sector.add_gas_storage_contraction_constraints: r, one over the hours to
-    # empty a reservoir, is ~1e-5 to 1e-3
+    # rate == r * energy, with r = whole_rate / whole_energy (~1e-5 to 1e-3 per
+    # hour), written as rate / sqrt(r) == sqrt(r) * energy so both coefficients
+    # are better conditioned, as in opts.sector.add_gas_storage_contraction_constraints
     scale = (whole_rate.to_numpy() / whole_energy.to_numpy()) ** 0.5
     lhs = (p_nom.sel(name=discharger.index) / DataArray(pd.Series(scale, index=discharger.index))).groupby(
         store,
