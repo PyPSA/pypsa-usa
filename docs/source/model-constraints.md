@@ -70,7 +70,7 @@ in-zone REC trading is implicit — and per planning horizon. State-level target
 from `electricity: portfolio_standards` (CSV) and merged with ReEDS RPS and CES trajectories
 supplied by the workflow. Eligible carriers default to
 `onwind, offwind, offwind_floating, solar, hydro, geothermal, biomass, EGS` for RPS; CES
-additionally includes `nuclear, SMR, hydrogen_ct, CCGT-95CCS, CCGT-99CCS, Coal-95CCS`.
+additionally includes `nuclear, SMR, OCHT, CCHT, CCGT-95CCS, CCGT-99CCS, Coal-95CCS`.
 Custom rows may specify any carrier group.
 
 :::{figure} _static/generated/rec_trading_zones.png

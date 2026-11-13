@@ -39,6 +39,10 @@ BECCS_CO2_REMOVAL = 206 * 0.95 * 0.45359237 / 1000 * 3.412  # tCO2/MWh_th
 # history: https://www.eia.gov/dnav/ng/hist/nw2_epg0_swo_r48_bcfw.htm
 NG_STORAGE_CHARGE_DISCHARGE_RATIO = 132 / 359
 
+# technologies existing gas plants can be retrofitted to (electricity: retrofit),
+# and the technology of the plants they are retrofitted from
+RETROFITS = {"OCHT": "OCGT", "CCHT": "CCGT", "CCGT-90CCS": "CCGT"}
+
 LBS_TON = 2000  # lbs/ short ton
 COAL_BTU_LB = 9396  # BTU/lb - EIA US AVERAGE TODO: differentiate between coal types
 MMBTU_MWHthemal = 3.4129  # MMBTU to MWh_thermal

@@ -7,16 +7,16 @@ def sector_input_files(wildcards):
         + "{interconnect}/elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}.nc",
         "tech_costs": RESOURCES
         + f"costs/sector_costs_{config['scenario']['planning_horizons'][0]}.csv",
-        # each investment period's costs, for the fuel price of biomass power with carbon capture
-        "tech_costs_by_year": expand(
+    }
+    if sector_on(wildcards.sector):
+        input_files["county"] = DATA + "counties/cb_2020_us_county_500k.shp"
+        # each investment period's costs, for fuel prices and hydrogen
+        input_files["tech_costs_by_year"] = expand(
             COSTS + "costs_{year}.csv",
             year=config["scenario"]["planning_horizons"],
-        ),
-    }
-    sectors = wildcards.sector.split("-")
-    if "G" in sectors:
+        )
+    if gas_sector_on(wildcards.sector):
         ng_files = {
-            "county": DATA + "counties/cb_2020_us_county_500k.shp",
             "pipeline_capacity": DATA
             + "natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
             "pipeline_shape": DATA + "natural_gas/pipelines.geojson",
@@ -41,6 +41,17 @@ def sector_input_files(wildcards):
             "industrial_stock": "repo_data/sectors/industrial_stock/Table5_6.xlsx",
         }
         input_files.update(ng_files)
+
+    if hydrogen_sector_on(wildcards.sector):
+        input_files.update(
+            {
+                "h2_demand": "repo_data/hydrogen/adp2024_h2_demand.csv",
+                "h2_storage_sites": "repo_data/hydrogen/h2_storage_sites.gpkg",
+                # hydrogen pipelines may follow the natural gas pipelines
+                "pipeline_capacity": DATA
+                + "natural_gas/EIA-StatetoStateCapacity_Feb2024.xlsx",
+            }
+        )
 
     if config["co2"]["storage"] is True:
         input_files.update(

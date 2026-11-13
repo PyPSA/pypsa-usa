@@ -317,6 +317,17 @@ BECCS_DATA = {
     "heatrate": 19.965,  # MMBtu/MWh, HHV
 }
 
+# Retrofits of existing gas plants, as the ReEDS upgrades: repo_data/costs/reeds_gas_ccs_retrofit_costs.csv
+# holds the default "atb22_1p2_moderate" column of ReEDS inputs/upgrades/upgrade_costs_ccs_gas.csv,
+# in GAS_CCS_RETROFIT_DOLLAR_YEAR dollars; the hydrogen retrofits cost a share of the overnight capital cost of the gas plant
+# (ReEDS inputs/scalars.csv cost_upgrade_gasct2h2ct and cost_upgrade_gascc2h2cc)
+GAS_CCS_RETROFIT_DOLLAR_YEAR = 2004
+H2_RETROFIT_COST_SHARES = {"OCHT": ("OCGT", 0.33), "CCHT": ("CCGT", 0.28)}
+
+# repo_data/costs/hydrogen_costs.csv holds its costs in HYDROGEN_DOLLAR_YEAR dollars
+HYDROGEN_DOLLAR_YEAR = 2023
+HYDROGEN_COST_PARAMETERS = ["investment", "fixed-om", "variable-om"]
+
 ATB_VALUE_COLS = [
     "cost_recovery_period_years",
     "capacity_factor",
@@ -418,6 +429,32 @@ def complete_atb_slice(pudl_atb_year: pd.DataFrame, atb_scenario: str, atb_model
     return sub
 
 
+def build_hydrogen_turbines(pivot_atb: pd.DataFrame) -> list[pd.DataFrame]:
+    """Hydrogen turbines (OCHT, CCHT) from their natural gas counterparts (OCGT, CCGT).
+
+    Per ReEDS, H2-CT and H2-CC keep the heat rate and O&M of the gas plant at a 10%
+    higher overnight capital cost. The grid connection and construction financing
+    costs (``capex_construction_finance_factor``, USD/kW in the ATB) of the gas
+    plant are added as they are.
+    https://reeds-model.github.io/ReEDS/model_documentation.html#hydrogen
+
+    The fuel is a drop-in at 20 USD/MMBtu, the ReEDS default for when hydrogen
+    production is not modelled. With the H sector enabled, ``build_hydrogen``
+    replaces the turbines by links drawing from the state hydrogen buses.
+    """
+    turbines = []
+    for h2_carrier, gas_carrier in (("OCHT", "OCGT"), ("CCHT", "CCGT")):
+        df = pivot_atb[pivot_atb["pypsa-name"] == gas_carrier].copy()
+        df["pypsa-name"] = h2_carrier
+        grid = df["capex_grid_connection_per_kw"].fillna(0)
+        df["capex_overnight_per_kw"] *= 1.1
+        df["capex_per_kw"] = df["capex_overnight_per_kw"] + grid + df["capex_construction_finance_factor"]
+        df["fuel_cost_real_per_mwhth"] = 20 * 3.412  # 20 USD/MMBtu * 3.412 MMBtu/MWh_th
+        df["co2_emissions"] = 0
+        turbines.append(df)
+    return turbines
+
+
 def get_beccs_data(dollar_year: int) -> pd.Series:
     """``BECCS_DATA`` with its costs in US dollars of ``dollar_year``."""
     data = pd.Series(BECCS_DATA)
@@ -458,17 +495,89 @@ def build_beccs(pivot_atb: pd.DataFrame, beccs: pd.Series) -> pd.DataFrame:
     return df
 
 
+def get_gas_ccs_retrofit_cost(gas_ccs_retrofit_costs: str, year: int, dollar_year: int) -> float:
+    """
+    ReEDS overnight cost of retrofitting carbon capture to a gas plant in ``year``, in USD/kW of ``dollar_year``.
+
+    Linearly interpolated between the ReEDS years and held constant outside them.
+    """
+    df = pd.read_csv(gas_ccs_retrofit_costs, index_col="t").sort_index()
+    cost = float(np.interp(year, df.index, df.capcost))
+    return to_dollars(cost, year=GAS_CCS_RETROFIT_DOLLAR_YEAR, to_year=dollar_year)
+
+
+def build_retrofits(pivot_atb: pd.DataFrame, ccs_retrofit_cost: float) -> pd.DataFrame:
+    """
+    Overnight cost of retrofitting an existing gas plant (``retrofit_capex_per_kw``, USD/kW).
+
+    As the ReEDS upgrades (cost_upgrade in reeds/core/setup/b_inputs.gms), set on
+    the technology retrofitted to: the hydrogen retrofits cost a share of the
+    overnight cost of the new gas plant (``H2_RETROFIT_COST_SHARES``), the carbon
+    capture retrofit ``ccs_retrofit_cost`` (``get_gas_ccs_retrofit_cost``).
+
+    ReEDS has no separate heat rate or O&M for retrofitted carbon capture: it
+    uses those of the new CCS plant (Gas-CC-CCS_mod) at the lower capture rate of
+    upgrades (GSw_CCS_Rate_Upgrade_mod). CCGT-90CCS is therefore a copy of
+    CCGT-95CCS.
+    """
+    ccs = pivot_atb[pivot_atb["pypsa-name"] == "CCGT-95CCS"].assign(**{"pypsa-name": "CCGT-90CCS"})
+    pivot_atb = pd.concat([pivot_atb, ccs], ignore_index=True)
+    overnight = pivot_atb.set_index("pypsa-name").capex_overnight_per_kw
+    cost = {target: share * overnight[source] for target, (source, share) in H2_RETROFIT_COST_SHARES.items()}
+    cost["CCGT-90CCS"] = ccs_retrofit_cost
+    pivot_atb["retrofit_capex_per_kw"] = pivot_atb["pypsa-name"].map(cost)
+    return pivot_atb
+
+
+def get_hydrogen_costs(hydrogen_costs: str, year: int, dollar_year: int) -> pd.DataFrame:
+    """Hydrogen supply chain costs for one cost year, in the long format of the tech costs.
+
+    ``hydrogen_costs`` holds values in model units (HHV), with its costs in
+    ``HYDROGEN_DOLLAR_YEAR`` dollars, which are converted to ``dollar_year``.
+    Year dependent parameters are linearly interpolated to ``year`` (and held
+    constant outside the years given); the investment is annualized with the
+    technology's discount rate and lifetime, plus fixed O&M.
+    """
+    df = pd.read_csv(hydrogen_costs)
+    is_cost = df["parameter"].isin(HYDROGEN_COST_PARAMETERS)
+    df.loc[is_cost, "value"] = to_dollars(df.loc[is_cost, "value"], year=HYDROGEN_DOLLAR_YEAR, to_year=dollar_year)
+
+    def interpolate(group: pd.DataFrame) -> float:
+        if group.year.isna().all():
+            return group.value.iloc[0]
+        group = group.sort_values("year")
+        return float(np.interp(year, group.year, group.value))
+
+    data = df.groupby(["technology", "parameter"])[["year", "value"]].apply(interpolate).unstack("parameter")
+
+    r = data["discount-rate"]
+    none = pd.Series(0.0, index=data.index)
+    replacement = data.get("stack-replacement", none).fillna(0)
+    replacement_year = data.get("stack-replacement-year", none).fillna(0)
+    investment = data["investment"] * (1 + replacement / (1 + r) ** replacement_year)
+    data["annualized_capex_fom"] = calculate_annuity(data["lifetime"], r) * investment + data["fixed-om"]
+
+    result = data.rename_axis(index="pypsa-name", columns=None).reset_index()
+    result = result.melt(id_vars="pypsa-name", var_name="parameter", value_name="value").dropna(subset="value")
+    result["atb_scenario"] = pd.NA
+    result["atb_model_case"] = pd.NA
+    return result.reset_index(drop=True)
+
+
 def process_atb_scenario(
     pudl_atb_sub: pd.DataFrame,
     aeo: pd.DataFrame,
     beccs: pd.Series | None = None,
+    ccs_retrofit_cost: float | None = None,
 ) -> pd.DataFrame:
     """Run the full cost pipeline for one (atb_scenario, model_case) slice.
 
     Concatenates static data (emissions, transmission, lifetime, AEO fuels), takes the
     ATB fuel costs of nuclear, SMR and biomass, derives biomass-95CCS from ``beccs``
     (``get_beccs_data``) if given, pivots,
-    derives hydrogen_ct, marginal cost, annualized capex etc., and returns a long-form
+    derives the hydrogen turbines, the retrofit costs of existing gas plants if
+    ``ccs_retrofit_cost`` (``get_gas_ccs_retrofit_cost``) is given, marginal cost,
+    annualized capex etc., and returns a long-form
     DataFrame with columns [pypsa-name, parameter, value] for this scenario+case.
     """
     pudl_atb = pudl_atb_sub.melt(
@@ -509,19 +618,9 @@ def process_atb_scenario(
     if beccs is not None:
         pivot_atb = pd.concat([pivot_atb, build_beccs(pivot_atb, beccs)], ignore_index=True)
 
-    # Create Hydrogen Combustion Turbine from OCGT using assumptions per ReEDS
-    # https://nrel.github.io/ReEDS-2.0/model_documentation.html#hydrogen
-    hydrogen_ct = pivot_atb[pivot_atb["pypsa-name"] == "OCGT"].copy()
-    hydrogen_ct["pypsa-name"] = "hydrogen_ct"
-    hydrogen_ct["capex_overnight_per_kw"] *= 1.03
-    hydrogen_ct["capex_per_kw"] = (
-        (hydrogen_ct["capex_overnight_per_kw"] + hydrogen_ct["capex_grid_connection_per_kw"])
-        * hydrogen_ct["capex_construction_finance_factor"]
-        / 100
-    )
-    hydrogen_ct["fuel_cost_real_per_mwhth"] = 20 * 3.412  # 20 USD/MMBtu * 3.412 MMBtu/MWh_th
-    hydrogen_ct["co2_emissions"] = 0
-    pivot_atb = pd.concat([pivot_atb, hydrogen_ct], ignore_index=True)
+    pivot_atb = pd.concat([pivot_atb, *build_hydrogen_turbines(pivot_atb)], ignore_index=True)
+    if ccs_retrofit_cost is not None:
+        pivot_atb = build_retrofits(pivot_atb, ccs_retrofit_cost)
 
     pivot_atb["efficiency"] = 3.412 / pivot_atb["heat_rate_mmbtu_per_mwh"]
     pivot_atb["fuel_cost"] = pivot_atb["fuel_cost_real_per_mwhth"] / pivot_atb["efficiency"]
@@ -655,6 +754,11 @@ if __name__ == "__main__":
 
     # BECCS costs and performance, independent of ATB scenario / case
     beccs = get_beccs_data(dollar_year)
+    ccs_retrofit_cost = get_gas_ccs_retrofit_cost(
+        snakemake.input.gas_ccs_retrofit_costs,
+        tech_year,
+        dollar_year,
+    )
 
     # Iterate over every (atb_scenario, model_case) so that the final CSV holds
     # the entire ATB scenario grid; downstream selects the correct slice via
@@ -672,7 +776,7 @@ if __name__ == "__main__":
             sub = complete_atb_slice(pudl_atb_year, atb_scenario, atb_model_case)
             if sub.empty:
                 continue
-            result = process_atb_scenario(sub, aeo, beccs)
+            result = process_atb_scenario(sub, aeo, beccs, ccs_retrofit_cost)
             result["atb_scenario"] = atb_scenario
             result["atb_model_case"] = atb_model_case
             scenario_results.append(result)
@@ -687,6 +791,10 @@ if __name__ == "__main__":
     egs_costs["atb_scenario"] = pd.NA
     egs_costs["atb_model_case"] = pd.NA
     pudl_atb = pd.concat([pudl_atb, egs_costs], ignore_index=True)
+
+    # Hydrogen supply chain costs do not vary with ATB scenario either
+    hydrogen_costs = get_hydrogen_costs(snakemake.input.hydrogen_costs, tech_year, dollar_year)
+    pudl_atb = pd.concat([pudl_atb, hydrogen_costs], ignore_index=True)
 
     pudl_atb.to_csv(snakemake.output.tech_costs, index=False)
 

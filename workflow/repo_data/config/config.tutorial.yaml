@@ -50,7 +50,7 @@ model_topology:
 # ====================================================================
 # ELECTRICITY — expansion candidates
 # ====================================================================
-# Same as config.default.yaml minus `hydrogen_ct` (whose `costs.min_year`
+# Same as config.default.yaml minus `OCHT` (whose `costs.min_year`
 # of 2040 makes it irrelevant to this single-horizon tutorial).
 electricity:
   extendable_carriers:
