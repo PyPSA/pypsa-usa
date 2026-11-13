@@ -510,15 +510,15 @@ def build_retrofits(pivot_atb: pd.DataFrame, ccs_retrofit_cost: float) -> pd.Dat
     """
     Overnight cost of retrofitting an existing gas plant (``retrofit_capex_per_kw``, USD/kW).
 
-    As the ReEDS upgrades (cost_upgrade in reeds/core/setup/b_inputs.gms): an
-    OCGT retrofitted to OCHT costs 33% of the overnight capital cost of a new
-    OCGT, a CCGT retrofitted to CCHT 28% of that of a new CCGT, and a CCGT
-    retrofitted to carbon capture ``ccs_retrofit_cost``
-    (``get_gas_ccs_retrofit_cost``). The cost is set on the technology
-    retrofitted to. Carbon capture retrofits capture 90% of the CO2, the ReEDS
-    GSw_CCS_Rate_Upgrade_mod, with the heat rate and O&M of the new plant
-    capturing 95% (CCGT-95CCS), the ReEDS Gas-CC-CCS_mod: they are CCGT-90CCS,
-    which is added as a copy of CCGT-95CCS.
+    As the ReEDS upgrades (cost_upgrade in reeds/core/setup/b_inputs.gms), set on
+    the technology retrofitted to: the hydrogen retrofits cost a share of the
+    overnight cost of the new gas plant (``H2_RETROFIT_COST_SHARES``), the carbon
+    capture retrofit ``ccs_retrofit_cost`` (``get_gas_ccs_retrofit_cost``).
+
+    ReEDS has no separate heat rate or O&M for retrofitted carbon capture: it
+    uses those of the new CCS plant (Gas-CC-CCS_mod) at the lower capture rate of
+    upgrades (GSw_CCS_Rate_Upgrade_mod). CCGT-90CCS is therefore a copy of
+    CCGT-95CCS.
     """
     ccs = pivot_atb[pivot_atb["pypsa-name"] == "CCGT-95CCS"].assign(**{"pypsa-name": "CCGT-90CCS"})
     pivot_atb = pd.concat([pivot_atb, ccs], ignore_index=True)
