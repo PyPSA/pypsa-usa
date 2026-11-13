@@ -568,27 +568,34 @@ def attach_retrofits(n: pypsa.Network, costs_dict: dict[int, pd.DataFrame], retr
     """
     Lets existing gas plants be retrofitted to hydrogen turbines or carbon capture.
 
-    For every technology enabled in ``electricity: retrofit``, each existing plant
-    of the technology it is retrofitted from (``RETROFITS``) gets, in every
-    investment period it is still active in, an extendable retrofit at its bus,
-    which names the plant (``retrofit_from``). The retrofit keeps the plant's
-    efficiency, times the ATB efficiency of the technology retrofitted to over that
-    of the plant's technology, and takes the ATB O&M of the technology retrofitted
-    to; it runs for the configured ``lifetime``, and its overnight cost
-    (``retrofit_capex_per_kw``, see build_cost_data) is annualized over that
-    lifetime or the ATB cost recovery period of the technology retrofitted to,
-    whichever is shorter. A
-    carbon capture retrofit burns the plant's fuel, a hydrogen one the hydrogen of
-    the cost data.
+    ``retrofit`` is ``electricity: retrofit``. ``constants.RETROFITS`` maps each
+    technology there to the technology of the plants it is retrofitted from
+    (e.g. CCHT from CCGT).
+
+    For each enabled technology, every existing plant of its source technology
+    gets, in each investment period the plant is still active in, an extendable
+    retrofit generator at the plant's bus, with ``retrofit_from`` set to the plant.
+    The retrofit:
+
+    - has the plant's efficiency, times the ATB efficiency of the target over that
+      of the source technology;
+    - takes the ATB O&M of the target technology;
+    - runs for the configured ``lifetime``, and annualizes its overnight cost
+      (``retrofit_capex_per_kw``, see build_cost_data) over
+      ``min(lifetime, ATB cost recovery period of the target technology)``;
+    - burns the plant's fuel if it captures carbon, and hydrogen at the fuel
+      cost of the cost data if it is a hydrogen turbine.
 
     The plant and its retrofits share the plant's fuel input
-    (``opts.retrofit.add_retrofit_constraints``), so the plants that can be
-    retrofitted may also retire, at their fixed O&M, whatever the retirement.
-    Only existing plants are retrofitted, not new ones.
+    (``opts.retrofit.add_retrofit_constraints``). So the plant becomes extendable
+    down to zero at its fixed O&M, and may retire whatever
+    ``electricity: retirement`` is. Only existing plants are retrofitted.
     """
     enabled = {target: options for target, options in retrofit.items() if options.get("enable", False)}
     if not enabled:
         return
+    # plants are still generators here in every model; add_sectors later converts
+    # them and their retrofits to links, keeping retrofit_from and retrofit_factor
     plants = n.generators[
         n.generators.carrier.isin({RETROFITS[target] for target in enabled}) & (n.generators.p_nom > 0)
     ]
@@ -1506,7 +1513,7 @@ def main(snakemake) -> None:
         )
 
     # sector coupled models add CO2 storage, transport and DAC in add_sectors
-    if set(snakemake.config["scenario"]["sector"].split("-")) <= {"", "E"}:
+    if snakemake.config["scenario"]["sector"] == "E":
         co2_storage = snakemake.config.get("co2", {}).get("storage", False)
         co2_network_enable = snakemake.config.get("co2", {}).get("network", {}).get("enable", False)
         dac_enable = snakemake.config.get("dac", {}).get("enable", False)
