@@ -383,8 +383,7 @@ def get_pipeline_routes(n: pypsa.Network, states: list[str], gas_pipelines: pd.D
 def get_gas_pipelines(path: str) -> pd.DataFrame:
     """
     State to state natural gas pipelines with capacity in the latest year of the
-    EIA state to state capacity data (``EIA-StatetoStateCapacity_Feb2024.xlsx``),
-    the data of the natural gas sector.
+    EIA state to state capacity data, as used by the natural gas sector.
     """
     df = pd.read_excel(path, sheet_name="Pipeline State2State Capacity", skiprows=1, index_col=0)
     df.columns = df.columns.str.strip()
