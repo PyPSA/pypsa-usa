@@ -872,7 +872,7 @@ def calibrate_tamu_transmission_capacity(
         new_g = avg_g_per_length_capacity * new_s_nom / distance_km
 
         # Calculate capital cost
-        new_capital_cost = hvac_overhead_cost * new_s_nom * distance_km
+        new_capital_cost = hvac_overhead_cost * distance_km
 
         # Generate unique line name
         line_name = f"REEDS_{region0}_{region1}"
