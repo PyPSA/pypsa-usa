@@ -24,7 +24,6 @@ from _helpers import (
     update_p_nom_max,
     weighted_avg,
 )
-from opts.bidirectional_link import DIRECTION_SUFFIX
 from sklearn.neighbors import BallTree
 
 idx = pd.IndexSlice
@@ -242,10 +241,10 @@ def update_transmission_costs(n, costs, length_factor=1.0):
 
 def _bidirectional_pair(names: pd.Index) -> pd.Series:
     """Return True for link names whose `_fwd`/`_rev` counterpart is also in `names`."""
-    parts = names.str.extract(DIRECTION_SUFFIX.pattern)
-    pair_key = parts["base"] + parts["vintage"].fillna("")
-    directions = parts.groupby(pair_key)["direction"].nunique()
-    return pd.Series((pair_key.map(directions) == 2).to_numpy(), index=names)
+    fwd = names[names.str.contains(const.FWD_SUFFIX, regex=False)]
+    rev = pd.Index([const.REV_SUFFIX.join(name.rsplit(const.FWD_SUFFIX, 1)) for name in fwd])
+    paired = rev.isin(names)
+    return pd.Series(names.isin(fwd[paired]) | names.isin(rev[paired]), index=names)
 
 
 def load_powerplants(

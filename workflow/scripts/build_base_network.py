@@ -10,7 +10,7 @@ import pypsa
 from _helpers import configure_logging, log_network_schema
 from build_bus_population import assign_load_weight, load_county_population
 from build_shapes import load_na_shapes
-from constants import REC_TRADING_ZONE_MAPPER
+from constants import FWD_SUFFIX, REC_TRADING_ZONE_MAPPER, REV_SUFFIX
 from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
 
@@ -128,7 +128,7 @@ def add_dclines_from_file(n: pypsa.Network, fn_dclines: str) -> pypsa.Network:
     n.add(
         "Link",
         dclines.index,
-        suffix="_fwd",
+        suffix=FWD_SUFFIX,
         bus0=dclines.from_bus_id,
         bus1=dclines.to_bus_id,
         p_nom=dclines.Pt,
@@ -139,7 +139,7 @@ def add_dclines_from_file(n: pypsa.Network, fn_dclines: str) -> pypsa.Network:
     n.add(
         "Link",
         dclines.index,
-        suffix="_rev",
+        suffix=REV_SUFFIX,
         bus0=dclines.to_bus_id,
         bus1=dclines.from_bus_id,
         p_nom=dclines.Pt,
