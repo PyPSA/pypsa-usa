@@ -22,7 +22,13 @@ from _helpers import (
     update_p_nom_max,
 )
 from add_electricity import update_transmission_costs
-from constants import FWD_SUFFIX, REEDS_NERC_INTERCONNECT_MAPPER, REV_SUFFIX, STATES_INTERCONNECT_MAPPER
+from constants import (
+    FWD_SUFFIX,
+    GENERATOR_CAPEX_STRATEGIES,
+    REEDS_NERC_INTERCONNECT_MAPPER,
+    REV_SUFFIX,
+    STATES_INTERCONNECT_MAPPER,
+)
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
     busmap_by_kmeans,
@@ -263,7 +269,9 @@ def clustering_for_n_clusters(
         busmap = custom_busmap
 
     line_strategies = aggregation_strategies.get("lines", dict())
-    generator_strategies = aggregation_strategies.get("generators", dict())
+    # The ReEDS wind/solar interconnection cost is intensive (per MW), so merged
+    # generators take its capacity-weighted mean. A user strategy still wins.
+    generator_strategies = {**GENERATOR_CAPEX_STRATEGIES, **aggregation_strategies.get("generators", dict())}
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
     bus_strategies = {
         "Pd": "sum",

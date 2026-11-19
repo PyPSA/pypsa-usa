@@ -384,6 +384,17 @@ properties:
     required: [atb, aeo, dollar_year]
     properties:
       dollar_year: {type: integer}
+      regional_multipliers:
+        type: object
+        additionalProperties: false
+        properties:
+          enable: {type: boolean}
+          renewable_interconnection: {type: boolean}
+          column_to_tech:
+            type: [object, "null"]
+            additionalProperties:
+              type: array
+              items: {type: string}
       atb:
         type: object
         additionalProperties: false

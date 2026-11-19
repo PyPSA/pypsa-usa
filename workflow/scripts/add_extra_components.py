@@ -9,13 +9,18 @@ import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging, load_costs, log_network_schema
 from add_electricity import add_missing_carriers
-from constants import BECCS_CO2_REMOVAL, HOURS_PER_YEAR
+from constants import BECCS_CO2_REMOVAL, HOURS_PER_YEAR, RENEWABLE_INTERCONNECTION_COL
 from external_regions import (
     add_external_regions,
     convert_flowgates_to_state,
     format_flowgates_for_imports_exports,
     load_remote_unit_bundle,
     resolve_trade_costs,
+)
+from regional_cost import (
+    build_bus_multipliers,
+    regional_capital_cost,
+    renewable_interconnection_capital_cost,
 )
 from shapely.geometry import Point
 from tax_credits import check_tax_credit_years
@@ -83,7 +88,40 @@ def add_nice_carrier_names(n, config):
     n.carriers["color"] = colors
 
 
-def attach_storageunits(n, costs, elec_opts, investment_year):
+def regional_capital_costs(costs: pd.DataFrame, carriers: pd.Series, buses: pd.Series, bus_multipliers) -> pd.Series:
+    """Per-component ``capital_cost`` with the ReEDS regional overnight multiplier.
+
+    ``carriers`` and ``buses`` share one index (the components). Carriers the
+    multiplier table does not map keep the uniform ``annualized_capex_fom``.
+    """
+    capex = carriers.map(costs["annualized_capex_fom"]).astype(float)
+    if bus_multipliers is None:
+        return capex
+    for carrier in set(carriers.unique()) & set(bus_multipliers.columns) & set(costs.index):
+        members = carriers.index[carriers == carrier]
+        capex.loc[members] = regional_capital_cost(costs, carrier, buses.loc[members], bus_multipliers)
+    return capex
+
+
+def apply_renewable_interconnection_costs(capex: pd.Series, costs: pd.DataFrame, gens: pd.DataFrame) -> pd.Series:
+    """Reprice wind/solar that carry a ReEDS interconnection cost with this year's costs.
+
+    ``add_electricity`` stores each generator's interconnection cost (overnight
+    USD/MW) in :data:`RENEWABLE_INTERCONNECTION_COL`. Each vintage swaps it for the
+    ATB grid connection of its own investment year, at that year's capital charge rate.
+    Generators without the column keep ``capex``.
+    """
+    if RENEWABLE_INTERCONNECTION_COL not in gens.columns:
+        return capex
+    interconnection = pd.to_numeric(gens[RENEWABLE_INTERCONNECTION_COL], errors="coerce")
+    capex = capex.copy()
+    for carrier in set(gens.carrier[interconnection > 0]) & set(costs.index):
+        members = gens.index[(gens.carrier == carrier) & (interconnection > 0)]
+        capex.loc[members] = renewable_interconnection_capital_cost(costs, carrier, interconnection.loc[members])
+    return capex
+
+
+def attach_storageunits(n, costs, elec_opts, investment_year, bus_multipliers=None):
     carriers = elec_opts["extendable_carriers"]["StorageUnit"]
     carriers = [k for k in carriers if "battery_storage" in k]
 
@@ -102,7 +140,7 @@ def attach_storageunits(n, costs, elec_opts, investment_year):
             bus=buses_i,
             carrier=carrier,
             p_nom_extendable=True,
-            capital_cost=costs.at[carrier, "annualized_capex_fom"],
+            capital_cost=regional_capital_cost(costs, carrier, buses_i, bus_multipliers),
             marginal_cost=0,  # costs.at[carrier, "marginal_cost"], # TODO: FIX THIS ISSUE IN BUILD_COST_DATA
             efficiency_store=costs.at[carrier, "efficiency"] ** roundtrip_correction,
             efficiency_dispatch=costs.at[carrier, "efficiency"] ** roundtrip_correction,
@@ -369,6 +407,11 @@ def split_retirement_gens(
         land_region=retirement_gens.land_region,
     )
     n.generators.loc[retirement_gens.index, "vom_cost"] = retirement_gens.get("vom_cost", np.nan)
+    # the new units reprice their vintages with the ReEDS interconnection cost
+    if RENEWABLE_INTERCONNECTION_COL in retirement_gens.columns:
+        n.generators.loc[retirement_gens.index, RENEWABLE_INTERCONNECTION_COL] = retirement_gens[
+            RENEWABLE_INTERCONNECTION_COL
+        ].to_numpy()
 
     # time dependent factors added after as not all generators are time dependent
     copy_timeseries_for_suffix(n, retirement_gens.index, "existing")
@@ -381,6 +424,7 @@ def attach_multihorizon_existing_generators(
     costs: dict,
     gens: pd.DataFrame,
     investment_year: int,
+    bus_multipliers=None,
 ):
     """
     Adds multiple investment options for generators types that were already
@@ -404,6 +448,11 @@ def attach_multihorizon_existing_generators(
     if gens.empty or len(n.investment_periods) == 1:
         return
 
+    capital_cost = apply_renewable_interconnection_costs(
+        regional_capital_costs(costs, gens.carrier, gens.bus, bus_multipliers),
+        costs,
+        gens,
+    )
     n.add(
         "Generator",
         gens.index,
@@ -420,13 +469,17 @@ def attach_multihorizon_existing_generators(
         marginal_cost=gens.marginal_cost,
         p_min_pu=gens.p_min_pu,
         p_max_pu=gens.p_max_pu,
-        capital_cost=gens.carrier.map(costs.annualized_capex_fom),
+        capital_cost=capital_cost.to_numpy(),
         build_year=investment_year,
         lifetime=gens.carrier.map(costs.cost_recovery_period_years),
         land_region=gens.land_region,
     )
     vom = gens.get("vom_cost", pd.Series(np.nan, index=gens.index))
     n.generators.loc[gens.index + f" {investment_year}", "vom_cost"] = vom.to_numpy()
+    if RENEWABLE_INTERCONNECTION_COL in gens.columns:
+        n.generators.loc[gens.index + f" {investment_year}", RENEWABLE_INTERCONNECTION_COL] = gens[
+            RENEWABLE_INTERCONNECTION_COL
+        ].to_numpy()
 
     # time dependent factors added after as not all generators are time dependent
     copy_timeseries_for_suffix(n, gens.index, investment_year)
@@ -498,7 +551,7 @@ def attach_multihorizon_egs(
     )
 
 
-def attach_multihorizon_new_generators(n, costs, carriers, investment_year):
+def attach_multihorizon_new_generators(n, costs, carriers, investment_year, bus_multipliers=None):
     """
     Attaches generators for carriers which did not previously exist in the
     network (CCS, H2, SMR, etc). These generators do not have spatially resolved
@@ -549,7 +602,7 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year):
             bus=buses_i,
             carrier=carrier,
             p_nom_extendable=True,
-            capital_cost=costs.at[carrier, "annualized_capex_fom"],
+            capital_cost=regional_capital_cost(costs, carrier, buses_i, bus_multipliers),
             marginal_cost=costs.at[carrier, "marginal_cost"],
             efficiency=costs.at[carrier, "efficiency"],
             build_year=investment_year,
@@ -1287,17 +1340,27 @@ def main(snakemake) -> None:
         ),
     )
 
+    # ReEDS county overnight-capex multipliers for new builds (None when disabled,
+    # which leaves every capital cost at its uniform national value)
+    bus_multipliers = build_bus_multipliers(
+        n,
+        snakemake.params.costs.get("regional_multipliers"),
+        snakemake.input.get("reg_cap_cost_diff"),
+        snakemake.input.get("county_shapes"),
+    )
+
     for investment_year in n.investment_periods:
         costs = costs_dict[investment_year]
-        attach_storageunits(n, costs, elec_config, investment_year)
+        attach_storageunits(n, costs, elec_config, investment_year, bus_multipliers=bus_multipliers)
         attach_multihorizon_existing_generators(
             n,
             costs,
             multi_horizon_gens,
             investment_year,
+            bus_multipliers=bus_multipliers,
         )
         attach_multihorizon_egs(n, costs, costs_dict, egs_gens, investment_year)
-        attach_multihorizon_new_generators(n, costs, new_carriers, investment_year)
+        attach_multihorizon_new_generators(n, costs, new_carriers, investment_year, bus_multipliers=bus_multipliers)
 
     if not multi_horizon_gens.empty and not len(n.investment_periods) == 1:
         # Remove duplicate generators from first investment period,

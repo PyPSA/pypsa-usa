@@ -62,9 +62,18 @@ Carrier names must match the keys in `ATB_TECH_MAPPER` (`workflow/scripts/consta
 
 To reflect regional differences, capital costs are adjusted using [EIA state-level CapEx multipliers](https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2020.pdf).
 
+### Regional capital costs from ReEDS
+
+With `costs: regional_multipliers: enable` (on by default), new generators and storage take regional capital costs from NREL ReEDS instead:
+
+- **County overnight-capex multipliers**: `reg_cap_cost_diff_default.csv` gives each county a relative capex difference per ReEDS technology group, applied as `1 + x` to the overnight capex only; FOM, grid connection and construction financing are unchanged. `column_to_tech` maps the groups to carriers, and each bus takes the value of the county it lies in. Carriers not mapped keep the EIA state multipliers.
+- **Wind and solar interconnection cost** (`renewable_interconnection`, on by default): each ReEDS supply-curve site carries its spur-line, point-of-interconnection and network-reinforcement cost (the radial export cable offshore). `build_renewable_profiles` places the sites in the bus regions and takes their capacity-weighted mean per bus, in `costs: dollar_year`. It replaces the ATB's uniform grid-connection cost; buses without a site keep the ATB cost, and these carriers skip the EIA state multiplier. The supply curves and site maps come from Zenodo (`rule retrieve_reeds_vre_file`) in the variant `renewable_land_access` selects, and fixed-bottom and floating offshore sites are split at the `renewable: offwind` depth limit with GEBCO. The mean covers every site in a bus region, uneconomic ones included, while builds go to the cheapest sites first; with large bus regions (coarse `simpl`) it therefore overstates the cost, and `renewable_interconnection: false` is the better choice there. Supply-curve bins that resolve this are left to [#849](https://github.com/PyPSA/pypsa-usa/issues/849).
+
+Both are annualized at the carrier's capital charge rate, and each investment period prices its new builds with that year's costs. The ReEDS tables and their release are listed in `workflow/repo_data/costs/README.md`.
+
 ### Annualized capital cost and tax credits
 
-Capex (`capex_per_kw`, which holds construction financing) is annualized at `capital_charge_rate`, the ATB fixed charge rate: the capital recovery factor of the ATB WACC over the cost recovery period times ATB's project finance factor, which holds taxes and depreciation. Carriers ATB publishes no fixed charge rate for (gas, coal and oil plants, hydrogen_ct, transmission) are annualized at the capital recovery factor alone.
+Capex (`capex_per_kw`, which holds construction financing) is annualized at `capital_charge_rate`, the ATB fixed charge rate: the capital recovery factor of the ATB WACC over the cost recovery period times ATB's project finance factor, which holds taxes and depreciation. Carriers ATB publishes no fixed charge rate for (gas, coal and oil plants, hydrogen_ct, transmission) are annualized at the capital recovery factor alone. The regional overnight multipliers and the ReEDS interconnection costs are annualized at the same rate.
 
 By default the tax credits enter through a `+ TC` model case, with the credit of each commercial operation year, so ATB's phase-out carries over:
 
