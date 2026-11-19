@@ -391,11 +391,17 @@ properties:
       natural_gas:
         type: object
         properties:
-          infra_contraction:
+          economic_retirement:
             type: object
             additionalProperties: false
             properties:
               production: {type: boolean}
+              pipeline: {type: boolean}
+              storage: {type: boolean}
+          retrofit:
+            type: object
+            additionalProperties: false
+            properties:
               pipeline: {type: boolean}
               storage: {type: boolean}
       hydrogen:
@@ -409,12 +415,6 @@ properties:
           pipelines: {type: boolean}
           storage: {type: boolean}
           pipeline_length_factor: {type: number, exclusiveMinimum: 0}
-          retrofit:
-            type: object
-            additionalProperties: false
-            properties:
-              storage: {type: boolean}
-              pipelines: {type: boolean}
 
   dac:
     type: object

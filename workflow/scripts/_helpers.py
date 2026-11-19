@@ -824,24 +824,23 @@ def get_multiindex_snapshots(
     return pd.MultiIndex.from_arrays([sns.year, sns], names=["period", "timestep"])
 
 
-# parts of the existing natural gas infrastructure that may contract
-GAS_INFRASTRUCTURE = ("production", "pipeline", "storage")
+# parts of the existing natural gas infrastructure, and their carriers
+GAS_INFRASTRUCTURE = {"production": "gas production", "pipeline": "gas pipeline", "storage": "gas storage"}
 
 
-def get_gas_infra_contraction(sector: dict, hydrogen: bool = False) -> dict[str, bool]:
+def get_gas_economic_retirement(sector: dict) -> dict[str, bool]:
     """
-    Whether each part of the existing natural gas infrastructure may shrink below
-    its capacity (``sector: natural_gas: infra_contraction``).
-
-    The storage and pipelines retrofitted to hydrogen (``sector: hydrogen:
-    retrofitting``, with ``hydrogen`` in the model) always may, as what is
-    retrofitted is taken from them.
+    Whether each part of the existing natural gas infrastructure may retire, saving
+    its fixed O&M (``sector: natural_gas: economic_retirement``).
     """
-    setting = sector.get("natural_gas", {}).get("infra_contraction", {})
-    contraction = {part: setting.get(part, False) for part in GAS_INFRASTRUCTURE}
+    setting = sector.get("natural_gas", {}).get("economic_retirement", {})
+    return {part: setting.get(part, False) for part in GAS_INFRASTRUCTURE}
 
-    if hydrogen:
-        retrofit = sector.get("hydrogen", {}).get("retrofit", {})
-        contraction["storage"] |= retrofit.get("storage", False)
-        contraction["pipeline"] |= retrofit.get("pipelines", False)
-    return contraction
+
+def get_gas_retrofit(sector: dict) -> dict[str, bool]:
+    """
+    Whether the existing natural gas pipelines and storage may be retrofitted to
+    hydrogen (``sector: natural_gas: retrofit``).
+    """
+    setting = sector.get("natural_gas", {}).get("retrofit", {})
+    return {part: setting.get(part, False) for part in ("pipeline", "storage")}

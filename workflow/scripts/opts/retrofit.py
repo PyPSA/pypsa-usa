@@ -11,6 +11,7 @@ measured by its fuel input (p_nom / efficiency), as that of the links
 """
 
 import logging
+from collections.abc import Collection
 
 import pandas as pd
 import pypsa
@@ -40,7 +41,7 @@ def _identity(names: pd.Index, dim: str) -> pd.Series:
     return pd.Series(names, index=pd.Index(names, name="name"), name=dim)
 
 
-def add_retrofit_constraints(n: pypsa.Network) -> None:
+def add_retrofit_constraints(n: pypsa.Network, kept: Collection[str] = ()) -> None:
     """
     Shares the capacity of each component with the components retrofitted from it.
 
@@ -48,6 +49,10 @@ def add_retrofit_constraints(n: pypsa.Network) -> None:
     existing one, so that the component may also retire:
 
         original + sum(retrofit / retrofit_factor) <= existing
+
+    Components of the carriers ``kept`` may not retire, so for them the two add
+    up to the existing capacity (``retrofit-capacity-kept``): what they lose is
+    retrofitted.
 
     A component no longer extendable (built in an earlier myopic horizon) is
     left out: a retrofit has already been taken from the existing capacity, and
@@ -88,8 +93,20 @@ def add_retrofit_constraints(n: pypsa.Network) -> None:
         # the originals of each component are a subset of all: align them by name, not position
         lhs.append(expr.reindex(original=originals))
 
-    n.model.add_constraints(sum(lhs[1:], lhs[0]), "<=", DataArray(existing), name="retrofit-capacity")
-    logger.info(f"Shared the capacity of {len(originals)} components with the components retrofitted from them")
+    total = sum(lhs[1:], lhs[0])
+    carrier = pd.concat([n.components[component].static.carrier for component in CAPACITIES])
+    is_kept = carrier[~carrier.index.duplicated()].reindex(originals).isin(kept).to_numpy()
+    for name, sign, names in (
+        ("retrofit-capacity", "<=", originals[~is_kept]),
+        ("retrofit-capacity-kept", "==", originals[is_kept]),
+    ):
+        if not names.empty:
+            rhs = DataArray(existing.loc[names].rename_axis("original"))
+            n.model.add_constraints(total.sel(original=names), sign, rhs, name=name)
+    logger.info(
+        f"Shared the capacity of {len(originals)} components with the components retrofitted from them; "
+        f"{is_kept.sum()} of them may not retire",
+    )
 
     _add_reservoir_constraints(n)
 
@@ -98,19 +115,20 @@ def _add_reservoir_constraints(n: pypsa.Network) -> None:
     """
     Shares the wells of reservoirs retrofitted to hydrogen between hydrogen and natural gas.
 
-    ``retrofit-capacity`` shares the volume; this ties the rates to it. For each
-    reservoir:
+    ``retrofit-capacity`` shares the volume; this ties the hydrogen rates to it.
+    For each reservoir:
 
         h2_withdrawal / h2_withdrawal_whole == h2_energy / h2_energy_whole
         h2_injection <= h2_withdrawal
-        gas_injection <= gas_withdrawal
 
     where ``*_whole`` is the whole reservoir retrofitted (``retrofit_factor``
     times the gas capacity). The wells go with the volume, so the withdrawal is
     fixed by the retrofitted share. Injection runs through the same wells, so it
-    is capped by the withdrawal of its side. Our EIA-based estimate puts gas
-    injection capacity below withdrawal capacity, so we let hydrogen injection
-    expand freely (larger compressors) up to the withdrawal rate.
+    is capped by the withdrawal. Our EIA-based estimate puts gas injection
+    capacity below withdrawal capacity, so we let hydrogen injection expand
+    freely (larger compressors) up to the withdrawal rate. The gas left in the
+    reservoir follows the same rules
+    (``opts.sector.add_gas_storage_constraints``).
     """
     stores = _retrofits(n.stores)
     links = _retrofits(n.links)
@@ -127,7 +145,7 @@ def _add_reservoir_constraints(n: pypsa.Network) -> None:
     whole_energy = reservoirs.retrofit_factor * n.stores.loc[reservoirs.retrofit_from, "e_nom_max"].to_numpy()
     # rate == r * energy, with r = whole_rate / whole_energy (~1e-5 to 1e-3 per
     # hour), written as rate / sqrt(r) == sqrt(r) * energy so both coefficients
-    # are better conditioned, as in opts.sector.add_gas_storage_contraction_constraints
+    # are better conditioned, as in opts.sector.add_gas_storage_constraints
     scale = (whole_rate.to_numpy() / whole_energy.to_numpy()) ** 0.5
     lhs = (p_nom.sel(name=discharger.index) / DataArray(pd.Series(scale, index=discharger.index))).groupby(
         store,
@@ -139,25 +157,12 @@ def _add_reservoir_constraints(n: pypsa.Network) -> None:
     # hydrogen injection, through the retrofitted wells
     discharger_of_bus = pd.Series(discharger.index, index=discharger.bus0)
     charger = n.links[(n.links.carrier == "h2_storage_charger") & n.links.bus1.isin(discharger_of_bus.index)]
-    _add_injection_limit(n, charger.bus1.map(discharger_of_bus), "hydrogen")
-
-    # gas injection, through the wells left to gas
-    gas_bus = n.stores.loc[reservoirs.retrofit_from, "bus"]
-    gas_links = n.links[n.links.carrier == "gas storage"]
-    gas_discharge = gas_links[gas_links.bus0.isin(gas_bus)]
-    discharge_of_bus = pd.Series(gas_discharge.index, index=gas_discharge.bus0)
-    gas_charge = gas_links[gas_links.bus1.isin(discharge_of_bus.index)]
-    _add_injection_limit(n, gas_charge.bus1.map(discharge_of_bus), "gas")
-
-
-def _add_injection_limit(n: pypsa.Network, withdrawal: pd.Series, kind: str) -> None:
-    """Keeps each injection link (the index) at most its reservoir's ``withdrawal`` link."""
+    withdrawal = charger.bus1.map(discharger_of_bus)
     if withdrawal.empty:
         return
-    p_nom = n.model["Link-p_nom"]
     pairs = withdrawal.rename("withdrawal").rename_axis("name")
     lhs = (
         p_nom.sel(name=pairs.index).groupby(pairs).sum()
         - p_nom.sel(name=pairs.unique()).groupby(_identity(pairs.unique(), "withdrawal")).sum()
     )
-    n.model.add_constraints(lhs, "<=", 0, name=f"Link-retrofitted-{kind}-injection")
+    n.model.add_constraints(lhs, "<=", 0, name="Link-retrofitted-hydrogen-injection")

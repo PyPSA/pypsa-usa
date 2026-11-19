@@ -118,7 +118,7 @@ def test_storage_components(base_network, make_storage, aggregation):
     n.add("Bus", ["CA", "TX"], suffix=" gas", carrier="gas")
     storage = make_storage(aggregation)
 
-    storage.build_infrastructure(n, injection_loss=0.0103, compressor_fom=1277.7, contraction=False)
+    storage.build_infrastructure(n, injection_loss=0.0103, compressor_fom=1277.7, economic_retirement=False)
 
     for _, row in storage.data.iterrows():
         name = row.NAME
@@ -148,7 +148,7 @@ def test_storage_contracts_down_to_zero(base_network, make_storage):
     n.add("Bus", ["CA", "TX"], suffix=" gas", carrier="gas")
     storage = make_storage()
 
-    storage.build_infrastructure(n, injection_loss=0.0103, compressor_fom=1277.7, contraction=True)
+    storage.build_infrastructure(n, injection_loss=0.0103, compressor_fom=1277.7, economic_retirement=True)
 
     data = storage.data.set_index("NAME")
     stores = n.stores.loc[data.index + " gas storage"]
@@ -165,7 +165,9 @@ def test_storage_contracts_down_to_zero(base_network, make_storage):
 def test_underground_storage_summary_sums_formations(base_network, make_storage):
     n = base_network
     n.add("Bus", ["CA", "TX"], suffix=" gas", carrier="gas")
-    make_storage("formation").build_infrastructure(n, injection_loss=0.0103, compressor_fom=1277.7, contraction=False)
+    make_storage("formation").build_infrastructure(
+        n, injection_loss=0.0103, compressor_fom=1277.7, economic_retirement=False
+    )
     stores = n.stores.index[n.stores.carrier == "gas storage"]
     n.stores_t.e = pd.DataFrame(1.0, index=n.snapshots, columns=stores)
 

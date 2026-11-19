@@ -52,6 +52,7 @@ def build_hydrogen(
     states_geometry: gpd.GeoDataFrame,
     center_points: pd.DataFrame,
     options: dict,
+    retrofit: dict[str, bool] | None = None,
 ) -> None:
     """
     Adds the hydrogen supply chain to the network.
@@ -75,6 +76,9 @@ def build_hydrogen(
         State center coordinates ('x', 'y') indexed by state
     options: dict
         ``sector: hydrogen`` config
+    retrofit: dict[str, bool], optional
+        Whether the natural gas 'pipeline' and 'storage' are retrofitted to
+        hydrogen (``_helpers.get_gas_retrofit``)
     """
     states = get_hydrogen_states(n)
     production = options.get("production", [])
@@ -106,11 +110,11 @@ def build_hydrogen(
 
     # the natural gas infrastructure is sized once for all investment periods, so
     # it is retrofitted once, in the first
-    retrofit = options.get("retrofit", {})
+    retrofit = retrofit or {}
     first_year = n.investment_periods[0]
     if retrofit.get("storage", False):
         add_retrofitted_storage(n, costs[first_year], first_year, center_points)
-    if retrofit.get("pipelines", False):
+    if retrofit.get("pipeline", False):
         add_retrofitted_pipelines(n, costs[first_year], first_year)
 
 
@@ -483,7 +487,8 @@ def add_retrofitted_storage(n: pypsa.Network, costs: pd.DataFrame, year: int, ce
     formations (``natural_gas: storage_aggregation: state``) takes the mean of
     their conversion factors and costs: weighted by their working gas for the
     store, by their withdrawal for the rates. ``opts.retrofit`` takes the share
-    from the natural gas storage.
+    from the natural gas storage, whose store, injection and withdrawal become
+    extendable.
     """
     gas = n.stores[n.stores.carrier == "gas storage"]
     if gas.empty:
@@ -519,7 +524,7 @@ def add_retrofitted_storage(n: pypsa.Network, costs: pd.DataFrame, year: int, ce
     discharge = discharge[pd.Index(n.links.loc[discharge, "bus0"]).get_indexer(gas.bus)]
 
     states = pd.Index(n.links.loc[charge, "bus0"].map(n.buses.STATE))
-    existing_energy = _existing_capacity(n, "Store", gas.index)
+    existing_energy = _retrofit_from(n, "Store", gas.index)
 
     buses = pd.Index(gas.bus.str.removesuffix(" gas storage") + " H2 storage retrofitted")
     n.add("Bus", buses, carrier="h2_storage", **_state_bus_attrs(list(states), center_points))
@@ -544,9 +549,9 @@ def add_retrofitted_storage(n: pypsa.Network, costs: pd.DataFrame, year: int, ce
 
     # the wells withdraw the hydrogen at a share of the gas rate; new compressors
     # inject it through the same wells, at most at that rate. The gas injection,
-    # kept to the wells left to gas, contracts too
-    _existing_capacity(n, "Link", charge)
-    withdrawal = power_factor * _existing_capacity(n, "Link", discharge)
+    # kept to the wells left to gas, may shrink too
+    _retrofit_from(n, "Link", charge)
+    withdrawal = power_factor * _retrofit_from(n, "Link", discharge)
     for kind, bus0, bus1, efficiency, retrofitted in (
         ("charger", states + " H2", buses, 1 - costs.at["h2_storage_charger", "compression-loss"], {}),
         ("discharger", buses, states + " H2", 1, {"retrofit_from": discharge, "retrofit_factor": power_factor}),
@@ -595,7 +600,7 @@ def add_retrofitted_pipelines(n: pypsa.Network, costs: pd.DataFrame, year: int) 
     A retrofitted pipeline carries ``capacity-conversion`` times the natural gas
     capacity it takes, in either direction, along the length of the gas
     pipeline. ``opts.retrofit`` takes the capacity from the natural gas
-    pipeline.
+    pipeline, which becomes extendable.
     """
     gas = n.links[n.links.carrier == "gas pipeline"]
     if gas.empty:
@@ -620,18 +625,18 @@ def add_retrofitted_pipelines(n: pypsa.Network, costs: pd.DataFrame, year: int) 
         gas.length.to_numpy(),
         # the reverse link follows the forward one, which takes the gas capacity
         fwd={"retrofit_from": gas.index, "retrofit_factor": factor},
-        p_nom_max=factor * _existing_capacity(n, "Link", gas.index),
+        p_nom_max=factor * _retrofit_from(n, "Link", gas.index),
     )
 
 
-def _existing_capacity(n: pypsa.Network, component: str, names: pd.Index) -> np.ndarray:
+def _retrofit_from(n: pypsa.Network, component: str, names: pd.Index) -> np.ndarray:
     """
-    Existing capacity of natural gas components that contract, from which what is
-    retrofitted is taken (``_helpers.get_gas_infra_contraction``).
+    Existing capacity of the natural gas components that hydrogen is retrofitted
+    from. They become extendable between zero and it (``build_natural_gas`` sets
+    those bounds), so that ``opts.retrofit`` can take what is retrofitted from
+    them; whether they may also retire is ``natural_gas: economic_retirement``.
     """
     static = n.components[component].static
     attr = "e_nom" if component == "Store" else "p_nom"
-    fixed = names[~static.loc[names, f"{attr}_extendable"].to_numpy()]
-    if not fixed.empty:
-        raise ValueError(f"Natural gas components to retrofit to hydrogen must contract: {fixed.tolist()}")
+    static.loc[names, f"{attr}_extendable"] = True
     return static.loc[names, f"{attr}_max"].to_numpy()

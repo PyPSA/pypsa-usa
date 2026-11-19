@@ -34,7 +34,7 @@ the gas the reformers draw is tracked like that of the other gas users.
 
 ## Retrofitted natural gas infrastructure
 
-With natural gas (`E-G-H`), `sector: hydrogen: retrofit` lets the model retrofit natural gas
+With natural gas (`E-G-H`), `sector: natural_gas: retrofit` lets the model retrofit natural gas
 storage and pipelines to hydrogen. The natural gas infrastructure is sized once for all investment
 periods, so it is retrofitted in the first one.
 
@@ -49,16 +49,16 @@ periods, so it is retrofitted in the first one.
   (`sector: natural_gas: storage_aggregation: state`), a state's storage takes the mean
   conversion factors and costs of its formations, weighted by their working gas (energy, store)
   or their withdrawal (rates, injection and withdrawal).
-- `pipelines`: each natural gas pipeline between states can carry 0.6 times its natural gas
+- `pipeline`: each natural gas pipeline between states can carry 0.6 times its natural gas
   capacity as hydrogen
   ([European Hydrogen Backbone, 2020](https://gasforclimate2050.eu/wp-content/uploads/2020/07/2020_European-Hydrogen-Backbone_Report.pdf)),
   in either direction, losing as much along the way as a new hydrogen
   pipeline.
 
 What is retrofitted is taken from the natural gas capacity: the gas capacity left plus the
-hydrogen capacity over its conversion factor is at most the existing gas capacity. The gas
-storage or pipelines that can be retrofitted therefore always contract
-(`sector: natural_gas: infra_contraction`), and may also retire.
+hydrogen capacity over its conversion factor is the existing gas capacity. With
+`sector: natural_gas: economic_retirement`, it is at most the existing gas capacity, so the gas
+storage or pipelines may also retire.
 
 ## Sector models without natural gas
 

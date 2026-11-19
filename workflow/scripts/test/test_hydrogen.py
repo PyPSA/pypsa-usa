@@ -13,7 +13,7 @@ from shapely.geometry import box
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from _helpers import get_gas_infra_contraction, get_multiindex_snapshots
+from _helpers import get_gas_economic_retirement, get_gas_retrofit, get_multiindex_snapshots
 from add_sectors import add_fuel_supply, get_period_fuel_price, get_plant_fuel_price
 from build_cost_data import build_hydrogen_turbines, get_hydrogen_costs
 from build_emission_tracking import build_ch4_tracking
@@ -28,6 +28,7 @@ from build_hydrogen import (
 from money import deflator
 from opts.bidirectional_link import DIRECTION_SUFFIX, add_bidirectional_link_constraints
 from opts.retrofit import add_retrofit_constraints
+from opts.sector import add_gas_storage_constraints
 
 pytestmark = pytest.mark.fast
 
@@ -98,7 +99,7 @@ OPTIONS = {
 }
 
 
-def build(n, demand, storage_sites, options=OPTIONS):
+def build(n, demand, storage_sites, options=OPTIONS, retrofit=None):
     build_hydrogen(
         n,
         costs={2030: hydrogen_costs(2030)},
@@ -108,6 +109,7 @@ def build(n, demand, storage_sites, options=OPTIONS):
         states_geometry=STATES,
         center_points=CENTERS,
         options=options,
+        retrofit=retrofit,
     )
 
 
@@ -359,11 +361,12 @@ GAS_STORAGE = (
 )
 
 
-def add_gas_infrastructure(n, reservoirs=GAS_STORAGE, shares=True, contraction=True):
+def add_gas_infrastructure(n, reservoirs=GAS_STORAGE, shares=True, retire=False):
     """
     Gas storage, with the shares of its formations in its working gas and withdrawal
-    as ``GasStorage`` gives them, and pipelines between CA and NV both ways. With
-    ``contraction``, as for retrofitting, they are optimised up to their capacity.
+    as ``GasStorage`` gives them, and pipelines between CA and NV both ways, as
+    ``build_natural_gas`` builds them: fixed unless they may ``retire``, with
+    bounds from zero to their capacity. Retrofitting makes them extendable.
     """
     for name, state, working_shares, withdrawal_shares, energy, cushion, withdrawal in reservoirs:
         storage = f"{name} gas storage"
@@ -379,7 +382,7 @@ def add_gas_infrastructure(n, reservoirs=GAS_STORAGE, shares=True, contraction=T
             carrier="gas storage",
             e_nom=energy,
             e_nom_max=energy,
-            e_nom_extendable=contraction,
+            e_nom_extendable=retire,
             e_min_pu=cushion,
             e_cyclic_per_period=True,
             **(formation_shares if shares else {}),
@@ -393,7 +396,7 @@ def add_gas_infrastructure(n, reservoirs=GAS_STORAGE, shares=True, contraction=T
             carrier="gas storage",
             p_nom=[injection, withdrawal],
             p_nom_max=[injection, withdrawal],
-            p_nom_extendable=contraction,
+            p_nom_extendable=retire,
         )
     n.add(
         "Link",
@@ -403,7 +406,7 @@ def add_gas_infrastructure(n, reservoirs=GAS_STORAGE, shares=True, contraction=T
         carrier="gas pipeline",
         p_nom=[100.0, 50.0],
         p_nom_max=[100.0, 50.0],
-        p_nom_extendable=contraction,
+        p_nom_extendable=retire,
         length=300.0,
         capital_cost=1.0,
     )
@@ -411,7 +414,7 @@ def add_gas_infrastructure(n, reservoirs=GAS_STORAGE, shares=True, contraction=T
 
 def test_retrofitted_storage(network, demand, storage_sites):
     add_gas_infrastructure(network)
-    build(network, demand, storage_sites, OPTIONS | {"retrofit": {"storage": True}})
+    build(network, demand, storage_sites, retrofit={"storage": True})
     costs = hydrogen_costs(2030)
 
     stores = network.stores[network.stores.carrier == "h2_storage_retrofitted"]
@@ -458,10 +461,16 @@ def test_retrofitted_storage(network, demand, storage_sites):
     assert discharger.retrofit_from == "NV depleted-field discharge gas storage"
 
 
-def test_retrofitted_gas_storage_must_contract(network, demand, storage_sites):
-    add_gas_infrastructure(network, contraction=False)
-    with pytest.raises(ValueError, match="must contract"):
-        build(network, demand, storage_sites, OPTIONS | {"retrofit": {"storage": True}})
+def test_retrofitting_makes_the_gas_parts_extendable(network, demand, storage_sites):
+    add_gas_infrastructure(network)
+    build(network, demand, storage_sites, retrofit={"pipeline": True, "storage": True})
+
+    stores = network.stores[network.stores.carrier == "gas storage"]
+    links = network.links[network.links.carrier.isin(["gas storage", "gas pipeline"])]
+    assert stores.e_nom_extendable.all() and links.p_nom_extendable.all()
+    # between zero and their existing capacity
+    assert (stores.e_nom_max == stores.e_nom).all() and (links.p_nom_max == links.p_nom).all()
+    assert (stores.e_nom_min == 0).all() and (links.p_nom_min == 0).all()
 
 
 def test_state_storage_takes_the_mean_of_its_formations(network, demand, storage_sites):
@@ -472,7 +481,7 @@ def test_state_storage_takes_the_mean_of_its_formations(network, demand, storage
             ("NV", "NV", {"salt-dome": 0.25, "aquifer": 0.75}, {"salt-dome": 0.5, "aquifer": 0.5}, 2000.0, 0.5, 4.0),
         ],
     )
-    build(network, demand, storage_sites, OPTIONS | {"retrofit": {"storage": True}})
+    build(network, demand, storage_sites, retrofit={"storage": True})
     costs = hydrogen_costs(2030)
 
     def annualized(technology, formation):
@@ -503,12 +512,12 @@ def test_state_storage_takes_the_mean_of_its_formations(network, demand, storage
 def test_storage_retrofitting_needs_the_formation_shares(network, demand, storage_sites):
     add_gas_infrastructure(network, shares=False)
     with pytest.raises(ValueError, match="formation shares"):
-        build(network, demand, storage_sites, OPTIONS | {"retrofit": {"storage": True}})
+        build(network, demand, storage_sites, retrofit={"storage": True})
 
 
 def test_retrofitted_pipelines(network, demand, storage_sites):
     add_gas_infrastructure(network)
-    build(network, demand, storage_sites, OPTIONS | {"retrofit": {"pipelines": True}})
+    build(network, demand, storage_sites, retrofit={"pipeline": True})
     costs = hydrogen_costs(2030)
 
     pipes = network.links[network.links.carrier == "h2_pipeline_retrofitted"]
@@ -538,13 +547,18 @@ def test_retrofitted_pipelines(network, demand, storage_sites):
 
 
 def test_nothing_to_retrofit_without_natural_gas(network, demand, storage_sites):
-    build(network, demand, storage_sites, OPTIONS | {"retrofit": {"storage": True, "pipelines": True}})
+    build(network, demand, storage_sites, retrofit={"pipeline": True, "storage": True})
 
     assert not network.stores.carrier.str.contains("retrofitted").any()
     assert not network.links.carrier.str.contains("retrofitted").any()
 
 
-def test_retrofitting_shares_the_gas_capacity():
+@pytest.mark.parametrize("retire", [True, False])
+def test_retrofitting_shares_the_gas_capacity(retire):
+    """
+    The gas left plus the hydrogen over its factor is at most the existing gas
+    capacity when the gas may retire, and is the existing capacity when it may not.
+    """
     n = pypsa.Network()
     n.set_snapshots(pd.MultiIndex.from_product([[2030], pd.date_range("2030-01-01", periods=4, freq="h")]))
     n.set_investment_periods([2030])
@@ -560,10 +574,12 @@ def test_retrofitting_shares_the_gas_capacity():
 
     def extra_functionality(n, sns):
         add_bidirectional_link_constraints(n)
-        add_retrofit_constraints(n)
+        add_retrofit_constraints(n, kept=[] if retire else ["gas storage", "gas pipeline"])
+        add_gas_storage_constraints(n)
 
     status, _ = n.optimize(solver_name="highs", multi_investment_periods=True, extra_functionality=extra_functionality)
     assert status == "ok"
+    assert ("retrofit-capacity-kept" in n.model.constraints) is not retire
 
     stores, links = n.stores, n.links
     h2_store = stores.filter(like="H2 storage retrofitted", axis=0)
@@ -571,14 +587,19 @@ def test_retrofitting_shares_the_gas_capacity():
     h2_pipe = links.loc["NV CA pipeline h2_pipeline_retrofitted_fwd_2030", "p_nom_opt"]
     assert links.loc[["CA NV pipeline h2_pipeline_retrofitted_fwd_2030"], "p_nom_opt"].sum() + h2_pipe > 0
 
-    # gas left + hydrogen / factor is at most the existing capacity
+    # gas left + hydrogen / factor is at most the existing capacity, or all of it
     gas_store = stores.loc[h2_store.retrofit_from, "e_nom_opt"].to_numpy()
     total = gas_store + h2_store.e_nom_opt.to_numpy() / 0.2551
-    assert (total <= np.array([1000, 500, 2000]) + 1e-6).all()
     gas_pipe = links.loc["NV CA pipeline", "p_nom_opt"]
-    assert gas_pipe + h2_pipe / 0.6 <= 50 + 1e-6
-    # gas capacity with a fixed cost and no use retires
-    assert gas_pipe == pytest.approx(0, abs=1e-6)
+    if retire:
+        assert (total <= np.array([1000, 500, 2000]) + 1e-6).all()
+        assert gas_pipe + h2_pipe / 0.6 <= 50 + 1e-6
+        # gas capacity with a fixed cost and no use retires
+        assert gas_pipe == pytest.approx(0, abs=1e-6)
+    else:
+        assert total == pytest.approx([1000, 500, 2000])
+        assert gas_pipe + h2_pipe / 0.6 == pytest.approx(50)
+        assert links.loc["CA NV pipeline", "p_nom_opt"] == pytest.approx(100)
 
     # a reservoir withdraws the share of the gas rate that it holds of the gas energy
     for reservoir, power, withdrawal, energy in (
@@ -597,10 +618,13 @@ def test_retrofitting_shares_the_gas_capacity():
             "p_nom_opt",
         ]
         assert gas_charge <= gas_discharge + 1e-6
+        # and the gas wells go with the gas volume
+        gas_share = stores.at[f"{reservoir} gas storage", "e_nom_opt"] / energy
+        assert gas_discharge / withdrawal == pytest.approx(gas_share, abs=1e-6)
 
 
 def test_injection_through_the_wells_of_each_part():
-    """Hydrogen and gas inject at most what their wells withdraw, at full use of the reservoir."""
+    """Hydrogen and gas inject at most what their wells withdraw, and the wells go with the volume."""
     n = pypsa.Network()
     n.set_snapshots(pd.MultiIndex.from_product([[2030], pd.date_range("2030-01-01", periods=2, freq="h")]))
     n.set_investment_periods([2030])
@@ -618,6 +642,7 @@ def test_injection_through_the_wells_of_each_part():
 
     def extra_functionality(n, sns):
         add_retrofit_constraints(n)
+        add_gas_storage_constraints(n)
 
     status, _ = n.optimize(solver_name="highs", multi_investment_periods=True, extra_functionality=extra_functionality)
     assert status == "ok"
@@ -626,25 +651,29 @@ def test_injection_through_the_wells_of_each_part():
     # half the wells withdraw hydrogen at 0.8 times the gas rate; new compressors inject as much
     assert links[discharger] == pytest.approx(0.5 * 0.8 * 10)
     assert links[charger] == pytest.approx(links[discharger])
-    # the gas keeps its compressors, and withdrawal enough to inject through
+    # the gas keeps its compressors, and withdrawal enough to inject through, so
+    # the volume that goes with these wells: 3.7 / 10 of the 1000 MWh
     assert links["CA salt-dome charge gas storage"] == pytest.approx(3.7)
     assert links["CA salt-dome discharge gas storage"] == pytest.approx(3.7)
+    assert n.stores.at["CA salt-dome gas storage", "e_nom_opt"] == pytest.approx(370)
 
 
 @pytest.mark.parametrize(
-    ("setting", "retrofit", "hydrogen", "expected"),
+    ("natural_gas", "retirement", "retrofit"),
     [
-        ({}, {}, True, {"production": False, "pipeline": False, "storage": False}),
-        ({"production": True, "storage": True}, {}, True, {"production": True, "pipeline": False, "storage": True}),
-        # retrofitting contracts the gas storage and pipelines it takes from
-        ({}, {"storage": True, "pipelines": True}, True, {"production": False, "pipeline": True, "storage": True}),
-        # but only with hydrogen in the model
-        ({}, {"storage": True, "pipelines": True}, False, {"production": False, "pipeline": False, "storage": False}),
+        ({}, {"production": False, "pipeline": False, "storage": False}, {"pipeline": False, "storage": False}),
+        # retrofitting does not let a part retire
+        (
+            {"economic_retirement": {"production": True}, "retrofit": {"pipeline": True, "storage": True}},
+            {"production": True, "pipeline": False, "storage": False},
+            {"pipeline": True, "storage": True},
+        ),
     ],
 )
-def test_gas_infrastructure_contraction(setting, retrofit, hydrogen, expected):
-    sector = {"natural_gas": {"infra_contraction": setting}, "hydrogen": {"retrofit": retrofit}}
-    assert get_gas_infra_contraction(sector, hydrogen) == expected
+def test_gas_switches_are_independent(natural_gas, retirement, retrofit):
+    sector = {"natural_gas": natural_gas}
+    assert get_gas_economic_retirement(sector) == retirement
+    assert get_gas_retrofit(sector) == retrofit
 
 
 def test_switches(network, demand, storage_sites):

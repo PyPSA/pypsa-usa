@@ -30,12 +30,13 @@ import pandas as pd
 import pypsa
 import yaml
 from _helpers import (
+    GAS_INFRASTRUCTURE,
     configure_logging,
-    get_gas_infra_contraction,
+    get_gas_economic_retirement,
     log_network_schema,
     update_config_from_wildcards,
 )
-from constants import HOURS_PER_YEAR
+from constants import HOURS_PER_YEAR, RETROFITS
 from opts.bidirectional_link import add_bidirectional_link_constraints
 from opts.interchange import add_interchange_constraints
 from opts.interfaces import add_interface_transmission_limits
@@ -57,7 +58,7 @@ from opts.sector import (
     add_demand_response_constraint,
     add_ev_generation_constraint,
     add_fossil_generation_constraint,
-    add_gas_storage_contraction_constraints,
+    add_gas_storage_constraints,
     add_gshp_capacity_constraint,
     add_ng_import_export_limits,
     add_sector_co2_constraints,
@@ -188,8 +189,14 @@ def extra_functionality(n, snapshots):
     # Always apply bidirectional link constraints
     add_bidirectional_link_constraints(n)
 
-    # Natural gas storage, pipelines and plants share their capacity with what is retrofitted from them
-    add_retrofit_constraints(n)
+    # Natural gas storage, pipelines and plants share their capacity with what is retrofitted from them;
+    # what may not retire keeps it all: gas infrastructure without economic retirement, and gas
+    # plants unless electricity: retirement is economic
+    retirement = get_gas_economic_retirement(config["sector"])
+    kept = [GAS_INFRASTRUCTURE[part] for part, retire in retirement.items() if not retire]
+    if config["electricity"].get("retirement", "technical") != "economic":
+        kept += sorted(set(RETROFITS.values()))
+    add_retrofit_constraints(n, kept=kept)
 
     # Apply demand response if configured
     dr_config = config["electricity"].get("demand_response", {})
@@ -223,9 +230,8 @@ def extra_functionality(n, snapshots):
         if config["sector"]["natural_gas"].get("imports", False):
             add_ng_import_export_limits(n, config)
 
-        # A contracting gas storage keeps its injection at least as large as its other parts
-        if get_gas_infra_contraction(config["sector"], "hydrogen" in opts)["storage"]:
-            add_gas_storage_contraction_constraints(n)
+        # The parts of an extendable gas storage keep their power to energy ratios
+        add_gas_storage_constraints(n)
 
         # Water heater tanks are sized to their heaters
         add_water_heater_tank_constraints(n)
@@ -311,7 +317,8 @@ def freeze_prior_periods(n: pypsa.Network, prior_period: int):
         existing = c.static.index.str.contains("existing", case=False, na=False)
         not_renewable = ~c.static["carrier"].isin(renewable_carriers)
         retirable = prior & existing & not_renewable & economic
-        # what can be retrofitted retires economically whatever the retirement
+        # what can be retrofitted stays extendable, so that later horizons can retrofit it;
+        # retrofit-capacity keeps its capacity unless it may retire
         retirable |= prior & c.static.index.isin(originals)
 
         # lock in the optimized capacity from the prior period as the starting point

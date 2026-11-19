@@ -158,7 +158,7 @@ def test_existing_plants_get_a_retrofit_in_every_period_they_are_active_in():
     assert ocht.capital_cost == pytest.approx((calculate_annuity(20, 0.05) * 330 + 26) * 1e3)
 
 
-def test_plants_that_can_be_retrofitted_retire_economically():
+def test_plants_that_can_be_retrofitted_become_extendable():
     n = two_period_network()
     attach_retrofits(n, {2030: retrofit_costs(), 2040: retrofit_costs()}, {"OCHT": RETROFIT["OCHT"]})
 
@@ -251,6 +251,43 @@ def test_retrofits_share_the_plant_fuel_input(as_link):
     assert plant == pytest.approx(100, abs=1e-3)
     assert retrofit == pytest.approx(80, abs=1e-3)
     assert plant / 0.5 + retrofit / 0.4 == pytest.approx(400, abs=1e-3)
+
+
+@pytest.mark.parametrize(("kept", "fuel_input"), [([], 60 / 0.4), (["CCGT"], 400)])
+def test_plants_retire_only_with_economic_retirement(kept, fuel_input):
+    """
+    A plant that may retire keeps only what serves the load. One that may not
+    (``kept``, technical retirement) keeps its fuel input, retrofitting what it
+    does not run as the plant.
+    """
+    n = pypsa.Network()
+    n.set_snapshots(pd.MultiIndex.from_product([[2030], pd.date_range("2030-01-01", periods=2, freq="h")]))
+    n.set_investment_periods([2030])
+    n.add("Bus", "p1")
+    n.add("Load", "p1", bus="p1", p_set=60)
+    n.add(
+        "Generator",
+        ["p1 CCGT existing", "p1 CCHT retrofit_2030"],
+        bus="p1",
+        carrier=["CCGT", "CCHT"],
+        p_nom=[200, 0],
+        p_nom_max=[200, np.inf],
+        p_nom_extendable=True,
+        efficiency=[0.5, 0.4],
+        marginal_cost=[100, 10],
+        capital_cost=1,
+    )
+    n.generators["retrofit_from"] = ["", "p1 CCGT existing"]
+    n.generators["retrofit_factor"] = 1.0
+
+    def extra_functionality(n, sns):
+        add_retrofit_constraints(n, kept=kept)
+
+    status, _ = n.optimize(solver_name="highs", multi_investment_periods=True, extra_functionality=extra_functionality)
+    assert status == "ok"
+
+    plant, retrofit = n.generators.loc[["p1 CCGT existing", "p1 CCHT retrofit_2030"], "p_nom_opt"]
+    assert plant / 0.5 + retrofit / 0.4 == pytest.approx(fuel_input, abs=1e-3)
 
 
 def test_carbon_capture_retrofits_capture_90_percent():

@@ -588,8 +588,9 @@ def attach_retrofits(n: pypsa.Network, costs_dict: dict[int, pd.DataFrame], retr
 
     The plant and its retrofits share the plant's fuel input
     (``opts.retrofit.add_retrofit_constraints``). So the plant becomes extendable
-    down to zero at its fixed O&M, and may retire whatever
-    ``electricity: retirement`` is. Only existing plants are retrofitted.
+    down to zero at its fixed O&M. It may retire only with ``electricity:
+    retirement: economic``; otherwise it keeps its fuel input, as the plant or
+    retrofitted. Only existing plants are retrofitted.
     """
     enabled = {target: options for target, options in retrofit.items() if options.get("enable", False)}
     if not enabled:

@@ -16,10 +16,13 @@ sector:
     marginal_cost_multiplier: 1
     existing_pipeline_multiplier: 1
     pipeline_length_factor: 1.25  # route length / distance between state centers
-    infra_contraction:  # true = the existing capacity may shrink to zero; retrofitting to hydrogen sets it for storage and pipelines
+    economic_retirement:  # true = the existing capacity may retire, saving its fixed O&M; retrofitting to hydrogen does not need it
       production: false
       pipeline: false
       storage: false
+    retrofit:  # to hydrogen, in the first investment period (E-G-H)
+      pipeline: false  # gas pipelines between states
+      storage: false  # salt dome, depleted field and aquifer gas storage; costs by formation, weighted by state
     storage_aggregation: state  # state | formation
   methane:
     upstream_leakage_rate: 0.02 # per unit 
@@ -38,9 +41,6 @@ sector:
     pipelines: true  # new pipelines between states joined by AC transmission or a gas pipeline
     storage: true  # new underground storage; salt cavern, hard rock or pipe as available (ReEDS)
     pipeline_length_factor: 1.25  # route length / distance between state centers
-    retrofit:  # natural gas infrastructure retrofitted to hydrogen, in the first investment period (E-G-H)
-      storage: false  # salt dome, depleted field and aquifer gas storage; costs by formation, weighted by state
-      pipelines: false  # gas pipelines between states
   # docs-heating
   heating:
     heat_pump_sink_T: 55.

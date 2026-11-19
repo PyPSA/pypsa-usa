@@ -12,7 +12,13 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, get_gas_infra_contraction, get_snapshots, load_costs, log_network_schema
+from _helpers import (
+    configure_logging,
+    get_gas_retrofit,
+    get_snapshots,
+    load_costs,
+    log_network_schema,
+)
 from add_electricity import sanitize_carriers
 from add_extra_components import add_co2_network, add_co2_storage, add_dac
 from build_electricity_sector import build_electricty
@@ -779,8 +785,6 @@ if __name__ == "__main__":
             pipelines_path=snakemake.input.pipeline_capacity,
             pipeline_shape_path=snakemake.input.pipeline_shape,
             options=ng_options,
-            # what is retrofitted to hydrogen is taken from the gas storage and pipelines
-            contraction=get_gas_infra_contraction(snakemake.params.sector, "H" in sectors),
         )
 
         pop_layout_path = snakemake.input.clustered_pop_layout
@@ -958,6 +962,7 @@ if __name__ == "__main__":
             states_geometry=state_geometry.states,
             center_points=center_points,
             options=snakemake.params.sector["hydrogen"],
+            retrofit=get_gas_retrofit(snakemake.params.sector),
         )
 
         # hydrogen turbines draw from the state hydrogen buses
