@@ -1,12 +1,13 @@
 """
 Render the technology-capacity-target (TCT) map for the documentation.
 
-Draws the three policy families shipped in
-``repo_data/config/policy_constraints/technology_capacity_targets.csv`` as three
+Draws the four policy families shipped in
+``repo_data/config/policy_constraints/technology_capacity_targets.csv`` as four
 CONUS panels: the ReEDS nuclear no-build regions (``max = existing``), the ReEDS
-forced retirements (``max = 0``) and the ReEDS storage mandates (annual ``min``
-MW of ``4hr_battery_storage``). A target's ``region`` may be a state code or a
-ReEDS zone id, and both are drawn.
+forced retirements (``max = 0``), the ReEDS storage mandates (annual ``min``
+MW of all batteries, existing included) and the ReEDS offshore wind mandates (annual
+``min`` MW of ``offwind, offwind_floating``). A target's ``region`` may be a
+state code or a ReEDS zone id, and both are drawn.
 
 Only the shipped defaults are mapped; a user pointing
 ``electricity: technology_capacity_targets`` at another CSV gets other targets.
@@ -37,10 +38,15 @@ RETIRE_COLOR = "#a52a2a"
 NEUTRAL_COLOR = "#e6eaee"
 STORAGE_CMAP = "Blues"
 STORAGE_HORIZON = 2030
+OFFSHORE_CMAP = "Greens"
+# most states' offshore requirements start after 2030; by 2035 every listed state has one
+OFFSHORE_HORIZON = 2035
 
 # small north-eastern states get their label pushed off the map body
 LABEL_OFFSETS = {
     "MA": (44, 30),
+    "RI": (50, 8),
+    "CT": (-14, 52),
     "NJ": (52, -8),
     "MD": (46, -34),
 }
@@ -142,9 +148,9 @@ def _panel_nuclear(ax, targets, states, zones):
     for _, s in hit_states.iterrows():
         offset = LABEL_OFFSETS.get(s.st)
         _annotate(ax, s.geometry, s.st, offset, color="#1f2933" if offset else "white")
-    # the target zones are small New England polygons: one callout beats six stacked labels
+    # the target zones are small polygons (Long Island): one callout naming them
     if not hit_zones.empty:
-        _annotate(ax, hit_zones.union_all(), f"{len(zone_regions)} ReEDS zones", (40, 34), fontsize=6.5)
+        _annotate(ax, hit_zones.union_all(), ", ".join(zone_regions), (40, -30), fontsize=6.5)
 
     _panel_legend(
         ax,
@@ -164,7 +170,7 @@ def _panel_nuclear(ax, targets, states, zones):
     )
     ax.set_title(
         f"Nuclear no-build (max = existing, all horizons)\n{len(rows)} rows: "
-        f"{len(state_regions)} states, {len(zone_regions)} ReEDS zones; carrier 'nuclear, SMR'",
+        f"{len(state_regions)} states, {len(zone_regions)} ReEDS zone(s); carrier 'nuclear, SMR'",
         fontsize=10,
         loc="left",
         fontweight="bold",
@@ -198,12 +204,13 @@ def _panel_retirements(ax, targets, states):
     )
 
 
-def _panel_storage(ax, targets, states):
-    rows = targets[targets.name == "reeds_storage_mandate"].copy()
+def _panel_min_mw(ax, targets, states, name, title, cmap_name, horizon):
+    """Shade each state by the ``min`` MW of target family ``name`` in ``horizon``."""
+    rows = targets[targets.name == name].copy()
     rows["horizon"] = rows.planning_horizon.astype(int)
     by_state = rows.pivot_table(index="region", columns="horizon", values="min")
-    if STORAGE_HORIZON in by_state.columns and by_state[STORAGE_HORIZON].notna().all():
-        values, shown = by_state[STORAGE_HORIZON], STORAGE_HORIZON
+    if horizon in by_state.columns and by_state[horizon].notna().all():
+        values, shown = by_state[horizon], horizon
     else:
         values, shown = by_state[by_state.columns.max()], int(by_state.columns.max())
 
@@ -211,7 +218,7 @@ def _panel_storage(ax, targets, states):
     hit = states[states.st.isin(values.index)].copy()
     hit["value"] = hit.st.map(values)
     norm = Normalize(vmin=0, vmax=values.max())
-    cmap = plt.get_cmap(STORAGE_CMAP)
+    cmap = plt.get_cmap(cmap_name)
     hit.plot(ax=ax, color=[cmap(norm(v)) for v in hit.value], edgecolor="white", linewidth=0.7)
 
     for _, s in hit.iterrows():
@@ -226,15 +233,14 @@ def _panel_storage(ax, targets, states):
             fontsize=6.5,
         )
 
-    # an inset below the map keeps this panel the same size as the other two
+    # an inset below the map keeps this panel the same size as the others
     cax = ax.inset_axes([0.18, -0.06, 0.6, 0.035])
     cbar = ax.figure.colorbar(ScalarMappable(norm=norm, cmap=cmap), cax=cax, orientation="horizontal")
     cbar.set_label(f"{shown} minimum capacity [MW]", fontsize=8)
     cbar.ax.tick_params(labelsize=7)
     horizons = f"{rows.horizon.min()}-{rows.horizon.max()}"
     ax.set_title(
-        f"Storage mandates (min MW, 4hr_battery_storage)\n{len(rows)} rows over {len(values)} states, "
-        f"horizons {horizons};\nshaded by the {shown} minimum",
+        f"{title}\n{len(rows)} rows over {len(values)} states, horizons {horizons};\nshaded by the {shown} minimum",
         fontsize=10,
         loc="left",
         fontweight="bold",
@@ -245,20 +251,38 @@ def plot_tct_targets(tct_path, shapes_path, membership_path, out_path):
     targets = pd.read_csv(tct_path)
     states, zones = _load_geometry(shapes_path, membership_path)
 
-    fig, axes = plt.subplots(1, 3, figsize=(21, 6.4), dpi=150)
+    fig, axes = plt.subplots(2, 2, figsize=(14, 13.4), dpi=150)
+    axes = axes.ravel()
     _panel_nuclear(axes[0], targets, states, zones)
     _panel_retirements(axes[1], targets, states)
-    _panel_storage(axes[2], targets, states)
+    _panel_min_mw(
+        axes[2],
+        targets,
+        states,
+        "reeds_storage_mandate",
+        "Storage mandates (min MW, all batteries incl. existing)",
+        STORAGE_CMAP,
+        STORAGE_HORIZON,
+    )
+    _panel_min_mw(
+        axes[3],
+        targets,
+        states,
+        "reeds_offshore_wind_mandate",
+        "Offshore wind mandates (min MW, offwind + offwind_floating)",
+        OFFSHORE_CMAP,
+        OFFSHORE_HORIZON,
+    )
     xmin, ymin, xmax, ymax = states.total_bounds
     padx, pady = 0.04 * (xmax - xmin), 0.06 * (ymax - ymin)
     for ax in axes:
-        # identical framing and top-anchored boxes, so the three maps and titles line up
+        # identical framing and top-anchored boxes, so the four maps and titles line up
         ax.set_xlim(xmin - padx, xmax + padx)
         ax.set_ylim(ymin - pady, ymax + pady)
         ax.set_anchor("N")
         ax.set_axis_off()
 
-    fig.subplots_adjust(left=0.02, right=0.98, top=0.84, bottom=0.12, wspace=0.04)
+    fig.subplots_adjust(left=0.02, right=0.98, top=0.9, bottom=0.07, wspace=0.04, hspace=0.42)
     fig.suptitle(
         "Default technology capacity targets — "
         "repo_data/config/policy_constraints/technology_capacity_targets.csv "
