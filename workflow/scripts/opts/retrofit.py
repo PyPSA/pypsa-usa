@@ -108,7 +108,9 @@ def _add_reservoir_constraints(n: pypsa.Network) -> None:
     where ``*_whole`` is the whole reservoir retrofitted (``retrofit_factor``
     times the gas capacity). The wells go with the volume, so the withdrawal is
     fixed by the retrofitted share. Injection runs through the same wells, so it
-    is capped by the withdrawal of its side.
+    is capped by the withdrawal of its side. Our EIA-based estimate puts gas
+    injection capacity below withdrawal capacity, so we let hydrogen injection
+    expand freely (larger compressors) up to the withdrawal rate.
     """
     stores = _retrofits(n.stores)
     links = _retrofits(n.links)
