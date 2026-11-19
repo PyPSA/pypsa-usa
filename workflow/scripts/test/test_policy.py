@@ -9,6 +9,7 @@ and Regional CO2 Limits.
 import logging
 import os
 import sys
+from pathlib import Path
 
 import pandas as pd
 import pypsa
@@ -619,18 +620,111 @@ def test_add_rps_constraints_without_params(policy_network, rps_config):
     assert all("2030" in c for c in rps)
 
 
-def test_process_reeds_wide_format_horizons_are_ints(tmp_path):
-    """The wide CES file melts to string years; they must be cast so the horizon filter keeps them."""
+def test_tct_storage_mandate_counts_existing_and_all_durations(policy_network, tmp_path):
+    """A storage mandate listing every battery carrier nets out existing batteries and lets any duration count."""
+    from opts.policy import add_technology_capacity_target_constraints
+
+    n = policy_network
+    n.add("StorageUnit", "battery_existing", bus="z1", carrier="battery", p_nom=100, max_hours=2)
+    for hours in (4, 8):
+        n.add(
+            "StorageUnit",
+            f"battery_{hours}hr",
+            bus="z1",
+            carrier=f"{hours}hr_battery_storage",
+            p_nom_extendable=True,
+            max_hours=hours,
+            capital_cost=100 * hours,
+        )
+
+    fn = tmp_path / "tct.csv"
+    fn.write_text(
+        "name,planning_horizon,region,carrier,min,max\n"
+        'reeds_storage_mandate,2030,CA,"battery, 4hr_battery_storage, 8hr_battery_storage",150,\n',
+    )
+    n.optimize.create_model(multi_investment_periods=True)
+    add_technology_capacity_target_constraints(n, {"electricity": {"technology_capacity_targets": str(fn)}})
+
+    (name,) = [c for c in n.model.constraints if c.startswith("GlobalConstraint-") and c.endswith("_min")]
+    con = n.model.constraints[name]
+    # 150 MW mandate minus the 100 MW existing battery
+    assert float(con.rhs) == 50
+    # every extendable battery in CA enters the left-hand side, whatever its duration
+    # (the base network already carries an extendable 'battery1' on z1)
+    su = n.storage_units
+    expected = su.index[su.p_nom_extendable & (su.bus == "z1") & su.carrier.str.contains("battery")]
+    assert {"battery_4hr", "battery_8hr"} <= set(expected)
+    lhs_vars = set(con.lhs.vars.values.ravel()) - {-1}
+    p_nom = n.model["StorageUnit-p_nom"]
+    assert lhs_vars == {int(p_nom.sel(name=name).labels) for name in expected}
+
+
+def test_shipped_storage_mandates_cover_every_battery_carrier():
+    """The shipped storage mandates count existing batteries and every new-build battery duration."""
+    from constants import ATB_TECH_MAPPER
+
+    tct = pd.read_csv(
+        Path(__file__).parents[2] / "repo_data" / "config" / "policy_constraints" / "technology_capacity_targets.csv"
+    )
+    storage = tct[tct.name == "reeds_storage_mandate"]
+    battery_carriers = {"battery"} | {c for c in ATB_TECH_MAPPER if c.endswith("hr_battery_storage")}
+    for carriers in storage.carrier.unique():
+        assert {c.strip() for c in carriers.split(",")} == battery_carriers
+
+
+def test_process_reeds_ces_long_format(tmp_path):
+    """The ReEDS CES file is long, headed '*t,st,Value'; zero fractions are dropped."""
     from opts.policy import CES_CARRIERS, _process_reeds_data
 
     fn = tmp_path / "ces_fraction.csv"
-    fn.write_text("st,2029,2030,2040\nCA,0,0.571,0.8\nCO,0,0,0.5\n")
+    fn.write_text("*t,st,Value\n2029,CA,0\n2030,CA,0.605\n2040,CA,0.917\n2040,CO,0.726\n")
 
     ces = _process_reeds_data(fn, CES_CARRIERS, value_col="pct")
 
+    assert list(ces.columns) == ["region", "planning_horizon", "carrier", "pct"]
     assert ces.planning_horizon.dtype.kind == "i"
-    assert ces.planning_horizon.isin([2030, 2040]).sum() == 3
-    assert ces.set_index(["region", "planning_horizon"]).pct.loc[("CA", 2030)] == 0.571
+    assert len(ces) == 3
+    assert ces.set_index(["region", "planning_horizon"]).pct.loc[("CA", 2030)] == 0.605
+    assert set(ces.carrier) == {", ".join(CES_CARRIERS)}
+
+
+def test_process_reeds_rps_ignores_carveouts(tmp_path):
+    """The ReEDS RPS file is long; only rps_all is used, the solar/wind carve-outs are ignored."""
+    from opts.policy import RPS_CARRIERS, _process_reeds_data
+
+    fn = tmp_path / "rps_fraction.csv"
+    fn.write_text("t,st,rps_all,rps_solar,rps_wind\n2030,DE,0.22,0.05,0\n2030,AZ,0,0,0\n")
+
+    rps = _process_reeds_data(fn, RPS_CARRIERS, value_col="pct")
+
+    assert rps.region.tolist() == ["DE"]
+    assert rps.pct.tolist() == [0.22]
+
+
+def test_process_reeds_rejects_wide_format(tmp_path):
+    """The old wide layout (one column per year) is no longer read."""
+    from opts.policy import CES_CARRIERS, _process_reeds_data
+
+    fn = tmp_path / "ces_fraction.csv"
+    fn.write_text("st,2030,2040\nCA,0.571,0.8\n")
+
+    with pytest.raises(ValueError, match="long-format"):
+        _process_reeds_data(fn, CES_CARRIERS, value_col="pct")
+
+
+def test_shipped_reeds_portfolio_files_parse():
+    """The ReEDS RPS and CES files shipped in repo_data parse and keep the post-2025 horizons."""
+    from opts.policy import CES_CARRIERS, RPS_CARRIERS, _process_reeds_data
+
+    reeds_dir = Path(__file__).parents[2] / "repo_data" / "config" / "policy_constraints" / "reeds"
+    rps = _process_reeds_data(reeds_dir / "rps_fraction.csv", RPS_CARRIERS, value_col="pct")
+    ces = _process_reeds_data(reeds_dir / "ces_fraction.csv", CES_CARRIERS, value_col="pct")
+
+    for df in (rps, ces):
+        assert df.planning_horizon.between(2010, 2050).all()
+        assert df.pct.between(0, 1).all()
+        assert 2030 in set(df.planning_horizon)
+    assert len(ces.region.unique()) == 16
 
 
 def test_add_rps_constraints_zone_without_eligible_gens_does_not_stop_others(policy_network, rps_config, tmp_path):

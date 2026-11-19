@@ -19,15 +19,17 @@ read from there directly by the rules — there is no copy step. Each file can b
 shipped, edited in place, or replaced by pointing the corresponding `electricity:` config
 key at your own CSV to explore new policy pathways.
 
-- **Renewable Portfolio Standards (RPS)**: State RPS compliance trajectories derived from the
-  NREL ReEDS model inputs (`reeds/rps_fraction.csv`), covering roughly 30 states with annual
-  fractions from 2010 through 2050, including solar- and wind-specific carve-outs. Custom
+- **Renewable Portfolio Standards (RPS)**: State RPS compliance trajectories from the NREL
+  ReEDS model inputs (`reeds/rps_fraction.csv`, ReEDS release `2026.09.21`; source and hashes
+  in `reeds/README.md`), covering 32 states with annual fractions from 2010 through 2050. The
+  file also lists solar- and wind-specific carve-outs, which are not applied (as in the ReEDS
+  default). Custom
   region/carrier targets can be added through `portfolio_standards.csv`; compliance is grouped
   by REC trading zones (mapped on the [portfolio standards](model-constraints.md#portfolio-standards-rps)
   page).
 - **Clean Energy Standards (CES)**: State CES trajectories from the ReEDS inputs
-  (`reeds/ces_fraction.csv`) for 16 states (CA, CO, CT, IL, MA, ME, MI, MN, NC, NE, NM, NV,
-  NY, OR, VA, WA), with annual fractions through 2050.
+  (`reeds/ces_fraction.csv`, long format `*t,st,Value`) for 16 states (CA, CO, CT, IL, MA, ME,
+  MI, MN, NC, NE, NM, NV, NY, OR, VA, WA), with annual fractions from 2010 through 2050.
 - **Energy Reserve Margins (ERM / SAFE)**: Annual planning reserve margins from the ReEDS
   inputs (`reeds/prm_annual.csv`) for ten NERC-style assessment regions (ERCOT, MISO, NPCC
   New England and New York, PJM, SERC, SPP, and the WECC CA/NWPP/SRSG regions) over 2020-2050,
@@ -35,7 +37,8 @@ key at your own CSV to explore new policy pathways.
   template (`SAFE_regional_prm.csv`) are also available.
 - **Technology Capacity Targets (TCT)**: Minimum/maximum capacity targets by carrier, region,
   and planning horizon (`technology_capacity_targets.csv`). The shipped entries are derived
-  from ReEDS: state nuclear no-build lists, forced retirements, and state storage mandates.
+  from ReEDS: state nuclear no-build lists, forced retirements, state storage mandates, and
+  state offshore wind mandates.
 - **Emissions Limits**: Annual regional CO2 caps (`regional_Co2_limits.csv`) covering
   California (AB 32 / 2022 CARB Scoping Plan), Washington, Oregon, and the eleven RGGI states,
   with optional user-defined emissions factors to penalize imports.
