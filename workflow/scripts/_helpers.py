@@ -814,6 +814,40 @@ def get_snapshots(
     return time
 
 
+def weather_year_hours(sns: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """
+    Return the hours of the weather year that the model snapshots ``sns`` read.
+
+    The model calendar has no February 29 (see ``get_snapshots``), so a leap
+    weather year is laid onto it by position: hour ``i`` of the model year reads
+    hour ``i`` of the weather year. Weather-year February 29 takes the 1 March
+    label, every later hour moves one day later, and weather-year 31 December is
+    not used. The EER, SERVM and GODEEEP inputs are published this way, so every
+    weather-driven input follows it and the same weather hour lands on the same
+    snapshot everywhere.
+
+    For a non-leap year this returns ``sns`` unchanged.
+    """
+    sns = pd.DatetimeIndex(sns)
+    if ((sns.month == 2) & (sns.day == 29)).any():
+        raise ValueError("Model snapshots carry no February 29; build them with get_snapshots.")
+    after_leap_day = sns.is_leap_year & (sns.month > 2)
+    return sns - pd.to_timedelta(after_leap_day.astype(int) * 24, unit="h")
+
+
+def select_weather_hours(ds, sns: pd.DatetimeIndex):
+    """
+    Select the weather-year hours that ``sns`` read from ``ds``, labelled with ``sns``.
+
+    ``ds`` is an xarray object with a ``time`` dimension on the weather-year
+    calendar (a cutout, for example). The mapping is the one of
+    :func:`weather_year_hours`.
+    """
+    sns = pd.DatetimeIndex(sns)
+    selected = ds.sel(time=weather_year_hours(sns))
+    return selected.assign_coords(time=sns.to_numpy().astype(ds["time"].dtype))
+
+
 def weighted_avg(df, values, weights):
     """
     Return the weighted average of a DataFrame column(s) `values` with weights

@@ -131,9 +131,18 @@ def reindex_cop(sns: pd.MultiIndex, da: xr.DataArray) -> pd.DataFrame:
     cop = da.to_pandas()
     investment_years = sns.get_level_values(0).unique()
 
+    # build_temperature_profiles lays a leap weather year onto the snapshots by
+    # position (_helpers.weather_year_hours), so the profile carries no Feb 29.
+    # Dropping it here instead would shift the profile by a day against the
+    # other weather-driven inputs.
+    if ((cop.index.month == 2) & (cop.index.day == 29)).any():
+        raise ValueError(
+            "COP profile carries February 29, so it was built from temperature profiles on the "
+            "weather-year calendar. Rebuild them (build_temperature_profiles) so a leap weather "
+            "year is laid onto the snapshots by position.",
+        )
+
     # use first investment year, as weather profiles dont change between years
-    # (snapshots carry no leap day, and Feb 29 has no date in a non-leap year)
-    cop = cop[~((cop.index.month == 2) & (cop.index.day == 29))]
     cop.index = cop.index.map(lambda x: x.replace(year=investment_years[0]))
 
     # need to account for tsa with variable lengths per snapshot

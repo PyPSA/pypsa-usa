@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
-from _helpers import configure_logging, get_multiindex_snapshots
+from _helpers import configure_logging, get_multiindex_snapshots, get_snapshots
 from build_servm_load_weights import compose_busmaps
 from constants_sector import FIPS_2_STATE, NAICS, VMT_UNIT_CONVERSION, DemandFuels
 from eia import EnergyDemand, TransportationDemand
@@ -594,12 +594,30 @@ class ReadEer(ReadStrategy):
                 for state in state_codes
             }
 
-        snapshots = pd.date_range(
-            f"{model_year}-01-01 00:00:00",
-            periods=self.HOURS_PER_YEAR,
-            freq="h",
+        return pd.DataFrame(data, index=self._model_year_snapshots(model_year))
+
+    @classmethod
+    def _model_year_snapshots(cls, model_year: int) -> pd.DatetimeIndex:
+        """Calendar the ``HOURS_PER_YEAR`` strip is laid on for one planning horizon.
+
+        Built with ``get_snapshots`` so it is the network's own calendar:
+        February 29 is dropped from leap horizons (2040), which then run
+        through December 31. A plain ``date_range(periods=HOURS_PER_YEAR)``
+        would instead keep February 29 and stop at December 30, so after
+        filtering on the network snapshots the period would be missing 24 hours.
+        """
+        snapshots = get_snapshots(
+            {
+                "start": f"{model_year}-01-01",
+                "end": f"{model_year + 1}-01-01",
+                "inclusive": "left",
+            },
         )
-        return pd.DataFrame(data, index=snapshots)
+        if len(snapshots) != cls.HOURS_PER_YEAR:
+            raise ValueError(
+                f"EER calendar for {model_year} has {len(snapshots)} hours; expected {cls.HOURS_PER_YEAR}.",
+            )
+        return snapshots
 
     @staticmethod
     def _decode_hdf_string(value) -> str:
@@ -906,8 +924,10 @@ class ReadServm(ReadStrategy):
            the planning horizon.
         2. For a leap *weather* year the strip contains February 29 and omits
            December 31, while the model snapshots do the opposite. Every hour
-           after February therefore lands one calendar day earlier than it sat
-           in the source file.
+           from February 29 on therefore lands one calendar day later than it
+           sat in the source file (February 29 takes the 1 March label). This
+           is the rule of ``_helpers.weather_year_hours``, which every
+           weather-driven input follows.
         """
         snapshots = self.period_snapshots[model_year]
         if len(snapshots) != self.HOURS_PER_YEAR:

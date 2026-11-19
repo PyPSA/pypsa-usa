@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import tables
+from _helpers import get_multiindex_snapshots
 from build_demand import ReadEer
 
 
@@ -58,6 +59,39 @@ def test_read_eer_selects_model_and_weather_year_with_cst_shift(tmp_path):
         weather_start + ReadEer.HOURS_PER_YEAR - ReadEer.CST_TO_UTC_SHIFT
     )
     assert demand.loc[(sixth_snapshot, "all", "all", "electricity"), "Alabama"] == weather_start
+
+
+def test_read_eer_leap_planning_horizon_matches_network_snapshots(tmp_path):
+    """A leap investment period lands on the network's own calendar.
+
+    ``get_snapshots`` drops February 29, so the 2040 period runs through
+    December 31. The EER strip has to cover exactly those hours.
+    """
+    path = tmp_path / "eer.h5"
+    _write_eer_fixture(path, model_year=2040)
+
+    reader = ReadEer(
+        str(path),
+        planning_horizons=[2040],
+        renewable_weather_years=[2010],
+    )
+    demand = reader.read_demand()
+
+    network_sns = get_multiindex_snapshots(
+        {"start": "2019-01-01", "end": "2020-01-01", "inclusive": "left"},
+        [2040],
+    ).get_level_values("timestep")
+    demand_sns = pd.DatetimeIndex(demand.index.get_level_values("snapshot"))
+
+    assert len(demand_sns) == ReadEer.HOURS_PER_YEAR
+    assert not ((demand_sns.month == 2) & (demand_sns.day == 29)).any()
+    assert demand_sns.equals(pd.DatetimeIndex(network_sns))
+
+    # values stay positional: the first UTC hour of March 1 is hour 59*24 of
+    # the CST-shifted weather-year strip
+    weather_start = ReadEer.WEATHER_YEARS.index(2010) * ReadEer.HOURS_PER_YEAR
+    march_first = pd.Timestamp("2040-03-01 06:00:00")
+    assert demand.loc[(march_first, "all", "all", "electricity"), "Alabama"] == weather_start + 59 * 24
 
 
 def test_read_eer_rejects_invalid_weather_year(tmp_path):

@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
-from _helpers import configure_logging, get_snapshots
+from _helpers import configure_logging, get_snapshots, select_weather_hours
 from dask.distributed import Client
 from godeeep_cf_registry import resolve_scenario, resolve_weather_year
 from pypsa.geo import haversine
@@ -300,9 +300,11 @@ if __name__ == "__main__":
         logger.info("Loading atlite renewable dataset...")
 
         logger.info(f'using cutout "{snakemake.input.cutout}"')
-        cutout = atlite.Cutout(snakemake.input.cutout[0]).sel(
-            time=sns,
-        )  # Patch fix with [0] move expand in snakemake rule to add_elec for multiple cutouts
+        # Patch fix with [0] move expand in snakemake rule to add_elec for multiple cutouts
+        cutout = atlite.Cutout(snakemake.input.cutout[0])
+        # a leap weather year is laid onto the 365-day snapshots by position,
+        # as the GODEEEP CF and the EER/SERVM demand are
+        cutout.data = select_weather_hours(cutout.data, sns)
 
         res = params.get("excluder_resolution", 100)
         excluder = atlite.ExclusionContainer(crs=5070, res=res)
