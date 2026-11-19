@@ -9,14 +9,18 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pypsa
 import pytest
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from _helpers import calculate_annuity, get_multiindex_snapshots
+from _helpers import calculate_annuity
 from add_extra_components import apply_renewable_interconnection_costs
-from constants import GENERATOR_CAPEX_STRATEGIES, RENEWABLE_INTERCONNECTION_COL
+from cluster_network import clustering_for_n_clusters, generator_aggregation_strategies
+from constants import (
+    GENERATOR_CAPEX_STRATEGIES,
+    RENEWABLE_INTERCONNECTION_COL,
+    RENEWABLE_INTERCONNECTION_SHARE_COL,
+)
 from reeds_vre import bus_weighted_mean, load_interconnection_costs
 from regional_cost import (
     renewable_interconnection_capital_cost,
@@ -24,6 +28,10 @@ from regional_cost import (
 )
 
 REPO_COSTS = Path(__file__).resolve().parents[2] / "repo_data" / "costs"
+
+SOLAR = ["solar1", "solar2"]
+#: merges the fixture's two eastern buses, which share every regional attribute
+EAST_BUSMAP = pd.Series({"z1": "z1", "z2": "X", "z3": "X"})
 
 
 def _costs() -> pd.DataFrame:
@@ -45,6 +53,37 @@ def _costs() -> pd.DataFrame:
             "annualized_capex_fom": annuity * (r["overnight"] + r["gcc"] + r["cff"]) * 1e3 + r["fom"] * 1e3,
         }
     return pd.DataFrame(out).T
+
+
+def _two_solar_sites(n, interconnection, p_nom=(100.0, 300.0)):
+    """Put the fixture's two solar generators at the eastern buses, as ``add_electricity`` leaves them.
+
+    Each carries its bus's ReEDS interconnection cost (NaN: no site), the share of
+    its capacity that cost covers, and the capital cost priced from it.
+    """
+    interconnection = pd.Series(interconnection, index=SOLAR, dtype=float)
+    n.generators.loc[SOLAR, "bus"] = ["z2", "z3"]
+    n.generators.loc[SOLAR, "p_nom"] = list(p_nom)
+    n.generators.loc[SOLAR, "land_region"] = "east"
+    n.generators.loc[SOLAR, "capital_cost"] = renewable_interconnection_capital_cost(
+        _costs(),
+        "solar",
+        interconnection,
+    ).to_numpy()
+    n.generators.loc[SOLAR, RENEWABLE_INTERCONNECTION_COL] = interconnection.to_numpy()
+    n.generators.loc[SOLAR, RENEWABLE_INTERCONNECTION_SHARE_COL] = (interconnection > 0).to_numpy().astype(float)
+    return n
+
+
+def _merge_east(n, aggregation_strategies=None):
+    """Cluster buses z2 and z3 into X the way ``cluster_network`` does, merging the solar generators."""
+    return clustering_for_n_clusters(
+        n,
+        2,
+        custom_busmap=EAST_BUSMAP,
+        aggregate_carriers=["solar"],
+        aggregation_strategies=aggregation_strategies or {},
+    ).n
 
 
 @pytest.mark.fast
@@ -91,6 +130,26 @@ def test_interconnection_replaces_atb_grid_connection_only():
 
 
 @pytest.mark.fast
+def test_share_defaults_to_the_whole_capacity():
+    """A positive cost without a share (a network built before the share column) is priced in full."""
+    costs = _costs()
+    annuity = calculate_annuity(30, costs.at["onwind", "wacc_real"])
+    interconnection = pd.Series([250_000.0, 250_000.0], index=["x", "y"])
+
+    full = renewable_interconnection_capital_cost(costs, "onwind", interconnection)
+    partly = renewable_interconnection_capital_cost(
+        costs,
+        "onwind",
+        interconnection,
+        share=pd.Series({"x": np.nan, "y": 0.5}),
+    )
+
+    assert partly["x"] == pytest.approx(full["x"])
+    # half the capacity keeps its ATB grid connection (100 USD/kW)
+    assert partly["y"] == pytest.approx(full["y"] + annuity * 0.5 * 100e3)
+
+
+@pytest.mark.fast
 def test_enable_switch_needs_both_keys():
     assert renewable_interconnection_enabled({"enable": True, "renewable_interconnection": True})
     assert not renewable_interconnection_enabled({"enable": False, "renewable_interconnection": True})
@@ -126,65 +185,103 @@ def test_vintages_are_repriced_with_their_own_year_costs():
 
 
 @pytest.mark.fast
-def test_column_survives_clustering_of_merged_generators():
+def test_column_survives_clustering_of_merged_generators(base_network):
     """Without the strategy pypsa's consense check raises on differing values."""
     from pypsa.clustering.spatial import get_clustering_from_busmap
 
-    n = pypsa.Network()
-    n.add("Bus", ["a", "b"], x=[0, 1], y=[0, 0])
-    n.add("Carrier", ["solar"])
-    n.add("Generator", ["a solar", "b solar"], bus=["a", "b"], carrier="solar", capital_cost=[10.0, 20.0])
-    n.generators[RENEWABLE_INTERCONNECTION_COL] = [100_000.0, 300_000.0]
-    busmap = pd.Series({"a": "X", "b": "X"})
+    n = _two_solar_sites(base_network, [100_000.0, 300_000.0], p_nom=(0.0, 0.0))
 
     with pytest.raises(ValueError, match=RENEWABLE_INTERCONNECTION_COL):
         get_clustering_from_busmap(
-            n, busmap, aggregate_generators_weighted=True, aggregate_generators_carriers=["solar"]
+            n,
+            EAST_BUSMAP,
+            aggregate_generators_weighted=True,
+            aggregate_generators_carriers=["solar"],
         )
-    clustered = get_clustering_from_busmap(
-        n,
-        busmap,
-        aggregate_generators_weighted=True,
-        aggregate_generators_carriers=["solar"],
-        generator_strategies=dict(GENERATOR_CAPEX_STRATEGIES),
-    ).n
+    clustered = _merge_east(n)
     assert clustered.generators.at["X solar", RENEWABLE_INTERCONNECTION_COL] == pytest.approx(200_000.0)
+    assert clustered.generators.at["X solar", RENEWABLE_INTERCONNECTION_SHARE_COL] == pytest.approx(1.0)
 
 
 @pytest.mark.fast
-def test_split_generators_keep_the_interconnection_cost_of_their_vintages():
+def test_merged_generator_keeps_the_atb_grid_connection_for_its_unpriced_share(base_network):
+    """A member without a ReEDS site keeps the ATB cost, in every investment year.
+
+    The weighted sum counts that member as zero, so pricing the merged generator
+    from the cost column alone would take the ATB grid connection off all of it.
+    """
+    interconnection = pd.Series([300_000.0, np.nan], index=SOLAR)
+    weights = pd.Series([0.25, 0.75], index=SOLAR)  # p_nom 100 and 300
+    clustered = _merge_east(_two_solar_sites(base_network, interconnection))
+    merged = clustered.generators.loc[["X solar"]]
+
+    assert merged.at["X solar", RENEWABLE_INTERCONNECTION_COL] == pytest.approx(0.25 * 300_000)
+    assert merged.at["X solar", RENEWABLE_INTERCONNECTION_SHARE_COL] == pytest.approx(0.25)
+
+    costs_2030 = _costs()
+    costs_2040 = _costs()
+    costs_2040.loc["solar", "capex_grid_connection_per_kw"] = 80.0
+    costs_2040.loc["solar", "annualized_capex_fom"] *= 0.9
+    for costs in (costs_2030, costs_2040):
+        base = costs.at["solar", "annualized_capex_fom"]
+        members = renewable_interconnection_capital_cost(costs, "solar", interconnection)
+        assert members["solar2"] == pytest.approx(base)
+        repriced = apply_renewable_interconnection_costs(pd.Series(base, index=merged.index), costs, merged)
+        assert repriced["X solar"] == pytest.approx((members * weights).sum())
+        if costs is costs_2030:
+            # the capital cost clustering itself gave the merged generator
+            assert repriced["X solar"] == pytest.approx(merged.at["X solar", "capital_cost"])
+
+
+@pytest.mark.fast
+def test_merged_generator_without_any_site_keeps_the_atb_cost(base_network):
+    clustered = _merge_east(_two_solar_sites(base_network, [np.nan, np.nan]))
+    merged = clustered.generators.loc[["X solar"]]
+    costs = _costs()
+    uniform = pd.Series(costs.at["solar", "annualized_capex_fom"], index=merged.index)
+
+    assert apply_renewable_interconnection_costs(uniform, costs, merged)["X solar"] == pytest.approx(uniform.iloc[0])
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("aggregation_strategies", [{}, {"generators": None}, None])
+def test_missing_generator_strategies_fall_back_to_the_defaults(base_network, aggregation_strategies):
+    """``generators:`` left empty in the config arrives as null, not as a mapping."""
+    assert generator_aggregation_strategies(aggregation_strategies) == GENERATOR_CAPEX_STRATEGIES
+    assert generator_aggregation_strategies({"generators": {"fuel_cost": "mean"}}) == {
+        **GENERATOR_CAPEX_STRATEGIES,
+        "fuel_cost": "mean",
+    }
+
+    n = _two_solar_sites(base_network, [100_000.0, 300_000.0])
+    clustered = _merge_east(n, aggregation_strategies={"generators": None})
+    assert clustered.generators.at["X solar", RENEWABLE_INTERCONNECTION_COL] == pytest.approx(250_000.0)
+
+
+@pytest.mark.fast
+def test_split_generators_keep_the_interconnection_cost_of_their_vintages(multi_period_base_network):
     """split_retirement_gens re-adds the expandable units, which price every vintage."""
     from add_extra_components import attach_multihorizon_existing_generators, split_retirement_gens
 
-    n = pypsa.Network()
-    n.snapshots = get_multiindex_snapshots(
-        sns_config={"start": "2030-01-01 00:00", "end": "2030-01-01 01:00", "inclusive": "both"},
-        invest_periods=[2030, 2040],
-    )
-    n.set_investment_periods(periods=[2030, 2040])
-    n.add("Bus", ["a", "b"])
-    n.add("Carrier", ["onwind"])
-    n.add(
-        "Generator",
-        ["a onwind", "b onwind"],
-        bus=["a", "b"],
-        carrier="onwind",
-        p_nom=[100.0, 0.0],
-        p_nom_extendable=True,
-        build_year=2030,
-        capital_cost=1.0,
-    )
-    n.generators["land_region"] = ["a", "b"]
-    n.generators[RENEWABLE_INTERCONNECTION_COL] = [300_000.0, 200_000.0]
+    n = multi_period_base_network
+    wind = ["wind1", "wind2"]
+    n.generators.loc["wind1", "p_nom"] = 100.0
+    n.generators["land_region"] = n.generators.bus
+    n.generators.loc[wind, RENEWABLE_INTERCONNECTION_COL] = [300_000.0, 200_000.0]
+    n.generators.loc[wind, RENEWABLE_INTERCONNECTION_SHARE_COL] = [0.5, 1.0]
     costs = _costs().assign(lifetime=30.0, efficiency=1.0, opex_variable_per_mwh=0.0, heat_rate_mmbtu_per_mwh=0.0)
 
     split_retirement_gens(n, costs, {"onwind"}, economic=False)
 
-    assert n.generators.at["a onwind", RENEWABLE_INTERCONNECTION_COL] == 300_000.0
-    gens = n.generators[n.generators.p_nom_extendable & ~n.generators.index.str.contains("existing")]
+    assert n.generators.at["wind1", RENEWABLE_INTERCONNECTION_COL] == 300_000.0
+    assert n.generators.at["wind1", RENEWABLE_INTERCONNECTION_SHARE_COL] == 0.5
+    gens = n.generators[
+        n.generators.p_nom_extendable
+        & (n.generators.carrier == "onwind")
+        & ~n.generators.index.str.contains("existing")
+    ]
+    expected = renewable_interconnection_capital_cost(costs, "onwind", pd.Series([300_000.0]), share=[0.5]).iloc[0]
     for year in n.investment_periods:
         attach_multihorizon_existing_generators(n, costs, gens, year)
-        priced = n.generators.at[f"a onwind {year}", "capital_cost"]
-        assert priced == pytest.approx(
-            renewable_interconnection_capital_cost(costs, "onwind", pd.Series([300_000.0])).iloc[0],
-        )
+        assert n.generators.at[f"wind1 {year}", "capital_cost"] == pytest.approx(expected)
+        assert n.generators.at[f"wind1 {year}", RENEWABLE_INTERCONNECTION_SHARE_COL] == 0.5

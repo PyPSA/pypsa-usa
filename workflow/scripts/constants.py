@@ -57,13 +57,36 @@ REEDS_INTERCONNECTION_COST_FIELD = {
 
 #: Profile variable and Generator column holding the ReEDS interconnection cost of
 #: wind/solar: overnight USD per MW in ``costs: dollar_year``, capacity-weighted
-#: per bus. NaN where no ReEDS site falls in the bus region.
+#: per bus. NaN where no ReEDS site falls in the bus region. On a generator that
+#: clustering merged it is the mean over the whole capacity, with the members that
+#: have no site counted as zero; :data:`RENEWABLE_INTERCONNECTION_SHARE_COL` says
+#: how much of the capacity it covers.
 RENEWABLE_INTERCONNECTION_COL = "interconnection_capex_per_mw"
 
-#: pypsa clustering strategy for :data:`RENEWABLE_INTERCONNECTION_COL`, the one
-#: pypsa applies to ``capital_cost`` (which is linear in the column). Without it
-#: pypsa's default "consense" strategy raises when merged generators differ.
-GENERATOR_CAPEX_STRATEGIES = {RENEWABLE_INTERCONNECTION_COL: "capacity_weighted_average"}
+#: Generator column: share of the capacity that carries a ReEDS interconnection
+#: cost. 1 or 0 per bus, in between once clustering merges generators with and
+#: without a ReEDS site. Only that share swaps the ATB grid connection for the
+#: ReEDS cost; the rest keeps the ATB cost.
+RENEWABLE_INTERCONNECTION_SHARE_COL = "interconnection_share"
+
+#: Generator column holding the ReEDS county overnight-capex multiplier (``1 + x``)
+#: ``add_electricity`` priced the generator with; a carrier's generators either all
+#: carry it or none do. Clustering takes its capacity-weighted mean over the merged
+#: generators, so ``add_extra_components`` prices every vintage with the multiplier
+#: ``capital_cost`` already holds.
+REGIONAL_MULTIPLIER_COL = "regional_capex_multiplier"
+
+#: pypsa clustering strategy of the generator columns that regional capital costs
+#: are rebuilt from: the one pypsa applies to ``capital_cost``, which is linear in
+#: each of them, so the merged ``capital_cost`` and these columns stay consistent.
+#: The weighted sum skips NaN, i.e. counts a member without a value as zero, which
+#: is why the interconnection cost needs its share column. Without a strategy
+#: pypsa's default "consense" raises when merged generators differ.
+GENERATOR_CAPEX_STRATEGIES = {
+    RENEWABLE_INTERCONNECTION_COL: "capacity_weighted_average",
+    RENEWABLE_INTERCONNECTION_SHARE_COL: "capacity_weighted_average",
+    REGIONAL_MULTIPLIER_COL: "capacity_weighted_average",
+}
 
 # energy content of natural gas
 # Assumes national averages for the conversion

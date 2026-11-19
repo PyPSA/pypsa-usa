@@ -24,9 +24,14 @@ from _helpers import (
     update_p_nom_max,
     weighted_avg,
 )
-from constants import RENEWABLE_INTERCONNECTION_COL
+from constants import (
+    REGIONAL_MULTIPLIER_COL,
+    RENEWABLE_INTERCONNECTION_COL,
+    RENEWABLE_INTERCONNECTION_SHARE_COL,
+)
 from regional_cost import (
     build_bus_multipliers,
+    carrier_multiplier,
     regional_capital_cost,
     renewable_interconnection_capital_cost,
     renewable_interconnection_enabled,
@@ -954,11 +959,35 @@ def attach_wind_and_solar(
             p_max_pu=bus_profiles,
         )
         if car in interconnection_carriers:
-            n.generators.loc[pd.Index(bus_list) + " " + car, RENEWABLE_INTERCONNECTION_COL] = (
-                interconnection_bus.to_numpy()
+            gens = pd.Index(bus_list) + " " + car
+            n.generators.loc[gens, RENEWABLE_INTERCONNECTION_COL] = interconnection_bus.to_numpy()
+            # 1 where a ReEDS cost replaced the ATB grid connection; clustering averages it
+            n.generators.loc[gens, RENEWABLE_INTERCONNECTION_SHARE_COL] = (
+                (interconnection_bus > 0).to_numpy().astype(float)
             )
 
     return interconnection_carriers
+
+
+def apply_regional_multipliers(n: pypsa.Network, costs: pd.DataFrame, bus_multipliers) -> set[str]:
+    """Price generators with the ReEDS county overnight-capex multiplier of their bus.
+
+    Covers every generator of the carriers ``bus_multipliers`` maps and ``costs``
+    prices. The multiplier is kept in the :data:`REGIONAL_MULTIPLIER_COL` column, so
+    clustering can average it like ``capital_cost`` and ``add_extra_components`` can
+    price every vintage with it. Returns the carriers the table maps (empty when the
+    feature is off).
+    """
+    if bus_multipliers is None:
+        return set()
+    reeds_carriers = set(bus_multipliers.columns)
+    for carrier in sorted(reeds_carriers & set(n.generators.carrier) & set(costs.index)):
+        gens = n.generators.index[n.generators.carrier == carrier]
+        buses = n.generators.loc[gens, "bus"]
+        n.generators.loc[gens, "capital_cost"] = regional_capital_cost(costs, carrier, buses, bus_multipliers)
+        n.generators.loc[gens, REGIONAL_MULTIPLIER_COL] = carrier_multiplier(bus_multipliers, carrier, pd.Index(buses))
+        logger.info("Applied ReEDS regional overnight-capex multipliers to %d %s generator(s).", len(gens), carrier)
+    return reeds_carriers
 
 
 def attach_egs(
@@ -2260,16 +2289,7 @@ def main(snakemake):
         snakemake.input.get("reg_cap_cost_diff"),
         snakemake.input.get("county_shapes"),
     )
-    reeds_carriers = set() if bus_multipliers is None else set(bus_multipliers.columns)
-    for carrier in sorted(reeds_carriers & set(n.generators.carrier) & set(costs.index)):
-        gens = n.generators.index[n.generators.carrier == carrier]
-        n.generators.loc[gens, "capital_cost"] = regional_capital_cost(
-            costs,
-            carrier,
-            n.generators.loc[gens, "bus"],
-            bus_multipliers,
-        )
-        logger.info("Applied ReEDS regional overnight-capex multipliers to %d %s generator(s).", len(gens), carrier)
+    reeds_carriers = apply_regional_multipliers(n, costs, bus_multipliers)
 
     # Wind/solar priced with the ReEDS per-site interconnection cost take their
     # regional differentiation from it, as in ReEDS; the EIA state multiplier would

@@ -349,9 +349,10 @@ costs:
     # renewable.dataset; needs enable: true.
     # The mean covers every site in a bus region, uneconomic ones included,
     # while builds go to the cheapest sites first. With large bus regions (coarse
-    # simpl) it overstates the cost; set false there (issue #849).
-    renewable_interconnection: true
-    column_to_tech:                        # ReEDS technology-group column -> pypsa carriers
+    # simpl, like the 75 of this default) it overstates the cost, so it is off
+    # until the supply curve is binned (issue #849); turn it on for fine simpl.
+    renewable_interconnection: false
+    column_to_tech:                        # ReEDS technology-group column -> pypsa carriers; null = no county multipliers
       BATTERY|PVB: [2hr_battery_storage, 4hr_battery_storage, 6hr_battery_storage, 8hr_battery_storage, 10hr_battery_storage]
       COAL|BIO: [coal, coal-95CCS, coal-99CCS, biomass, biomass-95CCS]
       COMBINED_CYCLE|NG_FUEL_CELL: [CCGT, CCGT-95CCS, CCGT-97CCS]

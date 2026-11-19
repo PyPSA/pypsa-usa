@@ -9,7 +9,14 @@ import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging, load_costs, log_network_schema
 from add_electricity import add_missing_carriers
-from constants import BECCS_CO2_REMOVAL, HOURS_PER_YEAR, RENEWABLE_INTERCONNECTION_COL
+from constants import (
+    BECCS_CO2_REMOVAL,
+    GENERATOR_CAPEX_STRATEGIES,
+    HOURS_PER_YEAR,
+    REGIONAL_MULTIPLIER_COL,
+    RENEWABLE_INTERCONNECTION_COL,
+    RENEWABLE_INTERCONNECTION_SHARE_COL,
+)
 from external_regions import (
     add_external_regions,
     convert_flowgates_to_state,
@@ -88,19 +95,47 @@ def add_nice_carrier_names(n, config):
     n.carriers["color"] = colors
 
 
-def regional_capital_costs(costs: pd.DataFrame, carriers: pd.Series, buses: pd.Series, bus_multipliers) -> pd.Series:
+def regional_capital_costs(
+    costs: pd.DataFrame,
+    carriers: pd.Series,
+    buses: pd.Series,
+    bus_multipliers,
+    own_multipliers: pd.Series | None = None,
+) -> pd.Series:
     """Per-component ``capital_cost`` with the ReEDS regional overnight multiplier.
 
     ``carriers`` and ``buses`` share one index (the components). Carriers the
     multiplier table does not map keep the uniform ``annualized_capex_fom``.
+
+    ``own_multipliers`` is the :data:`REGIONAL_MULTIPLIER_COL` column of the
+    components, where they have one. ``add_electricity`` sets it and clustering
+    averages it over the merged generators, so it is the multiplier their
+    ``capital_cost`` holds; where set it is used in place of the county of the bus.
     """
     capex = carriers.map(costs["annualized_capex_fom"]).astype(float)
     if bus_multipliers is None:
         return capex
     for carrier in set(carriers.unique()) & set(bus_multipliers.columns) & set(costs.index):
         members = carriers.index[carriers == carrier]
-        capex.loc[members] = regional_capital_cost(costs, carrier, buses.loc[members], bus_multipliers)
+        capex.loc[members] = regional_capital_cost(
+            costs,
+            carrier,
+            buses.loc[members],
+            bus_multipliers,
+            own_multiplier=None if own_multipliers is None else own_multipliers.loc[members],
+        )
     return capex
+
+
+def copy_capex_columns(n: pypsa.Network, source: pd.DataFrame, targets: pd.Index) -> None:
+    """Carry the columns regional capital costs are rebuilt from over to new units.
+
+    ``n.add`` does not take them, and the units added for the expansion of a
+    generator price every later vintage from them.
+    """
+    for column in GENERATOR_CAPEX_STRATEGIES:
+        if column in source.columns:
+            n.generators.loc[targets, column] = source[column].to_numpy()
 
 
 def apply_renewable_interconnection_costs(capex: pd.Series, costs: pd.DataFrame, gens: pd.DataFrame) -> pd.Series:
@@ -110,14 +145,28 @@ def apply_renewable_interconnection_costs(capex: pd.Series, costs: pd.DataFrame,
     USD/MW) in :data:`RENEWABLE_INTERCONNECTION_COL`. Each vintage swaps it for the
     ATB grid connection of its own investment year, at that year's capital charge rate.
     Generators without the column keep ``capex``.
+
+    A generator that clustering merged from members with and without a ReEDS site
+    swaps only the share :data:`RENEWABLE_INTERCONNECTION_SHARE_COL` gives; the
+    rest of its capacity keeps the ATB grid connection.
     """
     if RENEWABLE_INTERCONNECTION_COL not in gens.columns:
         return capex
     interconnection = pd.to_numeric(gens[RENEWABLE_INTERCONNECTION_COL], errors="coerce")
+    share = (
+        pd.to_numeric(gens[RENEWABLE_INTERCONNECTION_SHARE_COL], errors="coerce")
+        if RENEWABLE_INTERCONNECTION_SHARE_COL in gens.columns
+        else pd.Series(np.nan, index=gens.index)
+    )
     capex = capex.copy()
     for carrier in set(gens.carrier[interconnection > 0]) & set(costs.index):
         members = gens.index[(gens.carrier == carrier) & (interconnection > 0)]
-        capex.loc[members] = renewable_interconnection_capital_cost(costs, carrier, interconnection.loc[members])
+        capex.loc[members] = renewable_interconnection_capital_cost(
+            costs,
+            carrier,
+            interconnection.loc[members],
+            share=share.loc[members],
+        )
     return capex
 
 
@@ -407,11 +456,8 @@ def split_retirement_gens(
         land_region=retirement_gens.land_region,
     )
     n.generators.loc[retirement_gens.index, "vom_cost"] = retirement_gens.get("vom_cost", np.nan)
-    # the new units reprice their vintages with the ReEDS interconnection cost
-    if RENEWABLE_INTERCONNECTION_COL in retirement_gens.columns:
-        n.generators.loc[retirement_gens.index, RENEWABLE_INTERCONNECTION_COL] = retirement_gens[
-            RENEWABLE_INTERCONNECTION_COL
-        ].to_numpy()
+    # the new units reprice their vintages with the ReEDS regional costs
+    copy_capex_columns(n, retirement_gens, retirement_gens.index)
 
     # time dependent factors added after as not all generators are time dependent
     copy_timeseries_for_suffix(n, retirement_gens.index, "existing")
@@ -449,7 +495,7 @@ def attach_multihorizon_existing_generators(
         return
 
     capital_cost = apply_renewable_interconnection_costs(
-        regional_capital_costs(costs, gens.carrier, gens.bus, bus_multipliers),
+        regional_capital_costs(costs, gens.carrier, gens.bus, bus_multipliers, gens.get(REGIONAL_MULTIPLIER_COL)),
         costs,
         gens,
     )
@@ -476,10 +522,7 @@ def attach_multihorizon_existing_generators(
     )
     vom = gens.get("vom_cost", pd.Series(np.nan, index=gens.index))
     n.generators.loc[gens.index + f" {investment_year}", "vom_cost"] = vom.to_numpy()
-    if RENEWABLE_INTERCONNECTION_COL in gens.columns:
-        n.generators.loc[gens.index + f" {investment_year}", RENEWABLE_INTERCONNECTION_COL] = gens[
-            RENEWABLE_INTERCONNECTION_COL
-        ].to_numpy()
+    copy_capex_columns(n, gens, gens.index + f" {investment_year}")
 
     # time dependent factors added after as not all generators are time dependent
     copy_timeseries_for_suffix(n, gens.index, investment_year)

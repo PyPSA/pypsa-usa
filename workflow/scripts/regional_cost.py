@@ -23,6 +23,17 @@ already holds, so the generic connection cost is not counted twice. It is switch
 on with ``costs: regional_multipliers: renewable_interconnection`` and works with
 every ``renewable.dataset``. A carrier priced this way does not also take the EIA
 state locational multiplier.
+
+Clustering
+----------
+``capital_cost`` is linear in the county multiplier and in the interconnection
+cost, and clustering takes the capacity-weighted mean of all three (see
+``constants.GENERATOR_CAPEX_STRATEGIES``). ``add_extra_components`` therefore
+rebuilds the capital cost of every investment period from the columns a merged
+generator carries, and gets the value the single-period network holds. A generator
+without a ReEDS site keeps the ATB grid connection, so a merged generator also
+carries the share of its capacity that has a site
+(``constants.RENEWABLE_INTERCONNECTION_SHARE_COL``).
 """
 
 from __future__ import annotations
@@ -54,19 +65,17 @@ def county_multiplier_table(reg_cap_diff: pd.DataFrame, column_to_tech: dict[str
     """Expand ReEDS group columns to a (county x pypsa-carrier) table of ``1 + x``.
 
     Carriers absent from ``column_to_tech`` are not produced; callers default them
-    to 1.0.
+    to 1.0. An empty or null ``column_to_tech`` gives a table without carriers.
     """
-    if not column_to_tech:
-        raise ValueError("column_to_tech is required (config costs: regional_multipliers: column_to_tech).")
     out = {}
-    for column, carriers in column_to_tech.items():
+    for column, carriers in (column_to_tech or {}).items():
         if column not in reg_cap_diff.columns:
             logger.warning("reg_cap_cost_diff column %r not found; skipping.", column)
             continue
         mult = 1.0 + reg_cap_diff[column].fillna(0.0)
         for carrier in carriers:
             out[carrier] = mult
-    table = pd.DataFrame(out)
+    table = pd.DataFrame(out, index=reg_cap_diff.index)
     table.index.name = "r"
     return table
 
@@ -124,9 +133,16 @@ def bus_multiplier_table(buses: pd.DataFrame, county_table: pd.DataFrame, county
 
 
 def build_bus_multipliers(n, cfg: dict | None, reg_cap_cost_diff_fn: str | None, county_shapes_fn: str | None):
-    """Bus multiplier table for the AC buses of ``n``, or ``None`` when disabled."""
+    """Bus multiplier table for the AC buses of ``n``, or ``None`` when disabled.
+
+    Also ``None`` when ``column_to_tech`` maps no carrier, which is how the ReEDS
+    wind/solar interconnection cost is used without the county multipliers.
+    """
     cfg = cfg or {}
     if not cfg.get("enable", False):
+        return None
+    if not cfg.get("column_to_tech"):
+        logger.info("costs.regional_multipliers.column_to_tech is empty; no county overnight-capex multipliers.")
         return None
     if not reg_cap_cost_diff_fn or not county_shapes_fn:
         raise ValueError(
@@ -171,7 +187,7 @@ def overnight_delta_capital_cost(annualized_capex_fom, capex_overnight_per_kw, a
     return annualized_capex_fom + annuity_factor * (multiplier - 1.0) * capex_overnight_per_kw * 1e3
 
 
-def regional_capital_cost(costs: pd.DataFrame, carrier: str, buses, bus_multipliers):
+def regional_capital_cost(costs: pd.DataFrame, carrier: str, buses, bus_multipliers, own_multiplier=None):
     """Per-bus ``capital_cost`` for an ATB carrier with the regional overnight multiplier.
 
     ``buses`` are the bus names the components sit at (one per component, repeats
@@ -179,11 +195,20 @@ def regional_capital_cost(costs: pd.DataFrame, carrier: str, buses, bus_multipli
     off, the carrier is not mapped, or the cost table has no overnight capex. The
     overnight delta is annualized at the carrier's capital charge rate, like the
     rest of its capex.
+
+    ``own_multiplier`` (one value per component) is the multiplier a component
+    already carries (``constants.REGIONAL_MULTIPLIER_COL``). Where it is set it
+    replaces the multiplier of the bus, so a generator that clustering merged is
+    priced with the capacity-weighted mean of its members and not with the county
+    of the clustered bus.
     """
     base = costs.at[carrier, "annualized_capex_fom"]
     multiplier = carrier_multiplier(bus_multipliers, carrier, pd.Index(buses))
     if np.isscalar(multiplier):
         return base
+    if own_multiplier is not None:
+        own = pd.to_numeric(pd.Series(own_multiplier), errors="coerce").to_numpy(dtype=float)
+        multiplier = np.where(own > 0, own, multiplier)
     overnight = costs.at[carrier, "capex_overnight_per_kw"] if "capex_overnight_per_kw" in costs.columns else np.nan
     if not np.isfinite(overnight) or overnight == 0:
         logger.warning("No usable capex_overnight_per_kw for %r; skipping its regional multiplier.", carrier)
@@ -197,10 +222,15 @@ def renewable_interconnection_enabled(cfg: dict | None) -> bool:
     return bool(cfg.get("enable", False) and cfg.get("renewable_interconnection", False))
 
 
-def renewable_interconnection_capital_cost(costs: pd.DataFrame, carrier: str, interconnection_capex) -> pd.Series:
+def renewable_interconnection_capital_cost(
+    costs: pd.DataFrame,
+    carrier: str,
+    interconnection_capex,
+    share=None,
+) -> pd.Series:
     """Wind/solar ``capital_cost`` with the ATB grid connection replaced by the ReEDS cost.
 
-    ``capital_cost = annualized_capex_fom + annuity * (interconnection - capex_grid_connection_per_kw * 1e3)``
+    ``capital_cost = annualized_capex_fom + annuity * (interconnection - share * capex_grid_connection_per_kw * 1e3)``
 
     ``annualized_capex_fom`` is ``rate * (overnight + grid connection +
     construction finance) * 1e3 + FOM * 1e3`` with ``rate`` the carrier's capital
@@ -209,13 +239,21 @@ def renewable_interconnection_capital_cost(costs: pd.DataFrame, carrier: str, in
     capex, construction finance and FOM are untouched. ``interconnection_capex`` is
     overnight USD/MW of the same dollar year as ``costs`` (a Series, one value per
     component). A missing or non-positive value keeps the uniform ATB cost.
+
+    ``share`` (one value per component, 1 where not given) is the part of the
+    capacity the interconnection cost covers. It is below 1 on a generator that
+    clustering merged from members with and without a ReEDS site; there
+    ``interconnection_capex`` is the mean over the whole capacity with the members
+    without a site counted as zero, and only the covered share gives up the ATB
+    grid connection. That is the capacity-weighted mean of the members' costs.
     """
     interconnection = pd.Series(interconnection_capex, dtype=float)
+    share = pd.Series(1.0 if share is None else share, index=interconnection.index, dtype=float).fillna(1.0)
     base = float(costs.at[carrier, "annualized_capex_fom"])
     grid_connection = (
         costs.at[carrier, "capex_grid_connection_per_kw"] if "capex_grid_connection_per_kw" in costs else 0.0
     )
     grid_connection = 0.0 if pd.isna(grid_connection) else float(grid_connection)
     rate = carrier_capital_charge_rate(costs, carrier)
-    priced = base + rate * (interconnection - grid_connection * 1e3)
+    priced = base + rate * (interconnection - share * grid_connection * 1e3)
     return priced.where(interconnection > 0, base)
