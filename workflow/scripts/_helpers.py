@@ -13,6 +13,7 @@ import pypsa
 import requests
 import yaml
 from snakemake.utils import update_config
+from tax_credits import has_tax_credit_overrides, resolve_tax_credits, year_from_cost_file
 
 # pandas 3 infers `str` dtype for string data; pypsa (until 2.0) converts
 # network frames back to numpy object dtype on import. Pin the legacy
@@ -219,7 +220,7 @@ def calculate_annuity(n, r):
         return 1 / n
 
 
-def load_costs(tech_costs: str, costs_config: dict | None = None) -> pd.DataFrame:
+def load_costs(tech_costs: str, costs_config: dict | None = None, year: int | None = None) -> pd.DataFrame:
     """Load tech costs and select the configured ATB scenario/model_case per carrier.
 
     The CSV emitted by ``build_cost_data`` carries every (atb_scenario, atb_model_case)
@@ -228,11 +229,20 @@ def load_costs(tech_costs: str, costs_config: dict | None = None) -> pd.DataFram
     (``scenario``, ``model_case``) and an optional per-carrier ``overrides`` map. If the
     file predates these columns, the data is pivoted as-is. A configured
     (scenario, model_case) the file does not carry raises instead of selecting nothing.
+
+    ``costs_config["itc_modifier"]`` / ``["ptc_modifier"]`` then override the tax
+    credits of the selected cases (:func:`tax_credits.resolve_tax_credits`) for the
+    build ``year``, which defaults to the year in the ``costs_{year}.csv`` file name.
     """
     df = pd.read_csv(tech_costs)
+    if year is None:
+        year = year_from_cost_file(tech_costs)
 
     if "atb_scenario" not in df.columns or "atb_model_case" not in df.columns:
-        return df.pivot(index="pypsa-name", columns="parameter", values="value").fillna(0)
+        costs = df.pivot(index="pypsa-name", columns="parameter", values="value").fillna(0)
+        if has_tax_credit_overrides(costs_config):
+            costs = resolve_tax_credits(costs, costs_config, year)
+        return costs
 
     atb_cfg = (costs_config or {}).get("atb") or {}
     default_scenario = atb_cfg.get("scenario", "Moderate")
@@ -270,7 +280,10 @@ def load_costs(tech_costs: str, costs_config: dict | None = None) -> pd.DataFram
         ignore_index=True,
     )
     combined = combined.drop_duplicates(subset=["pypsa-name", "parameter"], keep="first")
-    return combined.pivot(index="pypsa-name", columns="parameter", values="value").fillna(0)
+    costs = combined.pivot(index="pypsa-name", columns="parameter", values="value").fillna(0)
+    if has_tax_credit_overrides(costs_config):
+        costs = resolve_tax_credits(costs, costs_config, year)
+    return costs
 
 
 def is_transport_model(transmission_network):
