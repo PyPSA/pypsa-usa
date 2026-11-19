@@ -148,6 +148,10 @@ def add_hydrogen_demand(n: pypsa.Network, demand_path: str, scenario: str, state
 
     The annual ADP demand is interpolated linearly between the ADP years (and
     held constant outside them) and spread evenly over the hours of the year.
+
+    Hydrogen demand is not added in ``add_demand.py`` as it is state level
+    demand, whose buses are created in ``add_sectors.py`` (through
+    ``build_hydrogen``).
     """
     df = pd.read_csv(demand_path)
     df = df[df.scenario == scenario]
