@@ -233,7 +233,18 @@ def update_transmission_costs(n, costs, length_factor=1.0):
         )
         + costs.at["HVDC inverter pair", "annualized_capex_per_mw"]
     )
+    # A DC line built as a `_fwd`/`_rev` link pair expands both links together
+    # (bidirectional link constraint), so each link carries half of the cost.
+    costs = costs.where(~_bidirectional_pair(costs.index), costs / 2)
     n.links.loc[dc_b, "capital_cost"] = costs
+
+
+def _bidirectional_pair(names: pd.Index) -> pd.Series:
+    """Return True for link names whose `_fwd`/`_rev` counterpart is also in `names`."""
+    fwd = names[names.str.contains(const.FWD_SUFFIX, regex=False)]
+    rev = pd.Index([const.REV_SUFFIX.join(name.rsplit(const.FWD_SUFFIX, 1)) for name in fwd])
+    paired = rev.isin(names)
+    return pd.Series(names.isin(fwd[paired]) | names.isin(rev[paired]), index=names)
 
 
 def load_powerplants(

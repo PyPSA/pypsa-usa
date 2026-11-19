@@ -51,6 +51,11 @@ COAL_dol_ton_2_MWHthermal = LBS_TON**-1 * COAL_BTU_LB * 1000**-1 * MMBTU_MWHthem
 # (TBTU) (1e6 MMBTU / TBTU) (MWh / MMBTU)
 TBTU_2_MWH = 1e6 * (1 / MMBTU_MWHthemal)
 
+# name suffixes of the two links that model one bidirectional connection,
+# optionally followed by a vintage: `<name>_fwd` / `<name>_rev_2040`
+FWD_SUFFIX = "_fwd"
+REV_SUFFIX = "_rev"
+
 
 ###############################
 # Constants for Region Mappings

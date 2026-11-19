@@ -25,8 +25,9 @@ from build_hydrogen import (
     get_storage_types,
     read_geopackage,
 )
+from constants import FWD_SUFFIX, REV_SUFFIX
 from money import deflator
-from opts.bidirectional_link import DIRECTION_SUFFIX, add_bidirectional_link_constraints
+from opts.bidirectional_link import add_bidirectional_link_constraints
 from opts.retrofit import add_retrofit_constraints
 from opts.sector import add_gas_storage_constraints
 
@@ -339,7 +340,7 @@ def test_pipelines(network, demand, storage_sites):
 
     pipes = network.links[network.links.carrier == "h2_pipeline"]
     assert sorted(pipes.index) == ["CA NV h2_pipeline_fwd_2030", "CA NV h2_pipeline_rev_2030"]
-    assert all(DIRECTION_SUFFIX.match(x) for x in pipes.index)
+    assert pairs_up(pipes.index)
 
     fwd = pipes.loc["CA NV h2_pipeline_fwd_2030"]
     assert (fwd.bus0, fwd.bus1) == ("CA H2", "NV H2")
@@ -527,7 +528,7 @@ def test_retrofitted_pipelines(network, demand, storage_sites):
         "NV CA pipeline h2_pipeline_retrofitted_fwd_2030",
         "NV CA pipeline h2_pipeline_retrofitted_rev_2030",
     ]
-    assert all(DIRECTION_SUFFIX.match(x) for x in pipes.index)
+    assert pairs_up(pipes.index)
 
     fwd = pipes.loc["NV CA pipeline h2_pipeline_retrofitted_fwd_2030"]
     rev = pipes.loc["NV CA pipeline h2_pipeline_retrofitted_rev_2030"]
@@ -722,6 +723,13 @@ def test_coal_and_oil_supply_are_priced_at_the_aeo_fuel_costs_of_each_period():
         get_period_fuel_price(n, "lpg", costs, "oil")
 
 
+def pairs_up(names: pd.Index) -> bool:
+    """Each forward link has the reverse link that add_bidirectional_link_constraints pairs it with."""
+    forward = names[names.str.contains(FWD_SUFFIX, regex=False)]
+    reverse = {REV_SUFFIX.join(x.rsplit(FWD_SUFFIX, 1)) for x in forward}
+    return len(forward) == len(names) / 2 and reverse == set(names.difference(forward))
+
+
 def test_vintage_names_match_the_bidirectional_pairing():
-    assert DIRECTION_SUFFIX.match("CA NV h2_pipeline_rev_2040")["base"] == "CA NV h2_pipeline"
+    assert pairs_up(pd.Index(["CA NV h2_pipeline_fwd_2040", "CA NV h2_pipeline_rev_2040"]))
     assert re.fullmatch(r".*_\d{4}", "z1 h2_smr_2040")

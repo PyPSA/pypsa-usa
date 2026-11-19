@@ -14,6 +14,7 @@ from build_sector_costs import (
 )
 from eia import ProjectedFuelCost
 from money import deflator, dollar_year_from_config, parse_unit_year, to_dollars
+from tax_credits import base_model_case
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,7 @@ def load_pudl_atb_data(parquet_path: str):
     WITH finance_cte AS (
         SELECT
             wacc_real,
+            fixed_charge_rate,
             technology_description,
             model_case_nrelatb,
             scenario_atb,
@@ -344,7 +346,17 @@ ATB_VALUE_COLS = [
     "opex_fixed_per_kw",
     "opex_variable_per_mwh",
     "wacc_real",
+    "fixed_charge_rate",
 ]
+
+# Carriers ATB publishes no financing for (no fixed charge rate and, for batteries, no
+# WACC) borrow the WACC and project finance factor of an ATB technology that claims
+# the same tax credit. Batteries claim the 48E ITC with its technology-neutral
+# phase-down, which is how ATB treats geothermal; wind and solar lose theirs earlier.
+FINANCE_PROXY = {f"{h}hr_battery_storage": "geothermal" for h in (2, 4, 6, 8, 10)}
+
+# Rates keep more digits than the 3 decimals of every other cost parameter
+RATE_PARAMETERS = ["capital_charge_rate", "fixed_charge_rate", "ptc_per_mwh", "itc_effective"]
 
 
 def build_aeo_fuel_costs(api: str, tech_year: int, aeo_scenario: str, dollar_year: int) -> pd.DataFrame:
@@ -468,8 +480,8 @@ def build_beccs(pivot_atb: pd.DataFrame, beccs: pd.Series) -> pd.DataFrame:
     Biomass power with 95% carbon capture (biomass-95CCS) from dedicated biomass power (ATB Biopower).
 
     It takes the capital cost, O&M and heat rate of ``get_beccs_data`` and the rest
-    of the biomass plant: its fuel cost per MWh of biomass, WACC, lifetime, cost
-    recovery period and construction financing. The capital cost is an overnight cost that already
+    of the biomass plant: its fuel cost per MWh of biomass, WACC, fixed charge rate, lifetime,
+    cost recovery period and construction financing. The capital cost is an overnight cost that already
     holds the grid connection. The construction financing cost
     (``capex_construction_finance_factor``, USD/kW in the ATB) keeps its share of
     the overnight and grid connection costs of biomass.
@@ -491,7 +503,7 @@ def build_beccs(pivot_atb: pd.DataFrame, beccs: pd.Series) -> pd.DataFrame:
     df["heat_rate_mmbtu_per_mwh"] = beccs.heatrate
     df["co2_emissions"] = -const.BECCS_CO2_REMOVAL
     # ATB figures of the biomass plant that do not hold for it
-    df[["fuel_cost_per_mwh", "capacity_factor", "levelized_cost_of_energy_per_mwh"]] = np.nan
+    df[["fuel_cost_per_mwh", "capacity_factor", "levelized_cost_of_energy_per_mwh", "ptc_per_mwh"]] = np.nan
     return df
 
 
@@ -564,11 +576,113 @@ def get_hydrogen_costs(hydrogen_costs: str, year: int, dollar_year: int) -> pd.D
     return result.reset_index(drop=True)
 
 
+def levelized_ptc(atb: pd.DataFrame) -> pd.Series:
+    """
+    Production tax credit per MWh, levelized over the cost recovery period, of each ATB row.
+
+    ATB folds the PTC into the LCOE only, as a levelized deduction:
+    ``LCOE = (FCR * capex + FOM) / (HOURS_PER_YEAR * CF) + VOM + fuel - PTC``. Solving that for
+    the PTC recovers the credit of the commercial operation year and the case, which is
+    zero once the credit has expired. Rows whose ``model_tax_credit_case_nrelatb``
+    names no PTC (the ITC carriers and every case without tax credits) get zero.
+    Real USD/MWh of the ATB dollar year.
+    """
+    ptc = (
+        (atb["fixed_charge_rate"] * atb["capex_per_kw"] + atb["opex_fixed_per_kw"])
+        * 1e3
+        / (const.HOURS_PER_YEAR * atb["capacity_factor"])
+    )
+    ptc = (
+        ptc
+        + atb["opex_variable_per_mwh"].fillna(0)
+        + atb["fuel_cost_per_mwh"].fillna(0)
+        - atb["levelized_cost_of_energy_per_mwh"]
+    )
+    label = atb.get("model_tax_credit_case_nrelatb", pd.Series(pd.NA, index=atb.index))
+    claims_ptc = label.fillna("").str.contains("PTC")
+    return ptc.clip(lower=0).where(claims_ptc, 0.0)
+
+
+def project_finance_factor(atb: pd.DataFrame) -> pd.Series:
+    """ATB project finance factor: the fixed charge rate over the capital recovery factor of the WACC.
+
+    It holds the taxes, depreciation and ITC of ATB's financing, the WACC aside.
+    """
+    return atb["fixed_charge_rate"] / calculate_annuity(atb["cost_recovery_period_years"], atb["wacc_real"])
+
+
+def implied_itc(atb: pd.DataFrame, base: pd.DataFrame | None) -> pd.Series:
+    """
+    Effective ITC each ATB row holds: the share of its capital charge the credit pays back.
+
+    ``base`` holds the rows of the matching case without tax credits (``R&D`` for
+    ``R&D + TC``). A ``+ TC`` case changes the WACC of every technology as well, so
+    the credit is read off the project finance factor, which leaves the WACC out:
+    ``1 - factor / factor(base)``. Rows whose ``model_tax_credit_case_nrelatb`` names
+    no ITC, and every row without ``base``, hold none.
+    """
+    if base is None or base.empty:
+        return pd.Series(0.0, index=atb.index)
+    base_factor = project_finance_factor(base).groupby(base["pypsa-name"]).last()
+    itc = 1 - project_finance_factor(atb) / atb["pypsa-name"].map(base_factor)
+    label = atb.get("model_tax_credit_case_nrelatb", pd.Series(pd.NA, index=atb.index))
+    claims_itc = label.fillna("").str.contains("ITC")
+    return itc.clip(lower=0, upper=1).where(claims_itc, 0.0).fillna(0.0)
+
+
+def apply_finance_proxies(pivot_atb: pd.DataFrame) -> pd.DataFrame:
+    """
+    Give each ``FINANCE_PROXY`` carrier the WACC and project finance factor of its proxy.
+
+    The project finance factor (fixed charge rate over capital recovery factor) holds
+    the taxes, depreciation and tax credit of ATB's financing and does not depend on
+    the cost recovery period, so the carrier's fixed charge rate is the capital
+    recovery factor of its own cost recovery period at the proxy's WACC times the
+    proxy's project finance factor.
+    """
+    pivot_atb = pivot_atb.set_index("pypsa-name")
+    for carrier, proxy in FINANCE_PROXY.items():
+        if carrier not in pivot_atb.index:
+            continue
+        if proxy not in pivot_atb.index or pd.isna(pivot_atb.at[proxy, "fixed_charge_rate"]):
+            logger.warning(f"No ATB fixed charge rate of {proxy}; {carrier} is annualized at its WACC alone")
+            continue
+        wacc = pivot_atb.at[proxy, "wacc_real"]
+        finance_factor = pivot_atb.at[proxy, "fixed_charge_rate"] / calculate_annuity(
+            pivot_atb.at[proxy, "cost_recovery_period_years"],
+            wacc,
+        )
+        pivot_atb.at[carrier, "wacc_real"] = wacc
+        pivot_atb.at[carrier, "fixed_charge_rate"] = (
+            calculate_annuity(pivot_atb.at[carrier, "cost_recovery_period_years"], wacc) * finance_factor
+        )
+        if "itc_effective" in pivot_atb.columns:
+            # the finance factor carries the proxy's ITC
+            pivot_atb.at[carrier, "itc_effective"] = pivot_atb.at[proxy, "itc_effective"]
+    return pivot_atb.reset_index()
+
+
+def capital_charge_rate(pivot_atb: pd.DataFrame) -> pd.Series:
+    """
+    Share of capex charged per year: the ATB fixed charge rate, else the capital recovery factor.
+
+    The fixed charge rate is ATB's capital recovery factor times its project finance
+    factor, so it carries the taxes, depreciation and, in the ``+ TC`` cases, the ITC of
+    the commercial operation year with the tax-equity financing that comes with it.
+    Rows ATB publishes no fixed charge rate for (AEO-fuelled thermal plants and the
+    hydrogen turbines and retrofits derived from them, transmission) fall back to the
+    capital recovery factor of their WACC.
+    """
+    crf = calculate_annuity(pivot_atb["cost_recovery_period_years"], pivot_atb["wacc_real"])
+    return pivot_atb["fixed_charge_rate"].fillna(crf)
+
+
 def process_atb_scenario(
     pudl_atb_sub: pd.DataFrame,
     aeo: pd.DataFrame,
     beccs: pd.Series | None = None,
     ccs_retrofit_cost: float | None = None,
+    base_sub: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Run the full cost pipeline for one (atb_scenario, model_case) slice.
 
@@ -579,10 +693,21 @@ def process_atb_scenario(
     ``ccs_retrofit_cost`` (``get_gas_ccs_retrofit_cost``) is given, marginal cost,
     annualized capex etc., and returns a long-form
     DataFrame with columns [pypsa-name, parameter, value] for this scenario+case.
+
+    Capex is annualized at ``capital_charge_rate``, so the ITC of a ``+ TC`` case lowers
+    the capital cost of the carriers that claim it, and ``ptc_per_mwh`` holds the
+    levelized PTC (``levelized_ptc``) that ``add_extra_components`` takes off the
+    marginal cost of new builds. ``itc_effective`` holds the ITC in that rate
+    (``implied_itc``, against ``base_sub``, the rows of the case without tax credits),
+    which an explicit ``costs: itc_modifier`` replaces (``tax_credits``).
     """
+    pudl_atb_sub = pudl_atb_sub.assign(
+        ptc_per_mwh=levelized_ptc(pudl_atb_sub),
+        itc_effective=implied_itc(pudl_atb_sub, base_sub),
+    )
     pudl_atb = pudl_atb_sub.melt(
         id_vars="pypsa-name",
-        value_vars=ATB_VALUE_COLS,
+        value_vars=[*ATB_VALUE_COLS, "ptc_per_mwh", "itc_effective"],
         var_name="parameter",
         value_name="value",
     )
@@ -626,37 +751,16 @@ def process_atb_scenario(
     pivot_atb["fuel_cost"] = pivot_atb["fuel_cost_real_per_mwhth"] / pivot_atb["efficiency"]
     pivot_atb["marginal_cost"] = pivot_atb["opex_variable_per_mwh"] + pivot_atb["fuel_cost"]
 
-    # Impute storage WACC from Utility Scale Solar. TODO: Revisit this assumption
-    for x in [2, 4, 6, 8, 10]:
-        pivot_atb.loc[
-            pivot_atb["pypsa-name"] == f"{x}hr_battery_storage",
-            "wacc_real",
-        ] = pivot_atb.loc[
-            pivot_atb["pypsa-name"] == "solar",
-            "wacc_real",
-        ].values[0]
-        pivot_atb.loc[
-            pivot_atb["pypsa-name"] == f"{x}hr_battery_storage",
-            "efficiency",
-        ] = 0.85  # 2023 ATB
+    batteries = pivot_atb["pypsa-name"].str.endswith("hr_battery_storage")
+    pivot_atb.loc[batteries, "efficiency"] = 0.85  # 2023 ATB
 
-    pivot_atb["annualized_capex_per_mw"] = (
-        calculate_annuity(
-            pivot_atb["cost_recovery_period_years"],
-            pivot_atb["wacc_real"],
-        )
-        * pivot_atb["capex_per_kw"]
-        * 1
-    ) * 1e3
+    # Battery WACC and fixed charge rate from FINANCE_PROXY
+    pivot_atb = apply_finance_proxies(pivot_atb)
+    pivot_atb["capital_charge_rate"] = capital_charge_rate(pivot_atb)
 
-    pivot_atb["annualized_capex_per_mw_km"] = (
-        calculate_annuity(
-            pivot_atb["cost_recovery_period_years"],
-            pivot_atb["wacc_real"],
-        )
-        * pivot_atb["capex_per_mw_km"]
-        * 1
-    )
+    pivot_atb["annualized_capex_per_mw"] = pivot_atb["capital_charge_rate"] * pivot_atb["capex_per_kw"] * 1e3
+
+    pivot_atb["annualized_capex_per_mw_km"] = pivot_atb["capital_charge_rate"] * pivot_atb["capex_per_mw_km"]
 
     # Grid interconnection costs per MW-KM
     # Land-based: 1 mile of spur line; offshore: 30 km of subsea cable
@@ -667,12 +771,7 @@ def process_atb_scenario(
     ] = pivot_atb["capex_grid_connection_per_kw"] / 30
 
     pivot_atb["annualized_connection_capex_per_mw_km"] = (
-        calculate_annuity(
-            pivot_atb["cost_recovery_period_years"],
-            pivot_atb["wacc_real"],
-        )
-        * pivot_atb["capex_grid_connection_per_kw_km"]
-        * 1
+        pivot_atb["capital_charge_rate"] * pivot_atb["capex_grid_connection_per_kw_km"]
     )
 
     pivot_atb["annualized_capex_fom"] = pivot_atb["annualized_capex_per_mw"] + (pivot_atb["opex_fixed_per_kw"] * 1e3)
@@ -683,7 +782,8 @@ def process_atb_scenario(
         value_name="value",
     )
     result = result.reset_index(drop=True)
-    result["value"] = result["value"].round(3)
+    rates = result["parameter"].isin(RATE_PARAMETERS)
+    result["value"] = result["value"].round(3).where(~rates, result["value"].round(6))
     return result
 
 
@@ -776,7 +876,11 @@ if __name__ == "__main__":
             sub = complete_atb_slice(pudl_atb_year, atb_scenario, atb_model_case)
             if sub.empty:
                 continue
-            result = process_atb_scenario(sub, aeo, beccs, ccs_retrofit_cost)
+            base_case = base_model_case(atb_model_case)
+            base_sub = (
+                complete_atb_slice(pudl_atb_year, atb_scenario, base_case) if base_case != atb_model_case else None
+            )
+            result = process_atb_scenario(sub, aeo, beccs, ccs_retrofit_cost=ccs_retrofit_cost, base_sub=base_sub)
             result["atb_scenario"] = atb_scenario
             result["atb_model_case"] = atb_model_case
             scenario_results.append(result)

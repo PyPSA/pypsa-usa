@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 import shapely
-from constants import CODE_2_STATE, HOURS_PER_YEAR, STATES_INTERCONNECT_MAPPER
+from constants import CODE_2_STATE, FWD_SUFFIX, HOURS_PER_YEAR, REV_SUFFIX, STATES_INTERCONNECT_MAPPER
 
 logger = logging.getLogger(__name__)
 
@@ -451,11 +451,11 @@ def _add_pipeline_pairs(
     # split over the two links of a route
     capital_cost = costs.at[carrier, "annualized_capex_fom"] * length / 2
 
-    for direction, (start, end), attrs in (("fwd", (bus0, bus1), fwd or {}), ("rev", (bus1, bus0), {})):
+    for direction, (start, end), attrs in ((FWD_SUFFIX, (bus0, bus1), fwd or {}), (REV_SUFFIX, (bus1, bus0), {})):
         n.add(
             "Link",
             names,
-            suffix=f"_{direction}_{year}",
+            suffix=f"{direction}_{year}",
             bus0=start,
             bus1=end,
             carrier=carrier,

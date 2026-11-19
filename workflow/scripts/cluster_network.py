@@ -22,7 +22,7 @@ from _helpers import (
     update_p_nom_max,
 )
 from add_electricity import update_transmission_costs
-from constants import REEDS_NERC_INTERCONNECT_MAPPER, STATES_INTERCONNECT_MAPPER
+from constants import FWD_SUFFIX, REEDS_NERC_INTERCONNECT_MAPPER, REV_SUFFIX, STATES_INTERCONNECT_MAPPER
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
     busmap_by_kmeans,
@@ -336,7 +336,7 @@ def add_itls(buses, itls, itl_cost, planning_horizons, lifetime):
     clustering.n.add(
         "Link",
         name=itls.interface,  # itl name
-        suffix="_fwd",
+        suffix=FWD_SUFFIX,
         bus0=buses.loc[itls.r].index,
         bus1=buses.loc[itls.rr].index,
         p_nom=itls.mw_f0.values,
@@ -355,7 +355,7 @@ def add_itls(buses, itls, itl_cost, planning_horizons, lifetime):
     clustering.n.add(
         "Link",
         name=itls.interface,  # itl name
-        suffix="_rev",
+        suffix=REV_SUFFIX,
         bus0=buses.loc[itls.rr].index,
         bus1=buses.loc[itls.r].index,
         p_nom=itls.mw_r0.values,
@@ -378,7 +378,7 @@ def add_itls(buses, itls, itl_cost, planning_horizons, lifetime):
         clustering.n.add(
             "Link",
             name=itls.interface,
-            suffix=f"_fwd_{horizon}",
+            suffix=f"{FWD_SUFFIX}_{horizon}",
             bus0=buses.loc[itls.r].index,
             bus1=buses.loc[itls.rr].index,
             p_nom=0.0,
@@ -396,7 +396,7 @@ def add_itls(buses, itls, itl_cost, planning_horizons, lifetime):
         clustering.n.add(
             "Link",
             name=itls.interface,
-            suffix=f"_rev_{horizon}",
+            suffix=f"{REV_SUFFIX}_{horizon}",
             bus0=buses.loc[itls.rr].index,
             bus1=buses.loc[itls.r].index,
             p_nom=0.0,
@@ -872,7 +872,7 @@ def calibrate_tamu_transmission_capacity(
         new_g = avg_g_per_length_capacity * new_s_nom / distance_km
 
         # Calculate capital cost
-        new_capital_cost = hvac_overhead_cost * new_s_nom * distance_km
+        new_capital_cost = hvac_overhead_cost * distance_km
 
         # Generate unique line name
         line_name = f"REEDS_{region0}_{region1}"

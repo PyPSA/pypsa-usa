@@ -62,6 +62,39 @@ Carrier names must match the keys in `ATB_TECH_MAPPER` (`workflow/scripts/consta
 
 To reflect regional differences, capital costs are adjusted using [EIA state-level CapEx multipliers](https://www.eia.gov/analysis/studies/powerplants/capitalcost/pdf/capital_cost_AEO2020.pdf).
 
+### Annualized capital cost and tax credits
+
+Capex (`capex_per_kw`, which holds construction financing) is annualized at `capital_charge_rate`, the ATB fixed charge rate: the capital recovery factor of the ATB WACC over the cost recovery period times ATB's project finance factor, which holds taxes and depreciation. Carriers ATB publishes no fixed charge rate for (gas, coal and oil plants, the OCHT and CCHT hydrogen turbines and the gas plant retrofits, transmission) are annualized at the capital recovery factor alone.
+
+By default the tax credits enter through a `+ TC` model case, with the credit of each commercial operation year, so ATB's phase-out carries over:
+
+- **ITC** (utility PV, offshore wind, geothermal, hydropower, nuclear and SMR): lowers the fixed charge rate, and with it the capital cost. In the 2025 ATB wind and solar keep their credit for builds through 2029; geothermal, hydropower and nuclear keep it through 2037 and lose it by 2041.
+- **PTC** (land-based wind): ATB deducts it from the LCOE only. `build_cost_data` recovers it as `ptc_per_mwh` from `LCOE = (FCR × capex + FOM) / (8760 × CF) + VOM + fuel − PTC`, a credit levelized over the cost recovery period, and `add_extra_components` takes it off the marginal cost of each extendable generator built in that year, in every period it operates. The existing fleet gets none.
+- **Batteries**: ATB publishes no financing for them. They take the WACC and project finance factor of geothermal, which claims the same 48E ITC with the same technology-neutral phase-out, over their own 20-year cost recovery period.
+
+Biomass gets no credit, as in the ATB. Cases without `+ TC` grant no credit.
+
+#### Setting the tax credits
+
+`costs: itc_modifier` and `costs: ptc_modifier` override the credits of the selected case per carrier, with one value for every build year or a mapping per build year (investment period):
+
+```yaml
+costs:
+  itc_modifier:
+    solar: 0.3                    # every build year
+    offwind: {2030: 0.3, 2040: 0}  # 2035 is unset and keeps the ATB credit
+  ptc_modifier:
+    onwind: {2030: 27.5, 2035: 0}
+```
+
+A carrier or year that is not set, or set to `null`, keeps the credit of its ATB case; `0` sets no credit. The overrides are applied by `load_costs` (`scripts/tax_credits.py`), so every rule reads the same costs:
+
+- **ITC** is the effective share of the capital charge the credit pays back. `build_cost_data` stores the ITC each ATB row holds as `itc_effective`: a `+ TC` case also changes the WACC of every technology, so the credit is read off ATB's project finance factor (fixed charge rate over capital recovery factor) against the case without tax credits, `1 − factor(+ TC) / factor`. A carrier with an ITC set is annualized at `capital_charge_rate × (1 − ITC) / (1 − itc_effective)`, which keeps the WACC of its case and replaces only the credit; FOM is unaffected, and `load_costs` logs both values. The effective ITC holds the depreciation basis reduction and the tax gross-up of the credit, so it differs from the statutory rate.
+- **PTC** is the first-year credit in USD/MWh of `costs: dollar_year`, paid for 10 years and levelized over the cost recovery period at the carrier's WACC, the basis of the ATB-derived `ptc_per_mwh`.
+- A project claims one of the two. A positive value of one drops the ATB value of the other for that carrier and year, unless both are set.
+
+Carriers whose costs are not in the cost table (pumped hydro takes its capital cost from its supply curve) cannot be set here; `load_costs` warns about them.
+
 ### Candidate Resources
 
 - **Coal Plants**: With and without Carbon Capture Storage (CCS) at 95% and 99% capture rates.

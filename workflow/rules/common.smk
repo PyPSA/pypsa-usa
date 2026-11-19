@@ -12,6 +12,7 @@ path = workflow.source_path("../scripts/_helpers.py")
 # same source-cache dir, or those imports fail under a fresh cache.
 workflow.source_path("../scripts/constants.py")
 workflow.source_path("../scripts/godeeep_cf_registry.py")
+workflow.source_path("../scripts/tax_credits.py")  # imported by _helpers
 sys.path.insert(0, os.path.dirname(path))
 
 from _helpers import validate_checksum, update_config_from_wildcards

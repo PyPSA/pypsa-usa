@@ -456,8 +456,21 @@ properties:
           enable: {type: boolean}
           co2: {type: number}
           co2_monthly_prices: {type: boolean}
-      ptc_modifier: {type: [object, "null"]}
-      itc_modifier: {type: [object, "null"]}
+      # carrier -> one number for every build year, or {build year: number};
+      # null keeps the credit of atb.model_case (scripts/tax_credits.py)
+      ptc_modifier:
+        type: [object, "null"]
+        additionalProperties:
+          type: [number, object, "null"]
+          minimum: 0
+          additionalProperties: {type: [number, "null"], minimum: 0}
+      itc_modifier:
+        type: [object, "null"]
+        additionalProperties:
+          type: [number, object, "null"]
+          minimum: 0
+          exclusiveMaximum: 1
+          additionalProperties: {type: [number, "null"], minimum: 0, exclusiveMaximum: 1}
       min_year: {type: [object, "null"]}
       max_growth: {type: [object, "null"]}
 

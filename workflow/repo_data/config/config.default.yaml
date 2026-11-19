@@ -369,27 +369,15 @@ costs:
     co2: 0.                                # USD/tCO2 flat price
     co2_monthly_prices: false              # true = use a monthly time series instead of flat co2 above
 
-  ptc_modifier:                            # Production Tax Credit; subtracted from marginal cost ($/MWh)
-    onwind: 27.50
-    biomass: 27.50
-
-  itc_modifier:                            # Investment Tax Credit; fraction of capex reduced
-    solar: 0.3
-    offwind: 0.3
-    offwind_floating: 0.3
-    EGS: 0.3
-    geothermal: 0.3
-    SMR: 0.3
-    nuclear: 0.3
-    hydro: 0.3
-    2hr_battery_storage:  0.3
-    4hr_battery_storage:  0.3
-    6hr_battery_storage:  0.3
-    8hr_battery_storage:  0.3
-    10hr_battery_storage: 0.3
-    8hr_PHS:  0.3                          # PHS = pumped hydro storage
-    10hr_PHS: 0.3
-    12hr_PHS: 0.3
+  # Tax credits per carrier: one number for every build year, or {year: number} per
+  # build year (vintage). Carriers and years left unset (null) take the credits of
+  # atb.model_case: a "+ TC" case holds ATB's ITC (in the fixed charge rate) and its
+  # levelized PTC; any other case none. A positive ITC or PTC set here is the
+  # project's election and drops the ATB value of the other credit.
+  #   itc_modifier: {solar: 0.3, offwind: {2030: 0.3, 2040: 0.0}}
+  #   ptc_modifier: {onwind: {2030: 27.5, 2035: 0.0}}
+  itc_modifier: null                       # effective share of the capital charge paid back, [0, 1); replaces the ATB ITC of the case, keeps its WACC
+  ptc_modifier: null                       # first-year USD/MWh in costs.dollar_year, paid 10 years, levelized over the cost recovery period
 
   min_year:                                # earliest commercial-availability year per carrier; carrier excluded before this year
     OCHT: 2040

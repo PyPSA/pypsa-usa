@@ -18,6 +18,7 @@ from external_regions import (
     resolve_trade_costs,
 )
 from shapely.geometry import Point
+from tax_credits import check_tax_credit_years
 
 idx = pd.IndexSlice
 
@@ -696,49 +697,42 @@ def apply_power_fuel_prices(n: pypsa.Network, costs_dict: dict[int, pd.DataFrame
     logger.info(f"Priced the fuel of {len(plants)} plants at the fuel costs of the cost data")
 
 
-def apply_itc(n, itc_modifier, monitization_cost=0.1):
+def apply_ptc(n: pypsa.Network, costs_dict: dict[int, pd.DataFrame]) -> None:
     """
-    Applies investment tax credit to all extendable components in the network.
+    Take the levelized production tax credit off the marginal cost of new builds.
 
-    Arguments:
-    n: pypsa.Network,
-    itc_modifier: dict,
-        Dict of ITC modifiers for each carrier
+    Each vintage claims the credit of its build year, ``ptc_per_mwh`` of that year's
+    costs: the ATB value of the selected case or the ``costs: ptc_modifier`` override
+    (``tax_credits.resolve_tax_credits``), zero where none is granted. The
+    credit is levelized over the cost recovery period like the capex it offsets, so
+    it applies in every period the vintage operates (a vintage does not operate
+    before its build year). Generators that are not extendable (the existing fleet)
+    get none.
     """
-    for carrier in itc_modifier.keys():
-        carrier_mask = n.generators["carrier"] == carrier
-        n.generators.loc[carrier_mask, "capital_cost"] *= 1 - ((1 - monitization_cost) * itc_modifier[carrier])
+    for build_year, costs in costs_dict.items():
+        if "ptc_per_mwh" not in costs.columns:
+            continue
+        ptc = costs["ptc_per_mwh"][costs["ptc_per_mwh"] > 0]
+        mask = (
+            n.generators.p_nom_extendable
+            & (n.generators.build_year == build_year)
+            & n.generators.carrier.isin(ptc.index)
+        )
+        if not mask.any():
+            continue
+        credit = n.generators.loc[mask, "carrier"].map(ptc)
+        n.generators.loc[credit.index, "marginal_cost"] -= credit
 
-        carrier_mask = n.storage_units["carrier"] == carrier
-        n.storage_units.loc[carrier_mask, "capital_cost"] *= 1 - ((1 - monitization_cost) * itc_modifier[carrier])
+        varying = credit.index.intersection(n.generators_t.marginal_cost.columns)
+        if not varying.empty:
+            marginal_cost = n.generators_t.marginal_cost.copy()
+            marginal_cost[varying] = marginal_cost[varying].sub(credit[varying], axis=1)
+            n.generators_t.marginal_cost = marginal_cost
 
-
-def apply_ptc(n, ptc_modifier, costs):
-    """
-    Applies production tax credit to all extendable components in the network.
-
-    Arguments:
-    n: pypsa.Network,
-    ptc_modifier: dict,
-        Dict of PTC modifiers for each carrier
-    """
-
-    def discount_ptc(ptc, r, financial_lifetime, credit_lifetime=10, monitization_cost_pct=0.1):
-        eff_ptc = (1 - monitization_cost_pct) * ptc
-        pv = eff_ptc * (1 - (1 + r) ** (-1 * credit_lifetime)) / r
-        crf = (r * (1 + r) ** financial_lifetime) / ((1 + r) ** financial_lifetime - 1)
-        return round(pv * crf, 2)
-
-    for carrier in ptc_modifier.keys():
-        ptc = ptc_modifier[carrier]
-        discounted_ptc = discount_ptc(ptc, costs.at[carrier, "wacc_real"], costs.at[carrier, "lifetime"])
-        mask = (n.generators["carrier"] == carrier) & n.generators.p_nom_extendable
-        for build_year in n.investment_periods:
-            mask_by = (n.generators.build_year == build_year) & mask
-            mc = n.get_switchable_as_dense("Generator", "marginal_cost").loc[:, mask_by]
-            mc.loc[build_year:, :] -= discounted_ptc
-            n.generators_t.marginal_cost.loc[:, mask_by] = mc
-            n.generators.loc[mask_by, "marginal_cost"] -= discounted_ptc
+        claimed = ptc[ptc.index.isin(n.generators.loc[mask, "carrier"])]
+        logger.info(
+            f"PTC of {build_year} builds: " + ", ".join(f"{c} {v:.2f} USD/MWh" for c, v in claimed.items()),
+        )
 
 
 def apply_max_annual_growth_rate(n, max_growth):
@@ -1350,9 +1344,11 @@ def main(snakemake) -> None:
         n.investment_periods[i]: load_costs(
             snakemake.input.tech_costs[i],
             snakemake.params.costs,
+            year=n.investment_periods[i],
         )
         for i in range(len(n.investment_periods))
     }
+    check_tax_credit_years(snakemake.params.costs, n.investment_periods)
 
     if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
         attach_phs_storageunits(n, elec_config, costs_dict[n.investment_periods[0]])
@@ -1425,8 +1421,8 @@ def main(snakemake) -> None:
     if not snakemake.config["conventional"]["dynamic_fuel_price"].get("enable", False):
         apply_power_fuel_prices(n, costs_dict)
 
-    apply_itc(n, snakemake.config["costs"]["itc_modifier"])
-    apply_ptc(n, snakemake.config["costs"]["ptc_modifier"], costs)
+    # The ITC is in the capital costs already (capital charge rate, load_costs)
+    apply_ptc(n, costs_dict)
     apply_max_annual_growth_rate(n, snakemake.config["costs"]["max_growth"])
     add_nice_carrier_names(n, snakemake.config)
     add_co2_emissions(n, costs_dict[n.investment_periods[0]], n.carriers.index)
