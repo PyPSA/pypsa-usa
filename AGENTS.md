@@ -42,7 +42,7 @@ Useful targets:
 - `--until <rule>` to stop early, `-R <rule>` to force re-execution.
 - Tutorial config (`repo_data/config/config.tutorial.yaml`, CA only, simpl=75, clusters=4, 2050) is the smallest meaningful end-to-end run.
 
-HPC: `bash workflow/run_slurm.sh <snakemake args>` runs the scheduler (inside a Slurm job, not on a login node) and submits each rule through `workflow/slurm_submit.sh`, with `workflow/slurm_status.sh` reporting killed jobs. Site settings are Slurm's own `SBATCH_ACCOUNT` / `SBATCH_PARTITION` / `SBATCH_MAIL_USER` env vars, never hard-coded in the scripts. Per-rule wall times: `walltime:` in `config.slurm.yaml`. How-to: "Running on HPC Cluster" in `docs/source/about-usage.md`. The CA weather-year campaign driver is `workflow/run_slurm_weather_years.sh`.
+HPC: `bash workflow/run_slurm.sh <snakemake args>` runs the scheduler (inside a Slurm job, not on a login node) and submits each rule through `workflow/slurm_submit.sh`, with `workflow/slurm_status.sh` reporting killed jobs. Site settings are the `SBATCH_ACCOUNT` / `SBATCH_PARTITION` / `SBATCH_MAIL_USER` env vars (the first two read by sbatch, mail passed on by `slurm_submit.sh`), never hard-coded in the scripts. Per-rule wall times: `walltime:` in `config.slurm.yaml`. How-to: "Running on HPC Cluster" in `docs/source/about-usage.md`. The CA weather-year campaign driver is `workflow/run_slurm_weather_years.sh`.
 
 ## Tests and lint
 

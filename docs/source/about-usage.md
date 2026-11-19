@@ -81,6 +81,10 @@ Anything else `man sbatch` lists as an input environment variable (`SBATCH_QOS`,
 `SBATCH_CONSTRAINT`, ...) works the same way. Check your site's documentation for the values;
 the table above is a starting point, not a guarantee.
 
+`SBATCH_MAIL_USER` and `SBATCH_MAIL_TYPE` are the exception: `sbatch` has no environment variable
+for mail, so `workflow/slurm_submit.sh` reads these two and passes them as `--mail-user` and
+`--mail-type`. They therefore apply to the rule jobs only, not to an `sbatch` you run yourself.
+
 Load any modules your site needs (a Gurobi license, a newer `git`) before starting the driver: the
 rule jobs inherit its environment.
 
@@ -108,7 +112,8 @@ Optional environment variables for `run_slurm.sh`:
 - `RESTART_TIMES` — retries for a failed rule (default 0). Rules that scale memory with `attempt`
   ask for more on each retry.
 - `LATENCY_WAIT` — seconds to wait for outputs to appear on a shared filesystem (default 60).
-- `SNAKEMAKE` — snakemake executable (default: the repository `.venv`, else the one on `PATH`).
+- `SNAKEMAKE` — snakemake command: an executable, or a launcher such as `uv run snakemake`
+  (default: the repository `.venv`, else the one on `PATH`).
 
 Wall times per rule come from the `walltime:` block of `config.slurm.yaml`
 ({ref}`walltime_cf`); override entries in your copy at `workflow/config/config.slurm.yaml`.
@@ -120,7 +125,8 @@ Rules that declare neither get 8 GB and 2 hours.
 The driver's log is the `-o` file you gave `sbatch`; each rule job writes
 `workflow/logs/slurm/<rule>-<jobid>.out` and `.err`. A rule that Slurm kills (out of memory,
 time limit, node failure) is reported as failed through `workflow/slurm_status.sh`, so the driver
-stops instead of waiting forever. Interrupting the driver with Ctrl-C also cancels its rule jobs;
+stops instead of waiting forever. A job that Slurm requeues after a preemption or node failure
+counts as still running. Interrupting the driver with Ctrl-C also cancels its rule jobs;
 if you `scancel` the driver job instead, check `squeue` for leftover rule jobs. Re-running the same
 command resumes where it stopped.
 

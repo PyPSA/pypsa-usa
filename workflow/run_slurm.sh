@@ -14,14 +14,15 @@
 #   sbatch --time=2-00:00:00 -c 2 --mem=8G -o logs/driver-%j.out \
 #       --wrap "bash run_slurm.sh --configfile config/config.my_scenario.yaml"
 #
-# Site settings (account, partition, mail) are Slurm's own SBATCH_* variables;
+# Site settings (account, partition, mail) are SBATCH_* environment variables;
 # see slurm_submit.sh. Tuning, all optional:
 #   JOBS            rule-jobs in flight at once            (default 20)
 #   RESTART_TIMES   retries per failed rule; rules that
 #                   scale memory by `attempt` get more     (default 0)
 #   LATENCY_WAIT    seconds to wait for outputs to appear
 #                   on a shared filesystem                 (default 60)
-#   SNAKEMAKE       snakemake executable                   (default: repo .venv, else PATH)
+#   SNAKEMAKE       snakemake command: an executable, or a
+#                   launcher such as "uv run snakemake"    (default: repo .venv, else PATH)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,16 +31,29 @@ cd "$HERE"
 JOBS="${JOBS:-20}"
 RESTART_TIMES="${RESTART_TIMES:-0}"
 LATENCY_WAIT="${LATENCY_WAIT:-60}"
-if [ -z "${SNAKEMAKE:-}" ]; then
-  if [ -x "$HERE/../.venv/bin/snakemake" ]; then
-    # The venv binary directly rather than `uv run`, which would re-resolve the
-    # environment on every invocation. See AGENTS.md for the uv setup.
-    SNAKEMAKE="$HERE/../.venv/bin/snakemake"
+snakemake_cmd=()
+if [ -n "${SNAKEMAKE:-}" ]; then
+  if command -v "$SNAKEMAKE" > /dev/null; then
+    snakemake_cmd=("$SNAKEMAKE")  # one executable; its path may hold spaces
   else
-    SNAKEMAKE="$(command -v snakemake || true)"
+    read -r -a snakemake_cmd <<< "$SNAKEMAKE"
   fi
+elif [ -x "$HERE/../.venv/bin/snakemake" ]; then
+  # The venv binary directly rather than `uv run`, which would re-resolve the
+  # environment on every invocation. See AGENTS.md for the uv setup.
+  snakemake_cmd=("$HERE/../.venv/bin/snakemake")
+elif command -v snakemake > /dev/null; then
+  snakemake_cmd=("$(command -v snakemake)")
 fi
-[ -n "$SNAKEMAKE" ] || { echo "snakemake not found; activate the environment or set SNAKEMAKE" >&2; exit 2; }
+[ "${#snakemake_cmd[@]}" -gt 0 ] || { echo "snakemake not found; activate the environment or set SNAKEMAKE" >&2; exit 2; }
+
+# The Python that goes with it: next to the executable, or behind the same
+# launcher ("uv run snakemake" -> "uv run python").
+if [ "${#snakemake_cmd[@]}" -eq 1 ]; then
+  python_cmd=("$(dirname "$(command -v "${snakemake_cmd[0]}" || echo "${snakemake_cmd[0]}")")/python")
+else
+  python_cmd=("${snakemake_cmd[@]:0:${#snakemake_cmd[@]}-1}" python)
+fi
 
 if [ -z "${SLURM_JOB_ID:-}" ]; then
   echo "WARNING: not inside a Slurm job. The scheduler runs for the whole workflow;" >&2
@@ -52,7 +66,7 @@ fi
 # store, which is why a curl reachability test does not catch this.) Point
 # Python at certifi. sbatch propagates the environment to the rule jobs.
 if [ -z "${SSL_CERT_FILE:-}" ]; then
-  _certifi=$("$(dirname "$SNAKEMAKE")/python" -c 'import certifi; print(certifi.where())' 2>/dev/null || true)
+  _certifi=$("${python_cmd[@]}" -c 'import certifi; print(certifi.where())' 2>/dev/null || true)
   if [ -n "$_certifi" ]; then
     export SSL_CERT_FILE="$_certifi" REQUESTS_CA_BUNDLE="$_certifi"
   else
@@ -65,7 +79,7 @@ mkdir -p logs/slurm
 # Our flags first, ending on a plain switch (--printshellcmds) so that
 # --default-resources, which takes several values, cannot swallow the user's
 # first argument; user arguments last, so they override ours.
-exec "$SNAKEMAKE" \
+exec "${snakemake_cmd[@]}" \
   --cluster "bash slurm_submit.sh {rule} {threads} {resources.mem_mb} {resources.walltime}" \
   --cluster-status "bash slurm_status.sh" \
   --cluster-cancel scancel \

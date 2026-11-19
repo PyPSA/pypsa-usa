@@ -11,9 +11,13 @@
 #                      leave unset on Sherlock, which has no accounts
 #   SBATCH_PARTITION   e.g. serc on Sherlock; leave unset where the scheduler
 #                      routes jobs by size (Alliance clusters)
-#   SBATCH_MAIL_USER   address for job mail; SBATCH_MAIL_TYPE defaults to FAIL
-#                      here when a mail user is set
 #   SBATCH_QOS, SBATCH_CONSTRAINT, ...   anything else `man sbatch` lists
+#
+# Mail is the exception: sbatch has no input environment variable for it, so
+# this script reads two of the same shape and passes them on as flags:
+#
+#   SBATCH_MAIL_USER   address for job mail (--mail-user); no mail when unset
+#   SBATCH_MAIL_TYPE   events to mail on (--mail-type); defaults to FAIL
 #
 # Export them once (e.g. in ~/.bashrc); the driver's environment is inherited
 # here, so they apply to every rule job.
@@ -35,14 +39,17 @@ case "$walltime" in
   *) walltime="02:00:00" ;;
 esac
 
+mail_args=()
 if [ -n "${SBATCH_MAIL_USER:-}" ]; then
-  export SBATCH_MAIL_TYPE="${SBATCH_MAIL_TYPE:-FAIL}"
+  mail_args=(--mail-user "$SBATCH_MAIL_USER" --mail-type "${SBATCH_MAIL_TYPE:-FAIL}")
 fi
 
 mkdir -p logs/slurm
 
+# ${arr[@]+...}: an empty array is "unbound" under `set -u` before bash 4.4.
 exec sbatch \
   --parsable \
+  ${mail_args[@]+"${mail_args[@]}"} \
   -J "$rule" \
   -o "logs/slurm/${rule}-%j.out" \
   -e "logs/slurm/${rule}-%j.err" \

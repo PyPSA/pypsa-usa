@@ -11,10 +11,10 @@
 # forwards to sbatch as `--time` (via slurm_submit.sh). Override entries in
 # your per-user copy, workflow/config/config.slurm.yaml.
 #
-# Site settings (account, partition, mail) do NOT live here: they are Slurm's
-# own SBATCH_* environment variables, read by sbatch itself. See
-# workflow/slurm_submit.sh and "Running on HPC Cluster" in
-# docs/source/about-usage.md.
+# Site settings (account, partition, mail) do NOT live here: they are
+# SBATCH_* environment variables, read by sbatch itself (account, partition)
+# or by workflow/slurm_submit.sh (mail). See that script and "Running on HPC
+# Cluster" in docs/source/about-usage.md.
 #
 # `solving.walltime` and `solving.mem` in config.default.yaml are a different
 # concern: they are the solver's own limits, not the scheduler's.
