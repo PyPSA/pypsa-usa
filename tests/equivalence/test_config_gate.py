@@ -365,3 +365,34 @@ def test_walltime_guard_rejects_a_block_with_anything_else_in_it():
 def test_allowlist_without_a_diff_still_resolves():
     """Callers that only have the key (docs, tests) get the reason unguarded."""
     assert context.allowlist_reason("costs.atb") is not None
+
+
+# --- On the shipped configs --------------------------------------------------
+
+
+@pytest.mark.parametrize("shared_name", ["config.equivalence.yaml", "config.equivalence-usa.yaml"])
+def test_shared_config_pins_the_regional_capital_costs_off(shared_name):
+    """Develop's default layer turns ReEDS regional capital costs on; the baseline has no such key.
+
+    The shared config has to neutralise the whole block, the carrier mapping
+    included: a truthy key that only one side carries is fatal. The develop side
+    is the default layer under the shared config, the baseline side the shared
+    config alone, which is how the two Snakefiles load them.
+    """
+    import copy
+    from pathlib import Path
+
+    import yaml
+    from snakemake.utils import update_config
+
+    config_dir = Path(__file__).resolve().parents[2] / "workflow" / "repo_data" / "config"
+    shared = yaml.safe_load((config_dir / shared_name).read_text())
+    develop = yaml.safe_load((config_dir / "config.default.yaml").read_text())
+    assert develop["costs"]["regional_multipliers"]["enable"], "the default no longer needs pinning off"
+    update_config(develop, copy.deepcopy(shared))
+
+    differences = [
+        d for d in context.config_differences(shared, develop) if str(d["key"]).startswith("costs.regional_multipliers")
+    ]
+    assert differences == []
+    assert develop["costs"]["regional_multipliers"]["enable"] is False
