@@ -15,6 +15,7 @@ A Tsink of 50-60C is recommended for how water temperatures
 """
 
 import xarray as xr
+from _helpers import WEATHER_CALENDAR_ATTR
 
 
 def coefficient_of_performance(
@@ -27,6 +28,20 @@ def coefficient_of_performance(
         return 8.77 - 0.150 * delta_t + 0.000734 * delta_t**2
     else:
         raise NotImplementedError("'source' must be one of  ['air', 'soil']")
+
+
+def cop_profile(source_t: xr.DataArray, sink_t: float, source: str = "air") -> xr.DataArray:
+    """
+    COP time series for a source temperature profile and a sink temperature.
+
+    The result keeps the stamp naming the rule the temperatures were laid on
+    the model snapshots with (``_helpers.WEATHER_CALENDAR_ATTR``); arithmetic
+    drops attributes, and ``build_heat`` checks the stamp.
+    """
+    cop = coefficient_of_performance(sink_t - source_t, source)
+    if WEATHER_CALENDAR_ATTR in source_t.attrs:
+        cop.attrs[WEATHER_CALENDAR_ATTR] = source_t.attrs[WEATHER_CALENDAR_ATTR]
+    return cop
 
 
 if __name__ == "__main__":
@@ -43,8 +58,6 @@ if __name__ == "__main__":
         for source in ["air", "soil"]:
             source_t = xr.open_dataarray(snakemake.input[f"temp_{source}_{area}"])
 
-            delta_t = snakemake.params.heat_pump_sink_T - source_t
-
-            cop = coefficient_of_performance(delta_t, source)
+            cop = cop_profile(source_t, snakemake.params.heat_pump_sink_T, source)
 
             cop.to_netcdf(snakemake.output[f"cop_{source}_{area}"])

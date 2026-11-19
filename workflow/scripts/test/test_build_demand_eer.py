@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 import tables
 from _helpers import get_multiindex_snapshots
-from build_demand import ReadEer
+from build_demand import DemandFormatter, DemandScaler, ReadEer
 
 
 def _write_eer_fixture(path, model_year=2030):
@@ -107,3 +107,26 @@ def test_read_eer_rejects_multiple_weather_years(tmp_path):
 def test_read_eer_rejects_unsupported_planning_horizon(tmp_path):
     with pytest.raises(ValueError, match="unsupported year"):
         ReadEer(str(tmp_path / "eer.h5"), planning_horizons=[2032], renewable_weather_years=[2010])
+
+
+class _FlatScaler(DemandScaler):
+    """A scaler is configured for most profiles (eia, ferc, efs, ...); it is not used here."""
+
+    def get_projections(self) -> pd.DataFrame:
+        return pd.DataFrame()
+
+
+def test_format_demand_rejects_a_frame_short_of_the_snapshots(base_network):
+    """Demand whose years match the investment periods must still cover every snapshot.
+
+    Such a frame goes to the network unformatted. With a scaler configured
+    nothing else checks its length, so a reader that lost hours would pass.
+    """
+    timesteps = base_network.snapshots.get_level_values("timestep")
+    demand = pd.DataFrame({"z1": 1.0}, index=timesteps)
+    formatter = DemandFormatter(base_network)
+    formatter.scaler = _FlatScaler()
+
+    assert formatter.format_demand(demand, "power") is demand
+    with pytest.raises(ValueError, match="6 snapshot"):
+        formatter.format_demand(demand.iloc[:-6], "power")

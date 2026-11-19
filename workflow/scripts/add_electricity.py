@@ -17,8 +17,10 @@ import pypsa
 import xarray as xr
 from _helpers import (
     calculate_annuity,
+    check_weather_calendar,
     configure_logging,
     export_network_for_gis_mapping,
+    lay_on_model_calendar,
     load_costs,
     log_network_schema,
     update_p_nom_max,
@@ -796,9 +798,8 @@ def attach_wind_and_solar(
     add_missing_carriers(n, carriers)
 
     # Check if we're using horizon-specific profiles
-    godeeep_future = (
-        config.get("renewable", {}).get("dataset") == "godeeep" and config["renewable_scenarios"][0] != "historical"
-    )
+    dataset = config.get("renewable", {}).get("dataset")
+    godeeep_future = dataset == "godeeep" and config["renewable_scenarios"][0] != "historical"
 
     for car in carriers:
         if car in ["hydro", "EGS"]:
@@ -876,6 +877,11 @@ def attach_wind_and_solar(
             with xr.open_dataset(getattr(input_profiles, "profile_" + car)) as ds:
                 if ds.indexes["bus"].empty:
                     continue
+
+                # GODEEEP CF were always laid on by position; an atlite profile
+                # built before that rule would be a day off the other inputs.
+                if dataset == "atlite":
+                    check_weather_calendar(ds, getattr(input_profiles, "profile_" + car))
 
                 bus_list = ds.bus.values.astype(str)
                 p_nom_max_bus = (
@@ -1961,8 +1967,10 @@ def attach_breakthrough_renewable_plants(
             p_nom = tech_plants.Pmax
             p_max_pu = p_nom_be[tech_plants.index] / p_nom
 
-        leap_day = p_max_pu.loc["2016-02-29 00:00:00":"2016-02-29 23:00:00"]
-        p_max_pu = p_max_pu.drop(leap_day.index)
+        # The Breakthrough profile is the leap year 2016 on its real calendar.
+        # It goes onto the model calendar as every weather-driven input does:
+        # 29 February takes the 1 March label and 31 December is not used.
+        p_max_pu = lay_on_model_calendar(p_max_pu)
         p_max_pu = broadcast_investment_horizons_index(n, p_max_pu)
 
         n.add(

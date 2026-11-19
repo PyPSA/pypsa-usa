@@ -310,10 +310,12 @@ their four deliberate simplifications.
 - SERVM lays each year's 8760 hours on a **synthetic calendar that starts on a Monday**, so
   weekday-versus-weekend hours do not line up with the real weekdays of the planning horizon.
 - For a **leap weather year** the SERVM strip contains February 29 and omits December 31, while
-  PyPSA-USA's snapshots do the opposite. Every hour after February therefore lands one calendar
-  day earlier than in the source file. The strip is mapped positionally onto the network's own
-  snapshots, so each planning horizon must carry exactly 8760 snapshots — a truncated snapshot
-  window cannot be used with `profile: servm`.
+  PyPSA-USA's snapshots do the opposite. Every hour from February 29 on therefore lands one
+  calendar day later than in the source file (February 29 takes the 1 March label). Capacity
+  factors (GODEEEP and atlite) and the temperature and heat-pump COP profiles follow the same
+  rule, so demand and weather stay on the same hour. The strip is mapped positionally onto the
+  network's own snapshots, so each planning horizon must carry exactly 8760 snapshots — a
+  truncated snapshot window cannot be used with `profile: servm`.
 
 **Footprint**
 

@@ -7,7 +7,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-from _helpers import get_snapshots, select_weather_hours
+from _helpers import get_snapshots, select_weather_hours, stamp_weather_calendar
 from dask.distributed import Client, LocalCluster
 
 
@@ -83,7 +83,9 @@ if __name__ == "__main__":
         show_progress=False,
     )
 
-    temp_air.to_netcdf(snakemake.output.temp_air)
+    # build_heat rejects a leap-year COP profile whose temperatures do not say
+    # which rule laid the weather year onto the snapshots
+    stamp_weather_calendar(temp_air).to_netcdf(snakemake.output.temp_air)
 
     temp_soil = cutout.soil_temperature(
         matrix=M_tilde.T,
@@ -92,4 +94,4 @@ if __name__ == "__main__":
         show_progress=False,
     )
 
-    temp_soil.to_netcdf(snakemake.output.temp_soil)
+    stamp_weather_calendar(temp_soil).to_netcdf(snakemake.output.temp_soil)

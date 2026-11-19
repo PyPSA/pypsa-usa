@@ -10,8 +10,20 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from _helpers import get_snapshots, select_weather_hours, weather_year_hours
-from build_demand import ReadEer
+from _helpers import (
+    WEATHER_CALENDAR_ATTR,
+    check_weather_calendar,
+    get_snapshots,
+    label_with_snapshots,
+    lay_on_model_calendar,
+    model_calendar_labels,
+    select_weather_hours,
+    stamp_weather_calendar,
+    weather_year_hours,
+)
+from atlite.pv.solar_position import SolarPosition
+from build_cop_profiles import cop_profile
+from build_demand import ReadEer, ReadEia
 from build_renewable_profiles import get_renewable_snapshots
 from nrel_exclusion.aggregate_godeeep_weighted import fix_godeeep_time
 from test_build_demand_eer import _write_eer_fixture
@@ -68,6 +80,35 @@ def test_select_weather_hours_relabels_onto_the_snapshots():
     assert (out["v"].to_numpy() == np.arange(8760)).all()
 
 
+def test_model_calendar_labels_is_the_inverse_of_weather_year_hours():
+    weather = pd.date_range(f"{WEATHER_YEAR}-01-01", f"{WEATHER_YEAR}-12-31 23:00", freq="h")
+
+    labels = model_calendar_labels(weather)
+
+    # 31 December of a leap year is read by no snapshot
+    assert labels.isna().sum() == 24
+    assert labels[labels.isna()].equals(labels[weather.dayofyear == 366])
+    assert labels.dropna().equals(MODEL_SNS)
+    assert weather_year_hours(labels.dropna()).equals(weather[labels.notna()])
+
+
+def test_model_calendar_labels_non_leap_year_is_identity():
+    time = pd.date_range("2019-01-01", "2019-12-31 23:00", freq="h")
+    assert model_calendar_labels(time).equals(time)
+
+
+def test_lay_on_model_calendar_keeps_the_index_name_and_repeated_stamps():
+    # FERC 714 arrives with one row per state and hour
+    time = pd.DatetimeIndex(["2012-02-28 05:00", "2012-02-29 05:00", "2012-02-29 05:00", "2012-12-31 05:00"])
+    df = pd.DataFrame({"v": [1.0, 2.0, 3.0, 4.0]}, index=time.rename("snapshot"))
+
+    out = lay_on_model_calendar(df)
+
+    assert out.index.name == "snapshot"
+    assert out.index.tolist() == [pd.Timestamp("2012-02-28 05:00")] + [pd.Timestamp("2012-03-01 05:00")] * 2
+    assert out["v"].tolist() == [1.0, 2.0, 3.0]
+
+
 def _cutout_hour(label: pd.Timestamp) -> float:
     """Atlite CF and temperature/COP: select_weather_hours on the full-year cutout."""
     time = pd.date_range(f"{WEATHER_YEAR}-01-01", f"{WEATHER_YEAR}-12-31 23:00", freq="h")
@@ -101,6 +142,35 @@ def _eer_hour(label: pd.Timestamp, tmp_path) -> float:
     return float(row - weather_start + ReadEer.CST_TO_UTC_SHIFT)
 
 
+# balancing areas ReadEia folds into the regions of the GIS shapes
+_EIA_FOLDED_BAS = [
+    *["SRP", "AZPS", "TEPC"],
+    *["CPLE", "CPLW", "DUK", "SC", "SCEG", "YAD"],
+    *["FPC", "FPL", "GVL", "JEA", "NSB", "SEC", "TAL", "TEC", "HST", "FMPP"],
+    "SWPP",
+]
+
+
+def _eia_hour(label: pd.Timestamp, tmp_path) -> float:
+    """EIA historical demand: the real calendar of the weather year, read by ReadEia."""
+    time = pd.date_range(f"{WEATHER_YEAR}-01-01", f"{WEATHER_YEAR}-12-31 23:00", freq="h")
+    raw = pd.DataFrame({"CISO": _hour_of_year_axis(time)}, index=time.rename("timestamp"))
+    raw[_EIA_FOLDED_BAS] = 0.0
+    path = tmp_path / "eia_demand.csv"
+    raw.to_csv(path)
+
+    demand = ReadEia(str(path)).read_demand()
+    return float(demand.loc[(label, "all", "all", "electricity"), "CISO"])
+
+
+def _hydro_hour(label: pd.Timestamp) -> float:
+    """Breakthrough hydro: a leap-year csv on its real calendar, as add_electricity lays it on."""
+    time = pd.date_range(f"{WEATHER_YEAR}-01-01", f"{WEATHER_YEAR}-12-31 23:00", freq="h")
+    # read_csv(index_col=0) leaves the stamps as strings
+    profile = pd.DataFrame({"plant": _hour_of_year_axis(time)}, index=time.astype(str))
+    return float(lay_on_model_calendar(profile).at[label, "plant"])
+
+
 @pytest.mark.parametrize("label", PROBES)
 def test_every_input_reads_the_same_weather_hour(label, tmp_path):
     expected = _hour_of_year_axis(weather_year_hours(pd.DatetimeIndex([label])))[0]
@@ -108,6 +178,116 @@ def test_every_input_reads_the_same_weather_hour(label, tmp_path):
     assert _cutout_hour(label) == expected
     assert _godeeep_hour(label) == expected
     assert _eer_hour(label, tmp_path) == expected
+    assert _eia_hour(label, tmp_path) == expected
+    assert _hydro_hour(label) == expected
+
+
+def test_historical_demand_carries_no_feb_29_and_ends_on_dec_31(tmp_path):
+    """Historical demand on a leap year covers the model snapshots, hour for hour."""
+    time = pd.date_range(f"{WEATHER_YEAR}-01-01", f"{WEATHER_YEAR}-12-31 23:00", freq="h")
+    raw = pd.DataFrame({"CISO": _hour_of_year_axis(time)}, index=time.rename("timestamp"))
+    raw[_EIA_FOLDED_BAS] = 0.0
+    path = tmp_path / "eia_demand.csv"
+    raw.to_csv(path)
+
+    demand = ReadEia(str(path)).read_demand()
+
+    assert pd.DatetimeIndex(demand.index.get_level_values("snapshot")).equals(MODEL_SNS)
+    assert (demand["CISO"].to_numpy() == np.arange(8760)).all()
+
+
+def test_godeeep_hour_beginning_axis_is_not_shifted():
+    """An axis that already holds 1 January 00:00 is hour-beginning and keeps its stamps."""
+    start = pd.date_range("2019-01-01", "2019-12-31 23:00", freq="h")
+    raw = xr.Dataset({"v": ("Time", np.arange(len(start)))}, coords={"Time": start.to_numpy()})
+
+    fixed = fix_godeeep_time(raw, 2019)
+
+    assert pd.DatetimeIndex(fixed.indexes["time"]).equals(start)
+
+
+def test_godeeep_hour_ending_axis_moves_back_an_hour():
+    start = pd.date_range("2019-01-01", "2019-12-31 23:00", freq="h")
+    raw = xr.Dataset(
+        {"v": ("Time", np.arange(len(start)))},
+        coords={"Time": (start + pd.Timedelta(hours=1)).to_numpy()},
+    )
+
+    fixed = fix_godeeep_time(raw, 2019)
+
+    assert pd.DatetimeIndex(fixed.indexes["time"]).equals(start)
+
+
+def _point_cutout(time: pd.DatetimeIndex) -> xr.Dataset:
+    """One grid cell without stored sun position, as an older cutout has."""
+    ds = xr.Dataset(
+        {"influx_direct": (("time", "y", "x"), np.ones((len(time), 1, 1)))},
+        coords={"time": time, "y": [35.0], "x": [-120.0]},
+    )
+    return ds.assign_coords(lon=ds["x"], lat=ds["y"]).chunk(time=len(time))
+
+
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
+def test_sun_position_follows_the_weather_hour_not_the_label():
+    """Atlite derives the sun position from the time axis, so it is computed before relabelling."""
+    time = pd.date_range(f"{WEATHER_YEAR}-01-01", f"{WEATHER_YEAR}-12-31 23:00", freq="h")
+    cutout = _point_cutout(time)
+    # build_renewable_profiles: select on the weather-year calendar, convert, relabel
+    weather = cutout.sel(time=weather_year_hours(MODEL_SNS))
+    altitude = label_with_snapshots(SolarPosition(weather)["altitude"], MODEL_SNS)
+
+    true_altitude = SolarPosition(cutout)["altitude"]
+    label, weather_hour = pd.Timestamp("2012-07-04 20:00"), pd.Timestamp("2012-07-03 20:00")
+    assert float(altitude.sel(time=label)) == float(true_altitude.sel(time=weather_hour))
+    # relabelling first pairs the 3 July irradiance with the 4 July sun
+    relabelled_first = SolarPosition(select_weather_hours(cutout, MODEL_SNS))["altitude"]
+    assert float(relabelled_first.sel(time=label)) == float(true_altitude.sel(time=label))
+    assert float(relabelled_first.sel(time=label)) != float(altitude.sel(time=label))
+
+
+def _profile(time: pd.DatetimeIndex) -> xr.DataArray:
+    return xr.DataArray(np.ones((len(time), 1)), coords={"time": time, "bus": ["b1"]}, dims=["time", "bus"])
+
+
+def test_unstamped_leap_year_profile_is_rejected():
+    """A profile built before the positional rule is one day off from 1 March on."""
+    # a window without 29 February: the time axis alone cannot show the old rule
+    june_2020 = get_snapshots({"start": "2020-06-01", "end": "2020-06-08", "inclusive": "left"})
+
+    with pytest.raises(ValueError, match="rebuild"):
+        check_weather_calendar(_profile(june_2020), "profile_solar.nc")
+
+
+def test_stamped_and_non_leap_profiles_pass():
+    june_2020 = get_snapshots({"start": "2020-06-01", "end": "2020-06-08", "inclusive": "left"})
+    june_2019 = get_snapshots({"start": "2019-06-01", "end": "2019-06-08", "inclusive": "left"})
+
+    check_weather_calendar(stamp_weather_calendar(_profile(june_2020)), "profile_solar.nc")
+    # both rules give the same result for a non-leap year
+    check_weather_calendar(_profile(june_2019), "profile_solar.nc")
+
+
+def test_stamp_survives_from_temperature_to_cop(tmp_path):
+    """build_temperature_profiles stamps, build_cop_profiles carries it over, build_heat checks it."""
+    june_2020 = get_snapshots({"start": "2020-06-01", "end": "2020-06-08", "inclusive": "left"})
+    temp_path, cop_path = tmp_path / "temp_air.nc", tmp_path / "cop_air.nc"
+
+    stamp_weather_calendar(_profile(june_2020) * 10.0).to_netcdf(temp_path)
+    cop_profile(xr.open_dataarray(temp_path), sink_t=55.0, source="air").to_netcdf(cop_path)
+
+    cop = xr.open_dataarray(cop_path)
+    assert WEATHER_CALENDAR_ATTR in cop.attrs
+    check_weather_calendar(cop, str(cop_path))
+
+
+def test_cop_from_unstamped_temperatures_stays_unstamped():
+    """A stale temperature profile must not come out of build_cop_profiles looking current."""
+    june_2020 = get_snapshots({"start": "2020-06-01", "end": "2020-06-08", "inclusive": "left"})
+
+    cop = cop_profile(_profile(june_2020) * 10.0, sink_t=55.0, source="air")
+
+    with pytest.raises(ValueError, match="rebuild"):
+        check_weather_calendar(cop, "cop_air.nc")
 
 
 def test_leap_day_weather_is_on_march_1():

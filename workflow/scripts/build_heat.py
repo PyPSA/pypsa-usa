@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
+from _helpers import check_weather_calendar
 from constants_sector import SecCarriers, SecNames
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,11 @@ def build_heat(
 
     ashp_cop = xr.open_dataarray(cop_ashp_path)
     gshp_cop = xr.open_dataarray(cop_gshp_path)
+    # a COP profile built before leap weather years were laid on by position
+    # carries no February 29 when its window has none, so reindex_cop cannot
+    # tell; the stamp from build_temperature_profiles can
+    check_weather_calendar(ashp_cop, cop_ashp_path)
+    check_weather_calendar(gshp_cop, cop_gshp_path)
 
     ashp_cop = reindex_cop(sns, ashp_cop)
     gshp_cop = reindex_cop(sns, gshp_cop)

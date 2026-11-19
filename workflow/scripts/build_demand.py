@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
-from _helpers import configure_logging, get_multiindex_snapshots, get_snapshots
+from _helpers import configure_logging, get_multiindex_snapshots, get_snapshots, lay_on_model_calendar
 from build_servm_load_weights import compose_busmaps
 from constants_sector import FIPS_2_STATE, NAICS, VMT_UNIT_CONVERSION, DemandFuels
 from eia import EnergyDemand, TransportationDemand
@@ -243,7 +243,14 @@ class ReadStrategy(ABC):
 
 
 class ReadEia(ReadStrategy):
-    """Reads data from GridEmissions."""
+    """
+    Reads data from GridEmissions.
+
+    The source is on the real calendar of each historical year. It is laid onto
+    the model calendar with ``_helpers.lay_on_model_calendar``, so a leap year
+    (2020) follows the rule of every other weather-driven input: 29 February
+    takes the 1 March label and 31 December is not used.
+    """
 
     def __init__(self, filepath: str | None = None) -> None:
         super().__init__(filepath)
@@ -266,7 +273,7 @@ class ReadEia(ReadStrategy):
         """Formats raw data."""
         df = data.copy().fillna(0)
         df = self._correct_balancing_areas(df)
-        df = self._format_snapshot_index(df)
+        df = lay_on_model_calendar(self._format_snapshot_index(df))
         df["fuel"] = "electricity"
         df["sector"] = "all"
         df["subsector"] = "all"
@@ -295,7 +302,12 @@ class ReadEia(ReadStrategy):
 
 
 class ReadFERC714(ReadStrategy):
-    """Reads data from PuDLs FERC 714 based State historical Demand."""
+    """
+    Reads data from PuDLs FERC 714 based State historical Demand.
+
+    Like ``ReadEia``, the historical calendar is laid onto the model calendar
+    with ``_helpers.lay_on_model_calendar``.
+    """
 
     def __init__(self, filepath: str | None = None) -> None:
         super().__init__(filepath)
@@ -349,7 +361,7 @@ class ReadFERC714(ReadStrategy):
         df = df.groupby(["datetime_utc", "State"]).sum().reset_index()
 
         df = df.rename(columns={"datetime_utc": "snapshot"}).set_index("snapshot")
-        df = self._format_snapshot_index(df)
+        df = lay_on_model_calendar(self._format_snapshot_index(df))
         df["fuel"] = "electricity"
         df["sector"] = "all"
         df["subsector"] = "all"
@@ -2654,6 +2666,7 @@ class DemandFormatter:
 
         demand_periods = df.index.year.unique().to_list()
         if demand_periods == self.investment_periods:
+            self._check_covers_snapshots(df)
             logger.info("No demand formatting required")
             return df
 
@@ -2678,6 +2691,22 @@ class DemandFormatter:
         demand = pd.concat(demand_per_period)
         assert len(demand) == len(self.sns)
         return demand
+
+    def _check_covers_snapshots(self, df: pd.DataFrame) -> None:
+        """Raise if demand that needs no formatting does not cover the network snapshots.
+
+        The years match the investment periods, so the frame goes to the network
+        as it is; a reader that lost hours (a period laid on the wrong calendar,
+        for example) would otherwise pass through unnoticed.
+        """
+        timesteps = self.sns.get_level_values(-1) if self.sns.nlevels > 1 else self.sns
+        missing = timesteps.difference(df.index)
+        if len(df) != len(self.sns) or len(missing):
+            raise ValueError(
+                f"Demand has {len(df)} rows for {len(self.sns)} network snapshots; "
+                f"{len(missing)} snapshot(s) carry no demand"
+                + (f", the first at {missing[0]}." if len(missing) else "."),
+            )
 
     def need_scaling(self, df: pd.DataFrame) -> bool:
         """Checks if any demand needs to be scaled."""

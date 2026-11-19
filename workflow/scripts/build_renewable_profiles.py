@@ -14,7 +14,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
-from _helpers import configure_logging, get_snapshots, select_weather_hours
+from _helpers import (
+    configure_logging,
+    get_snapshots,
+    label_with_snapshots,
+    stamp_weather_calendar,
+    weather_year_hours,
+)
 from dask.distributed import Client
 from godeeep_cf_registry import resolve_scenario, resolve_weather_year
 from pypsa.geo import haversine
@@ -302,9 +308,12 @@ if __name__ == "__main__":
         logger.info(f'using cutout "{snakemake.input.cutout}"')
         # Patch fix with [0] move expand in snakemake rule to add_elec for multiple cutouts
         cutout = atlite.Cutout(snakemake.input.cutout[0])
-        # a leap weather year is laid onto the 365-day snapshots by position,
-        # as the GODEEEP CF and the EER/SERVM demand are
-        cutout.data = select_weather_hours(cutout.data, sns)
+        # A leap weather year is laid onto the 365-day snapshots by position,
+        # as the GODEEEP CF and the EER/SERVM demand are. The cutout keeps its
+        # true weather-year timestamps through the conversion, because atlite
+        # derives the sun position from the time axis when the cutout does not
+        # store it; the profile takes the snapshot labels afterwards.
+        cutout.data = cutout.data.sel(time=weather_year_hours(sns))
 
         res = params.get("excluder_resolution", 100)
         excluder = atlite.ExclusionContainer(crs=5070, res=res)
@@ -415,6 +424,7 @@ if __name__ == "__main__":
             return_capacity=True,
             **resource,
         )
+        profile = label_with_snapshots(profile, sns)
 
         logger.info(f"Calculating maximal capacity per bus (method '{p_nom_max_meth}')")
         if p_nom_max_meth == "simple":  ## right now the capacities loaded in are "conservative"
@@ -630,6 +640,8 @@ if __name__ == "__main__":
         logger.info(f"Applying correction factor {correction_factor} to profile...")
         ds["profile"] = ds["profile"] * correction_factor
 
-    ds.to_netcdf(snakemake.output.profile)
+    # both datasets follow _helpers.weather_year_hours; add_electricity rejects
+    # an atlite profile of a leap weather year that does not say so
+    stamp_weather_calendar(ds).to_netcdf(snakemake.output.profile)
     if client is not None:
         client.shutdown()
