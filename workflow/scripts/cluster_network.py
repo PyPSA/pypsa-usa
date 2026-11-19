@@ -34,6 +34,12 @@ from pypsa.clustering.spatial import (
     busmap_by_kmeans,
     get_clustering_from_busmap,
 )
+from regional_cost import (
+    BRANCH_CAPEX_COL,
+    LINE_CAPEX_STRATEGIES,
+    TransmissionCostModel,
+    assign_bus_counties,
+)
 
 warnings.filterwarnings(action="ignore", category=UserWarning)
 
@@ -279,7 +285,10 @@ def clustering_for_n_clusters(
     else:
         busmap = custom_busmap
 
-    line_strategies = aggregation_strategies.get("lines", dict())
+    # The region/voltage-resolved transmission unit cost is intensive (per km), so
+    # merged parallel lines take its capacity-weighted mean, as pypsa does for
+    # capital_cost / length. A user strategy for the column still wins.
+    line_strategies = {**LINE_CAPEX_STRATEGIES, **aggregation_strategies.get("lines", dict())}
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
     generator_strategies = generator_aggregation_strategies(aggregation_strategies)
     bus_strategies = {
@@ -670,6 +679,8 @@ def calibrate_tamu_transmission_capacity(
     build_year,
     lifetime,
     use_original_region=False,
+    cost_model=None,
+    county_shapes=None,
 ):
     """
     Apply REEDS transmission capacity data to correct the aggregated TAMU network.
@@ -697,6 +708,11 @@ def calibrate_tamu_transmission_capacity(
         Lifetime stamped on calibrated existing TAMU lines and new REEDS-backfill lines.
     use_original_region : bool
         If True, use original region info saved before aggregation
+    cost_model : regional_cost.TransmissionCostModel, optional
+        When given (with ``county_shapes``), lines backfilled from REEDS are
+        priced by region and voltage instead of the national HVAC cost.
+    county_shapes : str, optional
+        County polygons used to locate the backfilled lines' endpoints.
     """
     logger.info("Calibrate TAMU transmission capacity...")
 
@@ -888,7 +904,8 @@ def calibrate_tamu_transmission_capacity(
         new_b = avg_b_per_length_capacity * new_s_nom / distance_km
         new_g = avg_g_per_length_capacity * new_s_nom / distance_km
 
-        # Calculate capital cost
+        # Annualized cost per MW (pypsa multiplies by s_nom itself); replaced by
+        # the regional cost below when a cost model is given.
         new_capital_cost = hvac_overhead_cost * distance_km
 
         # Generate unique line name
@@ -934,6 +951,22 @@ def calibrate_tamu_transmission_capacity(
     # Batch add all new lines using madd
     if new_lines_data:
         new_lines_df = pd.DataFrame(new_lines_data)
+        if cost_model is not None:
+            # Price the backfilled interfaces like every other line: ReEDS route
+            # cost between the endpoint counties x voltage ratio, per great-circle
+            # km (distance_km carries length_factor, which ReEDS prices embed).
+            bus_county = assign_bus_counties(clustering.n.buses, county_shapes)
+            unit = cost_model.ac_unit_cost(
+                bus_county.reindex(new_lines_df["bus0"]).set_axis(new_lines_df.index),
+                bus_county.reindex(new_lines_df["bus1"]).set_axis(new_lines_df.index),
+                new_lines_df["v_nom"].to_numpy(),
+            )
+            annuity = calculate_annuity(
+                costs.at["HVAC overhead", "cost_recovery_period_years"],
+                costs.at["HVAC overhead", "wacc_real"],
+            )
+            new_lines_df[BRANCH_CAPEX_COL] = unit.to_numpy()
+            new_lines_df["capital_cost"] = annuity * unit.to_numpy() * new_lines_df["length"] / length_factor
         clustering.n.add(
             "Line",
             name=new_lines_df["name"],
@@ -955,6 +988,8 @@ def calibrate_tamu_transmission_capacity(
             build_year=build_year,
             lifetime=lifetime,
         )
+        if BRANCH_CAPEX_COL in new_lines_df:
+            clustering.n.lines.loc[new_lines_df["name"], BRANCH_CAPEX_COL] = new_lines_df[BRANCH_CAPEX_COL].to_numpy()
 
     logger.info(
         f"Added {len(new_lines_data)} missing lines from REEDS data that were not present in TAMU network",
@@ -1044,6 +1079,19 @@ if __name__ == "__main__":
         aggregate_carriers = carriers
 
     costs = load_costs(snakemake.input.tech_costs, params.costs)
+
+    regional_transmission_costs = snakemake.config["lines"].get("regional_costs", True)
+    # Only needed to price the lines calibrate_tamu_transmission_capacity backfills.
+    transmission_cost_model = None
+    if regional_transmission_costs and params.transmission_network == "tamu":
+        from money import dollar_year_from_config
+
+        transmission_cost_model = TransmissionCostModel.from_files(
+            snakemake.input.itl_costs_county,
+            snakemake.input.transmission_basecost,
+            dollar_year=dollar_year_from_config(snakemake.config),
+            voltage_factor=snakemake.config["lines"].get("voltage_factor", True),
+        )
 
     if (n_clusters == len(n.buses)) and not transport_model:
         # Fast-path if no clustering is necessary
@@ -1168,8 +1216,10 @@ if __name__ == "__main__":
                 agg_busmap=agg_busmap,
             )
         else:
-            # Use standard transmission cost estimates
-            update_transmission_costs(clustering.n, costs)
+            # Re-price on the clustered buses. With lines.regional_costs the
+            # unit cost aggregated above (capacity-weighted) is kept and only the
+            # great-circle length of each new corridor changes.
+            update_transmission_costs(clustering.n, costs, regional=regional_transmission_costs)
 
     if not transport_model:
         # Apply REEDS transmission capacity corrections
@@ -1208,6 +1258,8 @@ if __name__ == "__main__":
             transmission_build_year,
             transmission_lifetime,
             use_original_region=use_original_region,
+            cost_model=transmission_cost_model,
+            county_shapes=snakemake.input.get("county_shapes"),
         )
 
     # Defensive backstop: stamp any transmission Line/Link still carrying PyPSA's default

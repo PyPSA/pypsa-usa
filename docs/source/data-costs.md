@@ -71,6 +71,15 @@ With `costs: regional_multipliers: enable` (on by default), new generators and s
 
 Both are annualized at the carrier's capital charge rate, and each investment period prices its new builds with that year's costs. The ReEDS tables and their release are listed in `workflow/repo_data/costs/README.md`.
 
+### Regional transmission costs from ReEDS
+
+With `lines: regional_costs` (on by default), AC lines and HVDC links are priced from two ReEDS tables instead of the national `HVAC overhead` / `HVDC overhead` cost per km:
+
+- **Route cost**: `transmission_distance_cost_500kVac_county.csv` gives the 500 kV AC cost of each county pair over the great-circle distance between the county centroids, so regional cost, terrain and route detour are in the price per great-circle km. A line takes the cost of its endpoint counties' pair; other lines, mostly within one county, take the mean of their two counties' typical cost (the median of each county's 8 shortest pairs), with state and national medians as fallbacks.
+- **Voltage class** (`lines: voltage_factor`, on by default): the cost is scaled by `(kV / 500)^b`, fitted through 500 kV to the per-region voltage ratios of `rev_transmission_basecost.csv`. HVDC links take the DC/AC ratio of the same table (0.41).
+
+Both tables are in 2004 USD and are converted to `costs: dollar_year`. The unit cost is set in `aggregate_to_substations`, while lines still have their own voltage and county, and is carried through clustering as a capacity-weighted mean. `capital_cost` is the annuity times that unit cost times the great-circle length of the clustered corridor; `lines: length_factor` is not applied, since the ReEDS prices include the detour. The submarine share of HVDC links and the converter stations keep their national costs.
+
 ### Annualized capital cost and tax credits
 
 Capex (`capex_per_kw`, which holds construction financing) is annualized at `capital_charge_rate`, the ATB fixed charge rate: the capital recovery factor of the ATB WACC over the cost recovery period times ATB's project finance factor, which holds taxes and depreciation. Carriers ATB publishes no fixed charge rate for (gas, coal and oil plants, hydrogen_ct, transmission) are annualized at the capital recovery factor alone. The regional overnight multipliers and the ReEDS interconnection costs are annualized at the same rate.

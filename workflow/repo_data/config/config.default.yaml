@@ -278,6 +278,8 @@ lines:
   s_nom_max: .inf                          # MVA cap on expanded line capacity per corridor (.inf = unbounded)
   max_extension: 20000                     # MW cap on total network-wide line expansion
   length_factor: 1.25                      # multiplier on geographic length to account for routing/right-of-way
+  regional_costs: true                     # price AC lines/HVDC links by ReEDS county-pair route cost (region, terrain, detour) per great-circle km; false = national HVAC/HVDC overhead cost per routed km
+  voltage_factor: true                     # with regional_costs: scale AC line cost by voltage class, (kV/500)^b fitted to ReEDS rev_transmission_basecost; false = price every line at 500 kV
 
   # pyPSA line-type catalog, mapped onto AC corridors by v_nom. Every line in
   # the base network is assigned the LineType matching its voltage; values
