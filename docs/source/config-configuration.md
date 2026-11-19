@@ -650,8 +650,9 @@ Sector-based network with DAC at `state` granularity.
 
 Selects the capital- and operating-cost assumptions: the NREL Annual Technology Baseline (ATB)
 scenario used for capex/FOM, the EIA Annual Energy Outlook (AEO) case used for fuel-price
-escalation, and policy incentives (PTC/ITC modifiers, emission prices, per-carrier availability
-years and build-rate caps). Processed cost tables are written to `resources/costs/costs_{year}.csv`.
+escalation, and policy incentives (tax credits of the ATB model case, optionally overridden per
+carrier and build year; emission prices; per-carrier availability years and build-rate caps).
+Processed cost tables are written to `resources/costs/costs_{year}.csv`.
 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
