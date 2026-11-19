@@ -835,3 +835,25 @@ def get_multiindex_snapshots(
             get_snapshots(sns_config).map(lambda x: x.replace(year=year)),
         )
     return pd.MultiIndex.from_arrays([sns.year, sns], names=["period", "timestep"])
+
+
+# parts of the existing natural gas infrastructure, and their carriers
+GAS_INFRASTRUCTURE = {"production": "gas production", "pipeline": "gas pipeline", "storage": "gas storage"}
+
+
+def get_gas_economic_retirement(sector: dict) -> dict[str, bool]:
+    """
+    Whether each part of the existing natural gas infrastructure may retire, saving
+    its fixed O&M (``sector: natural_gas: economic_retirement``).
+    """
+    setting = sector.get("natural_gas", {}).get("economic_retirement", {})
+    return {part: setting.get(part, False) for part in GAS_INFRASTRUCTURE}
+
+
+def get_gas_retrofit(sector: dict) -> dict[str, bool]:
+    """
+    Whether the existing natural gas pipelines and storage may be retrofitted to
+    hydrogen (``sector: natural_gas: retrofit``).
+    """
+    setting = sector.get("natural_gas", {}).get("retrofit", {})
+    return {part: setting.get(part, False) for part in ("pipeline", "storage")}

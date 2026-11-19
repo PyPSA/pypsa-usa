@@ -52,8 +52,12 @@ build_base_network → build_bus_regions
   → add_demand               (elec_s{simpl}_dem.nc)
   → add_electricity          (elec_s{simpl}_l_pp.pkl)         # dill pickle
   → cluster_network          (elec_s{simpl}_c{clusters}.nc)
-  → add_extra_components → prepare_network → solve_network
+  → add_extra_components → prepare_network
+  → add_sectors              (elec_s{simpl}_c{clusters}_ec_l{ll}_{opts}_{sector}.nc)
+  → solve_network
 ```
+
+`add_sectors` runs for every `{sector}`; with `E` alone it writes the network out unchanged.
 
 EGS gets a parallel `aggregate_egs` rule (gated on `EGS in extendable_carriers.Generator`) that remaps NREL substation-keyed supply curves through `busmap_s{simpl}.csv` before they reach `add_electricity`. HAC clustering has been removed entirely; only `kmeans` and `modularity` are supported in `cluster_network`.
 
@@ -83,7 +87,7 @@ Defined in `workflow/Snakefile`:
 - `clusters`: integer optionally suffixed with `m`/`s`/`a`/`c`, or `all` — final cluster count. A plain integer (and `m`) aggregates only conventional generators, keeping renewable resource zones at `{simpl}` resolution; `s` ("small") aggregates every carrier; `a` aggregates none. Do not add `m` to new configs — it is the default.
 - `ll`: `v|c` + number/`opt`/`all` — line-limit scenario
 - `opts`: dash/plus-separated options string (transmission, horizon discretization, etc.)
-- `sector`: `E`, `G`, or hyphenated combos
+- `sector`: `E`, `E-G`, `E-H` or `E-G-H` (pattern `E(-G)?(-H)?`; a `scenario.sector` without `E` gets it prepended). `G` is natural gas plus the end-use sectors (heating, transport, industry), `H` is hydrogen. Anything but `E` alone is a sector-coupled model. In rules, test it with `sector_on` / `gas_sector_on` / `hydrogen_sector_on` from `rules/common.smk`.
 
 ### Script conventions
 

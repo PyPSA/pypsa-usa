@@ -14,11 +14,13 @@ logger = logging.getLogger(__name__)
 def build_co2_tracking(
     n: pypsa.Network,
     config: dict[str, Any] | None = None,
+    sectors: list[str] | None = None,
 ) -> None:
     """Main funtion to interface with."""
     states = n.buses.STATE.unique()
 
-    sectors = ["pwr", "trn", "res", "com", "ind"]
+    if sectors is None:
+        sectors = ["pwr", "trn", "res", "com", "ind"]
 
     if not config:
         config = {}
@@ -161,14 +163,7 @@ def _build_ch4_upstream(n, gwp: float, leakage_rate: float):
     emissions = gwp * leakage_rate
 
     # append the connection to methane stores
-
-    if "bus3" in n.links.columns:
-        assert all(n.links.loc[links].bus3.isna())
-    if "efficiency3" in n.links.columns:
-        assert all(n.links.loc[links].efficiency3.isna())
-
-    n.links.loc[links, "bus3"] = n.links.loc[links,].bus1 + "-ch4"  # 'CA gas-ch4'
-    n.links.loc[links, "efficiency3"] = emissions
+    _connect_ch4_port(n, links, n.links.loc[links].bus1 + "-ch4", emissions)  # 'CA gas-ch4'
 
 
 def _build_ch4_downstream(n, gwp: float, leakage_rate: float):
@@ -184,9 +179,20 @@ def _build_ch4_downstream(n, gwp: float, leakage_rate: float):
     emissions = gwp * leakage_rate
 
     # append the connection to methane stores
+    _connect_ch4_port(n, links, n.links.loc[links].bus0 + "-ch4", emissions)  # 'CA gas-ch4'
 
-    assert all(n.links.loc[links].bus3.isna())
-    assert all(n.links.loc[links].efficiency3.isna())
 
-    n.links.loc[links, "bus3"] = n.links.loc[links,].bus0 + "-ch4"  # 'CA gas-ch4'
+def _connect_ch4_port(n: pypsa.Network, links: pd.Index, buses: pd.Series, emissions: float):
+    """
+    Connects links to the state methane buses through their port 3.
+
+    The port is first registered with pypsa, as ``n.add`` does for the ports it
+    is given, so that links added later leave it unconnected rather than NaN.
+    """
+    n.add("Link", [], bus0=[], bus1=[], bus3=[])
+
+    connected = n.links.loc[links, "bus3"].fillna("") != ""
+    assert not connected.any(), f"Port 3 of {links[connected].tolist()} is already connected"
+
+    n.links.loc[links, "bus3"] = buses
     n.links.loc[links, "efficiency3"] = emissions

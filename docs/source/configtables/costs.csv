@@ -17,6 +17,6 @@ ptc_modifier,,,"Production tax credit per carrier, overriding the PTC of ``atb: 
 itc_modifier,,,"Investment tax credit per carrier, overriding the ITC of ``atb: model_case``. Unset (``null``) carriers and years keep it. See :ref:`data-costs`."
 -- {carrier},p.u.,"float in [0, 1), or mapping ``{year: float}``; e.g. ``solar: 0.3``","Effective share of the capital charge paid back, for every build year or per build year. Replaces the ATB ITC of the case (``itc_effective``) and keeps its WACC. A positive value drops the ATB PTC of the carrier unless ``ptc_modifier`` also sets it."
 min_year,,,"Earliest commercial-availability year per carrier; the carrier is excluded from investment periods before this year."
--- {carrier},--,int; e.g. ``hydrogen_ct: 2040``,"Per-carrier first-available year."
+-- {carrier},--,int; e.g. ``OCHT: 2040``,"Per-carrier first-available year."
 max_growth,,,"Optional per-carrier annual build-rate caps limiting how fast a technology can be deployed."
 -- {carrier},,"Mapping ``{base: MW, rate: fraction}``","Base build rate in MW and fractional annual growth allowed on top of it."
