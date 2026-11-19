@@ -110,6 +110,7 @@ def test_typo_in_closed_subtree_is_rejected(schema):
         (("costs", "atb", "scenario"), "moderate"),
         (("costs", "atb", "model_case"), "Market"),  # 2024 ATB label, gone from the 2025 ATB
         (("renewable_land_access",), "refrence"),
+        (("renewable", "dataset"), "reed"),
         (("costs", "regional_multipliers", "renewable_interconnection"), "yes"),
     ],
 )
@@ -156,6 +157,20 @@ def test_godeeep_requires_renewable_land_access_key(schema):
     """The godeeep conditional must fire when the key is missing entirely."""
     cfg = copy.deepcopy(_merged("config.default.yaml"))
     assert cfg["renewable"]["dataset"] == "godeeep"
+    cfg.pop("renewable_land_access")
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(cfg, schema)
+
+
+@pytest.mark.fast
+def test_reeds_dataset_validates_and_needs_land_access(schema):
+    """ReEDS picks its supply-curve variant by renewable_land_access, so null/missing is rejected."""
+    cfg = copy.deepcopy(_merged("config.default.yaml"))
+    cfg["renewable"]["dataset"] = "reeds"
+    jsonschema.validate(cfg, schema)
+    cfg["renewable_land_access"] = None
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(cfg, schema)
     cfg.pop("renewable_land_access")
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(cfg, schema)
