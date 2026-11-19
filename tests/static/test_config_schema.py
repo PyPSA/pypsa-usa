@@ -123,6 +123,34 @@ def test_bad_enum_values_are_rejected(path, bad_value, schema):
 
 
 @pytest.mark.fast
+@pytest.mark.parametrize(
+    "credits,valid",
+    [
+        (
+            {
+                "itc_modifier": {"solar": 0.3, "offwind": {2030: 0.3, 2040: None}},
+                "ptc_modifier": {"onwind": {2030: 27.5, 2035: 0}},
+            },
+            True,
+        ),
+        ({"itc_modifier": {"solar": 1.0}}, False),  # an ITC is a share of capex below 1
+        ({"itc_modifier": {"solar": {2030: 1.2}}}, False),
+        ({"ptc_modifier": {"onwind": -1}}, False),
+        ({"ptc_modifier": {"onwind": "27.5"}}, False),
+    ],
+)
+def test_tax_credit_modifiers(credits, valid, schema):
+    """ITC/PTC take one number per carrier or a {build year: number} mapping."""
+    cfg = copy.deepcopy(_merged("config.default.yaml"))
+    cfg["costs"].update(credits)
+    if valid:
+        jsonschema.validate(cfg, schema)
+    else:
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(cfg, schema)
+
+
+@pytest.mark.fast
 def test_godeeep_requires_renewable_land_access_key(schema):
     """The godeeep conditional must fire when the key is missing entirely."""
     cfg = copy.deepcopy(_merged("config.default.yaml"))

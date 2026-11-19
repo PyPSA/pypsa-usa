@@ -18,6 +18,7 @@ from external_regions import (
     resolve_trade_costs,
 )
 from shapely.geometry import Point
+from tax_credits import check_tax_credit_years, credit_for_year
 
 idx = pd.IndexSlice
 
@@ -597,29 +598,36 @@ def apply_power_fuel_prices(n: pypsa.Network, costs_dict: dict[int, pd.DataFrame
 
 def apply_itc(n, itc_modifier, monitization_cost=0.1):
     """
-    Applies investment tax credit to all extendable components in the network.
+    Applies investment tax credit to the capital cost of generators and storage units.
 
     Arguments:
     n: pypsa.Network,
     itc_modifier: dict,
-        Dict of ITC modifiers for each carrier
+        ITC fraction per carrier: one value for every component of the carrier, or
+        ``{build year: value}``, which gives each vintage the credit of its build
+        year and none to a build year not listed (``tax_credits.credit_for_year``).
     """
-    for carrier in itc_modifier.keys():
-        carrier_mask = n.generators["carrier"] == carrier
-        n.generators.loc[carrier_mask, "capital_cost"] *= 1 - ((1 - monitization_cost) * itc_modifier[carrier])
+    for carrier, spec in (itc_modifier or {}).items():
+        for c in (n.generators, n.storage_units):
+            mask = c["carrier"] == carrier
+            itc = c.loc[mask, "build_year"].map(
+                lambda year: credit_for_year(spec, year, "itc_modifier", carrier) or 0.0,
+            )
+            c.loc[mask, "capital_cost"] *= 1 - ((1 - monitization_cost) * itc)
 
-        carrier_mask = n.storage_units["carrier"] == carrier
-        n.storage_units.loc[carrier_mask, "capital_cost"] *= 1 - ((1 - monitization_cost) * itc_modifier[carrier])
 
-
-def apply_ptc(n, ptc_modifier, costs):
+def apply_ptc(n, ptc_modifier, costs_dict):
     """
-    Applies production tax credit to all extendable components in the network.
+    Applies production tax credit to the marginal cost of extendable generators.
 
     Arguments:
     n: pypsa.Network,
     ptc_modifier: dict,
-        Dict of PTC modifiers for each carrier
+        PTC per carrier in $/MWh: one value for every build year, or
+        ``{build year: value}``, which gives none to a build year not listed.
+    costs_dict: dict,
+        Costs of each investment period; each vintage is discounted with the WACC
+        and lifetime of its build year.
     """
 
     def discount_ptc(ptc, r, financial_lifetime, credit_lifetime=10, monitization_cost_pct=0.1):
@@ -628,11 +636,14 @@ def apply_ptc(n, ptc_modifier, costs):
         crf = (r * (1 + r) ** financial_lifetime) / ((1 + r) ** financial_lifetime - 1)
         return round(pv * crf, 2)
 
-    for carrier in ptc_modifier.keys():
-        ptc = ptc_modifier[carrier]
-        discounted_ptc = discount_ptc(ptc, costs.at[carrier, "wacc_real"], costs.at[carrier, "lifetime"])
+    for carrier, spec in (ptc_modifier or {}).items():
         mask = (n.generators["carrier"] == carrier) & n.generators.p_nom_extendable
         for build_year in n.investment_periods:
+            ptc = credit_for_year(spec, build_year, "ptc_modifier", carrier)
+            if not ptc:
+                continue
+            costs = costs_dict[build_year]
+            discounted_ptc = discount_ptc(ptc, costs.at[carrier, "wacc_real"], costs.at[carrier, "lifetime"])
             mask_by = (n.generators.build_year == build_year) & mask
             mc = n.get_switchable_as_dense("Generator", "marginal_cost").loc[:, mask_by]
             mc.loc[build_year:, :] -= discounted_ptc
@@ -1320,8 +1331,9 @@ def main(snakemake) -> None:
     if not snakemake.config["conventional"]["dynamic_fuel_price"].get("enable", False):
         apply_power_fuel_prices(n, costs_dict)
 
+    check_tax_credit_years(snakemake.config["costs"], n.investment_periods)
     apply_itc(n, snakemake.config["costs"]["itc_modifier"])
-    apply_ptc(n, snakemake.config["costs"]["ptc_modifier"], costs)
+    apply_ptc(n, snakemake.config["costs"]["ptc_modifier"], costs_dict)
     apply_max_annual_growth_rate(n, snakemake.config["costs"]["max_growth"])
     add_nice_carrier_names(n, snakemake.config)
     add_co2_emissions(n, costs_dict[n.investment_periods[0]], n.carriers.index)

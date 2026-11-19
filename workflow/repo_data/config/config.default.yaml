@@ -360,6 +360,9 @@ costs:
     co2: 0.                                # USD/tCO2 flat price
     co2_monthly_prices: false              # true = use a monthly time series instead of flat co2 above
 
+  # Tax credits per carrier: one value for every build year, or {year: value} per
+  # build year (vintage), e.g. onwind: {2030: 27.5, 2035: 0.0}; a build year the
+  # mapping does not list gets no credit.
   ptc_modifier:                            # Production Tax Credit; subtracted from marginal cost ($/MWh)
     onwind: 27.50
     biomass: 27.50
