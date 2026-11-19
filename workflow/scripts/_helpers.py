@@ -308,14 +308,17 @@ def update_p_nom_max(n):
 
 
 def progress_retrieve(url, file):
-    import urllib
+    import urllib.request
 
     from progressbar import ProgressBar
 
     pbar = ProgressBar(0, 100)
 
     def dlProgress(count, block_size, total_size):
-        pbar.update(int(count * block_size * 100 / total_size))
+        # The last block overshoots the file size, which for a small file reads
+        # as more than 100%; an unknown size (no Content-Length) is -1.
+        if total_size > 0:
+            pbar.update(min(100, int(count * block_size * 100 / total_size)))
 
     urllib.request.urlretrieve(url, file, reporthook=dlProgress)
 
