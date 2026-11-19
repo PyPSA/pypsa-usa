@@ -63,8 +63,7 @@ Fill `.github/pull_request_template.md`, then add:
 - **Equivalence** (larger changes only) — ask the user whether an
   equivalence-harness run (`tests/equivalence/`) exists for this branch. If
   yes: paste the report summary and list any deltas-ledger rows (DL-N in
-  `docs/superpowers/specs/2026-08-07-deltas-ledger.md`) this PR adds or
-  touches. If no: write "No equivalence run for this branch." — stated,
+  `docs/deltas-ledger.md`) this PR adds or touches. If no: write "No equivalence run for this branch." — stated,
   never omitted.
 - Ask the user whether the PR closes an issue; if so, `Closes #N` at the top.
 - Attribution footer:
