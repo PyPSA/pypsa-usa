@@ -69,7 +69,23 @@ def build_county_busmap(n: "pypsa.Network") -> "pd.Series":
             "Set model_topology.topological_boundaries to 'county' (or "
             "'reeds_zone') in your config, or use a numeric {simpl} wildcard.",
         )
-    return (n.buses.reeds_zone.astype(str) + "_" + n.buses.county.astype(str)).rename("busmap")
+    busmap = n.buses.reeds_zone.astype(str) + "_" + n.buses.county.astype(str)
+
+    # A few counties straddle an interconnection seam (east Texas, MT/WY).
+    # Buses of different interconnections must not be merged: pypsa refuses
+    # to aggregate a disagreeing bus attribute, and the merge would join two
+    # asynchronous systems. Those counties get one bus per interconnection.
+    if "interconnect" in n.buses.columns:
+        split = n.buses.groupby(busmap).interconnect.transform("nunique") > 1
+        if split.any():
+            groups = sorted(busmap[split].unique())
+            busmap[split] = busmap[split] + "_" + n.buses.interconnect[split].astype(str)
+            logger.info(
+                "simpl='county': %d county group(s) span two interconnections and are split: %s",
+                len(groups),
+                groups,
+            )
+    return busmap.rename("busmap")
 
 
 if __name__ == "__main__":
