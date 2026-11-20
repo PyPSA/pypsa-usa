@@ -5,40 +5,20 @@
 # `{clusters}` wildcard and the `clustering:` config section while having
 # nothing to do with either — it has always been about the job scheduler.
 #
-# This file is used in two ways:
+# It holds one thing: the `walltime:` block below, THE single source of
+# per-rule wall times. Rules read it as `config_provider("walltime", "<rule>")`
+# and pass the result to `resources: walltime=`, which workflow/run_slurm.sh
+# forwards to sbatch as `--time` (via slurm_submit.sh). Override entries in
+# your per-user copy, workflow/config/config.slurm.yaml.
 #
-#   1. `--cluster-config config/config.slurm.yaml` (see workflow/run_slurm.sh)
-#      resolves `{cluster.account}`, `{cluster.partition}`, `{cluster.email}`,
-#      `{cluster.output}` and `{cluster.error}` from `__default__` below.
-#      Fill those in with your institution's values in YOUR copy under
-#      workflow/config/ (seeded by init_pypsa_usa.sh); the tracked template
-#      here stays blank.
-#
-#   2. It is a `configfile:` layer, which is what puts `walltime:` into the
-#      merged config. That block is THE single source of per-rule wall times:
-#      rules read it as `config_provider("walltime", "<rule>")` and pass the
-#      result to `resources: walltime=`, which run_slurm.sh forwards to sbatch
-#      as `--time {resources.walltime}`. It used to be duplicated - partly in
-#      config.default.yaml under `walltime:` (the values the rules actually
-#      read) and partly here as per-rule `{rule}: {walltime: ...}` blocks that
-#      nothing read, because run_slurm.sh takes the time from resources rather
-#      than from `{cluster.walltime}`.
+# Site settings (account, partition, mail) do NOT live here: they are
+# SBATCH_* environment variables, read by sbatch itself (account, partition)
+# or by workflow/slurm_submit.sh (mail). See that script and "Running on HPC
+# Cluster" in docs/source/about-usage.md.
 #
 # `solving.walltime` and `solving.mem` in config.default.yaml are a different
 # concern: they are the solver's own limits, not the scheduler's.
 # ====================================================================
-
-# sbatch defaults consumed via {cluster.*} under --cluster-config.
-__default__:
-  account:
-  partition:
-  email:
-  walltime: 00:30:00   # fallback job time limit for {cluster.walltime}
-  cpus_per_task: 1     # number of cores per job
-  chdir:
-  output: logs/{rule}/log-%j.out
-  error: logs/{rule}/errlog-%j.err
-
 
 # ====================================================================
 # WALLTIME — per-rule wall times requested from the scheduler
