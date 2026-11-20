@@ -633,6 +633,19 @@ def parse_clusters_wildcard(
     return n_clusters, agg, all_carriers - agg
 
 
+def is_noop_clustering(cluster_wc, n_clusters: int, n_buses: int, aggregate_carriers, transport_model: bool) -> bool:
+    """Whether ``cluster_network`` can return the network unchanged.
+
+    Only when the buses stay as they are and no generator has to be merged: with
+    ``all``, or a cluster count equal to the bus count whose suffix aggregates no
+    carrier (``Na``). A plain ``N`` (or ``Nm``/``Ns``/``Nc``) equal to the bus count
+    still merges the generators of its carriers per bus.
+    """
+    if transport_model or n_clusters != n_buses:
+        return False
+    return cluster_wc == "all" or not aggregate_carriers
+
+
 def cluster_regions(busmaps, input=None, output=None):
     """Create new geojson files for the clustered regions."""
     busmap = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
@@ -1115,7 +1128,7 @@ if __name__ == "__main__":
             voltage_factor=snakemake.config["lines"].get("voltage_factor", False),
         )
 
-    if (n_clusters == len(n.buses)) and not transport_model:
+    if is_noop_clustering(cluster_wc, n_clusters, len(n.buses), aggregate_carriers, transport_model):
         # Fast-path if no clustering is necessary
         busmap = n.buses.index.to_series()
         linemap = n.lines.index.to_series()
@@ -1133,6 +1146,12 @@ if __name__ == "__main__":
             ).squeeze("columns")
             custom_busmap.index = custom_busmap.index.astype(str)
             logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
+        elif n_clusters == len(n.buses) and not transport_model:
+            # keep every bus; only merge the generators of the aggregated carriers
+            custom_busmap = n.buses.index.to_series()
+            logger.info(
+                f"Keeping all {n_clusters} buses and aggregating the generators of {sorted(aggregate_carriers)}."
+            )
 
         if transport_model:
             # Prepare data for transport model
