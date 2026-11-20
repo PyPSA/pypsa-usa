@@ -17,12 +17,26 @@ import pypsa
 import xarray as xr
 from _helpers import (
     calculate_annuity,
+    check_weather_calendar,
     configure_logging,
     export_network_for_gis_mapping,
+    lay_on_model_calendar,
     load_costs,
     log_network_schema,
     update_p_nom_max,
     weighted_avg,
+)
+from constants import (
+    REGIONAL_MULTIPLIER_COL,
+    RENEWABLE_INTERCONNECTION_COL,
+    RENEWABLE_INTERCONNECTION_SHARE_COL,
+)
+from regional_cost import (
+    build_bus_multipliers,
+    carrier_multiplier,
+    regional_capital_cost,
+    renewable_interconnection_capital_cost,
+    renewable_interconnection_enabled,
 )
 from sklearn.neighbors import BallTree
 
@@ -792,19 +806,29 @@ def attach_wind_and_solar(
     carriers: list[str],
     extendable_carriers: dict[str, list[str]],
     config: dict,
-):
+) -> set[str]:
+    """Attach wind/solar generators from the per-bus profiles.
+
+    With ``costs: regional_multipliers: renewable_interconnection`` the profile's
+    ReEDS interconnection cost replaces the ATB grid connection in
+    ``capital_cost`` and is kept in the :data:`RENEWABLE_INTERCONNECTION_COL`
+    column, so ``add_extra_components`` can price every vintage with that year's
+    costs. Returns the carriers priced this way.
+    """
     add_missing_carriers(n, carriers)
+    use_interconnection = renewable_interconnection_enabled(config["costs"].get("regional_multipliers"))
+    interconnection_carriers = set()
 
     # Check if we're using horizon-specific profiles
-    godeeep_future = (
-        config.get("renewable", {}).get("dataset") == "godeeep" and config["renewable_scenarios"][0] != "historical"
-    )
+    dataset = config.get("renewable", {}).get("dataset")
+    godeeep_future = dataset == "godeeep" and config["renewable_scenarios"][0] != "historical"
 
     for car in carriers:
         if car in ["hydro", "EGS"]:
             continue
 
         capital_cost = costs.at[car, "annualized_capex_fom"]
+        interconnection_bus = None
 
         # Profile bus index already matches the network bus index after
         # cluster_simpl runs upstream — both are keyed by simpl-cluster bus.
@@ -846,6 +870,8 @@ def attach_wind_and_solar(
                                 index=lambda b: str(b),
                             )
                         )
+                        if RENEWABLE_INTERCONNECTION_COL in ds:
+                            interconnection_bus = ds[RENEWABLE_INTERCONNECTION_COL].to_pandas().rename(index=str)
 
                     # Get profile for this horizon — index already at bus level
                     horizon_profile = ds["profile"].transpose("time", "bus").to_pandas()
@@ -877,6 +903,11 @@ def attach_wind_and_solar(
                 if ds.indexes["bus"].empty:
                     continue
 
+                # GODEEEP CF were always laid on by position; an atlite profile
+                # built before that rule would be a day off the other inputs.
+                if dataset == "atlite":
+                    check_weather_calendar(ds, getattr(input_profiles, "profile_" + car))
+
                 bus_list = ds.bus.values.astype(str)
                 p_nom_max_bus = (
                     ds["p_nom_max"]
@@ -896,6 +927,24 @@ def attach_wind_and_solar(
                 bus_profiles.columns = bus_profiles.columns.astype(str)
                 # Broadcast single profile across all horizons
                 bus_profiles = broadcast_investment_horizons_index(n, bus_profiles)
+                if RENEWABLE_INTERCONNECTION_COL in ds:
+                    interconnection_bus = ds[RENEWABLE_INTERCONNECTION_COL].to_pandas().rename(index=str)
+
+        if use_interconnection and interconnection_bus is not None:
+            interconnection_bus = interconnection_bus.reindex(pd.Index(bus_list))
+            capital_cost = renewable_interconnection_capital_cost(costs, car, interconnection_bus)
+            interconnection_carriers.add(car)
+            priced = interconnection_bus.notna() & (interconnection_bus > 0)
+            logger.info(
+                f"{car}: ReEDS interconnection cost replaces the ATB grid connection "
+                f"({costs.at[car, 'capex_grid_connection_per_kw'] * 1e3:.0f} USD/MW) at {int(priced.sum())} of "
+                f"{len(priced)} buses (median {interconnection_bus[priced].median():.0f} USD/MW); "
+                f"capital_cost {capital_cost.min():.0f}-{capital_cost.max():.0f} USD/MW/yr.",
+            )
+        elif use_interconnection:
+            logger.warning(
+                f"{car} profile has no {RENEWABLE_INTERCONNECTION_COL}; keeping the uniform ATB capital cost.",
+            )
 
         logger.info(f"Adding {car} capacity-factor profiles to the network.")
 
@@ -915,6 +964,36 @@ def attach_wind_and_solar(
             lifetime=costs.at[car, "lifetime"],
             p_max_pu=bus_profiles,
         )
+        if car in interconnection_carriers:
+            gens = pd.Index(bus_list) + " " + car
+            n.generators.loc[gens, RENEWABLE_INTERCONNECTION_COL] = interconnection_bus.to_numpy()
+            # 1 where a ReEDS cost replaced the ATB grid connection; clustering averages it
+            n.generators.loc[gens, RENEWABLE_INTERCONNECTION_SHARE_COL] = (
+                (interconnection_bus > 0).to_numpy().astype(float)
+            )
+
+    return interconnection_carriers
+
+
+def apply_regional_multipliers(n: pypsa.Network, costs: pd.DataFrame, bus_multipliers) -> set[str]:
+    """Price generators with the ReEDS county overnight-capex multiplier of their bus.
+
+    Covers every generator of the carriers ``bus_multipliers`` maps and ``costs``
+    prices. The multiplier is kept in the :data:`REGIONAL_MULTIPLIER_COL` column, so
+    clustering can average it like ``capital_cost`` and ``add_extra_components`` can
+    price every vintage with it. Returns the carriers the table maps (empty when the
+    feature is off).
+    """
+    if bus_multipliers is None:
+        return set()
+    reeds_carriers = set(bus_multipliers.columns)
+    for carrier in sorted(reeds_carriers & set(n.generators.carrier) & set(costs.index)):
+        gens = n.generators.index[n.generators.carrier == carrier]
+        buses = n.generators.loc[gens, "bus"]
+        n.generators.loc[gens, "capital_cost"] = regional_capital_cost(costs, carrier, buses, bus_multipliers)
+        n.generators.loc[gens, REGIONAL_MULTIPLIER_COL] = carrier_multiplier(bus_multipliers, carrier, pd.Index(buses))
+        logger.info("Applied ReEDS regional overnight-capex multipliers to %d %s generator(s).", len(gens), carrier)
+    return reeds_carriers
 
 
 def attach_egs(
@@ -1961,8 +2040,10 @@ def attach_breakthrough_renewable_plants(
             p_nom = tech_plants.Pmax
             p_max_pu = p_nom_be[tech_plants.index] / p_nom
 
-        leap_day = p_max_pu.loc["2016-02-29 00:00:00":"2016-02-29 23:00:00"]
-        p_max_pu = p_max_pu.drop(leap_day.index)
+        # The Breakthrough profile is the leap year 2016 on its real calendar.
+        # It goes onto the model calendar as every weather-driven input does:
+        # 29 February takes the 1 March label and 31 December is not used.
+        p_max_pu = lay_on_model_calendar(p_max_pu)
         p_max_pu = broadcast_investment_horizons_index(n, p_max_pu)
 
         n.add(
@@ -2136,7 +2217,7 @@ def main(snakemake):
         plants,
     )
 
-    attach_wind_and_solar(
+    interconnection_carriers = attach_wind_and_solar(
         n,
         costs,
         snakemake.input,
@@ -2207,9 +2288,25 @@ def main(snakemake):
 
     update_p_nom_max(n)
 
-    # apply regional multipliers to capital cost data
+    # Regional capital costs. Carriers mapped in costs.regional_multipliers get the
+    # ReEDS county overnight-capex multiplier (FOM untouched); every other carrier
+    # keeps the EIA state-level locational multiplier below.
+    bus_multipliers = build_bus_multipliers(
+        n,
+        params.costs.get("regional_multipliers"),
+        snakemake.input.get("reg_cap_cost_diff"),
+        snakemake.input.get("county_shapes"),
+    )
+    reeds_carriers = apply_regional_multipliers(n, costs, bus_multipliers)
+
+    # Wind/solar priced with the ReEDS per-site interconnection cost take their
+    # regional differentiation from it, as in ReEDS; the EIA state multiplier would
+    # also rebuild capital_cost from the uniform ATB value and drop that cost.
     for carrier, multiplier_data in const.CAPEX_LOCATIONAL_MULTIPLIER.items():
-        if n.generators.query(f"carrier == '{carrier}'").empty:
+        if carrier in interconnection_carriers:
+            logger.info("%s carries the ReEDS interconnection cost; skipping its EIA state multiplier.", carrier)
+            continue
+        if carrier in reeds_carriers or n.generators.query(f"carrier == '{carrier}'").empty:
             continue
         multiplier_file = snakemake.input[f"gen_cost_mult_{multiplier_data}"]
         df_multiplier = pd.read_csv(multiplier_file)

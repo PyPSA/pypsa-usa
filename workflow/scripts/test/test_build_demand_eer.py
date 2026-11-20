@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 import tables
-from build_demand import ReadEer
+from _helpers import get_multiindex_snapshots
+from build_demand import DemandFormatter, DemandScaler, ReadEer
 
 
 def _write_eer_fixture(path, model_year=2030):
@@ -60,6 +61,39 @@ def test_read_eer_selects_model_and_weather_year_with_cst_shift(tmp_path):
     assert demand.loc[(sixth_snapshot, "all", "all", "electricity"), "Alabama"] == weather_start
 
 
+def test_read_eer_leap_planning_horizon_matches_network_snapshots(tmp_path):
+    """A leap investment period lands on the network's own calendar.
+
+    ``get_snapshots`` drops February 29, so the 2040 period runs through
+    December 31. The EER strip has to cover exactly those hours.
+    """
+    path = tmp_path / "eer.h5"
+    _write_eer_fixture(path, model_year=2040)
+
+    reader = ReadEer(
+        str(path),
+        planning_horizons=[2040],
+        renewable_weather_years=[2010],
+    )
+    demand = reader.read_demand()
+
+    network_sns = get_multiindex_snapshots(
+        {"start": "2019-01-01", "end": "2020-01-01", "inclusive": "left"},
+        [2040],
+    ).get_level_values("timestep")
+    demand_sns = pd.DatetimeIndex(demand.index.get_level_values("snapshot"))
+
+    assert len(demand_sns) == ReadEer.HOURS_PER_YEAR
+    assert not ((demand_sns.month == 2) & (demand_sns.day == 29)).any()
+    assert demand_sns.equals(pd.DatetimeIndex(network_sns))
+
+    # values stay positional: the first UTC hour of March 1 is hour 59*24 of
+    # the CST-shifted weather-year strip
+    weather_start = ReadEer.WEATHER_YEARS.index(2010) * ReadEer.HOURS_PER_YEAR
+    march_first = pd.Timestamp("2040-03-01 06:00:00")
+    assert demand.loc[(march_first, "all", "all", "electricity"), "Alabama"] == weather_start + 59 * 24
+
+
 def test_read_eer_rejects_invalid_weather_year(tmp_path):
     with pytest.raises(ValueError, match="supports weather years"):
         ReadEer(str(tmp_path / "eer.h5"), planning_horizons=[2030], renewable_weather_years=[2014])
@@ -73,3 +107,26 @@ def test_read_eer_rejects_multiple_weather_years(tmp_path):
 def test_read_eer_rejects_unsupported_planning_horizon(tmp_path):
     with pytest.raises(ValueError, match="unsupported year"):
         ReadEer(str(tmp_path / "eer.h5"), planning_horizons=[2032], renewable_weather_years=[2010])
+
+
+class _FlatScaler(DemandScaler):
+    """A scaler is configured for most profiles (eia, ferc, efs, ...); it is not used here."""
+
+    def get_projections(self) -> pd.DataFrame:
+        return pd.DataFrame()
+
+
+def test_format_demand_rejects_a_frame_short_of_the_snapshots(base_network):
+    """Demand whose years match the investment periods must still cover every snapshot.
+
+    Such a frame goes to the network unformatted. With a scaler configured
+    nothing else checks its length, so a reader that lost hours would pass.
+    """
+    timesteps = base_network.snapshots.get_level_values("timestep")
+    demand = pd.DataFrame({"z1": 1.0}, index=timesteps)
+    formatter = DemandFormatter(base_network)
+    formatter.scaler = _FlatScaler()
+
+    assert formatter.format_demand(demand, "power") is demand
+    with pytest.raises(ValueError, match="6 snapshot"):
+        formatter.format_demand(demand.iloc[:-6], "power")

@@ -22,7 +22,13 @@ from _helpers import (
     update_p_nom_max,
 )
 from add_electricity import update_transmission_costs
-from constants import FWD_SUFFIX, REEDS_NERC_INTERCONNECT_MAPPER, REV_SUFFIX, STATES_INTERCONNECT_MAPPER
+from constants import (
+    FWD_SUFFIX,
+    GENERATOR_CAPEX_STRATEGIES,
+    REEDS_NERC_INTERCONNECT_MAPPER,
+    REV_SUFFIX,
+    STATES_INTERCONNECT_MAPPER,
+)
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
     busmap_by_kmeans,
@@ -237,6 +243,17 @@ def busmap_for_n_clusters(
     )
 
 
+def generator_aggregation_strategies(aggregation_strategies: dict | None) -> dict:
+    """Generator strategies for clustering: the configured ones over the regional-capex defaults.
+
+    The ReEDS regional cost columns are intensive (per MW), so merged generators
+    take their capacity-weighted mean, like ``capital_cost``. A user strategy still
+    wins. ``generators`` may be missing or null in the config.
+    """
+    configured = (aggregation_strategies or {}).get("generators") or {}
+    return {**GENERATOR_CAPEX_STRATEGIES, **configured}
+
+
 def clustering_for_n_clusters(
     n,
     n_clusters,
@@ -263,8 +280,8 @@ def clustering_for_n_clusters(
         busmap = custom_busmap
 
     line_strategies = aggregation_strategies.get("lines", dict())
-    generator_strategies = aggregation_strategies.get("generators", dict())
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
+    generator_strategies = generator_aggregation_strategies(aggregation_strategies)
     bus_strategies = {
         "Pd": "sum",
         "load_weight": "sum",

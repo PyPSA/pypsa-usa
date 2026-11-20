@@ -237,13 +237,17 @@ enforced by zeroing the affected non-extendable capacities before each horizon's
 
 :::{figure} _static/generated/tct_targets.png
 :width: 100%
-:alt: Three CONUS maps of the default technology capacity targets: nuclear no-build regions, forced retirements and storage mandates
+:alt: Four CONUS maps of the default technology capacity targets: nuclear no-build regions, forced retirements, storage mandates and offshore wind mandates
 
 The technology capacity targets shipped with the repo, by policy family: ReEDS nuclear
 no-build (`max = existing` for `nuclear, SMR`, over both state and ReEDS-zone regions),
 ReEDS forced retirements (`max = 0` for the fossil and biomass carriers listed on each
-state) and ReEDS storage mandates (an annual `min` MW trajectory of
-`4hr_battery_storage`, shaded by the 2030 minimum). The map shows the shipped defaults
+state), ReEDS storage mandates (an annual `min` MW trajectory of battery power capacity,
+counting existing `battery` units and every new `{X}hr_battery_storage` duration, shaded by
+the 2030 minimum) and ReEDS offshore wind mandates (an
+annual `min` MW trajectory of `offwind, offwind_floating`, shaded by the 2035 minimum).
+The values come from ReEDS release `2026.09.21`
+(`workflow/repo_data/config/policy_constraints/reeds/README.md`). The map shows the shipped defaults
 only — a study can point `electricity: technology_capacity_targets` at any other CSV with
 the same columns. Regenerate with `snakemake docs_tct_targets`.
 :::

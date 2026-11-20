@@ -434,7 +434,10 @@ def fix_godeeep_time(ds: xr.Dataset, year: int) -> xr.Dataset:
     """Replicate the time-correction logic from aggregate_godeeep.py."""
     missing_time = pd.Timestamp(f"{year}-01-01T00:00:00")
     time_index = pd.DatetimeIndex(pd.to_datetime(ds["Time"].values, unit="ns"))
-    if missing_time.value not in ds["Time"].values:
+    # Raw GODEEEP stamps are hour-ending (1 Jan 01:00 ... 1 Jan 00:00 of the next
+    # year), so 1 Jan 00:00 of ``year`` is absent and the axis moves back an hour.
+    # An axis that already starts at 1 Jan 00:00 is hour-beginning and is kept.
+    if missing_time not in time_index:
         time_index = time_index - pd.Timedelta(hours=1)
 
     if calendar.isleap(year) and pd.Timestamp(f"{year}-02-29") in time_index:

@@ -123,8 +123,13 @@ capacity-expansion model, but matter if you compare hour-for-hour against anothe
    real weekdays of the planning horizon.
 2. **Leap weather years.** For a leap *weather* year the SERVM strip contains February 29 and
    omits December 31, while PyPSA-USA's snapshots do the opposite (`get_snapshots` drops
-   February 29 from leap planning horizons). Every hour after February therefore lands one
-   calendar day earlier than it sat in the source file.
+   February 29 from leap planning horizons). Every hour from February 29 on therefore lands one
+   calendar day later than it sat in the source file: February 29 takes the 1 March label, and
+   December 30 takes the December 31 label. Every weather-driven input follows this one rule
+   (`_helpers.weather_year_hours`), so the same weather hour sits on the same snapshot
+   everywhere: EER demand, EIA and FERC historical demand, GODEEEP and atlite capacity factors,
+   the temperature and heat-pump COP profiles built from the cutout, and the Breakthrough hydro
+   profile.
 
 The strip is mapped **positionally** onto the network's own per-period snapshots rather than
 onto a synthesised `date_range` — the latter would run a day short of December 31 for the
