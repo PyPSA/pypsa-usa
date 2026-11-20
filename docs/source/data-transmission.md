@@ -51,7 +51,9 @@ interconnection. From the 2024-09-30 data it has 52,477 substations, 59,948 buse
 - **Interconnections**: each substation takes the interconnection of the nearest TAMU substation,
   smoothed over the line graph. AC lines that join two interconnections are cut (on the ground they
   are DC ties), lines with an end outside the United States are dropped, and only the largest
-  connected component of each interconnection is kept.
+  connected component of each interconnection is kept. When `model_topology: include` cuts the grid,
+  buses left in islands at the footprint boundary are merged into the nearest substation of the main
+  network.
 - **Electrical parameters**: per-km resistance, reactance and susceptance, and the per-circuit rating,
   are the medians of the TAMU lines of the same voltage class, applied over the route length.
 - **Other inputs**: bus load weights come from county population. TAMU's DC ties, its hydro plants and
@@ -59,6 +61,10 @@ interconnection. From the 2024-09-30 data it has 52,477 substations, 59,948 buse
   are moved to the nearest HIFLD bus or substation.
 - **Limitations**: line ratings are not calibrated to the ReEDS interface capacities, as `tamu`'s are,
   and EGS, whose supply curves are keyed by TAMU substation, is not supported.
+
+![TAMU base grid](./_static/networks/base_grid_tamu.png)
+
+![HIFLD base grid](./_static/networks/base_grid_hifld.png)
 
 
 

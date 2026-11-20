@@ -11,6 +11,8 @@ from _helpers import configure_logging, log_network_schema
 from build_bus_population import assign_load_weight, load_county_population
 from build_shapes import load_na_shapes
 from constants import FWD_SUFFIX, REC_TRADING_ZONE_MAPPER, REV_SUFFIX
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
 from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
 
@@ -365,6 +367,77 @@ def identify_osw_poi(n: pypsa.Network) -> pypsa.Network:
     return n
 
 
+#: Bus attributes an island bus takes from the substation it is merged into.
+ISLAND_MERGE_ATTRS = [
+    "sub_id",
+    "x",
+    "y",
+    "balancing_area",
+    "state",
+    "country",
+    "county",
+    "reeds_zone",
+    "reeds_ba",
+    "reeds_state",
+    "nerc_reg",
+    "trans_reg",
+    "trans_grp",
+    "rec_trading_zone",
+]
+
+
+def merge_footprint_islands(n: pypsa.Network) -> pypsa.Network:
+    """Merge the buses a footprint filter cut off into the nearest main-network substation.
+
+    Cutting a grid at a footprint boundary removes the lines that leave the
+    footprint, which can strand a few buses on the boundary in AC islands. Each
+    island would need its own cluster downstream. Per interconnection, the
+    largest AC component (lines and transformers) is the main network; every
+    other island takes the substation (``sub_id``, coordinates and region
+    attributes) of the main-network bus nearest to it, so
+    ``aggregate_to_substations`` merges it there with its load and generation.
+    Offshore buses share the ``sub_id`` of their point of interconnection; those
+    of an island's substations follow it, keeping their own coordinates.
+    """
+    is_offshore = n.buses.get("substation_off", pd.Series(False, index=n.buses.index)).astype(bool)
+    onshore = n.buses.index[~is_offshore]
+    pos = pd.Series(np.arange(len(n.buses)), index=n.buses.index)
+    branches = pd.concat([n.lines[["bus0", "bus1"]], n.transformers[["bus0", "bus1"]]])
+    graph = coo_matrix(
+        (np.ones(len(branches)), (pos[branches.bus0].to_numpy(), pos[branches.bus1].to_numpy())),
+        shape=(len(n.buses), len(n.buses)),
+    )
+    _, component = connected_components(graph, directed=False)
+    component = pd.Series(component, index=n.buses.index)
+    attrs = [a for a in ISLAND_MERGE_ATTRS if a in n.buses.columns]
+
+    merged, islands = [], 0
+    for _, group in n.buses.loc[onshore].groupby("interconnect"):
+        comp = component[group.index]
+        main = comp.value_counts().index[0]
+        main_buses = group.index[comp == main]
+        tree = BallTree(np.radians(n.buses.loc[main_buses, ["y", "x"]].to_numpy(dtype=float)), metric="haversine")
+        for _, members in comp[comp != main].groupby(comp):
+            distance, index = tree.query(np.radians(n.buses.loc[members.index, ["y", "x"]].to_numpy(dtype=float)), k=1)
+            target = main_buses[index[distance[:, 0].argmin(), 0]]
+            offshore = n.buses.index[is_offshore & n.buses.sub_id.isin(n.buses.loc[members.index, "sub_id"])]
+            n.buses.loc[members.index, attrs] = n.buses.loc[[target] * len(members), attrs].to_numpy()
+            region = [a for a in attrs if a not in ("x", "y")]
+            n.buses.loc[offshore, region] = n.buses.loc[[target] * len(offshore), region].to_numpy()
+            merged.extend(members.index)
+            islands += 1
+
+    if islands:
+        share = (
+            n.buses.loc[merged, "load_weight"].sum() / n.buses.load_weight.sum() if "load_weight" in n.buses else np.nan
+        )
+        logger.info(
+            f"Merged {islands} AC island(s) left by the footprint filter ({len(merged)} buses, "
+            f"{share:.2%} of load weight) into their nearest main-network substation.",
+        )
+    return n
+
+
 def assign_poi_from_file(n: pypsa.Network, fn_poi: str) -> pypsa.Network:
     """Mark the offshore points of interconnection listed in ``fn_poi``.
 
@@ -693,6 +766,8 @@ def main(snakemake):
             assert len(n.buses) > 0, (
                 "No buses remaining in network. Check your model_topology: inclusion:, you may be filtering the wrong zones for the selected interconnect"
             )
+        if is_hifld:
+            n = merge_footprint_islands(n)
 
     col_list = ["poi_bus", "poi_sub", "poi"]
     n.buses = n.buses.drop(columns=[col for col in col_list if col in n.buses])

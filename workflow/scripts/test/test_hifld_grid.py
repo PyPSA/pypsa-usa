@@ -14,7 +14,7 @@ from shapely.geometry import LineString, MultiLineString, box
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from build_base_network import TEXAS_POI_SUB_IDS, assign_poi_from_file
+from build_base_network import TEXAS_POI_SUB_IDS, assign_poi_from_file, merge_footprint_islands
 from build_hifld_grid import (
     assign_interconnects,
     be_offshore_poi_sites,
@@ -167,3 +167,26 @@ def test_rekey_caps_to_grid_substations_moves_entries_into_the_region_holding_th
     caps_by_sub = out["p_nom_max"].to_series()
     assert caps_by_sub.to_dict() == {"100001": 17.0, "100002": 30.0}
     assert float(out["avg_cf"].sel(bus="100001")) == pytest.approx((0.2 * 10 + 0.5 * 7) / 17)
+
+
+def test_merge_footprint_islands_moves_islands_onto_the_nearest_main_substation():
+    n = pypsa.Network()
+    # main network: a-b-c; island d-e near c; f alone near a; g offshore at d's substation
+    n.add(
+        "Bus",
+        list("abcdefg"),
+        x=[0.0, 1.0, 2.0, 2.3, 2.6, -0.2, 3.0],
+        y=0.0,
+        sub_id=[1, 2, 3, 4, 5, 6, 4],  # g is offshore, wired to island substation 4
+        interconnect="Western",
+        county=["A", "B", "C", "D", "E", "F", "G"],
+        load_weight=[10.0, 10.0, 10.0, 1.0, 1.0, 1.0, 0.0],
+        substation_off=[False] * 6 + [True],
+    )
+    n.add("Line", ["ab", "bc", "de"], bus0=["a", "b", "d"], bus1=["b", "c", "e"], x=0.1, s_nom=100)
+    merge_footprint_islands(n)
+    assert n.buses.sub_id.tolist() == [1, 2, 3, 3, 3, 1, 3]
+    assert n.buses.loc[["d", "e"], "x"].tolist() == [2.0, 2.0]
+    assert n.buses.loc["g", "x"] == 3.0  # offshore bus keeps its position
+    assert n.buses.loc["f", "county"] == "A"
+    assert n.buses.load_weight.sum() == 33.0  # nothing is dropped
