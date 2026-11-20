@@ -7,7 +7,14 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
-from _helpers import calculate_annuity, configure_logging, load_costs, log_network_schema
+from _helpers import (
+    calculate_annuity,
+    ccs_capture_rate,
+    ccs_co2_emissions,
+    configure_logging,
+    load_costs,
+    log_network_schema,
+)
 from add_electricity import add_missing_carriers
 from constants import (
     BECCS_CO2_REMOVAL,
@@ -77,9 +84,7 @@ def add_co2_emissions(n, costs, carriers):
                 continue
             base_carrier = ccs_carrier.split("-")[0]
             base_emissions = n.carriers.loc[base_carrier, "co2_emissions"]
-            ccs_level = int(ccs_carrier.split("-")[1].replace("CCS", ""))
-            ccs_emissions = (1 - ccs_level / 100) * base_emissions
-            n.carriers.loc[ccs_carrier, "co2_emissions"] = ccs_emissions
+            n.carriers.loc[ccs_carrier, "co2_emissions"] = ccs_co2_emissions(ccs_carrier, base_emissions)
 
 
 def add_nice_carrier_names(n, config):
@@ -999,9 +1004,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                         f"Assuming a CO2 intensity equal to 1 given that link '{index}' is not powered by gas or coal",
                     )
                     efficiency = 1
-                cc_level = (
-                    int(index.split("-")[1].split("CC")[0]) / 100
-                )  # extract CC level from index (e.g. index "p1 CCGT-95CCS_2030" returns 0.95)
+                cc_level = ccs_capture_rate(index)  # e.g. 0.95 for "p1 CCGT-95CCS_2030"
                 efficiency2.append(efficiency * (1 - cc_level))
                 efficiency4.append(efficiency * cc_level)
 
@@ -1084,9 +1087,7 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
                         f"Assuming a CO2 intensity equal to 1 given that generator '{index}' is not powered by gas or coal",
                     )
                     efficiency = 1 / generator_efficiency * 1
-                cc_level = (
-                    int(index.split("-")[1].split("CC")[0]) / 100
-                )  # extract CC level from index (e.g. index "p1 CCGT-95CCS_2030" returns 0.95)
+                cc_level = ccs_capture_rate(index)  # e.g. 0.95 for "p1 CCGT-95CCS_2030"
                 efficiency2.append(efficiency * (1 - cc_level))
                 efficiency3.append(efficiency * cc_level)
 
