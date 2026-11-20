@@ -22,7 +22,8 @@ These tests pin:
       Maryland once, and the national total is conserved,
   (d) the renormalisation is not state-specific -- a 'ba' key with factors
       normalised over states conserves too,
-  (e) a demand column that no bus carries is logged with the MW it drops.
+  (e) a demand column that no bus carries is logged with the MW it drops,
+  (f) a state split across interconnects keeps its share instead of 1.
 """
 
 import logging
@@ -138,6 +139,27 @@ def test_the_unfixed_allocation_would_have_doubled_maryland():
     assert result.loc[:, "dc"].iloc[0] == pytest.approx(500.0)
     assert result.loc[:, "md_a"].iloc[0] == pytest.approx(300.0)
     assert result.loc[:, "md_b"].iloc[0] == pytest.approx(200.0)
+
+
+def test_state_split_across_interconnects_gets_only_its_share():
+    """A network with El Paso alone holds 3 % of Texas; it must not receive all of it."""
+    n = make_network({"elp": ("TX", "p48", 0.03), "va": ("VA", "p99", 1.0)})
+    demand = make_demand(n, {"Texas": [50000.0], "Virginia": [500.0]})
+
+    result = WritePopulation(n).dissagregate_demand(demand, "state")
+
+    assert result.loc[:, "elp"].iloc[0] == pytest.approx(1500.0)
+    assert result.loc[:, "va"].iloc[0] == pytest.approx(500.0)
+
+
+def test_split_state_share_survives_the_threshold_drop():
+    """Buses dropped under LAF_DROP_THRESHOLD hand their factor to the key's other buses, not more."""
+    n = make_network({"a": ("TX", "p48", 0.0299999), "b": ("TX", "p48", 1e-7)})
+    demand = make_demand(n, {"Texas": [1000.0]})
+
+    result = WritePopulation(n).dissagregate_demand(demand, "state")
+
+    assert result.sum(axis=1).iloc[0] == pytest.approx(30.0)
 
 
 # --- (b) a key with zero factor mass ----------------------------------------

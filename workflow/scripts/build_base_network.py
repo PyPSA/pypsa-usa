@@ -409,6 +409,45 @@ def assign_missing_state_regions(gdf_bus: gpd.GeoDataFrame):
     return gdf_bus
 
 
+def national_reeds_state(gdf_bus: gpd.GeoDataFrame, fn_reeds_memberships: str) -> pd.Series:
+    """
+    ReEDS state of every bus of the national bus set (unique ``bus_id`` index).
+
+    Mirrors what ``assign_missing_regions`` and ``assign_reeds_memberships`` later
+    assign to the buses of one interconnect: a bus outside every ReEDS zone or
+    county takes its nearest neighbour's, the zone gives the state, and every bus
+    of a county takes the county's most common state.
+    """
+    states = pd.read_csv(fn_reeds_memberships, index_col=0).st
+    buses = gdf_bus[["lon", "lat", "reeds_zone", "county"]].rename(columns={"lon": "x", "lat": "y"})
+
+    missing = buses.index[buses[["reeds_zone", "county"]].isna().any(axis=1)]
+    if len(missing):
+        reference = buses.drop(missing)
+        matched = match_missing_buses(reference.copy(), buses.loc[missing])
+        for attr in ["reeds_zone", "county"]:
+            target = missing[buses.loc[missing, attr].isna()]
+            buses.loc[target, attr] = reference.loc[matched.loc[target, "bus_assignment"], attr].to_numpy()
+
+    state = buses.reeds_zone.map(states)
+    return state.groupby(buses.county).transform(lambda x: x.mode().iat[0] if x.notna().any() else np.nan)
+
+
+def state_load_allocation_factors(gdf_bus: gpd.GeoDataFrame, fn_reeds_memberships: str) -> pd.Series:
+    """
+    Share of its state's ``load_weight`` that each bus carries, on the national bus set.
+
+    The state is the bus's ReEDS state, the key ``build_demand`` disaggregates state
+    demand by; a bus without one falls back to its geographic ``full_state``. Each
+    bus counts once, even where overlapping shapes duplicated its row.
+    """
+    unique = gdf_bus[~gdf_bus.index.duplicated()]
+    key = national_reeds_state(unique, fn_reeds_memberships).fillna(unique.full_state)
+    totals = unique.load_weight.groupby(key).sum()
+    laf = unique.load_weight / key.map(totals)
+    return laf.reindex(gdf_bus.index).to_numpy()
+
+
 def assign_missing_regions(n: pypsa.Network):
     """Assign buses missing state and countries to their nearest neighbor bus value."""
     # Define the region attributes to check and assign
@@ -579,9 +618,9 @@ def main(snakemake):
         )
 
     # the LAF must be calculated on the national bus set to capture splitting
-    # of states across interconnects
-    group_sums = gdf_bus.groupby("full_state")["load_weight"].transform("sum")
-    gdf_bus["LAF_state"] = gdf_bus["load_weight"] / group_sums
+    # of states across interconnects, and over the key build_demand allocates
+    # state demand by, so that a state's factors in a network sum to its share
+    gdf_bus["LAF_state"] = state_load_allocation_factors(gdf_bus, snakemake.input.reeds_memberships)
     gdf_bus = gdf_bus.drop(columns=["full_state"])
 
     # Removing few duplicated shapes where GIS shapes were overlapping. TODO: Fix GIS shapes
