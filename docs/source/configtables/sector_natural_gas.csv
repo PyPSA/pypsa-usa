@@ -13,6 +13,11 @@ natural_gas,,,Options when implementing natural gas networks
 -- pipeline_length_factor,per_unit,"float {>=1}","Ratio of pipeline route length to the great circle distance between the centers of the two states. The length scales the compressor fuel and leakage losses of the pipeline."
 -- infra_contraction,--,"bool {true, false}","If false, the capacities of gas production, underground storage (store, injection and withdrawal) and pipelines between states are fixed. If true, they are optimised between zero and the existing capacity, so assets whose fixed O&M outweighs their value can shrink. The injection of each storage keeps at least the share of its existing capacity that its store and withdrawal keep. Trade pipelines and linepack stay fixed."
 -- storage_aggregation,--,"{state, formation}","How underground storage reservoirs are aggregated. ``state`` builds one storage per state; ``formation`` builds one per state and formation (depleted field, aquifer, salt dome)."
+-- linepack,--,,"Assumptions for the gas held in the pipelines (linepack), given for the ``interstate`` and ``intrastate`` pipeline classes of the EIA pipeline layer."
+--- include,--,"bool {true, false}",Count the pipelines of this class towards the linepack.
+--- diameter,inches,"float {>0}",Inner diameter assumed for every pipeline of this class.
+--- max_pressure,kPa,"float {>0}",Maximum operating pressure. Sets the capacity of the linepack store.
+--- min_pressure,kPa,"float {>=0}",Minimum operating pressure. Sets the lowest level the linepack store may reach.
 ,,,
 methane,,,Options of methane emission accounting attached to natural gas networks
 -- upstream_leakage_rate,per_unit,"float {0 <=, >= 1}",Upstream per_unit leakage rate of natural gas. Applied to gas processing facilities.

@@ -781,6 +781,17 @@ def demand_to_add(wildcards):
         return chain(service_demands, industrial_demands, road_demand, non_road_demand)
 
 
+def add_demand_mem_mb(wildcards, input, attempt):
+    """
+    Memory of add_demand in MB.
+
+    The demand files are read one at a time and the network ends up holding all
+    of them, so memory follows their total size by a small factor (the sector
+    run of issue #552 used 1.6 bytes per byte of input).
+    """
+    return max(4000, 3 * input.size // 1_000_000) * attempt
+
+
 rule add_demand:
     params:
         sectors=config["scenario"]["sector"],
@@ -796,7 +807,7 @@ rule add_demand:
     benchmark:
         BENCHMARKS + "{interconnect}/elec_s{simpl}_add_demand"
     resources:
-        mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
+        mem_mb=add_demand_mem_mb,
         walltime=config_provider("walltime", "add_demand", default="00:50:00"),
     script:
         "../scripts/add_demand.py"
