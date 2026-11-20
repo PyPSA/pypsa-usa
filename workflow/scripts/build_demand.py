@@ -2140,38 +2140,41 @@ class WriteStrategy(ABC):
         zone_data: pd.DataFrame,
         demand: pd.DataFrame,
     ) -> pd.DataFrame:
-        """Rescale load allocation factors to sum to one inside each demand key (HF-28).
+        """Rescale load allocation factors to at most one inside each demand key (HF-28).
 
-        ``build_base_network`` normalises ``LAF_state`` over ``full_state``,
-        a column no demand key reproduces (it separates the District of
-        Columbia), and the population/industrial factors are normalised over
-        whatever zone mapping they were built with. The consumption key here --
-        ``state``, ``ba``, ``reeds`` -- is a different column, so ``sum(laf)``
-        inside a key is not 1 and the allocated demand does not equal the
-        demand table's column for that key (USA 2026-09-15: +2.28 % on master,
-        +1.85 % on develop). Renormalising within the key that demand is
-        actually indexed by makes the allocation conserving whatever the key is.
+        A key's factors sum to the share of the key's demand that this network
+        holds: 1 for a state inside it, less for a state split across
+        interconnects (``LAF_state`` and the industrial factors are normalised on
+        the national bus set), e.g. 0.03 of Texas in ``western``. Each key keeps
+        that total, capped at 1, so a split state gets only its share.
+
+        The cap conserves demand where factors normalised over another column
+        overshoot inside the key (USA 2026-09-15: Maryland's summed to 2.008,
+        +1.85 % on develop), and the rescale removes the per-bus error that came
+        with it.
 
         A key whose factors sum to zero gets 0, never NaN, and is logged with
         the demand it cannot place.
 
         The rescale runs twice. ``_disaggregate_demand_to_buses`` drops every
         bus below ``LAF_DROP_THRESHOLD``, so the first pass is followed by
-        zeroing those buses and rescaling the survivors; the second pass can
-        only raise a share (it divides by a total <= 1), so nothing new falls
+        zeroing those buses and rescaling the survivors back to the key's
+        total; the second pass can only raise a factor, so nothing new falls
         under the threshold and the downstream drop cannot leak demand.
         """
         normalized = zone_data.copy()
         laf = pd.to_numeric(normalized["laf"], errors="coerce").fillna(0.0)
         zones = normalized["zone"]
 
-        def rescale(values: pd.Series) -> tuple[pd.Series, pd.Series]:
-            totals = values.groupby(zones).sum()
-            per_bus = pd.to_numeric(zones.map(totals), errors="coerce")
-            return values.div(per_bus).where(per_bus > 0, 0.0).astype(float), totals
+        zone_totals = laf.groupby(zones).sum()
+        target = pd.to_numeric(zones.map(zone_totals.clip(upper=1.0)), errors="coerce")
 
-        shares, zone_totals = rescale(laf)
-        shares, _ = rescale(shares.where(shares >= LAF_DROP_THRESHOLD, 0.0))
+        def rescale(values: pd.Series) -> pd.Series:
+            per_bus = pd.to_numeric(zones.map(values.groupby(zones).sum()), errors="coerce")
+            return values.div(per_bus).mul(target).where(per_bus > 0, 0.0).astype(float)
+
+        shares = rescale(laf)
+        shares = rescale(shares.where(shares >= LAF_DROP_THRESHOLD, 0.0))
         normalized["laf"] = shares
 
         empty_zones = [z for z, total in zone_totals.items() if not total > 0]
