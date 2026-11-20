@@ -1171,7 +1171,9 @@ if __name__ == "__main__":
             # Use standard transmission cost estimates
             update_transmission_costs(clustering.n, costs)
 
-    if not transport_model:
+    # Only the synthetic TAMU grid is calibrated to ReEDS interface capacities.
+    # 'hifld' keeps the ratings build_hifld_grid gives HIFLD's real corridors.
+    if params.transmission_network == "tamu":
         # Apply REEDS transmission capacity corrections
         logger.info("Applying REEDS transmission capacity corrections to TAMU network...")
 

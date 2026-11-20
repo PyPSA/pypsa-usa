@@ -16,6 +16,16 @@ from sklearn.neighbors import BallTree
 
 logger = logging.getLogger(__name__)
 
+# Breakthrough Energy numbers its offshore substations from this id upwards; they
+# are used to locate the offshore points of interconnection and then removed. A
+# grid rebuilt from HIFLD (build_hifld_grid) has no offshore substations at all,
+# and its substation ids start at 100000, so the test must not be applied to it.
+BE_OFFSHORE_SUB_ID_MIN = 41012
+
+# BE substations taken as Texas offshore wind points of interconnection (BE has
+# no Texas offshore lines to find them from).
+TEXAS_POI_SUB_IDS = [40893, 40894, 40729, 40908, 40854, 40760, 40776]
+
 
 def haversine_np(lon1, lat1, lon2, lat2):
     """
@@ -41,6 +51,7 @@ def add_buses_from_file(
     n: pypsa.Network,
     buses: gpd.GeoDataFrame,
     interconnect: str,
+    offshore_sub_id_min: int | None = BE_OFFSHORE_SUB_ID_MIN,
 ) -> pypsa.Network:
     if interconnect != "usa":
         buses = buses.query(
@@ -70,7 +81,8 @@ def add_buses_from_file(
         LAF_state=buses.LAF_state,
     )
 
-    n.buses.loc[n.buses.sub_id.astype(int) >= 41012, "substation_off"] = True  # mark offshore buses
+    if offshore_sub_id_min is not None:
+        n.buses.loc[n.buses.sub_id.astype(int) >= offshore_sub_id_min, "substation_off"] = True  # mark offshore buses
     return n
 
 
@@ -335,9 +347,8 @@ def add_offshore_buses(n: pypsa.Network, offshore_buses: pd.DataFrame) -> pypsa.
 
 
 def assign_texas_poi(n: pypsa.Network) -> pypsa.Network:
-    tx_pois_sub = [40893, 40894, 40729, 40908, 40854, 40760, 40776]
     tx_pois_bus = [3007405, 3007407, 3007096, 3007429, 3007321, 3007171, 3007205]
-    n.buses.loc[n.buses.sub_id.isin(tx_pois_sub), "poi_sub"] = True
+    n.buses.loc[n.buses.sub_id.isin(TEXAS_POI_SUB_IDS), "poi_sub"] = True
     n.buses.loc[n.buses.sub_id.isin(tx_pois_bus), "poi_bus"] = True
     return n
 
@@ -351,6 +362,28 @@ def identify_osw_poi(n: pypsa.Network) -> pypsa.Network:
     n.buses.loc[n.buses.sub_id.isin(poi_sub_ids), "poi_sub"] = True
     n.buses.poi_bus = n.buses.poi_bus.astype(bool).fillna(False)
     n.buses.poi_sub = n.buses.poi_sub.astype(bool).fillna(False)
+    return n
+
+
+def assign_poi_from_file(n: pypsa.Network, fn_poi: str) -> pypsa.Network:
+    """Mark the offshore points of interconnection listed in ``fn_poi``.
+
+    The Breakthrough path finds its POIs by looking for onshore buses wired to
+    BE's own offshore substations, which a grid rebuilt from HIFLD does not have.
+    ``build_hifld_grid`` takes the same BE sites (offshore-line landfalls plus
+    :data:`TEXAS_POI_SUB_IDS`) and matches them to the nearest HIFLD bus.
+    """
+    poi = pd.read_csv(fn_poi)
+    poi = poi[poi.bus_id.isin(n.buses.index.astype(int))]
+    n.buses["poi_bus"] = False
+    n.buses["poi_sub"] = False
+    n.buses.loc[n.buses.index.astype(int).isin(poi.bus_id), "poi_bus"] = True
+    n.buses.loc[n.buses.sub_id.astype(int).isin(poi.sub_id), "poi_sub"] = True
+    logger.info(
+        "Marked %s bus(es) at %s substation(s) as offshore points of interconnection.",
+        int(n.buses.poi_bus.sum()),
+        int(n.buses.poi_sub.sum()),
+    )
     return n
 
 
@@ -527,6 +560,11 @@ def main(snakemake):
 
     model_topology = snakemake.params.model_topology
     interconnect = snakemake.wildcards.interconnect
+    # 'hifld' reads a grid rebuilt from the real HIFLD transmission layer, which
+    # has no offshore substations of its own; 'reeds' and 'tamu' read
+    # Breakthrough's synthetic grid, whose offshore substations locate the
+    # points of interconnection and are then removed.
+    is_hifld = snakemake.params.transmission_network == "hifld"
     # interconnect in raw data given with an uppercase first letter
     if interconnect != "usa":
         interconnect = interconnect[0].upper() + interconnect[1:]
@@ -597,15 +635,23 @@ def main(snakemake):
     gdf_bus = gdf_bus.drop(columns=["full_state"])
 
     # add buses, transformers, lines and links
-    n = add_buses_from_file(n, gdf_bus, interconnect=interconnect)
+    n = add_buses_from_file(
+        n,
+        gdf_bus,
+        interconnect=interconnect,
+        offshore_sub_id_min=None if is_hifld else BE_OFFSHORE_SUB_ID_MIN,
+    )
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
 
     # identify offshore points of interconnection, and remove unncess components from BE network
-    n = identify_osw_poi(n)
-    if interconnect == "Texas" or interconnect == "usa":
-        n = assign_texas_poi(n)
-    n = remove_breakthrough_offshore(n)
+    if is_hifld:
+        n = assign_poi_from_file(n, snakemake.input["offshore_poi"])
+    else:
+        n = identify_osw_poi(n)
+        if interconnect == "Texas" or interconnect == "usa":
+            n = assign_texas_poi(n)
+        n = remove_breakthrough_offshore(n)
     assign_missing_regions(n)
 
     # build offshore network configuration

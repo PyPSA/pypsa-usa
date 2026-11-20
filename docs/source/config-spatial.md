@@ -126,10 +126,11 @@ This setup, using an `m` after the `clusters` wildcard, results in a model with 
 ## Configuring Transmission Resolution
 
 ### Transmission Network Selection
-You can specify the transmission network you want to use by setting the `model_topology: transmission_network:` option. There are two available options:
+You can specify the transmission network you want to use by setting the `model_topology: transmission_network:` option. There are three available options:
 
 - 'reeds': The ReEDS NARIS networks.
 - 'tamu': The synthetic BE-TAMU nodal network.
+- 'hifld': A nodal network built from the HIFLD transmission lines (see [Transmission](./data-transmission.md)).
 
 When selecting between the ReEDS NARIS networks, you will need to also specify the `model_topology: topological_boundaries:`. Currently you can set `county`, `reeds_zone`, or `state` (note that `state` does not support `model_topology: include:` regional filtering). To use the FERC 1000 regions, you will need to use the custom network topologies described in the example below.
 

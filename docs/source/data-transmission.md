@@ -3,7 +3,7 @@
 
 ## Transmission Networks
 
-PyPSA-USA offers a unique capability by integrating two options of transmission networks: the ReEDS NARIS-derived zonal network and the Breakthrough Energy - Texas A&M University (TAMU) synthetic nodal network.
+PyPSA-USA offers three transmission networks: the ReEDS NARIS-derived zonal network, the Breakthrough Energy - Texas A&M University (TAMU) synthetic nodal network, and a nodal network built from the HIFLD transmission lines.
 
 
 ### ReEDS NARIS-based Networks
@@ -31,6 +31,34 @@ The **TAMU synthetic nodal network** offers a high-resolution representation of 
 While representative of the US electricity system, the TAMU network is synthetic and not precisely aligned with the actual US transmission network. As such we integrated the ReEDS NARIS dataset for planning applications where more precise inter-regional transfer capacity ratings are necessary.
 
 ![TAMU_clustered](./_static/networks/TAMU_Clustered_500.png)
+
+
+### HIFLD Nodal Network
+
+`model_topology: transmission_network: hifld` builds the nodal network from the HIFLD "Electric Power
+Transmission Lines" layer (Oak Ridge National Laboratory and U.S. Department of Homeland Security), so
+lines follow their surveyed routes and voltages instead of TAMU's synthetic corridors. Power flow and
+clustering work as for `tamu`; the grid is built nationally by `build_hifld_grid` and then filtered by
+interconnection. From the 2024-09-30 data it has 52,477 substations, 59,948 buses, 70,888 AC lines
+(873,000 route-km) and 7,471 transformers.
+
+- **Data**: `retrieve_hifld_transmission_lines` downloads the layer from Esri's public archive of the
+  last HIFLD Open version (data updated 2024-09-30, 94,619 records; HIFLD Open was shut down on
+  2025-08-26). Records without a voltage or voltage class, and lines under construction or inactive,
+  are dropped; a missing voltage takes the representative voltage of its voltage class.
+- **Substations**: line endpoints within 200 m form one substation, with one bus per voltage class
+  (69, 138, 230, 345, 500 and 765 kV) and a transformer between adjacent classes.
+- **Interconnections**: each substation takes the interconnection of the nearest TAMU substation,
+  smoothed over the line graph. AC lines that join two interconnections are cut (on the ground they
+  are DC ties), lines with an end outside the United States are dropped, and only the largest
+  connected component of each interconnection is kept.
+- **Electrical parameters**: per-km resistance, reactance and susceptance, and the per-circuit rating,
+  are the medians of the TAMU lines of the same voltage class, applied over the route length.
+- **Other inputs**: bus load weights come from county population. TAMU's DC ties, its hydro plants and
+  its offshore wind points of interconnection, and the NREL capacity caps (keyed by TAMU substation),
+  are moved to the nearest HIFLD bus or substation.
+- **Limitations**: line ratings are not calibrated to the ReEDS interface capacities, as `tamu`'s are,
+  and EGS, whose supply curves are keyed by TAMU substation, is not supported.
 
 
 

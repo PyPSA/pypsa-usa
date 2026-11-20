@@ -86,7 +86,7 @@ foresight: 'perfect'                     # multi-horizon solve mode; perfect (mo
 # ====================================================================
 # docs : MODEL_TOPOLOGY
 model_topology:
-  transmission_network: 'reeds'          # transmission dataset; reeds | tamu
+  transmission_network: 'reeds'          # transmission dataset; reeds | tamu | hifld (power-flow grid built from HIFLD lines, not calibrated to ReEDS)
   topological_boundaries: 'reeds_zone'   # post-cluster zone type; county | reeds_zone | state
   interface_transmission_limits: false   # apply NARIS2024 inter-region transfer caps (requires reeds backbone)
   # KEEP THIS NULL, not {}. build_base_network treats "not None" as "the user

@@ -26,6 +26,15 @@ HOURS_PER_YEAR = 8760
 #: fixed-bottom and floating wind).
 REEDS_VRE_CARRIERS = ("onwind", "solar", "offwind", "offwind_floating")
 
+#: ArcGIS feature layer of the HIFLD "Electric Power Transmission Lines" layer that
+#: ``rule retrieve_hifld_transmission_lines`` downloads: Esri's public archive of the
+#: last HIFLD Open version (data updated 2024-09-30, 94,619 records). HIFLD Open
+#: itself was shut down on 2025-08-26.
+HIFLD_TRANSMISSION_LINES_URL = (
+    "https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/"
+    "US_Electric_Power_Transmission_Lines/FeatureServer/0"
+)
+
 #: Zenodo record of each ReEDS VRE resource (one file per land-access scenario).
 REEDS_VRE_RECORDS = {
     "onwind": "18827074",
