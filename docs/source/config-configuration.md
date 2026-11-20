@@ -487,6 +487,23 @@ created along the offshore shapes.
    :end-before: # docs :
 ```
 
+(conventional_cf)=
+## `conventional`
+
+Options for existing conventional (thermal) generators: unit commitment, must-run minimum loading and time-varying fuel prices. All of them are off by default.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+   :language: yaml
+   :start-after: # docs : CONVENTIONAL
+   :end-before: # docs :
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/conventional.csv
+```
+
 (lines_cf)=
 ## `lines`
 ```{eval-rst}
