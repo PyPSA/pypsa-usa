@@ -9,7 +9,6 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pyomo.environ as po
 import pypsa
 import seaborn as sns
 from _helpers import (
@@ -77,11 +76,33 @@ def weighting_for_region(n, x, weighting_strategy=None):
     return (weighting * (100.0 / weighting.max())).clip(lower=1.0).astype(int)
 
 
+def allocate_clusters(target: pd.Series, n_clusters: int, n_nodes: pd.Series) -> pd.Series:
+    """
+    Whole clusters per region that add up to ``n_clusters`` and stay closest to ``target``.
+
+    Minimises ``sum((n - target) ** 2)`` over integers with ``1 <= n <= n_nodes``
+    and ``sum(n) == n_clusters``. Every region starts with one cluster and the
+    rest are handed out one at a time to the region where the next cluster adds
+    least to the objective, ``2 * (n - target) + 1``. For a sum of convex terms
+    under one total this greedy allocation is exactly optimal, so no solver is
+    needed. Ties go to the region listed first.
+    """
+    n_nodes = n_nodes.reindex(target.index)
+    if not len(target) <= n_clusters <= n_nodes.sum():
+        raise ValueError(
+            f"Number of clusters must be {len(target)} <= n_clusters <= {n_nodes.sum()}, got {n_clusters}.",
+        )
+    allocation = pd.Series(1, index=target.index, dtype=int)
+    for _ in range(n_clusters - len(target)):
+        cost = (2 * (allocation - target) + 1).round(9).where(allocation < n_nodes, np.inf)
+        allocation[cost.idxmin()] += 1
+    return allocation
+
+
 def distribute_clusters(
     n,
     n_clusters,
     focus_weights=None,
-    solver_name="cbc",
     weighting_strategy=None,
 ):
     """Determine the number of clusters per region."""
@@ -115,38 +136,12 @@ def distribute_clusters(
         rtol=1e-3,
     ), f"Country weights L must sum up to 1.0 when distributing clusters. Is {factors.sum()}."
 
-    m = po.ConcreteModel()
-
-    def n_bounds(model, *n_id):
-        return (1, n_subnetwork_nodes[n_id])
-
-    m.n = po.Var(list(factors.index), bounds=n_bounds, domain=po.Integers)
-    m.tot = po.Constraint(expr=(po.summation(m.n) == n_clusters))
-    m.objective = po.Objective(
-        expr=sum((m.n[i] - factors.loc[i] * n_clusters) ** 2 for i in factors.index),
-        sense=po.minimize,
-    )
-
-    if solver_name == "highs":
-        solver_name = "ipopt"
-
-    opt = po.SolverFactory(solver_name)
-    if not opt.has_capability("quadratic_objective"):
-        logger.warning(
-            f"The configured solver `{solver_name}` does not support quadratic objectives. Falling back to `ipopt`.",
-        )
-        opt = po.SolverFactory("ipopt")
-
-    results = opt.solve(m)
-    assert results["Solver"][0]["Status"] == "ok", f"Solver returned non-optimally: {results}"
-
-    return pd.Series(m.n.get_values(), index=factors.index).round().astype(int)
+    return allocate_clusters(factors * n_clusters, n_clusters, n_subnetwork_nodes)
 
 
 def busmap_for_n_clusters(
     n,
     n_clusters,
-    solver_name,
     focus_weights=None,
     algorithm="kmeans",
     weighting_strategy=None,
@@ -160,8 +155,6 @@ def busmap_for_n_clusters(
     n : pypsa.Network
     n_clusters : int
         The number of clusters in the new network.
-    solver_name : str
-        The name of the solver to use.
 
     Returns
     -------
@@ -186,7 +179,6 @@ def busmap_for_n_clusters(
         n_clusters,
         focus_weights=focus_weights,
         weighting_strategy=weighting_strategy,
-        solver_name=solver_name,
     )
     # Remove buses and lines that are not part of the clustering to reconcile TAMU and ReEDS Topologies
     nc_set = set(n_clusters_per_region.index.get_level_values(0).unique())
@@ -261,7 +253,6 @@ def clustering_for_n_clusters(
     aggregate_carriers=None,
     line_length_factor=1.25,
     aggregation_strategies=dict(),
-    solver_name="cbc",
     algorithm="kmeans",
     focus_weights=None,
     weighting_strategy=None,
@@ -270,7 +261,6 @@ def clustering_for_n_clusters(
         busmap = busmap_for_n_clusters(
             n,
             n_clusters,
-            solver_name,
             focus_weights,
             algorithm,
             weighting_strategy,
@@ -974,7 +964,6 @@ if __name__ == "__main__":
     configure_logging(snakemake)
 
     params = snakemake.params
-    solver_name = snakemake.config["solving"]["solver"]["name"]
 
     if str(snakemake.input.network).endswith(".pkl"):
         import dill as pickle
@@ -1141,7 +1130,6 @@ if __name__ == "__main__":
             aggregate_carriers,
             params.length_factor,
             params.aggregation_strategies,
-            solver_name,
             params.cluster_network["algorithm"],
             params.focus_weights,
             weighting_strategy=params.cluster_network.get("weighting_strategy", None),
