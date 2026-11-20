@@ -73,10 +73,15 @@ Both are annualized at the carrier's capital charge rate, and each investment pe
 
 ### Regional transmission costs from ReEDS
 
-With `lines: regional_costs` (on by default), AC lines and HVDC links are priced from two ReEDS tables instead of the national `HVAC overhead` / `HVDC overhead` cost per km:
+The transport model (`transmission_network: reeds`) prices each interface with the ReEDS `transmission_distance_cost_500kVac_*.csv` tables, whose costs already hold ReEDS's regional base costs and terrain and land-class multipliers. The nodal network (`transmission_network: tamu`) used the national `HVAC overhead` / `HVDC overhead` cost per km for every line. With `lines: regional_costs` (on by default), its AC lines and HVDC links are priced from the same ReEDS data:
 
-- **Route cost**: `transmission_distance_cost_500kVac_county.csv` gives the 500 kV AC cost of each county pair over the great-circle distance between the county centroids, so regional cost, terrain and route detour are in the price per great-circle km. A line takes the cost of its endpoint counties' pair; other lines, mostly within one county, take the mean of their two counties' typical cost (the median of each county's 8 shortest pairs), with state and national medians as fallbacks.
+- **Route cost**: `transmission_distance_cost_500kVac_county.csv` gives the 500 kV AC cost of each county pair over the great-circle distance between the county centroids, so regional cost, terrain and route detour are in the price per great-circle km. A line whose endpoint counties form a ReEDS pair takes that pair's cost. Other lines, mostly within one county, take the mean of their two counties' typical cost (the median of each county's 8 shortest pairs, mapped below), with state and national medians as fallbacks.
 - **Voltage class** (`lines: voltage_factor`, on by default): the cost is scaled by `(kV / 500)^b`, fitted through 500 kV to the per-region voltage ratios of `rev_transmission_basecost.csv`. HVDC links take the DC/AC ratio of the same table (0.41).
+
+:::{figure} _static/costs/county_transmission_cost_field.png
+:width: 90%
+Typical 500 kV AC line cost of each county, relative to the national median (1,221 USD2004/MW per great-circle km).
+:::
 
 Both tables are in 2004 USD and are converted to `costs: dollar_year`. The unit cost is set in `aggregate_to_substations`, while lines still have their own voltage and county, and is carried through clustering as a capacity-weighted mean. `capital_cost` is the annuity times that unit cost times the great-circle length of the clustered corridor; `lines: length_factor` is not applied, since the ReEDS prices include the detour. The submarine share of HVDC links and the converter stations keep their national costs.
 

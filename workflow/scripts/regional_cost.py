@@ -159,8 +159,16 @@ def voltage_cost_anchors(basecost: pd.DataFrame) -> pd.Series:
 def dc_ac_line_cost_ratio(basecost: pd.DataFrame) -> float:
     """500 kV DC bipole line cost as a fraction of 500 kV AC single-circuit.
 
-    All four ReEDS cost regions give the same ratio (0.4137); the agreement is
-    asserted so a future data refresh cannot silently collapse a regional spread.
+    ``rev_transmission_basecost.csv`` (ReEDS-2.0 ``inputs/transmission``) holds the
+    base line costs reV builds the ReEDS cost surface from, in 2004 USD per MW-mile,
+    from four cost studies: WECC/TEPPC, Southern California Edison, MISO and a
+    Southeast utility (ReEDS documentation, "Transmission Costs"). The ratio is
+    the ``500DCbipole`` row over the ``500ACsingle`` row, e.g. TEPPC
+    623.10 / 1506.22 = 0.4137. The rows are per MW, so the bipole's 3,000 MW
+    rating against 1,500 MW for the AC circuit is already in the ratio.
+
+    All four regions give the same ratio; the agreement is asserted so a future
+    data refresh cannot silently collapse a regional spread.
     """
     ac_label = f"{REFERENCE_VOLTAGE_KV:.0f}ACsingle"
     dc_label = f"{REFERENCE_VOLTAGE_KV:.0f}DCbipole"
