@@ -177,15 +177,26 @@ def map_bus_to_region(
     """
     Maps a bus to a geographic region.
 
+    The region shapes overlap in places (TODO: fix the GIS shapes), and a bus
+    inside two polygons comes back from the join once per polygon. Only its
+    first match is kept, so the result always has one row per bus.
+
     Args:
         buses: gpd.GeoDataFrame,
         shape: gpd.GeoDataFrame,
         name: str
             column name in shape to merge
     """
-    names.append("geometry")
-    shape_filtered = shape[names]
-    return gpd.sjoin(buses, shape_filtered, how="left").drop(columns=["index_right"])
+    shape_filtered = shape[[*names, "geometry"]]
+    joined = gpd.sjoin(buses, shape_filtered, how="left").drop(columns=["index_right"])
+    extra_match = joined.index.duplicated(keep="first")
+    if extra_match.any():
+        logger.info(
+            "%d buses lie in overlapping %s shapes; keeping the first match for each.",
+            joined.index[extra_match].nunique(),
+            "/".join(names),
+        )
+    return joined[~extra_match]
 
 
 def assign_line_length(n: pypsa.Network):
@@ -583,9 +594,6 @@ def main(snakemake):
     group_sums = gdf_bus.groupby("full_state")["load_weight"].transform("sum")
     gdf_bus["LAF_state"] = gdf_bus["load_weight"] / group_sums
     gdf_bus = gdf_bus.drop(columns=["full_state"])
-
-    # Removing few duplicated shapes where GIS shapes were overlapping. TODO: Fix GIS shapes
-    gdf_bus = gdf_bus.reset_index().drop_duplicates(subset="bus_id", keep="first").set_index("bus_id")
 
     # add buses, transformers, lines and links
     n = add_buses_from_file(n, gdf_bus, interconnect=interconnect)
