@@ -367,6 +367,7 @@ def split_retirement_gens(
     costs: pd.DataFrame,
     carriers: list[str] | None = None,
     economic: bool = True,
+    new_build_carriers: set[str] | None = None,
 ):
     """
     Seperates extendable conventional generators into existing and new
@@ -388,6 +389,11 @@ def split_retirement_gens(
     economic: bool
         If True, enable economic retirement, else only allow lifetime
         retirement for the new generators
+    new_build_carriers: set[str]
+        Carriers whose new capacity is offered at every bus by
+        attach_multihorizon_new_generators. Their plants are only renamed to
+        "existing" and get no expanding duplicate, which would be a second
+        way to build the same technology at the plant's bus.
     """
     retirement_mask = (
         n.generators["p_nom_extendable"]
@@ -432,37 +438,47 @@ def split_retirement_gens(
         "p_nom_extendable",
     ] = economic  # if economic retirement is true enable extendable
 
+    # time dependent factors added after as not all generators are time dependent
+    copy_timeseries_for_suffix(n, retirement_gens.index, "existing")
+
+    expanding = retirement_gens[~retirement_gens.carrier.isin(new_build_carriers or [])]
+    # plants without an expanding duplicate leave no generator under their old name
+    renamed_only = retirement_gens.index.difference(expanding.index)
+    for attr, series in n.generators_t.items():
+        orphaned = series.columns.intersection(renamed_only)
+        if not orphaned.empty:
+            n.generators_t[attr] = series.drop(columns=orphaned)
+    if expanding.empty:
+        return
+
     # Adding Expanding generators for the first investment period
     # There are generators that exist today and could expand
     # in the first time horizon
     n.add(
         "Generator",
-        retirement_gens.index,
-        carrier=retirement_gens.carrier,
-        bus=retirement_gens.bus,
+        expanding.index,
+        carrier=expanding.carrier,
+        bus=expanding.bus,
         p_nom_min=0,
         p_nom=0,
-        p_nom_max=retirement_gens.p_nom_max,
+        p_nom_max=expanding.p_nom_max,
         p_nom_extendable=True,
-        ramp_limit_up=retirement_gens.ramp_limit_up,
-        ramp_limit_down=retirement_gens.ramp_limit_down,
-        efficiency=retirement_gens.efficiency,
-        marginal_cost=retirement_gens.marginal_cost,
-        capital_cost=retirement_gens.capital_cost,
+        ramp_limit_up=expanding.ramp_limit_up,
+        ramp_limit_down=expanding.ramp_limit_down,
+        efficiency=expanding.efficiency,
+        marginal_cost=expanding.marginal_cost,
+        capital_cost=expanding.capital_cost,
         build_year=n.investment_periods[0],
-        lifetime=retirement_gens.carrier.map(costs.lifetime).fillna(np.inf),
-        p_min_pu=retirement_gens.p_min_pu,
-        p_max_pu=retirement_gens.p_max_pu,
-        land_region=retirement_gens.land_region,
+        lifetime=expanding.carrier.map(costs.lifetime).fillna(np.inf),
+        p_min_pu=expanding.p_min_pu,
+        p_max_pu=expanding.p_max_pu,
+        land_region=expanding.land_region,
     )
-    n.generators.loc[retirement_gens.index, "vom_cost"] = retirement_gens.get("vom_cost", np.nan)
+    n.generators.loc[expanding.index, "vom_cost"] = expanding.get("vom_cost", np.nan)
     # the new units reprice their vintages with the ReEDS regional costs
-    copy_capex_columns(n, retirement_gens, retirement_gens.index)
+    copy_capex_columns(n, expanding, expanding.index)
 
-    # time dependent factors added after as not all generators are time dependent
-    copy_timeseries_for_suffix(n, retirement_gens.index, "existing")
-
-    apply_new_build_parameters(n, retirement_gens, retirement_gens.index, costs)
+    apply_new_build_parameters(n, expanding, expanding.index, costs)
 
 
 def attach_multihorizon_existing_generators(
@@ -626,12 +642,9 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year, bus_
         p_max_pu_t = None
         if min_years and min_years.get(carrier, 0) > investment_year:
             continue
+        # the fleet of the carrier, where there is one (nuclear), sets availability and ramping
         existing_gens = n.generators[
-            (
-                (n.generators.carrier == carrier)
-                & ~n.generators.index.str.contains("existing")
-                & (n.generators.build_year <= n.investment_periods[0])
-            )
+            (n.generators.carrier == carrier) & (n.generators.build_year <= n.investment_periods[0])
         ].copy()
 
         if not existing_gens.empty:
@@ -1346,6 +1359,10 @@ def main(snakemake) -> None:
     if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
         attach_phs_storageunits(n, elec_config, costs_dict[n.investment_periods[0]])
 
+    # Nuclear can be built at any bus (attach_multihorizon_new_generators), so
+    # its existing plants get no expanding unit of their own
+    everywhere_carriers = {"nuclear"} & set(elec_config["extendable_carriers"].get("Generator", []))
+
     # Split conventional generators so expansion is a new unit; with technical
     # retirement the existing part is fixed and retires on its lifetime
     split_retirement_gens(
@@ -1353,6 +1370,7 @@ def main(snakemake) -> None:
         costs_dict[n.investment_periods[0]],
         set(elec_config.get("conventional_carriers", None)),
         economic=snakemake.params.retirement == "economic",
+        new_build_carriers=everywhere_carriers,
     )
     # Split renewable generators from the first investement period to support lifetime retirement
     split_retirement_gens(
@@ -1378,9 +1396,7 @@ def main(snakemake) -> None:
 
     new_carriers = list(
         set(elec_config["extendable_carriers"].get("Generator", [])) - set(n.generators.carrier.unique())
-        | set(
-            ["nuclear"] if "nuclear" in elec_config["extendable_carriers"].get("Generator", []) else [],
-        ),
+        | everywhere_carriers,
     )
 
     # ReEDS county overnight-capex multipliers for new builds (None when disabled,
