@@ -469,10 +469,7 @@ def demand_raw_data(wildcards):
     elif profile == "servm":
         return servm_demand_files()
     elif profile == "ferc":
-        return [
-            DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
-            DATA + "pudl/censusdp1tract.sqlite",
-        ]
+        return [DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet"]
     elif profile == "eulp":
         return [
             DEMAND + f"eulp/{eulp_sector}/{state}.csv"

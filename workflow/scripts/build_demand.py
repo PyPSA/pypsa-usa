@@ -13,7 +13,6 @@ from typing import Any, ClassVar
 
 import constants as const
 import duckdb
-import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
@@ -326,37 +325,11 @@ class ReadFERC714(ReadStrategy):
         logger.info("Building Load Data using PUDL FERC 714 demand")
         return pd.read_parquet(self.filepath[0], dtype_backend="pyarrow")
 
-    def _read_census_data(self) -> pd.DataFrame:
-        """Reads in census data for population weighting using parquet."""
-        duckdb.connect(database=":memory:", read_only=False)
-        duckdb.query("INSTALL httpfs;")
-
-        parquet_path = snakemake.params.pudl_path
-
-        sql = f"""
-        SELECT
-        stusps10 as state_abbr,
-        geoid10 as state_id_fips,
-        name10 as state_name,
-        shape as geom
-        FROM read_parquet('{parquet_path}/censusdp1tract.state_2010census_dp1.parquet');
-        """
-
-        states = (
-            gpd.read_postgis(sql, duckdb, crs="EPSG:4326")
-            .convert_dtypes()
-            .sort_values("state_abbr")
-            .set_index("state_id_fips")
-        )
-        return states
-
     def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """Formats raw data."""
-        states = self._read_census_data()
-
         df = data.copy()
 
-        df["State"] = df.state_id_fips.map(states.state_abbr)
+        df["State"] = df.state_id_fips.astype(str).str.zfill(2).map(const.STATE_FIPS_2_CODE)
         df = df.drop(columns=["state_id_fips", "demand_mwh"])
         df = df.groupby(["datetime_utc", "State"]).sum().reset_index()
 
