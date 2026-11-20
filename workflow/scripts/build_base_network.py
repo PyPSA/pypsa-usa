@@ -10,7 +10,7 @@ import pypsa
 from _helpers import configure_logging, log_network_schema
 from build_bus_population import assign_load_weight, load_county_population
 from build_shapes import load_na_shapes
-from constants import FWD_SUFFIX, REC_TRADING_ZONE_MAPPER, REV_SUFFIX
+from constants import FWD_SUFFIX, REC_TRADING_ZONE_MAPPER, REV_SUFFIX, STATE_2_CODE
 from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
 
@@ -411,26 +411,19 @@ def assign_missing_state_regions(gdf_bus: gpd.GeoDataFrame):
 
 def national_reeds_state(gdf_bus: gpd.GeoDataFrame, fn_reeds_memberships: str) -> pd.Series:
     """
-    ReEDS state of every bus of the national bus set (unique ``bus_id`` index).
+    State code of every bus of the national bus set (unique ``bus_id`` index).
 
-    Mirrors what ``assign_missing_regions`` and ``assign_reeds_memberships`` later
-    assign to the buses of one interconnect: a bus outside every ReEDS zone or
-    county takes its nearest neighbour's, the zone gives the state, and every bus
-    of a county takes the county's most common state.
+    A bus in a ReEDS zone takes the zone's state, made uniform per county as
+    ``assign_reeds_memberships`` later does. The ReEDS and county shapes cover only
+    the modelled interconnect, so every other bus, and the few in shape gaps, take
+    the state of their geographic ``full_state`` (national shapes).
     """
     states = pd.read_csv(fn_reeds_memberships, index_col=0).st
-    buses = gdf_bus[["lon", "lat", "reeds_zone", "county"]].rename(columns={"lon": "x", "lat": "y"})
-
-    missing = buses.index[buses[["reeds_zone", "county"]].isna().any(axis=1)]
-    if len(missing):
-        reference = buses.drop(missing)
-        matched = match_missing_buses(reference.copy(), buses.loc[missing])
-        for attr in ["reeds_zone", "county"]:
-            target = missing[buses.loc[missing, attr].isna()]
-            buses.loc[target, attr] = reference.loc[matched.loc[target, "bus_assignment"], attr].to_numpy()
-
-    state = buses.reeds_zone.map(states)
-    return state.groupby(buses.county).transform(lambda x: x.mode().iat[0] if x.notna().any() else np.nan)
+    reeds_state = gdf_bus.reeds_zone.map(states)
+    reeds_state = reeds_state.groupby(gdf_bus.county).transform(
+        lambda x: x.mode().iat[0] if x.notna().any() else np.nan,
+    )
+    return reeds_state.fillna(gdf_bus.full_state.map(STATE_2_CODE))
 
 
 def state_load_allocation_factors(gdf_bus: gpd.GeoDataFrame, fn_reeds_memberships: str) -> pd.Series:

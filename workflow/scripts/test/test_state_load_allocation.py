@@ -66,13 +66,15 @@ def test_duplicate_rows_count_once(memberships):
     assert laf.tolist() == pytest.approx([0.25, 0.75, 0.25])
 
 
-def test_bus_outside_every_zone_takes_its_neighbours_state(memberships):
+def test_bus_outside_the_interconnects_shapes_takes_its_geographic_state(memberships):
+    """ReEDS shapes cover only the modelled interconnect; ERCOT buses still count for Texas."""
     gdf = buses(
         {
-            1: (-122.6, 45.7, "p1", "53011", "Washington", 1.0),
-            2: (-122.6, 45.8, None, None, "Washington", 1.0),
-            3: (-122.7, 45.5, "p2", "41051", "Oregon", 2.0),
+            1: (-106.4, 31.8, "p48", "48141", "Texas", 3.0),
+            2: (-97.0, 32.8, None, None, "Texas", 60.0),
+            3: (-95.4, 29.8, None, None, "Texas", 37.0),
+            4: (-98.0, 38.5, None, None, "Kansas", 50.0),
         },
     )
     laf = pd.Series(state_load_allocation_factors(gdf, memberships), index=gdf.index)
-    assert laf.tolist() == pytest.approx([0.5, 0.5, 1.0])
+    assert laf.tolist() == pytest.approx([0.03, 0.6, 0.37, 1.0])
