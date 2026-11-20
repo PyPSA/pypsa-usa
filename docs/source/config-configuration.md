@@ -90,8 +90,8 @@ Planning horizons determines which year(s) of future demand forecast to use for 
 ## `model_topology`
 
 The `model_topology` section selects the transmission backbone and the spatial zones the final
-network is aggregated to. `transmission_network` chooses between the ReEDS zonal backbone and the
-TAMU synthetic nodal network; `topological_boundaries` sets the zone type used after clustering
+network is aggregated to. `transmission_network` chooses between the ReEDS zonal backbone, the
+TAMU synthetic nodal network and a nodal network built from the HIFLD transmission lines; `topological_boundaries` sets the zone type used after clustering
 (county, REeDS zone, state, or balancing area). Use `include` to subset the modeled footprint to
 specific zones, states, or balancing authorities (mixed zone types are not supported), and
 `aggregate` to pre-aggregate buses into larger regions. `interface_transmission_limits` switches

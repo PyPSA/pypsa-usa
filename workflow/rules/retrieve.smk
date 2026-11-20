@@ -433,6 +433,26 @@ rule retrieve_reeds_vre_file:
         "../scripts/retrieve_http_file.py"
 
 
+# HIFLD transmission lines for model_topology: transmission_network: hifld, from
+# Esri's public archive of the last HIFLD Open version (see constants.py).
+from constants import HIFLD_TRANSMISSION_LINES_URL
+
+
+rule retrieve_hifld_transmission_lines:
+    params:
+        url=HIFLD_TRANSMISSION_LINES_URL,
+    output:
+        DATA + "hifld/transmission_lines.geojson",
+    log:
+        LOGS + "retrieve/hifld_transmission_lines.log",
+    resources:
+        walltime="01:00:00",
+        mem_mb=4000,
+    retries: 2
+    script:
+        "../scripts/retrieve_hifld_transmission_lines.py"
+
+
 if "EGS" in config["electricity"]["extendable_carriers"]["Generator"]:
 
     rule retrieve_egs:
