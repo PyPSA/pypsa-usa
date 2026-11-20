@@ -28,7 +28,7 @@ CONCURRENCY="${CONCURRENCY:-4}"    # concurrent snakemake drivers
 RESTART_TIMES="${RESTART_TIMES:-0}"  # 0 while benchmarking: a retry re-runs with
                                      # attempt*mem and would pollute MaxRSS data
 # Use the venv binary directly rather than `uv run`, which would re-resolve the
-# environment on every invocation. See CLAUDE.md for the uv setup.
+# environment on every invocation. See AGENTS.md for the uv setup.
 SNAKEMAKE="${SNAKEMAKE:-$(cd .. && pwd)/.venv/bin/snakemake}"
 
 CA_CONFIG=repo_data/config/config.california.yaml
