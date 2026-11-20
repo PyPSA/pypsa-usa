@@ -1090,7 +1090,7 @@ if __name__ == "__main__":
             snakemake.input.itl_costs_county,
             snakemake.input.transmission_basecost,
             dollar_year=dollar_year_from_config(snakemake.config),
-            voltage_factor=snakemake.config["lines"].get("voltage_factor", True),
+            voltage_factor=snakemake.config["lines"].get("voltage_factor", False),
         )
 
     if (n_clusters == len(n.buses)) and not transport_model:

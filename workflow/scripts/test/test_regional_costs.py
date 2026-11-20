@@ -69,7 +69,12 @@ def pair_table():
 
 @pytest.fixture(scope="module")
 def model():
-    return TransmissionCostModel.from_files(str(DISTANCE_COST), str(BASECOST), dollar_year=DOLLAR_YEAR)
+    return TransmissionCostModel.from_files(
+        str(DISTANCE_COST),
+        str(BASECOST),
+        dollar_year=DOLLAR_YEAR,
+        voltage_factor=True,
+    )
 
 
 def _costs():

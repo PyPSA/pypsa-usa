@@ -339,8 +339,10 @@ class TransmissionCostModel:
     """ReEDS transmission cost tables reduced to what pricing a branch needs.
 
     ``to_dollar_year`` converts the 2004 USD of the tables to the model's
-    ``costs: dollar_year``. With ``voltage_factor=False`` every AC line is priced
-    at the 500 kV reference cost.
+    ``costs: dollar_year``. With ``voltage_factor=False`` (the default) every AC
+    line is priced at the 500 kV reference cost, as the ReEDS-2.0 tables price all
+    new AC capacity. ``True`` scales by voltage class, which makes lines below
+    500 kV much dearer per MW-km (x1.4 at 345 kV, x1.9 at 230 kV, x2.9 at 138 kV).
     """
 
     pair_costs: pd.Series
@@ -348,7 +350,7 @@ class TransmissionCostModel:
     voltage_exponent: float
     dc_ratio: float
     to_dollar_year: float
-    voltage_factor: bool = True
+    voltage_factor: bool = False
 
     @classmethod
     def from_files(
@@ -356,7 +358,7 @@ class TransmissionCostModel:
         distance_cost_fn: str,
         basecost_fn: str,
         dollar_year: int,
-        voltage_factor: bool = True,
+        voltage_factor: bool = False,
     ) -> TransmissionCostModel:
         """Build the model from the ReEDS county-pair and voltage-class cost tables."""
         from money import conversion_factor

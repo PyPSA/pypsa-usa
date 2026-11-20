@@ -1004,7 +1004,7 @@ rule aggregate_to_substations:
         regional_transmission_costs=config_provider(
             "lines", "regional_costs", default=True
         ),
-        voltage_factor=config_provider("lines", "voltage_factor", default=True),
+        voltage_factor=config_provider("lines", "voltage_factor", default=False),
         dollar_year=config_provider("costs", "dollar_year"),
     input:
         bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
