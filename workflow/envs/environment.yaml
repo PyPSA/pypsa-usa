@@ -90,6 +90,7 @@ dependencies:
   - currencyconverter==0.18.23
   - gurobipy==11.0.3
   - highspy>=1.9.0
+  - inflate64>=1.0.0
   - duckdb==0.10.0
   - flake8
   - dill>=0.3.9
