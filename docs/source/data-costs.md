@@ -71,6 +71,20 @@ With `costs: regional_multipliers: enable` (on by default), new generators and s
 
 Both are annualized at the carrier's capital charge rate, and each investment period prices its new builds with that year's costs. The ReEDS tables and their release are listed in `workflow/repo_data/costs/README.md`.
 
+### Regional transmission costs from ReEDS
+
+The transport model (`transmission_network: reeds`) prices each interface with the ReEDS `transmission_distance_cost_500kVac_*.csv` tables, whose costs already hold ReEDS's regional base costs and terrain and land-class multipliers. The nodal network (`transmission_network: tamu`) used the national `HVAC overhead` / `HVDC overhead` cost per km for every line. With `lines: regional_costs` (on by default), its AC lines and HVDC links are priced from the same ReEDS data:
+
+- **Route cost**: `transmission_distance_cost_500kVac_county.csv` gives the 500 kV AC cost of each county pair over the great-circle distance between the county centroids, so regional cost, terrain and route detour are in the price per great-circle km. A line whose endpoint counties form a ReEDS pair takes that pair's cost. Other lines, mostly within one county, take the mean of their two counties' typical cost (the median of each county's 8 shortest pairs, mapped below), with state and national medians as fallbacks.
+- **Voltage class** (`lines: voltage_factor`, off by default): the cost is scaled by `(kV / 500)^b` (b = −0.82), fitted through 500 kV to the per-region voltage ratios of `rev_transmission_basecost.csv`. This makes lines below 500 kV much dearer: ×1.4 at 345 kV, ×1.9 at 230 kV, ×2.9 at 138 kV, ×5 at 69 kV. Off, every AC line is priced at 500 kV, as the ReEDS-2.0 tables price all new AC capacity (current ReEDS prices each interface at its highest existing voltage, at least 138 kV). HVDC links take the DC/AC ratio of the same table (0.41) either way.
+
+:::{figure} _static/costs/county_transmission_cost_field.png
+:width: 90%
+Typical 500 kV AC line cost of each county, relative to the national median (1,221 USD2004/MW per great-circle km).
+:::
+
+Both tables are in 2004 USD and are converted to `costs: dollar_year`. The unit cost is set in `aggregate_to_substations`, while lines still have their own voltage and county, and is carried through clustering as a capacity-weighted mean. `capital_cost` is the annuity times that unit cost times the great-circle length of the clustered corridor; `lines: length_factor` is not applied, since the ReEDS prices include the detour. The submarine share of HVDC links and the converter stations keep their national costs.
+
 ### Annualized capital cost and tax credits
 
 Capex (`capex_per_kw`, which holds construction financing) is annualized at `capital_charge_rate`, the ATB fixed charge rate: the capital recovery factor of the ATB WACC over the cost recovery period times ATB's project finance factor, which holds taxes and depreciation. Carriers ATB publishes no fixed charge rate for (gas, coal and oil plants, hydrogen_ct, transmission) are annualized at the capital recovery factor alone. The regional overnight multipliers and the ReEDS interconnection costs are annualized at the same rate.
