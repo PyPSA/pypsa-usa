@@ -16,10 +16,7 @@ sector:
     marginal_cost_multiplier: 1
     existing_pipeline_multiplier: 1
     pipeline_length_factor: 1.25  # route length / distance between state centers
-    economic_retirement:  # true = the existing capacity may retire, saving its fixed O&M; retrofitting to hydrogen does not need it
-      production: false
-      pipeline: false
-      storage: false
+    economic_retirement: false  # true = existing production, pipelines and storage may retire, saving their fixed O&M; retrofitting to hydrogen does not need it
     retrofit:  # to hydrogen, in the first investment period (E-G-H)
       pipeline: false  # gas pipelines between states
       storage: false  # salt dome, depleted field and aquifer gas storage; costs by formation, weighted by state

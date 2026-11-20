@@ -391,13 +391,7 @@ properties:
       natural_gas:
         type: object
         properties:
-          economic_retirement:
-            type: object
-            additionalProperties: false
-            properties:
-              production: {type: boolean}
-              pipeline: {type: boolean}
-              storage: {type: boolean}
+          economic_retirement: {type: boolean}
           retrofit:
             type: object
             additionalProperties: false

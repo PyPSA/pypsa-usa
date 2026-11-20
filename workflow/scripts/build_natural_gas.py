@@ -1443,7 +1443,7 @@ def build_natural_gas(
         production_costs=production_costs,
         efficiency=production_efficiency,
         fom=production_fom,
-        economic_retirement=retirement["production"],
+        economic_retirement=retirement,
     )
 
     # add state level gas storage facilities
@@ -1454,7 +1454,7 @@ def build_natural_gas(
         cyclic_storage=cyclic_storage,
         injection_loss=storage_injection_loss,
         compressor_fom=storage_compressor_fom,
-        economic_retirement=retirement["storage"],
+        economic_retirement=retirement,
     )
 
     # add interconnect pipelines
@@ -1465,7 +1465,7 @@ def build_natural_gas(
         length_factor=pipeline_length_factor,
         loss_per_1000km=pipeline_loss_per_1000km,
         fom_per_km=pipeline_fom_per_km,
-        economic_retirement=retirement["pipeline"],
+        economic_retirement=retirement,
     )
 
     # add pipelines for imports/exports

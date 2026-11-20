@@ -662,13 +662,10 @@ def test_injection_through_the_wells_of_each_part():
 @pytest.mark.parametrize(
     ("natural_gas", "retirement", "retrofit"),
     [
-        ({}, {"production": False, "pipeline": False, "storage": False}, {"pipeline": False, "storage": False}),
-        # retrofitting does not let a part retire
-        (
-            {"economic_retirement": {"production": True}, "retrofit": {"pipeline": True, "storage": True}},
-            {"production": True, "pipeline": False, "storage": False},
-            {"pipeline": True, "storage": True},
-        ),
+        ({}, False, {"pipeline": False, "storage": False}),
+        # retrofitting does not let the infrastructure retire
+        ({"retrofit": {"pipeline": True, "storage": True}}, False, {"pipeline": True, "storage": True}),
+        ({"economic_retirement": True}, True, {"pipeline": False, "storage": False}),
     ],
 )
 def test_gas_switches_are_independent(natural_gas, retirement, retrofit):

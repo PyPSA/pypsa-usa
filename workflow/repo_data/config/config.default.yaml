@@ -164,7 +164,9 @@ electricity:
   # Retrofits of existing gas plants (ReEDS upgrades): OCGT to OCHT, CCGT to CCHT or to
   # 90% carbon capture (CCGT-90CCS). A retrofit runs for `lifetime` years from the period
   # it is built in; its cost is annualized over min(lifetime, ATB cost recovery period).
-  # Plants that can be retrofitted retire economically.
+  # The model chooses how much of each plant to retrofit, up to its existing fuel input. The
+  # plant and its retrofits share that input: with `retirement: economic` the plant may also
+  # retire, otherwise the whole input is kept, as the plant or retrofitted.
   retrofit:
     OCHT:       {enable: false, lifetime: 30}
     CCHT:       {enable: false, lifetime: 30}

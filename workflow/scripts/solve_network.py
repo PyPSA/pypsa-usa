@@ -192,8 +192,7 @@ def extra_functionality(n, snapshots):
     # Natural gas storage, pipelines and plants share their capacity with what is retrofitted from them;
     # what may not retire keeps it all: gas infrastructure without economic retirement, and gas
     # plants unless electricity: retirement is economic
-    retirement = get_gas_economic_retirement(config["sector"])
-    kept = [GAS_INFRASTRUCTURE[part] for part, retire in retirement.items() if not retire]
+    kept = [] if get_gas_economic_retirement(config["sector"]) else list(GAS_INFRASTRUCTURE)
     if config["electricity"].get("retirement", "technical") != "economic":
         kept += sorted(set(RETROFITS.values()))
     add_retrofit_constraints(n, kept=kept)
