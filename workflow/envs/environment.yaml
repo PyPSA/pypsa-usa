@@ -65,7 +65,6 @@ dependencies:
 - plotly==5.17.0
 - pyomo==6.6.1
 - graphviz
-- cyipopt
 
 # Keep in conda environment when calling ipython
 - ipython

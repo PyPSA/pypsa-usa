@@ -83,7 +83,6 @@ if __name__ == "__main__":
         )
     configure_logging(snakemake)
     params = snakemake.params
-    solver_name = snakemake.config["solving"]["solver"]["name"]
 
     n = pypsa.Network(snakemake.input.network)
     schema_entry = log_network_schema(n, stage="entry")
@@ -111,7 +110,6 @@ if __name__ == "__main__":
             0 if simpl_mode == "county" else int(snakemake.wildcards.simpl),
             custom_busmap=county_busmap,
             focus_weights=params.focus_weights,
-            solver_name=solver_name,
             algorithm=params.simplify_network["algorithm"],
             aggregation_strategies=params.aggregation_strategies,
             weighting_strategy="population",

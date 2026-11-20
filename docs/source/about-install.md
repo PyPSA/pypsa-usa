@@ -88,7 +88,6 @@ You can download and install several free options here:
 - [HiGHS](https://highs.dev/)
 - [Cbc](https://projects.coin-or.org/Cbc#DownloadandInstall)
 - [GLPK](https://www.gnu.org/software/glpk/)
-- [Ipopt](https://coin-or.github.io/Ipopt/INSTALL.html)
 
 and the non-free, commercial software (for some of which free academic licenses are available)
 
