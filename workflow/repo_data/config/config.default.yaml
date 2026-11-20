@@ -477,7 +477,10 @@ solving:
       # https://ergo-code.github.io/HiGHS/options/definitions.html
       threads: 4
       solver: "ipm"
-      run_crossover: "off"
+      # Barrier without crossover can end with status "unknown" on sector
+      # networks and leaves small negative dispatch (issues #635, #639). "off"
+      # is faster on large networks if the interior solution is good enough.
+      run_crossover: "on"
       small_matrix_value: 1e-6
       large_matrix_value: 1e9
       primal_feasibility_tolerance: 1e-5
