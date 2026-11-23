@@ -14,6 +14,7 @@ import pandas as pd
 import pypsa
 from _helpers import (
     configure_logging,
+    get_gas_economic_retirement,
     get_gas_retrofit,
     get_snapshots,
     load_costs,
@@ -771,6 +772,18 @@ if __name__ == "__main__":
     # natural gas comes with the end-use sectors (service, transport, industry)
     if "G" in sectors:
         ng_options = snakemake.params.sector["natural_gas"]
+
+        # the gas infrastructure has its own retirement switch; flag when it differs from the power plants'
+        gas_retirement = get_gas_economic_retirement(snakemake.params.sector)
+        plant_retirement = snakemake.config["electricity"].get("retirement", "technical")
+        if gas_retirement != (plant_retirement == "economic"):
+            retiring, kept = ("gas production, pipelines and storage", "power plants")
+            if not gas_retirement:
+                retiring, kept = kept, retiring
+            logger.warning(
+                f"sector: natural_gas: economic_retirement is {str(gas_retirement).lower()} but electricity: "
+                f"retirement is {plant_retirement}, so existing {retiring} may retire while existing {kept} may not",
+            )
 
         # add natural gas infrastructure and data
         build_natural_gas(
