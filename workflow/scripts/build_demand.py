@@ -2803,7 +2803,20 @@ class DemandScaler(ABC):
 
 
 class AeoElectricityScaler(DemandScaler):
-    """Scales against EIA Annual Energy Outlook electricity projections."""
+    """
+    Scales against EIA Annual Energy Outlook electricity projections.
+
+    PUDL stores several AEO editions in one table, and their projection years
+    overlap, so a single edition (``report_year``) has to be selected. AEO2023 is
+    used rather than the newer AEO2025 because the demand being scaled is
+    historical (2018-2023): AEO2023 starts in 2022, AEO2025 only in 2024.
+    Scaling with AEO2025 would treat the historical demand as 2024 demand and
+    leave out the growth before 2024. Mixing editions (an AEO2023 base year and
+    an AEO2025 projection) would count the differences between the two outlooks
+    as growth.
+    """
+
+    report_year: int = 2023
 
     def __init__(self, pudl_path: str, scenario: str = "reference"):
         self.pudl_path = pudl_path
@@ -2834,6 +2847,7 @@ class AeoElectricityScaler(DemandScaler):
         FROM read_parquet('{self.pudl_path}/core_eiaaeo__yearly_projected_generation_in_electric_sector_by_technology.parquet')
         WHERE electricity_market_module_region_eiaaeo = '{self.region}'
         AND model_case_eiaaeo = '{self.scenario}'
+        AND report_year = {self.report_year}
         """
 
         df = duckdb.query(query).to_df()
