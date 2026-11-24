@@ -220,6 +220,14 @@ costs:
   # fails on null. develop reads {} as unset and takes the ATB tax credits.
   ptc_modifier: {}
   itc_modifier: {}
+  # ReEDS regional capital costs do not exist on the baseline, so the whole block
+  # is pinned off. column_to_tech is nulled as well as disabled: develop's default
+  # layer would otherwise carry a mapping the baseline lacks, and the config gate
+  # refuses a truthy key that only one side has.
+  regional_multipliers:
+    enable: false
+    renewable_interconnection: false
+    column_to_tech:
   min_year:
     hydrogen_ct: 2040
   max_growth:

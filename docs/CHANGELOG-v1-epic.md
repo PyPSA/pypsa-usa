@@ -321,7 +321,7 @@ Conventions:
   A and B took seven targeted `interconnect: western` waivers. Result: prong 1
   PASS, 0 live / 87 total; prong 2 PASS, 0 live / 3. *Results effect: none —
   comparison artifacts of the 0.30→1.3 conventions.* Full adjudication in
-  ledger entry **DL-15** (`docs/superpowers/specs/2026-08-07-deltas-ledger.md`),
+  ledger entry **DL-15** (`docs/deltas-ledger.md`),
   pending countersignature; the usa leg still needs re-baselining on this stack.
   See `docs/pypsa-v1-migration.md` for the migration map,
   the pandas-3 bump detail, and the pypsa-v1 data-storage features we can now

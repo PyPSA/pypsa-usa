@@ -348,6 +348,28 @@ dac:
 costs:
   dollar_year: 2023                        # every cost in the model is in real US dollars of this year; inputs in other dollar years or currencies are converted by scripts/money.py
 
+  # ReEDS county overnight-capex multipliers (reg_cap_cost_diff, applied as 1 + x
+  # to overnight capex only; FOM untouched) for new-build generators and storage.
+  # Carriers not listed keep the EIA state-level locational multipliers.
+  regional_multipliers:
+    enable: true
+    # Wind/solar (incl. offshore) take the ReEDS per-site interconnection cost
+    # (spur line + POI + network reinforcement; offshore radial export), capacity-
+    # weighted per bus, in place of the ATB's uniform grid-connection cost; those
+    # carriers then skip the EIA state multiplier. Works with every
+    # renewable.dataset; needs enable: true.
+    # The mean covers every site in a bus region, uneconomic ones included,
+    # while builds go to the cheapest sites first. With large bus regions (coarse
+    # simpl, like the 75 of this default) it overstates the cost, so it is off
+    # until the supply curve is binned (issue #849); turn it on for fine simpl.
+    renewable_interconnection: false
+    column_to_tech:                        # ReEDS technology-group column -> pypsa carriers; null = no county multipliers
+      BATTERY|PVB: [2hr_battery_storage, 4hr_battery_storage, 6hr_battery_storage, 8hr_battery_storage, 10hr_battery_storage]
+      COAL|BIO: [coal, coal-95CCS, coal-99CCS, biomass, biomass-95CCS]
+      COMBINED_CYCLE|NG_FUEL_CELL: [CCGT, CCGT-95CCS, CCGT-97CCS, CCHT]
+      COMBUSTION_TURBINE|CONSUME|LFILL|OGS|H2_FUEL_CELL: [OCGT, OCHT]
+      NUCLEAR: [nuclear, SMR]
+
   # NREL Annual Technology Baseline (ATB) — primary capex/fom source
   atb:
     model_case: "R&D + TC"                 # R&D | R&D + TC | Exp | Exp + TC  (TC = with tax credits; Exp = expanded cost drivers)

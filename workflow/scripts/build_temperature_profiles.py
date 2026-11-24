@@ -7,6 +7,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
+from _helpers import get_snapshots, select_weather_hours, stamp_weather_calendar
 from dask.distributed import Client, LocalCluster
 
 
@@ -20,7 +21,9 @@ def load_cutout(cutout_files: str | list[str], time: None | pd.DatetimeIndex = N
         Path to a single cutout file or a list of paths to multiple cutout files.
         If a list is provided, the cutouts will be concatenated along the time dimension.
     time : pd.DatetimeIndex, optional
-        If provided, select only the specified times from the cutout.
+        Model snapshots (no February 29). If provided, select the weather-year
+        hours they read (see ``_helpers.weather_year_hours``) and label them
+        with these snapshots.
 
     Returns
     -------
@@ -35,7 +38,7 @@ def load_cutout(cutout_files: str | list[str], time: None | pd.DatetimeIndex = N
         cutout = atlite.Cutout(NamedTemporaryFile().name, data=combined_data)
 
     if time is not None:
-        cutout.data = cutout.data.sel(time=time)
+        cutout.data = select_weather_hours(cutout.data, time)
 
     return cutout
 
@@ -56,7 +59,7 @@ if __name__ == "__main__":
     cluster = LocalCluster(n_workers=nprocesses, threads_per_worker=1)
     client = Client(cluster, asynchronous=True)
 
-    time = pd.date_range(freq="h", **snakemake.params.snapshots)
+    time = get_snapshots(snakemake.params.snapshots)
 
     cutout = load_cutout(snakemake.input.cutout, time=time)
 
@@ -80,7 +83,9 @@ if __name__ == "__main__":
         show_progress=False,
     )
 
-    temp_air.to_netcdf(snakemake.output.temp_air)
+    # build_heat rejects a leap-year COP profile whose temperatures do not say
+    # which rule laid the weather year onto the snapshots
+    stamp_weather_calendar(temp_air).to_netcdf(snakemake.output.temp_air)
 
     temp_soil = cutout.soil_temperature(
         matrix=M_tilde.T,
@@ -89,4 +94,4 @@ if __name__ == "__main__":
         show_progress=False,
     )
 
-    temp_soil.to_netcdf(snakemake.output.temp_soil)
+    stamp_weather_calendar(temp_soil).to_netcdf(snakemake.output.temp_soil)

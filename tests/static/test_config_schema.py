@@ -110,6 +110,7 @@ def test_typo_in_closed_subtree_is_rejected(schema):
         (("costs", "atb", "scenario"), "moderate"),
         (("costs", "atb", "model_case"), "Market"),  # 2024 ATB label, gone from the 2025 ATB
         (("renewable_land_access",), "refrence"),
+        (("costs", "regional_multipliers", "renewable_interconnection"), "yes"),
     ],
 )
 def test_bad_enum_values_are_rejected(path, bad_value, schema):

@@ -13,14 +13,53 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import reeds_vre
 import xarray as xr
-from _helpers import configure_logging, get_snapshots
+from _helpers import (
+    configure_logging,
+    get_snapshots,
+    label_with_snapshots,
+    stamp_weather_calendar,
+    weather_year_hours,
+)
+from constants import RENEWABLE_INTERCONNECTION_COL
 from dask.distributed import Client
 from godeeep_cf_registry import resolve_scenario, resolve_weather_year
 from pypsa.geo import haversine
 from shapely.geometry import LineString
 
 logger = logging.getLogger(__name__)
+
+
+def load_reeds_sites(tech: str, inputs, params, tech_config: dict):
+    """ReEDS supply-curve sites of ``tech`` with their interconnection cost.
+
+    Returns None when the rule passes no ReEDS supply curve (the interconnection
+    cost is off).
+    """
+    if not inputs.get("reeds_sc"):
+        return None
+    sites = reeds_vre.load_supply_curve(inputs.reeds_sc, inputs.reeds_sitemap)
+    if tech.startswith("offwind"):
+        sites = reeds_vre.split_offshore_by_depth(
+            sites,
+            inputs.gebco,
+            floating=tech == "offwind_floating",
+            threshold_m=reeds_vre.floating_depth_threshold(tech, tech_config),
+        )
+    if inputs.get("reeds_interconnection"):
+        costs = reeds_vre.load_interconnection_costs(inputs.reeds_interconnection, tech, params.dollar_year)
+        sites = sites.join(costs, on="sc_point_gid")
+        missing = sites["interconnection_cost"].isna()
+        if missing.any():
+            logger.warning(
+                "%d ReEDS %s sites (%.0f MW) have no interconnection cost; their buses fall back to the ATB "
+                "grid connection unless other sites there are priced.",
+                int(missing.sum()),
+                tech,
+                sites.loc[missing, "capacity"].sum(),
+            )
+    return sites
 
 
 def _reassign_unmapped_caps(
@@ -300,9 +339,14 @@ if __name__ == "__main__":
         logger.info("Loading atlite renewable dataset...")
 
         logger.info(f'using cutout "{snakemake.input.cutout}"')
-        cutout = atlite.Cutout(snakemake.input.cutout[0]).sel(
-            time=sns,
-        )  # Patch fix with [0] move expand in snakemake rule to add_elec for multiple cutouts
+        # Patch fix with [0] move expand in snakemake rule to add_elec for multiple cutouts
+        cutout = atlite.Cutout(snakemake.input.cutout[0])
+        # A leap weather year is laid onto the 365-day snapshots by position,
+        # as the GODEEEP CF and the EER/SERVM demand are. The cutout keeps its
+        # true weather-year timestamps through the conversion, because atlite
+        # derives the sun position from the time axis when the cutout does not
+        # store it; the profile takes the snapshot labels afterwards.
+        cutout.data = cutout.data.sel(time=weather_year_hours(sns))
 
         res = params.get("excluder_resolution", 100)
         excluder = atlite.ExclusionContainer(crs=5070, res=res)
@@ -413,6 +457,7 @@ if __name__ == "__main__":
             return_capacity=True,
             **resource,
         )
+        profile = label_with_snapshots(profile, sns)
 
         logger.info(f"Calculating maximal capacity per bus (method '{p_nom_max_meth}')")
         if p_nom_max_meth == "simple":  ## right now the capacities loaded in are "conservative"
@@ -579,6 +624,12 @@ if __name__ == "__main__":
 
         logger.info(f"Profile: {profile.shape}  Capacities: {capacities.shape}")
 
+    # ReEDS supply-curve sites in the bus regions, for the interconnection cost
+    tech = snakemake.wildcards.technology
+    reeds_sites = load_reeds_sites(tech, snakemake.input, snakemake.params, params)
+    if reeds_sites is not None:
+        reeds_sites = reeds_vre.map_sites_to_regions(reeds_sites, regions, tech=tech)
+
     # ds of renewable data to be outputted
     ds = xr.merge(
         [
@@ -611,6 +662,28 @@ if __name__ == "__main__":
                 fill_value=1.0,
             )
 
+    # ReEDS wind/solar interconnection cost per bus (overnight USD/MW in
+    # costs.dollar_year); add_electricity swaps it for the ATB grid connection.
+    if reeds_sites is not None and "interconnection_cost" in reeds_sites:
+        bus_cost = reeds_vre.bus_weighted_mean(reeds_sites, "interconnection_cost")
+        bus_cost.index = bus_cost.index.astype(str)
+        ds[RENEWABLE_INTERCONNECTION_COL] = xr.DataArray(
+            bus_cost.reindex(ds["bus"].values.astype(str)).to_numpy(),
+            coords={"bus": ds["bus"].values},
+            dims="bus",
+            attrs={
+                "units": "USD/MW (overnight)",
+                "dollar_year": int(snakemake.params.dollar_year),
+                "source": "ReEDS cost_total_trans_usd_per_mw, capacity-weighted per bus",
+            },
+        )
+        priced = np.isfinite(ds[RENEWABLE_INTERCONNECTION_COL].values)
+        logger.info(
+            f"ReEDS interconnection cost for {priced.sum()} of {priced.size} {tech} buses "
+            f"(median {np.nanmedian(ds[RENEWABLE_INTERCONNECTION_COL].values) if priced.any() else float('nan'):.0f} USD/MW); "
+            "the rest keep the ATB grid connection.",
+        )
+
     # select only buses with some capacity and minimal capacity factor
     ds = ds.sel(
         bus=(
@@ -628,6 +701,8 @@ if __name__ == "__main__":
         logger.info(f"Applying correction factor {correction_factor} to profile...")
         ds["profile"] = ds["profile"] * correction_factor
 
-    ds.to_netcdf(snakemake.output.profile)
+    # both datasets follow _helpers.weather_year_hours; add_electricity rejects
+    # an atlite profile of a leap weather year that does not say so
+    stamp_weather_calendar(ds).to_netcdf(snakemake.output.profile)
     if client is not None:
         client.shutdown()

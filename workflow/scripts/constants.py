@@ -17,6 +17,77 @@ GPS_CRS = "EPSG:4326"
 # number of hours in a non-leap year
 HOURS_PER_YEAR = 8760
 
+###########################################
+# ReEDS wind/solar supply curves
+###########################################
+# Read at parse time by the rule files, so keep this module free of heavy imports.
+
+#: Technologies ReEDS supply curves cover (the offshore curve serves both
+#: fixed-bottom and floating wind).
+REEDS_VRE_CARRIERS = ("onwind", "solar", "offwind", "offwind_floating")
+
+#: Zenodo record of each ReEDS VRE resource (one file per land-access scenario).
+REEDS_VRE_RECORDS = {
+    "onwind": "18827074",
+    "solar": "18826700",
+    "offwind": "18826680",
+}
+
+#: File names inside each ReEDS VRE record (``sc`` supply curve, ``sitemap`` site
+#: coordinates). Fixed-bottom and floating offshore wind share the ``offwind`` curve.
+REEDS_VRE_FILES = {
+    "onwind": {"sc": "sc_wind-ons_{access}.csv", "sitemap": "sitemap.csv"},
+    "solar": {"sc": "sc_upv_{access}.csv", "sitemap": "sitemap.csv"},
+    "offwind": {"sc": "sc_wind-ofs_{access}.csv", "sitemap": "sitemap_offshore.csv"},
+}
+
+#: Depth (m) dividing ReEDS's shared offshore curve into fixed and floating sites
+#: when the technology config sets no depth bound.
+REEDS_DEFAULT_FLOATING_DEPTH_M = 60.0
+
+#: Interconnection cost column of the ReEDS interconnection tables per
+#: technology (spur line + point of interconnection + network reinforcement).
+#: Offshore takes the radial export option, which assumes no meshed offshore grid.
+REEDS_INTERCONNECTION_COST_FIELD = {
+    "onwind": "cost_total_trans_usd_per_mw",
+    "solar": "cost_total_trans_usd_per_mw",
+    "offwind": "cost_total_trans_usd_per_mw|radial",
+    "offwind_floating": "cost_total_trans_usd_per_mw|radial",
+}
+
+#: Profile variable and Generator column holding the ReEDS interconnection cost of
+#: wind/solar: overnight USD per MW in ``costs: dollar_year``, capacity-weighted
+#: per bus. NaN where no ReEDS site falls in the bus region. On a generator that
+#: clustering merged it is the mean over the whole capacity, with the members that
+#: have no site counted as zero; :data:`RENEWABLE_INTERCONNECTION_SHARE_COL` says
+#: how much of the capacity it covers.
+RENEWABLE_INTERCONNECTION_COL = "interconnection_capex_per_mw"
+
+#: Generator column: share of the capacity that carries a ReEDS interconnection
+#: cost. 1 or 0 per bus, in between once clustering merges generators with and
+#: without a ReEDS site. Only that share swaps the ATB grid connection for the
+#: ReEDS cost; the rest keeps the ATB cost.
+RENEWABLE_INTERCONNECTION_SHARE_COL = "interconnection_share"
+
+#: Generator column holding the ReEDS county overnight-capex multiplier (``1 + x``)
+#: ``add_electricity`` priced the generator with; a carrier's generators either all
+#: carry it or none do. Clustering takes its capacity-weighted mean over the merged
+#: generators, so ``add_extra_components`` prices every vintage with the multiplier
+#: ``capital_cost`` already holds.
+REGIONAL_MULTIPLIER_COL = "regional_capex_multiplier"
+
+#: pypsa clustering strategy of the generator columns that regional capital costs
+#: are rebuilt from: the one pypsa applies to ``capital_cost``, which is linear in
+#: each of them, so the merged ``capital_cost`` and these columns stay consistent.
+#: The weighted sum skips NaN, i.e. counts a member without a value as zero, which
+#: is why the interconnection cost needs its share column. Without a strategy
+#: pypsa's default "consense" raises when merged generators differ.
+GENERATOR_CAPEX_STRATEGIES = {
+    RENEWABLE_INTERCONNECTION_COL: "capacity_weighted_average",
+    RENEWABLE_INTERCONNECTION_SHARE_COL: "capacity_weighted_average",
+    REGIONAL_MULTIPLIER_COL: "capacity_weighted_average",
+}
+
 # energy content of natural gas
 # Assumes national averages for the conversion
 # https://www.eia.gov/naturalgas/monthly/pdf/table_25.pdf

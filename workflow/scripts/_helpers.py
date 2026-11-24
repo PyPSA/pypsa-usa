@@ -308,14 +308,17 @@ def update_p_nom_max(n):
 
 
 def progress_retrieve(url, file):
-    import urllib
+    import urllib.request
 
     from progressbar import ProgressBar
 
     pbar = ProgressBar(0, 100)
 
     def dlProgress(count, block_size, total_size):
-        pbar.update(int(count * block_size * 100 / total_size))
+        # The last block overshoots the file size, which for a small file reads
+        # as more than 100%; an unknown size (no Content-Length) is -1.
+        if total_size > 0:
+            pbar.update(min(100, int(count * block_size * 100 / total_size)))
 
     urllib.request.urlretrieve(url, file, reporthook=dlProgress)
 
@@ -812,6 +815,126 @@ def get_snapshots(
         time = time[~((time.month == 2) & (time.day == 29))]
 
     return time
+
+
+def weather_year_hours(sns: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """
+    Return the hours of the weather year that the model snapshots ``sns`` read.
+
+    The model calendar has no February 29 (see ``get_snapshots``), so a leap
+    weather year is laid onto it by position: hour ``i`` of the model year reads
+    hour ``i`` of the weather year. Weather-year February 29 takes the 1 March
+    label, every later hour moves one day later, and weather-year 31 December is
+    not used. The EER, SERVM and GODEEEP inputs are published this way, so every
+    weather-driven input follows it and the same weather hour lands on the same
+    snapshot everywhere.
+
+    For a non-leap year this returns ``sns`` unchanged.
+    """
+    sns = pd.DatetimeIndex(sns)
+    if ((sns.month == 2) & (sns.day == 29)).any():
+        raise ValueError("Model snapshots carry no February 29; build them with get_snapshots.")
+    after_leap_day = sns.is_leap_year & (sns.month > 2)
+    return sns - pd.to_timedelta(after_leap_day.astype(int) * 24, unit="h")
+
+
+def model_calendar_labels(time: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """
+    Return the model snapshot that reads each weather-year hour in ``time``.
+
+    The inverse of :func:`weather_year_hours`, for inputs that come on the real
+    calendar of their weather year (historical demand, the Breakthrough hydro
+    profile). From February 29 of a leap year on, every hour takes the label one
+    day later; the hours of 31 December of a leap year, which no snapshot
+    reads, are ``NaT``. Hours of a non-leap year keep their label.
+    """
+    time = pd.DatetimeIndex(time)
+    leap = time.is_leap_year
+    from_leap_day = leap & ((time.month > 2) | ((time.month == 2) & (time.day == 29)))
+    unused = leap & (time.month == 12) & (time.day == 31)
+    labels = time + pd.to_timedelta(from_leap_day.astype(int) * 24, unit="h")
+    return labels.where(~unused)
+
+
+def lay_on_model_calendar(df):
+    """
+    Relabel a pandas object indexed by weather-year hours onto the model calendar.
+
+    Rows are relabelled with :func:`model_calendar_labels`, and the rows of
+    31 December of a leap year, which no snapshot reads, are dropped. The index
+    name is kept.
+    """
+    labels = model_calendar_labels(pd.DatetimeIndex(df.index))
+    used = labels.notna()
+    out = df[used].copy()
+    out.index = labels[used].rename(df.index.name)
+    return out
+
+
+def label_with_snapshots(ds, sns: pd.DatetimeIndex):
+    """
+    Label the ``time`` axis of ``ds`` with the model snapshots ``sns``.
+
+    ``ds`` holds, in order, the weather-year hours that ``sns`` read
+    (``ds.sel(time=weather_year_hours(sns))``, or anything computed from it).
+    """
+    sns = pd.DatetimeIndex(sns)
+    return ds.assign_coords(time=sns.to_numpy().astype(ds["time"].dtype))
+
+
+def select_weather_hours(ds, sns: pd.DatetimeIndex):
+    """
+    Select the weather-year hours that ``sns`` read from ``ds``, labelled with ``sns``.
+
+    ``ds`` is an xarray object with a ``time`` dimension on the weather-year
+    calendar (a cutout, for example). The mapping is the one of
+    :func:`weather_year_hours`.
+
+    Anything that depends on the true date of each hour (the sun position
+    atlite computes from the time axis, for example) must be derived before the
+    relabelling: select with ``ds.sel(time=weather_year_hours(sns))``, compute,
+    then call :func:`label_with_snapshots` on the result.
+    """
+    sns = pd.DatetimeIndex(sns)
+    return label_with_snapshots(ds.sel(time=weather_year_hours(sns)), sns)
+
+
+#: Attribute stamped on every output built from a cutout or a CF file. It names
+#: the rule that laid the weather year onto the model snapshots, so a reader can
+#: tell a file built on the current rule from one built before it.
+WEATHER_CALENDAR_ATTR = "weather_calendar"
+#: The rule of :func:`weather_year_hours`.
+WEATHER_CALENDAR_RULE = "positional"
+
+
+def stamp_weather_calendar(ds):
+    """Record on ``ds`` that it follows :func:`weather_year_hours` (see ``WEATHER_CALENDAR_ATTR``)."""
+    ds.attrs[WEATHER_CALENDAR_ATTR] = WEATHER_CALENDAR_RULE
+    return ds
+
+
+def check_weather_calendar(ds, name: str) -> None:
+    """
+    Raise if ``ds`` holds a leap weather year laid onto the snapshots by another rule.
+
+    Outputs built before :func:`weather_year_hours` dropped February 29 by
+    date, which reads every hour from 1 March on one day later than the current
+    rule does. Such a file carries no ``WEATHER_CALENDAR_ATTR`` stamp, and
+    Snakemake does not rebuild it when only the script changed and the run uses
+    ``--rerun-triggers mtime`` (the default of ``run_slurm.sh``). Mixing it with
+    rebuilt inputs would put them a day apart with no error, so it is rejected
+    here. The two rules agree for a non-leap year, and those files pass.
+    """
+    time = pd.DatetimeIndex(ds.indexes["time"])
+    if not time.is_leap_year.any():
+        return
+    if ds.attrs.get(WEATHER_CALENDAR_ATTR) != WEATHER_CALENDAR_RULE:
+        raise ValueError(
+            f"{name} holds a leap weather year ({sorted(set(time.year[time.is_leap_year]))}) but was built "
+            "before leap years were laid onto the model snapshots by position (_helpers.weather_year_hours), "
+            "so it is one day off from 1 March on. Delete it and rebuild it "
+            "(snakemake --forcerun build_renewable_profiles build_temperature_profiles).",
+        )
 
 
 def weighted_avg(df, values, weights):

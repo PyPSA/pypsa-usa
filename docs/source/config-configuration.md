@@ -731,7 +731,7 @@ networks.
 ## `walltime`
 
 Per-rule wall-time overrides consumed as Snakemake `walltime` resources and forwarded to
-`sbatch --time` by `workflow/run_slurm.sh`. This is the single source for per-rule wall times;
+`sbatch --time` by `workflow/run_slurm.sh` (through `workflow/slurm_submit.sh`). This is the single source for per-rule wall times;
 it lives in `config.slurm.yaml` (renamed from `config.cluster.yaml`, whose name collided with
 the `{clusters}` wildcard and the `clustering:` section). Rules not listed here fall back to
 per-rule defaults defined in the workflow. Local runs ignore these values.

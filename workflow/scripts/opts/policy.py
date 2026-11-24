@@ -295,28 +295,33 @@ def apply_forced_retirements(n, planning_horizon, config):
 
 
 def _process_reeds_data(filepath, carriers, value_col):
-    """Helper function to process RPS or CES REEDS data."""
+    """Read a ReEDS RPS or CES file in long format (one row per year and state).
+
+    ``rps_fraction.csv`` has columns ``t,st,rps_all,rps_solar,rps_wind`` and
+    ``ces_fraction.csv`` has ``*t,st,Value``. Only the overall fraction is used;
+    the solar and wind carve-outs are ignored, as in the ReEDS default
+    (``GSw_StateRPS_Carveouts = 0``).
+    """
     reeds = pd.read_csv(filepath)
+    # ReEDS marks the first index column of a GAMS table with a leading '*'
+    reeds.columns = reeds.columns.str.lstrip("*")
 
-    # Handle both wide and long formats
-    if "rps_all" not in reeds.columns:
-        reeds = reeds.melt(
-            id_vars="st",
-            var_name="planning_horizon",
-            value_name=value_col,
+    fraction_cols = [col for col in ("rps_all", "Value") if col in reeds.columns]
+    if not {"t", "st"} <= set(reeds.columns) or len(fraction_cols) != 1:
+        raise ValueError(
+            f"{filepath}: expected a long-format ReEDS table with columns 't', 'st' and one of "
+            f"'rps_all' or 'Value', found {list(reeds.columns)}",
         )
-        # melted column headers are strings; the horizon filter compares against ints
-        reeds["planning_horizon"] = reeds["planning_horizon"].astype(int)
 
-    # Standardize column names
     reeds = reeds.rename(
-        columns={"st": "region", "t": "planning_horizon", "rps_all": "pct"},
+        columns={"st": "region", "t": "planning_horizon", fraction_cols[0]: value_col},
     )
+    reeds["planning_horizon"] = reeds["planning_horizon"].astype(int)
     reeds["carrier"] = [", ".join(carriers)] * len(reeds)
 
     # Ensure the final dataframe has consistent columns
-    reeds = reeds[["region", "planning_horizon", "carrier", "pct"]]
-    reeds = reeds[reeds["pct"] > 0.0]  # Remove any rows with zero or negative percentages
+    reeds = reeds[["region", "planning_horizon", "carrier", value_col]]
+    reeds = reeds[reeds[value_col] > 0.0]  # Remove any rows with zero or negative percentages
 
     return reeds
 

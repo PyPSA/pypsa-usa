@@ -2,6 +2,8 @@
 
 from itertools import chain
 
+from constants import REEDS_VRE_CARRIERS
+
 # rules/common.smk materializes godeeep_cf_registry.py into the source-cache
 # dir it puts on sys.path, so the CF registry is importable at parse time —
 # where its validation belongs.
@@ -188,6 +190,39 @@ if config["enable"].get("build_cutout", False):
 # of hundreds of DAG nodes later. A non-godeeep config is a no-op.
 validate_godeeep_cf_config(config)
 
+
+def reeds_interconnection_enabled():
+    """Whether wind/solar take the ReEDS per-site interconnection cost."""
+    cfg = config["costs"].get("regional_multipliers") or {}
+    return bool(
+        cfg.get("enable", False) and cfg.get("renewable_interconnection", False)
+    )
+
+
+def reeds_vre_input(kind):
+    """Input function for one ReEDS supply-curve file (``kind``: sc | sitemap) of the
+    technology wildcard, needed while the ReEDS interconnection cost is on.
+    """
+
+    def _inner(w):
+        if (
+            w.technology not in REEDS_VRE_CARRIERS
+            or not reeds_interconnection_enabled()
+        ):
+            return []
+        return reeds_vre_path(w.technology, kind)
+
+    return _inner
+
+
+def reeds_interconnection_input(w):
+    """ReEDS per-site interconnection cost table, when that cost is on."""
+    if not reeds_interconnection_enabled():
+        return []
+    kind = "offshore" if w.technology.startswith("offwind") else "land"
+    return f"repo_data/costs/interconnection_{kind}.h5"
+
+
 # Only use planning_horizon for GoDEEEP future scenarios. `and` short-circuits,
 # so an atlite run never needs renewable_scenarios, and a godeeep run missing it
 # gets the registry's error rather than a bare KeyError.
@@ -260,6 +295,7 @@ rule build_renewable_profiles:
         ),
         renewable_scenarios=config_provider("renewable_scenarios"),
         mapping_cache_dir=PROFILES + "{interconnect}/nrel_mapping_cache",
+        dollar_year=config_provider("costs", "dollar_year"),
     input:
         corine=ancient(
             DATA
@@ -268,13 +304,22 @@ rule build_renewable_profiles:
         natura=lambda w: (
             DATA + "natura.tiff" if config["renewable"][w.technology]["natura"] else []
         ),
+        # also splits ReEDS's shared offshore curve into fixed and floating sites
         gebco=ancient(
             lambda w: (
                 DATA + "gebco/gebco_2023_n55.0_s10.0_w-126.0_e-65.0.tif"
                 if config["renewable"][w.technology].get("max_depth")
+                or (
+                    w.technology.startswith("offwind")
+                    and reeds_interconnection_enabled()
+                )
                 else []
             )
         ),
+        # the ReEDS wind/solar interconnection cost
+        reeds_sc=reeds_vre_input("sc"),
+        reeds_sitemap=reeds_vre_input("sitemap"),
+        reeds_interconnection=reeds_interconnection_input,
         country_shapes=GEOSPATIAL + "{interconnect}/country_shapes.geojson",
         offshore_shapes=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
         cec_onwind="repo_data/geospatial/CEC_GIS/CEC_Wind_BaseScreen_epsg3310.tif",
@@ -908,6 +953,12 @@ rule add_electricity:
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
         busmap_s=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",
+        reg_cap_cost_diff=(
+            "repo_data/costs/reg_cap_cost_diff_default.csv"
+            if config["costs"].get("regional_multipliers", {}).get("enable", False)
+            else []
+        ),
+        county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
         pudl_fuel_costs=PRICES + "{interconnect}/pudl_fuel_costs.csv",
         specs_egs=(
             PROFILES + "{interconnect}/specs_EGS_s{simpl}.nc"
@@ -1135,6 +1186,11 @@ rule add_extra_components:
             else []
         ),
         county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
+        reg_cap_cost_diff=(
+            "repo_data/costs/reg_cap_cost_diff_default.csv"
+            if config["costs"].get("regional_multipliers", {}).get("enable", False)
+            else []
+        ),
     params:
         retirement=config["electricity"].get("retirement", "technical"),
         demand_response=config["electricity"].get("demand_response", {}),
