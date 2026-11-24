@@ -2,14 +2,14 @@
 
 
 def pop_layout_input(wildcards):
-    if wildcards["sector"] != "E":
+    if gas_sector_on(wildcards["sector"]):
         return POPULATION + "{interconnect}/pop_layout_elec_s{simpl}_c{clusters}.csv"
     else:
         return []
 
 
 def ev_policy_input(wildcards):
-    if wildcards["sector"] != "E":
+    if gas_sector_on(wildcards["sector"]):
         return "repo_data/config/policy_constraints/ev_policy.csv"
     else:
         return []

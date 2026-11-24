@@ -90,7 +90,7 @@ Simple Natural Gas Trading with Regions Outside Model Scope
 
 ### Capacity Expansion
 
-PyPSA-USA does not currently support natural gas pipeline expansion and retrofitting.
+PyPSA-USA does not currently support natural gas pipeline expansion. With `sector: natural_gas: economic_retirement`, existing production, pipelines and storage may retire, saving their fixed O&M. With the hydrogen sector, `sector: natural_gas: retrofit` lets existing pipelines and storage be retrofitted to hydrogen (see [Hydrogen](data-hydrogen.md)).
 
 ### Methane Tracking
 
