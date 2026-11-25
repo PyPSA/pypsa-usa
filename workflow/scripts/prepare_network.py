@@ -169,6 +169,8 @@ def average_every_nhours(n, offset):
     m.set_snapshots(snapshot_weightings.index)
     m.snapshot_weightings = snapshot_weightings
     m.investment_periods = n.investment_periods
+    # Setting the periods resets their weightings to 1; keep the ones set upstream.
+    m.investment_period_weightings = n.investment_period_weightings
 
     for c in n.components:
         pnl = getattr(m, c.list_name + "_t")
