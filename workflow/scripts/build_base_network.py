@@ -17,26 +17,6 @@ from sklearn.neighbors import BallTree
 logger = logging.getLogger(__name__)
 
 
-def haversine_np(lon1, lat1, lon2, lat2):
-    """
-    Calculate the great circle distance between two points on the earth
-    (specified in decimal degrees).
-
-    All args must be of equal length.
-    source: https://stackoverflow.com/questions/29545704/fast-haversine-approximation-python-pandas
-    """
-    lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
-
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-
-    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
-
-    c = 2 * np.arcsin(np.sqrt(a))
-    km = 6378.137 * c
-    return km
-
-
 def add_buses_from_file(
     n: pypsa.Network,
     buses: gpd.GeoDataFrame,
@@ -191,18 +171,13 @@ def map_bus_to_region(
 def assign_line_length(n: pypsa.Network):
     """Assigns line length to each line in the network using Haversine distance."""
     bus_df = n.buses[["x", "y"]]
-    bus0 = bus_df.loc[n.lines.bus0].values
-    bus1 = bus_df.loc[n.lines.bus1].values
-    distances = haversine_np(bus0[:, 0], bus0[:, 1], bus1[:, 0], bus1[:, 1])
-    n.lines["length"] = distances
+    n.lines["length"] = pypsa.geo.haversine_pts(bus_df.loc[n.lines.bus0], bus_df.loc[n.lines.bus1])
 
 
 def assign_link_length_and_efficiency(n: pypsa.Network, length_factor: float):
     """Assigns link length and efficiency to each link (DC transmission line) in the network using Haversine distance."""
     bus_df = n.buses[["x", "y"]]
-    bus0 = bus_df.loc[n.links.bus0].values
-    bus1 = bus_df.loc[n.links.bus1].values
-    distances = haversine_np(bus0[:, 0], bus0[:, 1], bus1[:, 0], bus1[:, 1])
+    distances = pypsa.geo.haversine_pts(bus_df.loc[n.links.bus0], bus_df.loc[n.links.bus1])
     n.links["length"] = distances
     # 2% loss for inverters, 3%/1000km loss for DC lines, https://www.nature.com/articles/s41560-025-01752-6#Sec14
     n.links["efficiency"] = 1 - 0.02 - 0.03 * distances * length_factor / 1000
