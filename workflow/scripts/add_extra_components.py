@@ -204,7 +204,7 @@ def attach_storageunits(n, costs, elec_opts, investment_year, bus_multipliers=No
             cyclic_state_of_charge=True,
             cyclic_state_of_charge_per_period=True,  # pypsa v1 flipped this default to False
             build_year=investment_year,
-            lifetime=costs.at[carrier, "cost_recovery_period_years"],
+            lifetime=costs.at[carrier, "lifetime"],
         )
 
 
@@ -540,7 +540,7 @@ def attach_multihorizon_existing_generators(
         p_max_pu=gens.p_max_pu,
         capital_cost=capital_cost.to_numpy(),
         build_year=investment_year,
-        lifetime=gens.carrier.map(costs.cost_recovery_period_years),
+        lifetime=gens.carrier.map(costs.lifetime),
         land_region=gens.land_region,
     )
     vom = gens.get("vom_cost", pd.Series(np.nan, index=gens.index))
