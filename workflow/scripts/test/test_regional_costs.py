@@ -18,7 +18,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from _helpers import calculate_annuity
 from add_electricity import apply_regional_multipliers, update_transmission_costs
-from add_extra_components import regional_capital_costs
+from add_extra_components import attach_storageunits, regional_capital_costs
 from cluster_network import clustering_for_n_clusters
 from constants import REGIONAL_MULTIPLIER_COL
 from money import conversion_factor
@@ -279,6 +279,7 @@ def _gas_costs(overnight: float = 1000.0) -> pd.DataFrame:
             "annualized_capex_fom": {"gas": 150_000.0},
             "capex_overnight_per_kw": {"gas": overnight},
             "cost_recovery_period_years": {"gas": 30.0},
+            "lifetime": {"gas": 55.0},
             "wacc_real": {"gas": 0.05},
         },
     )
@@ -441,5 +442,31 @@ def test_attached_vintages_carry_the_multiplier(multi_period_base_network):
             year,
             bus_multipliers=pd.DataFrame({"gas": {"z1": 1.0, "z2": 1.0, "z3": 1.5}}),
         )
+        assert n.generators.at[f"gas2 {year}", "lifetime"] == 55.0
         assert n.generators.at[f"gas2 {year}", "capital_cost"] == pytest.approx(150_000 + annuity * 0.125 * 1e6)
         assert n.generators.at[f"gas2 {year}", REGIONAL_MULTIPLIER_COL] == 1.125
+
+
+@pytest.mark.fast
+def test_storage_vintages_use_technical_lifetime(multi_period_base_network):
+    n = multi_period_base_network
+    carrier = "4hr_battery_storage"
+    costs = pd.DataFrame(
+        {
+            "annualized_capex_fom": [120_000.0],
+            "co2_emissions": [0.0],
+            "cost_recovery_period_years": [10.0],
+            "efficiency": [0.81],
+            "lifetime": [15.0],
+        },
+        index=[carrier],
+    )
+    elec_opts = {"extendable_carriers": {"StorageUnit": [carrier]}}
+
+    attach_storageunits(n, costs, elec_opts, investment_year=2030)
+
+    batteries = n.storage_units.loc[n.storage_units.carrier == carrier]
+    assert len(batteries) == len(n.buses)
+    assert (batteries.lifetime == 15.0).all()
+    assert (batteries.capital_cost == 120_000.0).all()
+    assert n.components.storage_units.get_active_assets(2040).loc[batteries.index].all()
