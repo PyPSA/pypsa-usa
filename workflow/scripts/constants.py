@@ -88,6 +88,11 @@ GENERATOR_CAPEX_STRATEGIES = {
     REGIONAL_MULTIPLIER_COL: "capacity_weighted_average",
 }
 
+#: Extendable generator carriers whose new capacity stays at the sites of their
+#: plants or resources, besides the renewable carriers and EGS. Every other
+#: extendable thermal carrier is built at every bus (add_extra_components).
+SITE_CARRIERS = {"hydro", "ror", "geothermal"}
+
 # energy content of natural gas
 # Assumes national averages for the conversion
 # https://www.eia.gov/naturalgas/monthly/pdf/table_25.pdf

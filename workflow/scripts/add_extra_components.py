@@ -13,9 +13,11 @@ from constants import (
     BECCS_CO2_REMOVAL,
     GENERATOR_CAPEX_STRATEGIES,
     HOURS_PER_YEAR,
+    REEDS_VRE_CARRIERS,
     REGIONAL_MULTIPLIER_COL,
     RENEWABLE_INTERCONNECTION_COL,
     RENEWABLE_INTERCONNECTION_SHARE_COL,
+    SITE_CARRIERS,
 )
 from external_regions import (
     add_external_regions,
@@ -362,6 +364,26 @@ def apply_new_build_parameters(
         mc_t[cols] = mc_t[cols].sub(p.fleet_vom).mul(p.fleet_eff).div(p.atb_eff).add(p.atb_vom)
 
 
+def every_bus_carriers(extendable: list[str], renewable: list[str], costs: pd.DataFrame) -> set[str]:
+    """
+    Extendable thermal carriers, built at every bus from the costs of each period.
+
+    Every extendable generator carrier except the renewable ones, hydro,
+    geothermal and EGS, whose potentials and profiles are site specific. A
+    carrier without an efficiency in the cost data (oil and waste have no ATB
+    technology) cannot be built from it: it keeps expanding at its plants.
+    """
+    site = set(renewable) | set(REEDS_VRE_CARRIERS) | SITE_CARRIERS
+    thermal = sorted(c for c in extendable if c not in site and "EGS" not in c)
+    efficiency = costs.efficiency.reindex(thermal) if "efficiency" in costs else pd.Series(np.nan, index=thermal)
+    unpriced = efficiency.index[~(efficiency > 0)]
+    if not unpriced.empty:
+        logger.warning(
+            f"No efficiency in the cost data for {list(unpriced)}: their new capacity is offered at their plants only",
+        )
+    return set(thermal) - set(unpriced)
+
+
 def split_retirement_gens(
     n: pypsa.Network,
     costs: pd.DataFrame,
@@ -375,11 +397,13 @@ def split_retirement_gens(
 
 
     Specifically this function does the following:
-    1. Creates duplicate generators for any that are tagged as extendable. For
-    example, an extendable "CCGT" generator will be split into "CCGT existing" and "CCGT"
+    1. Renames extendable generators with capacity to "<name> existing"
     2. Capital costs of existing extendable generators are replaced with fixed costs
     3. p_nom_max of existing extendable generators are set to p_nom
     4. p_nom_min of existing and new generators is set to zero
+    5. Except for ``new_build_carriers``, adds an expanding duplicate under the
+    original name, a copy of the plant at its bus. For example, an extendable
+    "geothermal" generator is split into "geothermal existing" and "geothermal"
 
     Arguments:
     n: pypsa.Network,
@@ -490,9 +514,11 @@ def attach_multihorizon_existing_generators(
 ):
     """
     Adds multiple investment options for generators types that were already
-    existing in the network. Function used for all carriers, renewable and
-    conventional. Generators are added only to the nodes where they already exist
-    because their cost information is spatially resolved.
+    existing in the network. Function used for the carriers whose new capacity
+    stays at the sites of their plants or resources (renewables, hydro,
+    geothermal): generators are added only to the nodes where they already
+    exist because their resource potential and profiles are spatially resolved.
+    Thermal carriers are offered at every bus by attach_multihorizon_new_generators.
 
     Specifically this function does the following:
     1. Adds new generators for the given investment year, according that year's costs.
@@ -610,18 +636,55 @@ def attach_multihorizon_egs(
     )
 
 
-def attach_multihorizon_new_generators(n, costs, carriers, investment_year, bus_multipliers=None):
+def apply_fleet_fuel_prices(n: pypsa.Network, new: pd.Index, carrier: str) -> None:
     """
-    Attaches generators for carriers which did not previously exist in the
-    network (CCS, H2, SMR, etc). These generators do not have spatially resolved
-    costs, so they are added to all buses in the network.
+    Price the fuel of new units at the fuel price of the plants of their carrier at their bus.
 
-    Unlike CT's and CCGT's we include nuclear in this function, since we assume
-    they can be built anywhere in the network.
+    For dynamic fuel prices, which only the existing fleet carries. A new unit at
+    a bus with plants of its carrier burns their capacity weighted fuel price per
+    MWh_th, static or time varying, at its own efficiency and adds its own VOM.
+    New units at buses without such plants keep the fuel cost of the cost data.
+    """
+    fleet = n.generators[(n.generators.carrier == carrier) & (n.generators.p_nom > 0) & (n.generators.efficiency > 0)]
+    new = n.generators.loc[new]
+    new = new[new.bus.isin(fleet.bus) & (new.efficiency > 0)]
+    if new.empty:
+        return
+    fleet = fleet[fleet.bus.isin(new.bus)]
+
+    # USD/MWh_el of each plant -> USD/MWh_th, capacity weighted over the plants at each bus
+    vom = fleet.get("vom_cost", pd.Series(np.nan, index=fleet.index)).fillna(0)
+    fuel = n.get_switchable_as_dense("Generator", "marginal_cost", inds=fleet.index).sub(vom).mul(fleet.efficiency)
+    weight = fleet.p_nom / fleet.p_nom.groupby(fleet.bus).transform("sum")
+    fuel = fuel.mul(weight).T.groupby(fleet.bus).sum().T
+
+    marginal_cost = fuel[new.bus].set_axis(new.index, axis=1).div(new.efficiency).add(new.vom_cost.fillna(0))
+    n.generators.loc[new.index, "marginal_cost"] = marginal_cost.iloc[0]
+    if not n.generators_t.marginal_cost.columns.intersection(fleet.index).empty:
+        n.generators_t.marginal_cost = pd.concat([n.generators_t.marginal_cost, marginal_cost], axis=1)
+
+
+def attach_multihorizon_new_generators(
+    n,
+    costs,
+    carriers,
+    investment_year,
+    bus_multipliers=None,
+    fleet_fuel_prices=False,
+):
+    """
+    Attaches one generator per bus for each carrier, built from the costs of the
+    investment year: thermal carriers, and carriers which did not previously exist in
+    the network (CCS, H2, SMR, etc). The capital cost takes the regional multiplier of
+    the bus, so they are added to all buses in the network.
+
+    The new units are available in full (``p_max_pu`` 1) and take the PyPSA defaults
+    for ``p_min_pu`` and ramp limits: they are not copies of the existing fleet,
+    whose seasonal derates and minimum loads describe old units.
 
     Specifically this function does the following:
     1. Adds new carriers to the network
-    2. Adds generators for the new carriers
+    2. Adds generators for the carriers
 
     Arguments:
     n: pypsa.Network,
@@ -630,6 +693,9 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year, bus_
         List of carriers to add to the network
     investment_year: int
         Year of investment
+    fleet_fuel_prices: bool
+        Price the fuel of new units at the fuel price of the plants of their
+        carrier at their bus (dynamic fuel prices), see apply_fleet_fuel_prices
     """
     if not carriers:
         return
@@ -639,22 +705,12 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year, bus_
     min_years = snakemake.config["costs"].get("min_year")
     buses_i = n.buses.index
     for carrier in carriers:
-        p_max_pu_t = None
         if min_years and min_years.get(carrier, 0) > investment_year:
             continue
-        # the fleet of the carrier, where there is one (nuclear), sets availability and ramping
-        existing_gens = n.generators[
-            (n.generators.carrier == carrier) & (n.generators.build_year <= n.investment_periods[0])
-        ].copy()
-
-        if not existing_gens.empty:
-            p_max_pu_t = n.get_switchable_as_dense("Generator", "p_max_pu")
-            p_max_pu_t = (p_max_pu_t[[x for x in existing_gens.index if x in p_max_pu_t.columns]]).mean().mean()
-
+        new = buses_i + f" {carrier}_{investment_year}"
         n.add(
             "Generator",
-            buses_i,
-            suffix=f" {carrier}_{investment_year}",
+            new,
             bus=buses_i,
             carrier=carrier,
             p_nom_extendable=True,
@@ -663,14 +719,13 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year, bus_
             efficiency=costs.at[carrier, "efficiency"],
             build_year=investment_year,
             lifetime=costs.at[carrier, "lifetime"],
-            p_max_pu=p_max_pu_t if p_max_pu_t is not None else 1,
-            ramp_limit_up=existing_gens.ramp_limit_up.mean() or 1,
-            ramp_limit_down=existing_gens.ramp_limit_down.mean() or 1,
+            # the land constraint groups generators by (carrier, land_region), as
+            # cluster_network gives every generator its bus
+            land_region=buses_i,
         )
-        n.generators.loc[buses_i + f" {carrier}_{investment_year}", "vom_cost"] = costs.at[
-            carrier,
-            "opex_variable_per_mwh",
-        ]
+        n.generators.loc[new, "vom_cost"] = costs.at[carrier, "opex_variable_per_mwh"]
+        if fleet_fuel_prices:
+            apply_fleet_fuel_prices(n, new, carrier)
 
 
 def apply_power_fuel_prices(n: pypsa.Network, costs_dict: dict[int, pd.DataFrame]) -> None:
@@ -1359,9 +1414,14 @@ def main(snakemake) -> None:
     if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
         attach_phs_storageunits(n, elec_config, costs_dict[n.investment_periods[0]])
 
-    # Nuclear can be built at any bus (attach_multihorizon_new_generators), so
-    # its existing plants get no expanding unit of their own
-    everywhere_carriers = {"nuclear"} & set(elec_config["extendable_carriers"].get("Generator", []))
+    # Thermal carriers are built at every bus from the costs of each investment
+    # period (attach_multihorizon_new_generators), so their existing plants get no
+    # expanding unit of their own
+    everywhere_carriers = every_bus_carriers(
+        elec_config["extendable_carriers"].get("Generator", []),
+        elec_config.get("renewable_carriers", []),
+        costs_dict[n.investment_periods[0]],
+    )
 
     # Split conventional generators so expansion is a new unit; with technical
     # retirement the existing part is fixed and retires on its lifetime
@@ -1380,9 +1440,21 @@ def main(snakemake) -> None:
         economic=False,
     )
 
+    # plants of those carriers without capacity would be a second candidate at their bus
+    site_candidates = n.generators.index[
+        n.generators.carrier.isin(everywhere_carriers)
+        & n.generators.p_nom_extendable
+        & (n.generators.p_nom == 0)
+        & ~n.generators.index.str.contains("existing")
+    ]
+    if not site_candidates.empty:
+        logger.info(f"Removing {len(site_candidates)} zero-capacity plants of carriers built at every bus")
+        n.remove("Generator", site_candidates)
+
     multi_horizon_gens = n.generators[
         n.generators["p_nom_extendable"]
         & n.generators["carrier"].isin(elec_config["extendable_carriers"]["Generator"])
+        & ~n.generators["carrier"].isin(everywhere_carriers)
         & ~n.generators.index.str.contains("existing")
     ]
 
@@ -1394,10 +1466,12 @@ def main(snakemake) -> None:
     egs_gens = n.generators[n.generators["p_nom_extendable"]]
     egs_gens = egs_gens.loc[egs_gens["carrier"].str.contains("EGS")]
 
-    new_carriers = list(
+    new_carriers = sorted(
         set(elec_config["extendable_carriers"].get("Generator", [])) - set(n.generators.carrier.unique())
         | everywhere_carriers,
     )
+    # only the existing fleet carries dynamic fuel prices; new units at its buses take them over
+    dynamic_fuel_price = snakemake.config["conventional"]["dynamic_fuel_price"].get("enable", False)
 
     # ReEDS county overnight-capex multipliers for new builds (None when disabled,
     # which leaves every capital cost at its uniform national value)
@@ -1419,7 +1493,14 @@ def main(snakemake) -> None:
             bus_multipliers=bus_multipliers,
         )
         attach_multihorizon_egs(n, costs, costs_dict, egs_gens, investment_year)
-        attach_multihorizon_new_generators(n, costs, new_carriers, investment_year, bus_multipliers=bus_multipliers)
+        attach_multihorizon_new_generators(
+            n,
+            costs,
+            new_carriers,
+            investment_year,
+            bus_multipliers=bus_multipliers,
+            fleet_fuel_prices=dynamic_fuel_price,
+        )
 
     if not multi_horizon_gens.empty and not len(n.investment_periods) == 1:
         # Remove duplicate generators from first investment period,
@@ -1435,7 +1516,7 @@ def main(snakemake) -> None:
 
     # gas, coal and oil plants pay the AEO fuel costs, nuclear and biomass plants the ATB
     # fuel costs, unless dynamic fuel prices are enabled
-    if not snakemake.config["conventional"]["dynamic_fuel_price"].get("enable", False):
+    if not dynamic_fuel_price:
         apply_power_fuel_prices(n, costs_dict)
 
     # The ITC is in the capital costs already (capital charge rate, load_costs)

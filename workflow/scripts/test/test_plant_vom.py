@@ -5,6 +5,9 @@
   must still carry the plant's VOM.
 - ``add_extra_components`` gives new units copied from an existing fleet the
   ATB efficiency and VOM, at the fleet's fuel price.
+- ``add_extra_components`` builds new thermal units once per bus and period from
+  the cost data, not as copies of the fleet, which only renewables, hydro and
+  geothermal keep.
 - ``add_electricity.apply_dynamic_pricing`` adds each plant's own VOM.
 """
 
@@ -275,8 +278,182 @@ def test_one_new_nuclear_generator_per_bus(nuclear_network, monkeypatch):
     buildable = n.generators[(n.generators.carrier == "nuclear") & ~n.generators.index.str.contains("existing")]
     assert buildable.index.tolist() == ["z1 nuclear_2030", "z2 nuclear_2030", "z3 nuclear_2030"]
     assert buildable.bus.is_unique
-    # the new units take the availability of the existing fleet
-    assert buildable.p_max_pu.tolist() == pytest.approx([0.9] * 3)
+    # the new units do not take the availability of the existing fleet (#972)
+    assert buildable.p_max_pu.tolist() == pytest.approx([1.0] * 3)
+    assert not buildable.index.isin(n.generators_t.p_max_pu.columns).any()
+
+
+# ---------------------------------------------------------------------------
+# thermal new builds at every bus (#972)
+# ---------------------------------------------------------------------------
+
+CCGT_COSTS = pd.concat(
+    [
+        COSTS.drop(index="CCGT"),  # COSTS holds only the CO2 intensity of CCGT
+        pd.DataFrame(
+            {
+                "opex_variable_per_mwh": [2.5, 0.0],
+                "opex_fixed_per_kw": [30.0, 100.0],
+                "annualized_capex_fom": [1.2e5, 5e5],
+                "cost_recovery_period_years": [30, 30],
+                "lifetime": [55, 70],
+                "marginal_cost": [30.0, 0.0],
+                "efficiency": [0.55, 0.38],
+                "heat_rate_mmbtu_per_mwh": [6.2, 8.9],
+                "co2_emissions": [0.2, 0.04],
+            },
+            index=["CCGT", "geothermal"],
+        ),
+    ],
+)
+
+
+@pytest.fixture
+def ccgt_network(fleet_network, monkeypatch):
+    """fleet_network with an extendable CCGT plant at z1 that carries the operating limits of an old unit."""
+    n = fleet_network
+    monkeypatch.setattr(aec, "snakemake", SimpleNamespace(config={"costs": {}}), raising=False)
+    n.add("Carrier", ["CCGT", "geothermal"])
+    n.add(
+        "Generator",
+        "ccgt1",
+        bus="z1",
+        carrier="CCGT",
+        p_nom=500,
+        p_nom_extendable=True,
+        efficiency=0.45,
+        marginal_cost=30.0,
+        capital_cost=1e5,
+        p_min_pu=0.4,
+        ramp_limit_up=0.5,
+        ramp_limit_down=0.5,
+        land_region="z1",
+    )
+    n.generators.loc["ccgt1", "vom_cost"] = 3.0
+    n.generators_t.p_max_pu["ccgt1"] = 0.9  # EIA-860 seasonal derate of the old unit
+    return n
+
+
+def _split_ccgt(n):
+    aec.split_retirement_gens(n, CCGT_COSTS, ["gas", "CCGT"], economic=True, new_build_carriers={"CCGT"})
+
+
+def test_existing_ccgt_gets_no_duplicate(ccgt_network):
+    n = ccgt_network
+
+    _split_ccgt(n)
+
+    assert "ccgt1 existing" in n.generators.index
+    assert "ccgt1" not in n.generators.index
+    assert n.generators.at["ccgt1 existing", "p_min_pu"] == 0.4  # the plant keeps its own limits
+    assert (n.generators_t.p_max_pu["ccgt1 existing"] == 0.9).all()
+    n.consistency_check()
+
+
+@pytest.mark.parametrize("periods", [[2030], [2030, 2040]])
+def test_one_new_ccgt_per_bus_and_period(ccgt_network, periods):
+    """Every bus, with or without CCGT plants, gets one new CCGT per period, a single period included."""
+    n = ccgt_network
+    if len(periods) > 1:
+        n.snapshots = get_multiindex_snapshots(
+            sns_config={"start": "2030-01-01 00:00", "end": "2030-01-01 23:00", "inclusive": "both"},
+            invest_periods=periods,
+        )
+        n.set_investment_periods(periods=periods)
+    _split_ccgt(n)
+
+    for year in periods:
+        aec.attach_multihorizon_new_generators(n, CCGT_COSTS, ["CCGT"], year)
+
+    ccgt = n.generators[n.generators.carrier == "CCGT"]
+    buildable = ccgt[ccgt.p_nom_extendable & ~ccgt.index.str.contains("existing")]
+    assert len(buildable) == len(n.buses) * len(periods)
+    assert buildable.groupby(["bus", "build_year"]).size().eq(1).all()
+    assert set(buildable.bus) == {"z1", "z2", "z3"}  # z2 and z3 have no CCGT plant
+    assert buildable.build_year.unique().tolist() == periods
+
+
+def test_new_ccgt_takes_cost_table_and_pypsa_defaults(ccgt_network):
+    """New units do not inherit the must-run, ramp limits or seasonal derate of the old units (#972)."""
+    n = ccgt_network
+    _split_ccgt(n)
+
+    aec.attach_multihorizon_new_generators(n, CCGT_COSTS, ["CCGT"], 2030)
+
+    new = n.generators.loc[["z1 CCGT_2030", "z2 CCGT_2030"]]
+    assert (new.p_max_pu == 1).all()
+    assert (new.p_min_pu == 0).all()
+    assert new.ramp_limit_up.isna().all() and new.ramp_limit_down.isna().all()
+    assert not new.index.isin(n.generators_t.p_max_pu.columns).any()
+    assert not new.committable.any()
+    assert (new.efficiency == 0.55).all()
+    assert (new.vom_cost == 2.5).all()
+    assert (new.marginal_cost == 30.0).all()
+    assert (new.capital_cost == 1.2e5).all()
+    assert (new.lifetime == 55).all()
+    assert new.land_region.tolist() == ["z1", "z2"]
+    n.consistency_check()
+
+
+def test_new_ccgt_respects_min_year(ccgt_network, monkeypatch):
+    n = ccgt_network
+    monkeypatch.setattr(aec, "snakemake", SimpleNamespace(config={"costs": {"min_year": {"CCGT": 2035}}}))
+
+    aec.attach_multihorizon_new_generators(n, CCGT_COSTS, ["CCGT"], 2030)
+
+    assert not n.generators.index.str.endswith("CCGT_2030").any()
+
+
+def test_new_ccgt_takes_the_dynamic_fuel_price_of_the_plants_at_its_bus(ccgt_network):
+    n = ccgt_network
+    n.generators_t.marginal_cost["ccgt1"] = 21.0  # dynamic fuel price: 18 USD/MWh_el of fuel plus 3 VOM
+    _split_ccgt(n)
+
+    aec.attach_multihorizon_new_generators(n, CCGT_COSTS, ["CCGT"], 2030, fleet_fuel_prices=True)
+
+    # 18 USD/MWh_el at 45 % is 8.1 USD/MWh_th, burnt at the ATB 55 %, plus the ATB VOM
+    expected = 18 * 0.45 / 0.55 + 2.5
+    assert n.generators_t.marginal_cost["z1 CCGT_2030"].to_numpy() == pytest.approx(expected)
+    assert n.generators.at["z1 CCGT_2030", "marginal_cost"] == pytest.approx(expected)
+    # buses without CCGT plants keep the cost table
+    assert "z2 CCGT_2030" not in n.generators_t.marginal_cost.columns
+    assert n.generators.at["z2 CCGT_2030", "marginal_cost"] == 30.0
+
+
+def test_geothermal_still_expands_at_its_plants(ccgt_network):
+    """Geothermal stays tied to its sites: its plants keep an expanding copy at their bus."""
+    n = ccgt_network
+    n.add(
+        "Generator",
+        "geo1",
+        bus="z2",
+        carrier="geothermal",
+        p_nom=100,
+        p_nom_extendable=True,
+        efficiency=0.38,
+        marginal_cost=0.0,
+        p_min_pu=0.6,
+        ramp_limit_up=0.2,
+        land_region="z2",
+    )
+    build = aec.every_bus_carriers(["CCGT", "geothermal"], ["onwind", "solar"], CCGT_COSTS)
+    assert build == {"CCGT"}
+
+    aec.split_retirement_gens(n, CCGT_COSTS, ["CCGT", "geothermal"], economic=True, new_build_carriers=build)
+
+    assert {"geo1 existing", "geo1"} <= set(n.generators.index)
+    copy = n.generators.loc["geo1"]
+    assert (copy.bus, copy.p_nom, copy.p_nom_extendable, copy.p_min_pu, copy.ramp_limit_up) == ("z2", 0, True, 0.6, 0.2)
+
+
+def test_every_bus_carriers_are_the_thermal_ones():
+    extendable = ["solar", "onwind", "offwind_floating", "OCGT", "CCGT", "CCGT-95CCS", "coal", "nuclear"]
+    extendable += ["hydrogen_ct", "biomass", "oil", "geothermal", "hydro", "EGS"]
+    thermal = ["OCGT", "CCGT", "CCGT-95CCS", "coal", "nuclear", "hydrogen_ct", "biomass"]
+    costs = pd.DataFrame({"efficiency": dict.fromkeys(thermal, 0.4) | {"oil": 0.0, "geothermal": 0.38}})
+
+    # oil has no ATB technology, so no efficiency to build a new unit from
+    assert aec.every_bus_carriers(extendable, ["onwind", "solar", "hydro"], costs) == set(thermal)
 
 
 # ---------------------------------------------------------------------------
