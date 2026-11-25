@@ -662,6 +662,41 @@ def apply_finance_proxies(pivot_atb: pd.DataFrame) -> pd.DataFrame:
     return pivot_atb.reset_index()
 
 
+#: First projection year ATB publishes the floating offshore wind classes for
+OFFWIND_FLOATING_FIRST_YEAR = 2030
+
+# Financing of an ATB row: published per technology, so the same for fixed-bottom
+# and floating offshore wind, together with the tax credit the row claims
+ATB_FINANCE_COLS = ["wacc_real", "fixed_charge_rate", "model_tax_credit_case_nrelatb"]
+
+
+def offwind_floating_before_first_year(pudl_atb: pd.DataFrame, tech_year: int) -> pd.DataFrame:
+    """
+    ATB rows of ``offwind_floating`` for a cost year ATB has no floating classes for.
+
+    Cost and performance are those of the first year ATB publishes
+    (``OFFWIND_FLOATING_FIRST_YEAR``). The financing is that of ``tech_year``, taken
+    from fixed-bottom ``offwind`` of the same scenario and case: the WACC, the fixed
+    charge rate and the tax credit label. The financing of the first published year
+    would price a plant built in ``tech_year`` without the ITC that fixed-bottom
+    offshore wind gets in that year. A scenario and case with no ``offwind`` row in
+    ``tech_year`` keeps the financing of the first published year.
+    """
+    floating = pudl_atb[
+        (pudl_atb["pypsa-name"] == "offwind_floating") & (pudl_atb.projection_year == OFFWIND_FLOATING_FIRST_YEAR)
+    ].copy()
+    fixed = pudl_atb[(pudl_atb["pypsa-name"] == "offwind") & (pudl_atb.projection_year == tech_year)]
+    keys = ["scenario_atb", "model_case_nrelatb", "cost_recovery_period_years"]
+    finance_cols = [col for col in ATB_FINANCE_COLS if col in pudl_atb.columns]
+    finance = fixed.drop_duplicates(keys).set_index(keys)[finance_cols]
+
+    slices = pd.MultiIndex.from_frame(floating[keys])
+    has_fixed = slices.isin(finance.index)
+    for col in finance_cols:
+        floating[col] = floating[col].where(~has_fixed, finance[col].reindex(slices).to_numpy())
+    return floating
+
+
 def capital_charge_rate(pivot_atb: pd.DataFrame) -> pd.Series:
     """
     Share of capex charged per year: the ATB fixed charge rate, else the capital recovery factor.
@@ -830,15 +865,13 @@ if __name__ == "__main__":
 
     # Filter to the requested projection year (with 2030 fallback for offwind_floating)
     pudl_atb_filt = pudl_atb[pudl_atb.projection_year == tech_year]
-    if tech_year < 2030:
+    if tech_year < OFFWIND_FLOATING_FIRST_YEAR:
         logger.warning(
-            "Using 2030 ATB data for offwind_floating; earlier data not available.",
+            "Using 2030 ATB cost and performance for offwind_floating, with the "
+            f"{tech_year} financing of offwind; earlier data not available.",
         )
-        pudl_atb_offwind_floating = pudl_atb[
-            (pudl_atb["pypsa-name"] == "offwind_floating") & (pudl_atb.projection_year == 2030)
-        ]
         pudl_atb_year = pd.concat(
-            [pudl_atb_filt, pudl_atb_offwind_floating],
+            [pudl_atb_filt, offwind_floating_before_first_year(pudl_atb, tech_year)],
             ignore_index=True,
         )
     else:
