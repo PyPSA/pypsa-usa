@@ -665,90 +665,87 @@ def plot_production_area(
         plt.close()
 
 
+def plot_area_per_period(
+    n: pypsa.Network,
+    data: pd.DataFrame,
+    title: str,
+    ylabel: str,
+    save: str,
+) -> None:
+    """
+    Stacked area chart of a snapshot-indexed table, one panel per investment period.
+
+    A single axis would string the periods together on one (period, timestep)
+    axis; each period is its own modelled year and gets its own panel.
+    """
+    color_palette = get_color_palette(n)
+    periods = n.investment_periods
+    fig, axs = plt.subplots(figsize=(14, 4 * len(periods)), nrows=len(periods), squeeze=False)
+
+    for ax, period in zip(axs[:, 0], periods):
+        period_data = data.loc[period]
+        if not period_data.empty and len(period_data.columns) > 0:
+            period_data.plot.area(
+                ax=ax,
+                alpha=0.7,
+                legend="reverse",
+                color=color_palette,
+            )
+            ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+        ax.set_title(title if len(periods) == 1 else f"{title} ({period})")
+        ax.set_ylabel(ylabel)
+
+    fig.tight_layout()
+    fig.savefig(save)
+    plt.close(fig)
+
+
+def cumulative_per_period(data: pd.DataFrame) -> pd.DataFrame:
+    """Running total over the snapshots of each investment period, restarting at every period."""
+    return data.groupby(level="period").cumsum()
+
+
 def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     """Plots snapshot emissions by technology."""
-    # get data
     emissions = get_tech_emissions_timeseries(n).mul(1e-6)  # T -> MT
     zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
     emissions = emissions.drop(columns=zeros)
 
-    # plot
-    color_palette = get_color_palette(n)
-
-    fig, ax = plt.subplots(figsize=(14, 4))
-    if not emissions.empty:
-        emissions.plot.area(
-            ax=ax,
-            alpha=0.7,
-            legend="reverse",
-            color=color_palette,
-        )
-
-    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-    ax.set_title(create_title("Technology Emissions", **wildcards))
-    ax.set_ylabel("Emissions [MT]")
-    fig.tight_layout()
-
-    fig.savefig(save)
-    plt.close()
+    plot_area_per_period(
+        n,
+        emissions,
+        create_title("Technology Emissions", **wildcards),
+        "Emissions [MT]",
+        save,
+    )
 
 
 def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) -> None:
     """Creates area plot of accumulated emissions by technology."""
-    # get data
-
-    emissions = get_tech_emissions_timeseries(n).cumsum().mul(1e-6)  # T -> MT
+    emissions = cumulative_per_period(get_tech_emissions_timeseries(n)).mul(1e-6)  # T -> MT
     zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
     emissions = emissions.drop(columns=zeros)
 
-    # plot
-
-    color_palette = get_color_palette(n)
-
-    fig, ax = plt.subplots(figsize=(14, 4))
-    if not emissions.empty:
-        emissions.plot.area(
-            ax=ax,
-            alpha=0.7,
-            legend="reverse",
-            color=color_palette,
-        )
-
-    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-    ax.set_title(create_title("Technology Accumulated Emissions", **wildcards))
-    ax.set_ylabel("Emissions [MT]")
-    fig.tight_layout()
-
-    fig.savefig(save)
-    plt.close()
+    plot_area_per_period(
+        n,
+        emissions,
+        create_title("Technology Accumulated Emissions", **wildcards),
+        "Emissions [MT]",
+        save,
+    )
 
 
 def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     """Plots accumulated emissions."""
-    # get data
+    emissions = get_tech_emissions_timeseries(n).mul(1e-6).sum(axis=1).to_frame("co2")  # T -> MT
 
-    emissions = get_tech_emissions_timeseries(n).mul(1e-6).sum(axis=1)  # T -> MT
-    emissions = emissions.cumsum().to_frame("co2")
-
-    # plot
-
-    color_palette = get_color_palette(n)
-
-    fig, ax = plt.subplots(figsize=(14, 4))
-
-    emissions.plot.area(
-        ax=ax,
-        alpha=0.7,
-        legend="reverse",
-        color=color_palette,
+    plot_area_per_period(
+        n,
+        cumulative_per_period(emissions),
+        create_title("Accumulated Emissions", **wildcards),
+        "Emissions [MT]",
+        save,
     )
-
-    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-    ax.set_title(create_title("Accumulated Emissions", **wildcards))
-    ax.set_ylabel("Emissions [MT]")
-    fig.tight_layout()
-    fig.savefig(save)
-    plt.close()
 
 
 def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:
