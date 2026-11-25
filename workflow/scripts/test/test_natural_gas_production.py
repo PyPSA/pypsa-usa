@@ -187,7 +187,7 @@ def _build_production(**kwargs) -> pypsa.Network:
     return n
 
 
-KWARGS = {"efficiency": 0.88, "fom": 10725.4, "contraction": False}
+KWARGS = {"efficiency": 0.88, "fom": 10725.4, "economic_retirement": False}
 
 
 def test_production_links_pay_the_wellhead_price_of_each_period():
@@ -210,7 +210,7 @@ def test_production_links_deliver_the_dry_share_of_marketed_gas():
 
 
 def test_production_contracts_down_to_zero():
-    n = _build_production(**(KWARGS | {"contraction": True}))
+    n = _build_production(**(KWARGS | {"economic_retirement": True}))
 
     links = n.links.loc[LINKS]
     assert links.p_nom_extendable.all()

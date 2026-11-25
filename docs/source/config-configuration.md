@@ -487,6 +487,23 @@ created along the offshore shapes.
    :end-before: # docs :
 ```
 
+(conventional_cf)=
+## `conventional`
+
+Options for existing conventional (thermal) generators: unit commitment, must-run minimum loading and time-varying fuel prices. All of them are off by default.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+   :language: yaml
+   :start-after: # docs : CONVENTIONAL
+   :end-before: # docs :
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/conventional.csv
+```
+
 (lines_cf)=
 ## `lines`
 ```{eval-rst}
@@ -731,7 +748,7 @@ networks.
 ## `walltime`
 
 Per-rule wall-time overrides consumed as Snakemake `walltime` resources and forwarded to
-`sbatch --time` by `workflow/run_slurm.sh`. This is the single source for per-rule wall times;
+`sbatch --time` by `workflow/run_slurm.sh` (through `workflow/slurm_submit.sh`). This is the single source for per-rule wall times;
 it lives in `config.slurm.yaml` (renamed from `config.cluster.yaml`, whose name collided with
 the `{clusters}` wildcard and the `clustering:` section). Rules not listed here fall back to
 per-rule defaults defined in the workflow. Local runs ignore these values.

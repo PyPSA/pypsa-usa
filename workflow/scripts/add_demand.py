@@ -67,7 +67,7 @@ if __name__ == "__main__":
     if isinstance(demand_files, str):
         demand_files = [demand_files]
 
-    if sectors == "E" or sectors == "":  # electricity only
+    if "G" not in sectors.split("-"):  # electricity demand only, also with hydrogen
         assert len(demand_files) == 1
 
         suffix = ""

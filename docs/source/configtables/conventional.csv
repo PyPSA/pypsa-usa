@@ -1,0 +1,11 @@
+,Unit,Values,Description
+unit_commitment,bool,"{true, false}","Make conventional generators committable, with start-up costs and minimum up and down times from the plant data. Solved as a linear relaxation when ``solving: options: linearized_unit_commitment`` is true."
+must_run,bool,"{true, false}","Give plants flagged as must-run in the WECC ADS data a minimum loading (``p_min_pu``) from their minimum load."
+dynamic_fuel_price,,,
+-- enable,bool,"{true, false}","Use time-varying historical fuel prices for existing conventional generators instead of the annual AEO and ATB prices."
+-- pudl,bool,"{true, false}","Use plant-level monthly fuel costs from PUDL. Only read when ``enable`` is true."
+-- wholesale,bool,"{true, false}","Use state and balancing-area prices for gas and coal plants; needs an EIA API key. Only read when ``enable`` is true."
+ambient_derate,,,
+-- enable,bool,{false},"Reserved for ambient-temperature capacity derates of thermal units. Not implemented: setting it to true raises ``NotImplementedError``."
+-- source,str,{cpuc_servm},"Source of the derate profiles (reserved)."
+-- replaces_seasonal_derate,bool,{true},"The ambient derate is meant to replace the EIA-860 seasonal derate, never to stack on it (reserved)."
