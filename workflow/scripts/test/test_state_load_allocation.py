@@ -78,3 +78,18 @@ def test_bus_outside_the_interconnects_shapes_takes_its_geographic_state(members
     )
     laf = pd.Series(state_load_allocation_factors(gdf, memberships), index=gdf.index)
     assert laf.tolist() == pytest.approx([0.03, 0.6, 0.37, 1.0])
+
+
+def test_network_state_overrides_the_national_key(memberships):
+    """A bus the network files under another state (shape gap, nearest neighbour) counts for that state."""
+    gdf = buses(
+        {
+            1: (-122.7, 45.6, None, None, "Oregon", 1.0),  # in a ReEDS shape gap on the border
+            2: (-122.6, 45.7, "p1", "53011", "Washington", 3.0),
+            3: (-122.7, 45.5, "p2", "41051", "Oregon", 4.0),
+        },
+    )
+    network_state = pd.Series({"1": "WA", "2": "WA", "3": "OR"})
+    laf = state_load_allocation_factors(gdf, memberships, network_state)
+    assert laf.tolist() == pytest.approx([0.25, 0.75, 1.0])
+    assert laf.groupby(network_state.to_numpy()).sum().tolist() == pytest.approx([1.0, 1.0])

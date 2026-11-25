@@ -67,7 +67,6 @@ def add_buses_from_file(
         sub_id=buses.sub_id.astype(int),
         substation_off=False,
         poi=False,
-        LAF_state=buses.LAF_state,
     )
 
     n.buses.loc[n.buses.sub_id.astype(int) >= 41012, "substation_off"] = True  # mark offshore buses
@@ -414,8 +413,8 @@ def national_reeds_state(gdf_bus: gpd.GeoDataFrame, fn_reeds_memberships: str) -
     State code of every bus of the national bus set (unique ``bus_id`` index).
 
     A bus in a ReEDS zone takes the zone's state, made uniform per county as
-    ``assign_reeds_memberships`` later does. The ReEDS and county shapes cover only
-    the modelled interconnect, so every other bus, and the few in shape gaps, take
+    ``assign_reeds_memberships`` later does. The ReEDS shapes cover only the
+    modelled interconnect, so every other bus, and the few in shape gaps, take
     the state of their geographic ``full_state`` (national shapes).
     """
     states = pd.read_csv(fn_reeds_memberships, index_col=0).st
@@ -426,19 +425,33 @@ def national_reeds_state(gdf_bus: gpd.GeoDataFrame, fn_reeds_memberships: str) -
     return reeds_state.fillna(gdf_bus.full_state.map(STATE_2_CODE))
 
 
-def state_load_allocation_factors(gdf_bus: gpd.GeoDataFrame, fn_reeds_memberships: str) -> pd.Series:
+def state_load_allocation_factors(
+    gdf_bus: gpd.GeoDataFrame,
+    fn_reeds_memberships: str,
+    network_state: pd.Series | None = None,
+) -> pd.Series:
     """
     Share of its state's ``load_weight`` that each bus carries, on the national bus set.
 
-    The state is the bus's ReEDS state, the key ``build_demand`` disaggregates state
-    demand by; a bus without one falls back to its geographic ``full_state``. Each
+    The state is the key ``build_demand`` disaggregates state demand by.
+    ``network_state`` is that key as the network ends up with it
+    (``n.buses.reeds_state``, by bus name): a bus in it counts for exactly that
+    state, so a state inside the network sums to 1 even where
+    ``assign_missing_regions`` gave a bus its neighbour's zone. Every other bus
+    takes its ReEDS state, or failing that its geographic ``full_state``. Each
     bus counts once, even where overlapping shapes duplicated its row.
+
+    Returned on the index of ``gdf_bus``.
     """
     unique = gdf_bus[~gdf_bus.index.duplicated()]
     key = national_reeds_state(unique, fn_reeds_memberships).fillna(unique.full_state)
+    if network_state is not None:
+        network_state = network_state.dropna()
+        in_network = pd.Series(unique.index.astype(str), index=unique.index).map(network_state)
+        key = in_network.fillna(key)
     totals = unique.load_weight.groupby(key).sum()
     laf = unique.load_weight / key.map(totals)
-    return laf.reindex(gdf_bus.index).to_numpy()
+    return laf.reindex(gdf_bus.index)
 
 
 def assign_missing_regions(n: pypsa.Network):
@@ -610,12 +623,6 @@ def main(snakemake):
             f"'breakthrough'; received '{snakemake.params.bus_allocation}'.",
         )
 
-    # the LAF must be calculated on the national bus set to capture splitting
-    # of states across interconnects, and over the key build_demand allocates
-    # state demand by, so that a state's factors in a network sum to its share
-    gdf_bus["LAF_state"] = state_load_allocation_factors(gdf_bus, snakemake.input.reeds_memberships)
-    gdf_bus = gdf_bus.drop(columns=["full_state"])
-
     # Removing few duplicated shapes where GIS shapes were overlapping. TODO: Fix GIS shapes
     gdf_bus = gdf_bus.reset_index().drop_duplicates(subset="bus_id", keep="first").set_index("bus_id")
 
@@ -646,6 +653,14 @@ def main(snakemake):
     assign_link_length_and_efficiency(n, length_factor)
     assign_missing_regions(n)
     assign_reeds_memberships(n, snakemake.input.reeds_memberships)
+
+    # the LAF must be calculated on the national bus set to capture splitting
+    # of states across interconnects, and over the key build_demand allocates
+    # state demand by (the reeds_state just assigned), so that a state's factors
+    # in a network sum to its share. Offshore buses, not in the bus file, get NaN.
+    laf_state = state_load_allocation_factors(gdf_bus, snakemake.input.reeds_memberships, n.buses.reeds_state)
+    laf_state.index = laf_state.index.astype(str)
+    n.buses["LAF_state"] = laf_state.reindex(n.buses.index)
     n.buses["rec_trading_zone"] = n.buses.reeds_state.map(REC_TRADING_ZONE_MAPPER).fillna(n.buses.reeds_state)
 
     # Filter Network to Only Specified Regions

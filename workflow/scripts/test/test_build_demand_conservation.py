@@ -316,3 +316,56 @@ def test_sub_threshold_share_is_zeroed_and_the_key_still_conserves():
     per_key = allocated_by_key(result, n)
     assert per_key["Maryland"].iloc[0] == pytest.approx(1000.0, abs=1e-9)
     assert result.sum().sum() == pytest.approx(1500.0, abs=1e-9)
+
+
+# --- (h) only the population state share is a network share ------------------
+
+
+def test_state_factors_that_do_not_cover_the_state_still_place_all_of_it():
+    """Industrial factors short of 1 (a county without a load bus) do not shed a whole state's demand."""
+    n = make_network({"va_a": ("VA", "p99", 0.7), "va_b": ("VA", "p99", 0.3)})
+    laf = pd.Series([0.60, 0.36], index=n.buses.index)  # 4 % sits in a county with no bus
+    demand = make_demand(n, {"Virginia": [1000.0]})
+
+    result = _WriteFixedLaf(n, laf).dissagregate_demand(demand, "state")
+
+    assert result.sum(axis=1).iloc[0] == pytest.approx(1000.0)
+    assert result.loc[:, "va_a"].iloc[0] == pytest.approx(625.0)
+
+
+def test_split_state_share_comes_from_the_state_factors_for_every_writer():
+    """A writer with its own factors places the network's share of a split state, spread by those factors."""
+    n = make_network({"elp_a": ("TX", "p48", 0.02), "elp_b": ("TX", "p48", 0.01)})
+    laf = pd.Series([0.001, 0.003], index=n.buses.index)
+    demand = make_demand(n, {"Texas": [50000.0]})
+
+    result = _WriteFixedLaf(n, laf).dissagregate_demand(demand, "state")
+
+    assert result.loc[:, "elp_a"].iloc[0] == pytest.approx(375.0)
+    assert result.loc[:, "elp_b"].iloc[0] == pytest.approx(1125.0)
+
+
+def test_balancing_area_holding_part_of_a_state_gets_all_of_its_demand():
+    """State-normalised factors summing below 1 inside a 'ba' key are not a network share."""
+    n = make_network()
+    n.buses["balancing_area"] = ["PJM", "PJM", "DOM", "DOM"]
+    laf = pd.Series([0.3, 0.1, 0.2, 0.4], index=n.buses.index)
+    demand = make_demand(n, {"PJM": [3000.0], "DOM": [600.0]})
+
+    result = _WriteFixedLaf(n, laf).dissagregate_demand(demand, "ba")
+
+    assert result[["md_a", "md_b"]].sum(axis=1).iloc[0] == pytest.approx(3000.0)
+    assert result[["dc", "va"]].sum(axis=1).iloc[0] == pytest.approx(600.0)
+
+
+def test_key_emptied_by_the_threshold_drop_is_logged(caplog):
+    """A split state whose every bus falls under LAF_DROP_THRESHOLD says what it drops."""
+    n = make_network({"a": ("TX", "p48", 6e-7), "b": ("TX", "p48", 6e-7), "va": ("VA", "p99", 1.0)})
+    demand = make_demand(n, {"Texas": [50000.0], "Virginia": [500.0]})
+
+    with caplog.at_level(logging.WARNING, logger="build_demand"):
+        result = WritePopulation(n).dissagregate_demand(demand, "state")
+
+    warnings = "\n".join(record.getMessage() for record in caplog.records)
+    assert "Texas" in warnings
+    assert result.sum().sum() == pytest.approx(500.0)
