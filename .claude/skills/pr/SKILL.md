@@ -16,20 +16,6 @@ The base is `develop` on `PyPSA/pypsa-usa`. Never `master` — if the user asks
 for `master`, stop and remind them changes land on `develop` and flow to
 `master` in releases.
 
-Integration-branch exception: when the branch descends from an active
-integration branch (a long-lived upstream branch such as `v1-epic`), target
-that branch instead. Detect it:
-
-```bash
-git fetch upstream develop v1-epic
-git merge-base HEAD upstream/develop
-git merge-base HEAD upstream/v1-epic
-```
-
-If the merge-base with the integration branch is a descendant of the
-merge-base with `develop`, the branch was cut from the integration branch —
-base there.
-
 ## 2. Pick the push remote
 
 ```bash
@@ -84,8 +70,12 @@ is missing; otherwise ready-for-review. Mark ready once the evidence lands.
 
 ```bash
 git push <remote> HEAD:<head-branch>
-gh pr create --repo PyPSA/pypsa-usa --base <base> [--draft] ...
+gh pr create --repo PyPSA/pypsa-usa --base develop [--draft] ...
 ```
+
+If the PR has an issue, tell the user to link it in the PR's Development sidebar:
+on a PR into `develop`, `Closes #N` neither links nor closes it. It must be
+closed by hand after the merge.
 
 ## 6. Post the impact plots
 

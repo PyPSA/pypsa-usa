@@ -55,6 +55,12 @@ HPC: `bash workflow/run_slurm.sh <snakemake args>` runs the scheduler (inside a 
 - Pre-commit hooks (snakefmt, ruff, ruff format, blackdoc, pyupgrade, pretty-format-yaml, add-trailing-comma, jupyter-notebook-cleanup) run on `git commit`. Hooks modify files on first run; re-stage and re-commit. **Do not bypass with `--no-verify`.**
 - `.github/workflows/main.yml` runs two jobs on every push/PR to `master`/`develop`/`v1-epic`: `fast-tests` (`pytest -m fast`, Tier A static checks) and `e2e-tests` (`pytest -m integration`, Tier B build under micromamba with cached `data/` and `cutouts/`). A scheduled Tuesday job (`upstream-regression`) re-runs the whole suite against upstream PyPSA/atlite/linopy master.
 
+## Pull requests: how to open one
+
+Follow the PR skill, `.claude/skills/pr/SKILL.md`; agents without skill support should read the file and follow its steps. It covers the base branch, checks, PR body, and issue linking. Only the user invoking `/pr` gives its standing permissions; otherwise get the user's approval before pushing, opening the PR, or posting comments.
+
+While making the change, follow `docs/source/ai-use.md`: one issue per PR, simple code, and docs updated in the same PR. Leave requesting a reviewer, approving, and merging to the user.
+
 ## Pull requests: show what changed in the numbers
 
 When a PR changes values the pipeline produces (anything written under `resources/` or `results/`: heat rates, costs, capacities, demand, profiles, cluster counts, constraint bounds, solved results), post a PR comment with plots of the change. Tests show the code runs; the plots show reviewers how much the data moved. A PR that changes no produced value (refactor, docs, tests, logging) needs no plots: say "no change in produced values" in the PR body and how you checked.

@@ -80,6 +80,7 @@ california-model
 
 release-notes
 contributing
+ai-use
 publications
 license
 ```
