@@ -151,7 +151,9 @@ properties:
     additionalProperties: true
     required: [dataset]
     properties:
-      dataset: {enum: [atlite, godeeep]}
+      # reeds also needs one renewable_weather_years entry from
+      # constants.REEDS_VRE_WEATHER_YEARS (checked in rules/build_electricity.smk)
+      dataset: {enum: [atlite, godeeep, reeds]}
       # capacity = availability-weighted per substation, then p_nom_max-weighted
       # across the cluster's substations (default). NOT master's weighting, which
       # uses existing p_nom with a plain-mean fallback — see hot-fix HF-25.
@@ -160,10 +162,10 @@ properties:
 
   renewable_land_access:
     description: >
-      NREL exclusion-overlay variant. MUST be non-null when
-      renewable.dataset == godeeep - build_renewable_profiles raises otherwise,
-      and the conditional below enforces it at config-load time. Null is only
-      valid with dataset: atlite (the legacy availability path).
+      NREL reV land-access scenario. MUST be non-null when
+      renewable.dataset is godeeep (exclusion overlay) or reeds (supply-curve
+      and CF-table variant) - the conditional below enforces it at config-load
+      time. Null is only valid with dataset: atlite (the legacy availability path).
     enum: [reference, limited, open, null]
 
   apply_cec_basescreen: {type: boolean}
@@ -608,13 +610,14 @@ allOf:
         properties:
           solver_options: {type: object, minProperties: 1}
 
-# GODEEEP needs an NREL land-access overlay: the key must be declared and
-# non-null (null is only valid with dataset: atlite).
+# GODEEEP needs an NREL land-access overlay and ReEDS picks its supply-curve
+# variant by it: the key must be declared and non-null (null is only valid with
+# dataset: atlite).
 - if:
     properties:
       renewable:
         properties:
-          dataset: {const: godeeep}
+          dataset: {enum: [godeeep, reeds]}
         required: [dataset]
     required: [renewable]
   then:

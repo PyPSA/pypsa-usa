@@ -120,6 +120,10 @@ enable:
 # dataset in `godeeep_cf_registry` (config.common.yaml) — the Oak mirror covers
 # 1980-2022 historical, Zenodo publishes only 2012. An undeclared year is a
 # parse-time error, never a silent swap to a neighbouring year.
+# Under `reeds` it must hold exactly one year in 2007-2013 or 2016-2023 (the
+# years ReEDS publishes; the same rule as EER demand), checked at parse time.
+# The ReEDS CFs are UTC like the snapshots; in leap years Feb 29 takes the
+# 1 March labels, the convention GODEEEP and EER demand already follow.
 # docs : RENEWABLE_WEATHER_YEARS
 renewable_weather_years: [2019]         # weather years to use (single year unless multi-horizon godeeep)
 

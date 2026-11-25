@@ -2,7 +2,12 @@
 
 from itertools import chain
 
-from constants import REEDS_VRE_CARRIERS
+from constants import (
+    RENEWABLE_DATASETS,
+    REEDS_LAND_ACCESS,
+    REEDS_VRE_CARRIERS,
+    REEDS_VRE_WEATHER_YEARS,
+)
 
 # rules/common.smk materializes godeeep_cf_registry.py into the source-cache
 # dir it puts on sys.path, so the CF registry is importable at parse time —
@@ -190,6 +195,37 @@ if config["enable"].get("build_cutout", False):
 # of hundreds of DAG nodes later. A non-godeeep config is a no-op.
 validate_godeeep_cf_config(config)
 
+RENEWABLE_DATASET = config["renewable"]["dataset"]
+if RENEWABLE_DATASET not in RENEWABLE_DATASETS:
+    raise ValueError(
+        f"renewable.dataset must be one of {RENEWABLE_DATASETS}; received {RENEWABLE_DATASET!r}."
+    )
+
+
+def validate_reeds_vre_config(config):
+    """Fail at parse time when renewable.dataset: reeds cannot serve the weather years.
+
+    ReEDS publishes CF blocks for REEDS_VRE_WEATHER_YEARS only, and the profile is
+    built for one weather year and reused across planning horizons.
+    """
+    if config["renewable"]["dataset"] != "reeds":
+        return
+    years = config.get("renewable_weather_years") or []
+    if len(years) != 1 or int(years[0]) not in REEDS_VRE_WEATHER_YEARS:
+        raise ValueError(
+            "renewable.dataset: reeds needs renewable_weather_years to hold exactly one year from "
+            f"{list(REEDS_VRE_WEATHER_YEARS)}; received {list(years)}."
+        )
+    access = config.get("renewable_land_access") or "reference"
+    if access not in REEDS_LAND_ACCESS:
+        raise ValueError(
+            f"renewable_land_access must be one of {REEDS_LAND_ACCESS} for renewable.dataset: reeds; "
+            f"received {access!r}."
+        )
+
+
+validate_reeds_vre_config(config)
+
 
 def reeds_interconnection_enabled():
     """Whether wind/solar take the ReEDS per-site interconnection cost."""
@@ -200,17 +236,19 @@ def reeds_interconnection_enabled():
 
 
 def reeds_vre_input(kind):
-    """Input function for one ReEDS supply-curve file (``kind``: sc | sitemap) of the
-    technology wildcard, needed while the ReEDS interconnection cost is on.
+    """Input function for one ReEDS VRE file of the technology wildcard.
+
+    The CF table is needed only for renewable.dataset: reeds; the supply curve and
+    site map also whenever the ReEDS interconnection cost is on.
     """
 
     def _inner(w):
-        if (
-            w.technology not in REEDS_VRE_CARRIERS
-            or not reeds_interconnection_enabled()
-        ):
+        if w.technology not in REEDS_VRE_CARRIERS:
             return []
-        return reeds_vre_path(w.technology, kind)
+        needed = RENEWABLE_DATASET == "reeds" or (
+            kind != "cf" and reeds_interconnection_enabled()
+        )
+        return reeds_vre_path(w.technology, kind) if needed else []
 
     return _inner
 
@@ -265,7 +303,8 @@ def nrel_exclusion_artifact(kind):
 
     def _inner(w):
         access = config.get("renewable_land_access")
-        if not access:
+        # reeds reads its own supply curves; the NREL artifacts feed godeeep/atlite
+        if not access or RENEWABLE_DATASET == "reeds":
             return []
         cec = (
             "_cec"
@@ -311,14 +350,17 @@ rule build_renewable_profiles:
                 if config["renewable"][w.technology].get("max_depth")
                 or (
                     w.technology.startswith("offwind")
-                    and reeds_interconnection_enabled()
+                    and (
+                        RENEWABLE_DATASET == "reeds" or reeds_interconnection_enabled()
+                    )
                 )
                 else []
             )
         ),
-        # the ReEDS wind/solar interconnection cost
+        # renewable.dataset: reeds, and the ReEDS wind/solar interconnection cost
         reeds_sc=reeds_vre_input("sc"),
         reeds_sitemap=reeds_vre_input("sitemap"),
+        reeds_cf=reeds_vre_input("cf"),
         reeds_interconnection=reeds_interconnection_input,
         country_shapes=GEOSPATIAL + "{interconnect}/country_shapes.geojson",
         offshore_shapes=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
@@ -377,15 +419,22 @@ rule build_renewable_profiles:
             else BENCHMARKS
             + "{interconnect}/build_renewable_profiles_{technology}_s{simpl}"
         )
-    threads: ATLITE_NPROCESSES
+    # reeds reads the CF table in row blocks on one thread (no dask cluster)
+    threads: 1 if RENEWABLE_DATASET == "reeds" else ATLITE_NPROCESSES
     resources:
         # godeeep does no atlite excluder work: it streams the compressed CF in
         # 500-hour chunks and aggregates onto bus polygons, whose peak footprint
         # is set by the chunk and the cell->bus mapping, not by input.size.
+        # reeds holds one 2048-row block of the CF table (~200 MB for onshore
+        # wind) plus the (8760 x bus) profile, whatever the multi-GB file size.
         mem_mb=lambda wildcards, input, attempt: (
             32000 * attempt
             if config["renewable"]["dataset"] == "godeeep"
-            else (ATLITE_NPROCESSES * input.size // 2000000) * 2.5
+            else (
+                16000 * attempt
+                if config["renewable"]["dataset"] == "reeds"
+                else (ATLITE_NPROCESSES * input.size // 2000000) * 2.5
+            )
         ),
         walltime=config_provider(
             "walltime", "build_renewable_profiles", default="02:30:00"
