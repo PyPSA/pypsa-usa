@@ -22,7 +22,7 @@ from _helpers import (
     stamp_weather_calendar,
     weather_year_hours,
 )
-from constants import RENEWABLE_INTERCONNECTION_COL
+from constants import REEDS_VRE_WEATHER_YEARS, RENEWABLE_DATASETS, RENEWABLE_INTERCONNECTION_COL
 from dask.distributed import Client
 from godeeep_cf_registry import resolve_scenario, resolve_weather_year
 from pypsa.geo import haversine
@@ -31,11 +31,28 @@ from shapely.geometry import LineString
 logger = logging.getLogger(__name__)
 
 
-def load_reeds_sites(tech: str, inputs, params, tech_config: dict):
-    """ReEDS supply-curve sites of ``tech`` with their interconnection cost.
+def resolve_reeds_weather_year(renewable_weather_years) -> int:
+    """The single ReEDS weather year of the run.
 
-    Returns None when the rule passes no ReEDS supply curve (the interconnection
-    cost is off).
+    The profile is built for one historical weather year and reused for every
+    planning horizon, like the EER demand it is meant to pair with, so exactly one
+    year from :data:`constants.REEDS_VRE_WEATHER_YEARS` is accepted. The rule file
+    runs the same check at parse time; this one also guards direct script use.
+    """
+    years = [int(year) for year in (renewable_weather_years or [])]
+    if len(years) != 1 or years[0] not in REEDS_VRE_WEATHER_YEARS:
+        raise ValueError(
+            "renewable.dataset: reeds needs renewable_weather_years to hold exactly one year from "
+            f"{list(REEDS_VRE_WEATHER_YEARS)}; received {years}.",
+        )
+    return years[0]
+
+
+def load_reeds_sites(tech: str, inputs, params, tech_config: dict):
+    """ReEDS supply-curve sites of ``tech`` in the bus regions, with interconnection cost if requested.
+
+    Returns None when the rule passes no ReEDS supply curve (the dataset is not
+    ``reeds`` and the interconnection cost is off).
     """
     if not inputs.get("reeds_sc"):
         return None
@@ -302,9 +319,9 @@ if __name__ == "__main__":
     noprogress = snakemake.config["run"].get("disable_progressbar", True)
     noprogress = noprogress or not snakemake.config["atlite"]["show_progress"]
     dataset = snakemake.params.renewable.get("dataset")
-    if dataset not in ("atlite", "godeeep"):
+    if dataset not in RENEWABLE_DATASETS:
         raise ValueError(
-            f"renewable.dataset must be either 'atlite' or 'godeeep'; got {dataset!r}",
+            f"renewable.dataset must be one of {RENEWABLE_DATASETS}; got {dataset!r}",
         )
     params = snakemake.params.renewable[snakemake.wildcards.technology]
     resource = params["resource"]  # pv panel params / wind turbine params
@@ -624,11 +641,59 @@ if __name__ == "__main__":
 
         logger.info(f"Profile: {profile.shape}  Capacities: {capacities.shape}")
 
-    # ReEDS supply-curve sites in the bus regions, for the interconnection cost
+    # ReEDS supply-curve sites in the bus regions: the resource itself under
+    # dataset == reeds, and the interconnection cost of any dataset when on.
     tech = snakemake.wildcards.technology
     reeds_sites = load_reeds_sites(tech, snakemake.input, snakemake.params, params)
     if reeds_sites is not None:
         reeds_sites = reeds_vre.map_sites_to_regions(reeds_sites, regions, tech=tech)
+
+    if dataset == "reeds":
+        if reeds_sites is None:
+            raise ValueError("renewable.dataset: reeds needs the ReEDS supply-curve inputs (reeds_sc, reeds_sitemap).")
+        year = resolve_reeds_weather_year(snakemake.config["renewable_weather_years"])
+        renewable_sns = get_renewable_snapshots(snakemake.config, year)
+        cf_path = snakemake.input.reeds_cf
+        logger.info(f"Building ReEDS {tech} profiles for weather year {year} from {cf_path}")
+
+        in_table = reeds_sites["sc_point_gid"].isin(reeds_vre.cf_table_gids(cf_path))
+        if not in_table.all():
+            logger.warning(
+                f"{int((~in_table).sum())} ReEDS {tech} sites ({reeds_sites.loc[~in_table, 'capacity'].sum():.0f} MW) "
+                "have no column in the CF table; dropped.",
+            )
+        cf_sites = reeds_sites[in_table]
+        reeds_buses = pd.Index(sorted(cf_sites["bus"].unique()), name="bus")
+        profile_df = reeds_vre.bus_profiles(
+            cf_path,
+            year,
+            cf_sites,
+            reeds_buses,
+            transform=reeds_vre.solar_ac_transform if tech == "solar" else None,
+        )
+        missing_hours = renewable_sns.difference(profile_df.index)
+        if len(missing_hours):
+            raise ValueError(
+                f"ReEDS {tech} {year} profile lacks {len(missing_hours)} requested snapshots "
+                f"(first: {missing_hours[0]}).",
+            )
+        profile = xr.DataArray(
+            profile_df.loc[renewable_sns].to_numpy(),
+            coords={"time": renewable_sns, "bus": reeds_buses},
+            dims=("time", "bus"),
+        )
+
+        site_capacity = cf_sites.groupby("bus")["capacity"].sum().reindex(reeds_buses)
+        p_nom_max = xr.DataArray(site_capacity.to_numpy(), coords={"bus": reeds_buses}, dims="bus")
+        capacities = p_nom_max.copy()
+        potential = p_nom_max.copy()
+        spur_km = (
+            reeds_vre.bus_weighted_mean(cf_sites, "dist_spur_km").reindex(reeds_buses).fillna(0.0)
+            if "dist_spur_km" in cf_sites
+            else pd.Series(0.0, index=reeds_buses)
+        )
+        average_distance = xr.DataArray(spur_km.to_numpy(), coords={"bus": reeds_buses}, dims="bus")
+        logger.info(f"Profile: {profile.shape}  Capacity: {float(p_nom_max.sum()):.0f} MW")
 
     # ds of renewable data to be outputted
     ds = xr.merge(
@@ -661,6 +726,11 @@ if __name__ == "__main__":
                 bus=common_buses,
                 fill_value=1.0,
             )
+        elif dataset == "reeds":
+            # ReEDS sites carry no connection route; the export cable is priced in
+            # the interconnection cost instead. Kept for schema parity, unused
+            # for costing.
+            ds["underwater_fraction"] = xr.zeros_like(ds["p_nom_max"])
 
     # ReEDS wind/solar interconnection cost per bus (overnight USD/MW in
     # costs.dollar_year); add_electricity swaps it for the ATB grid connection.

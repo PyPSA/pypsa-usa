@@ -54,31 +54,95 @@ snakemake data_model -j1 --configfile config/config.default.yaml
 
 ## Running on HPC Cluster
 
-On a High-Performance Compute (HPC) cluster, `workflow/run_slurm.sh` runs one or more scenario
-overlays, submitting each snakemake rule to Slurm as its own job via `workflow/slurm_submit.sh`.
-The script itself must run **inside a compute job or an interactive shell** (`sh_dev` on Sherlock),
-never on a login node.
-
-Each overlay is a small config file in `workflow/config/weather_years/`, and that directory's
-`manifest.tsv` maps an overlay filename to its run name and build target (tab-separated,
-three columns). Both are yours to create. Overlay filenames are passed as positional arguments,
-and each is layered on top of `repo_data/config/config.california.yaml`:
+On a Slurm cluster, `workflow/run_slurm.sh` runs snakemake so that **each rule is submitted as its
+own Slurm job** (through `workflow/slurm_submit.sh`). Every argument you give it is passed to
+snakemake, so it takes the same targets and `--configfile` as a local run:
 
 ```console
-bash run_slurm.sh ca2040_wy2019_z4.yaml ca2040_wy2019_county.yaml
+cd workflow
+bash run_slurm.sh --configfile config/config.my_scenario.yaml
 ```
 
-Cluster settings come from the environment, not from a config file. `PARTITION` and `EMAIL` are
-exported to the `sbatch` wrapper; `JOBS` (rule-jobs in flight per overlay), `CONCURRENCY`
-(overlays at a time) and `RESTART_TIMES` tune the scheduling:
+Put a target, if you give one, *before* `--configfile`: `--configfile` takes several values and
+would otherwise read the target as another config file.
+
+### 1. Tell Slurm about your site, once
+
+The scripts carry no site settings. Set Slurm's own `SBATCH_*` environment variables, which `sbatch`
+reads whenever the matching flag is not given, for example in `~/.bashrc`:
+
+| Variable | Meaning | Sherlock (Stanford) | Alliance clusters, e.g. Fir |
+|---|---|---|---|
+| `SBATCH_ACCOUNT` | allocation to charge | leave unset (no accounts) | `def-<pi>` or `rrg-<pi>`; required |
+| `SBATCH_PARTITION` | partition / queue | e.g. `serc`, `normal` | leave unset; jobs are routed by size |
+| `SBATCH_MAIL_USER` | job e-mail (failures only, unless `SBATCH_MAIL_TYPE` is set) | optional | optional |
+
+Anything else `man sbatch` lists as an input environment variable (`SBATCH_QOS`,
+`SBATCH_CONSTRAINT`, ...) works the same way. Check your site's documentation for the values;
+the table above is a starting point, not a guarantee.
+
+`SBATCH_MAIL_USER` and `SBATCH_MAIL_TYPE` are the exception: `sbatch` has no environment variable
+for mail, so `workflow/slurm_submit.sh` reads these two and passes them as `--mail-user` and
+`--mail-type`. They therefore apply to the rule jobs only, not to an `sbatch` you run yourself.
+
+Load any modules your site needs (a Gurobi license, a newer `git`) before starting the driver: the
+rule jobs inherit its environment.
+
+### 2. Run the driver inside a job, not on a login node
+
+`run_slurm.sh` is the snakemake scheduler. It stays alive for the whole workflow, submitting rule
+jobs and polling their state, which most sites forbid on login nodes. Submit it as a small,
+long job of its own:
 
 ```console
-PARTITION=<partition> EMAIL=<you@example.edu> JOBS=20 bash run_slurm.sh ca2040_wy2019_z4.yaml
+cd workflow
+mkdir -p logs
+sbatch --time=2-00:00:00 -c 2 --mem=8G -o logs/driver-%j.out \
+    --wrap "bash run_slurm.sh --configfile config/config.my_scenario.yaml"
 ```
 
-Driver logs land in `workflow/logs/drivers/`, per-rule Slurm logs in `workflow/logs/slurm/`.
-Resource requests are computed per rule from the input size; to change them, edit the
-`resources: mem_mb:` / `walltime:` and `threads:` fields of the individual snakemake rules.
+For a short or interactive run, start it inside an interactive allocation instead (`sh_dev` on
+Sherlock, `salloc` elsewhere). The script warns if it is not inside a Slurm job.
+
+### 3. Tune and size the run
+
+Optional environment variables for `run_slurm.sh`:
+
+- `JOBS` — rule jobs in flight at once (default 20).
+- `RESTART_TIMES` — retries for a failed rule (default 0). Rules that scale memory with `attempt`
+  ask for more on each retry.
+- `LATENCY_WAIT` — seconds to wait for outputs to appear on a shared filesystem (default 60).
+- `SNAKEMAKE` — snakemake command: an executable, or a launcher such as `uv run snakemake`
+  (default: the repository `.venv`, else the one on `PATH`).
+
+Wall times per rule come from the `walltime:` block of `config.slurm.yaml`
+({ref}`walltime_cf`); override entries in your copy at `workflow/config/config.slurm.yaml`.
+Memory and threads come from the `resources: mem_mb:` and `threads:` fields of each rule.
+Rules that declare neither get 8 GB and 2 hours.
+
+### 4. Logs and failures
+
+The driver's log is the `-o` file you gave `sbatch`; each rule job writes
+`workflow/logs/slurm/<rule>-<jobid>.out` and `.err`. A rule that Slurm kills (out of memory,
+time limit, node failure) is reported as failed through `workflow/slurm_status.sh`, so the driver
+stops instead of waiting forever. A job that Slurm requeues after a preemption or node failure
+counts as still running. Interrupting the driver with Ctrl-C also cancels its rule jobs;
+if you `scancel` the driver job instead, check `squeue` for leftover rule jobs. Re-running the same
+command resumes where it stopped.
+
+### Weather-year campaigns
+
+`workflow/run_slurm_weather_years.sh` runs a batch of California weather-year overlays through
+`run_slurm.sh`, scheduling them so that overlays sharing input data do not collide. Each overlay is
+a small config file in `workflow/config/weather_years/`, and that directory's `manifest.tsv` maps an
+overlay filename to its run name and build target (tab-separated, three columns). Both are yours to
+create:
+
+```console
+bash run_slurm_weather_years.sh ca2040_wy2019_z4.yaml ca2040_wy2019_county.yaml
+```
+
+`CONCURRENCY` sets how many overlays run at once. Driver logs land in `workflow/logs/drivers/`.
 
 ## Examine Results
 

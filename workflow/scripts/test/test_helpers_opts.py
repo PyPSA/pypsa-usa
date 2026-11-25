@@ -48,3 +48,26 @@ def test_ch4l_value_and_bare_token():
     cfg = update_config_from_wildcards(_config(gaslimit=7.0), _wildcards("CH4L"), inplace=False)
     assert cfg["electricity"]["gaslimit_enable"] is True
     assert cfg["electricity"]["gaslimit"] == 7.0
+
+
+def test_region_buses_match_every_region_column(base_network):
+    from opts._helpers import get_region_buses
+
+    n = base_network
+    assert list(get_region_buses(n, ["CA"]).index) == ["z1"]
+    assert list(get_region_buses(n, ["NERC2"]).index) == ["z2", "z3"]
+    assert list(get_region_buses(n, ["z3"]).index) == ["z3"]
+    assert len(get_region_buses(n, ["west"])) == 3
+    assert len(get_region_buses(n, ["all"])) == 3
+    assert get_region_buses(n, ["nowhere"]).empty
+
+
+def test_region_buses_without_zone_columns(base_network):
+    """topological_boundaries: state drops reeds_zone and nerc_reg from the buses (#663)."""
+    from opts._helpers import get_region_buses
+
+    n = base_network
+    n.buses = n.buses.drop(columns=["reeds_zone", "nerc_reg"])
+    assert list(get_region_buses(n, ["TX"]).index) == ["z2", "z3"]
+    assert get_region_buses(n, ["NERC2"]).empty
+    assert len(get_region_buses(n, ["all"])) == 3

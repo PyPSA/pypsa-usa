@@ -76,7 +76,7 @@ wildcard_constraints:
     clusters="[0-9]+[msac]?|all",
     ll="(v|c)([0-9\.]+|opt|all)|all",
     opts="[-+a-zA-Z0-9\.]*",
-    sector="([EG]-)*[EG]",
+    sector="E(-G)?(-H)?",
 
 
 # -------------------------- Config and Subworkflows ------------------------- #
@@ -87,7 +87,7 @@ wildcard_constraints:
 # REPLACED wholesale), and anything the user passes via `--configfile` is
 # merged last, on top of everything below.
 #
-#   config.slurm.yaml     HPC scheduler settings + per-rule wall times
+#   config.slurm.yaml     per-rule scheduler wall times
 #   config.common.yaml    renewable/atlite plumbing that rarely changes
 #   config.plotting.yaml  figure styling
 #   config.api.yaml       API keys (gitignored)

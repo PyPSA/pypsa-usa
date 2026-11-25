@@ -1,11 +1,10 @@
 # BY PyPSA-USA Authors
 """``build_base_network.map_bus_to_region`` returns one row per bus.
 
-Regression for the eastern/usa ``build_base_network`` crash: the BA and ReEDS
-shapes overlap in places, a left spatial join returns a bus once per polygon
-it sits in, and the duplicated ``bus_id`` rows then broke the population
-load-weight reindex ("cannot reindex on an axis with duplicate labels") and
-double-counted the affected buses in the ``LAF_state`` denominators.
+The balancing-area and ReEDS shapes overlap along a few borders (NYISO/PJM/ISONE),
+so a left spatial join puts a bus there once per polygon it falls in. Duplicate
+``bus_id`` rows made ``assign_load_weight`` fail on reindexing and would count a
+bus twice in its state's ``LAF_state`` denominator.
 """
 
 import sys
@@ -21,55 +20,53 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from build_base_network import map_bus_to_region
 from build_bus_population import assign_load_weight
 
-pytestmark = pytest.mark.fast
 
-
-@pytest.fixture
-def buses():
-    """Three buses: inside zone A only, inside the A/B overlap, outside both."""
+def _buses():
+    """Bus 1 lies where the two shapes overlap, bus 2 only in the second, bus 3 in neither."""
     return gpd.GeoDataFrame(
-        {"sub_id": [1, 2, 3], "Pd": [10.0, 20.0, 30.0]},
-        index=pd.Index(["only_a", "overlap", "outside"], name="bus_id"),
-        geometry=[Point(0.5, 0.5), Point(1.5, 0.5), Point(9.0, 9.0)],
+        {"sub_id": [10, 20, 30]},
+        index=pd.Index([1, 2, 3], name="bus_id"),
+        geometry=[Point(1.5, 0.5), Point(2.5, 0.5), Point(9.0, 9.0)],
         crs=4326,
     )
 
 
-@pytest.fixture
-def overlapping_zones():
-    """Zones A (x 0-2) and B (x 1-3) share the strip x 1-2."""
+def _overlapping_shapes(column):
     return gpd.GeoDataFrame(
-        {"county": ["pA", "pB"]},
+        {column: ["A", "B"]},
         geometry=[box(0, 0, 2, 1), box(1, 0, 3, 1)],
         crs=4326,
     )
 
 
-def test_bus_in_overlapping_shapes_is_not_duplicated(buses, overlapping_zones):
-    mapped = map_bus_to_region(buses, overlapping_zones, ["county"])
-    assert list(mapped.index) == ["only_a", "overlap", "outside"]
-    assert mapped.index.name == "bus_id"
+@pytest.mark.fast
+def test_bus_in_two_polygons_keeps_its_first_match():
+    out = map_bus_to_region(_buses(), _overlapping_shapes("balancing_area"), ["balancing_area"])
+    assert out.index.tolist() == [1, 2, 3]
+    assert out.loc[1, "balancing_area"] == "A"
+    assert out.loc[2, "balancing_area"] == "B"
+    assert pd.isna(out.loc[3, "balancing_area"])
 
 
-def test_first_match_is_kept_and_unmatched_bus_stays_missing(buses, overlapping_zones):
-    mapped = map_bus_to_region(buses, overlapping_zones, ["county"])
-    assert mapped.loc["only_a", "county"] == "pA"
-    assert mapped.loc["overlap", "county"] == "pA"
-    assert pd.isna(mapped.loc["outside", "county"])
+@pytest.mark.fast
+def test_caller_names_list_is_not_mutated():
+    names = ["balancing_area"]
+    map_bus_to_region(_buses(), _overlapping_shapes("balancing_area"), names)
+    assert names == ["balancing_area"]
 
 
-def test_caller_names_list_is_not_mutated(buses, overlapping_zones):
-    names = ["county"]
-    map_bus_to_region(buses, overlapping_zones, names)
-    assert names == ["county"]
+@pytest.mark.fast
+def test_successive_overlapping_joins_still_give_one_row_per_bus():
+    """Two overlapping layers in a row used to multiply the rows (2 x 2 for bus 1)."""
+    out = map_bus_to_region(_buses(), _overlapping_shapes("balancing_area"), ["balancing_area"])
+    out = map_bus_to_region(out, _overlapping_shapes("reeds_zone"), ["reeds_zone"])
+    assert out.index.is_unique
+    assert out.loc[1, ["balancing_area", "reeds_zone"]].tolist() == ["A", "A"]
 
 
-def test_population_weight_runs_on_buses_mapped_through_overlapping_shapes(buses, overlapping_zones):
-    """The step that crashed: weighting buses after a join onto overlapping shapes."""
-    mapped = map_bus_to_region(buses, overlapping_zones, ["county"])
-    weight = assign_load_weight(mapped, pd.Series({"pA": 1000.0, "pB": 400.0}))
-    assert list(weight.index) == ["only_a", "overlap", "outside"]
-    # pA's population splits evenly over its two substations; pB gets no bus
-    assert weight["only_a"] == pytest.approx(500.0)
-    assert weight["overlap"] == pytest.approx(500.0)
-    assert weight["outside"] == 0.0
+@pytest.mark.fast
+def test_load_weight_works_after_overlapping_joins():
+    out = map_bus_to_region(_buses(), _overlapping_shapes("county"), ["county"])
+    weight = assign_load_weight(out, pd.Series({"A": 100.0, "B": 50.0}))
+    assert weight.index.is_unique
+    assert weight.loc[[1, 2]].tolist() == [100.0, 50.0]

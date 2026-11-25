@@ -754,8 +754,27 @@ def test_portfolio_standard_carriers_are_model_carriers():
     from constants import ATB_TECH_MAPPER
     from opts.policy import CES_CARRIERS, RPS_CARRIERS
 
-    # ATB technologies, plus the carriers build_cost_data derives from the gas turbine and the biomass plant
-    model_carriers = set(ATB_TECH_MAPPER) | {"hydrogen_ct", "biomass-95CCS"}
+    # ATB technologies, plus the carriers build_cost_data derives from the gas plants and the biomass plant
+    model_carriers = set(ATB_TECH_MAPPER) | {"OCHT", "CCHT", "CCGT-90CCS", "biomass-95CCS"}
     assert set(RPS_CARRIERS) <= model_carriers
     assert set(CES_CARRIERS) <= model_carriers
     assert {"CCGT-95CCS", "CCGT-97CCS", "coal-95CCS", "coal-99CCS"} <= set(CES_CARRIERS)
+
+
+def test_rps_and_ces_in_one_zone_and_year_get_one_constraint_each(policy_network, tmp_path):
+    """A REC trading zone with both an RPS and a CES in a year gets two constraints, not a name clash."""
+    from opts.policy import add_RPS_constraints
+
+    (tmp_path / "rps.csv").write_text("t,st,rps_all,rps_solar,rps_wind\n2030,CA,0.5,0,0\n")
+    (tmp_path / "ces.csv").write_text("*t,st,Value\n2030,CA,0.6\n")
+    (tmp_path / "custom.csv").write_text("planning_horizon,region,carrier,pct\n")
+    config = {"electricity": {"portfolio_standards": str(tmp_path / "custom.csv")}}
+    inputs = {"rps_reeds": str(tmp_path / "rps.csv"), "ces_reeds": str(tmp_path / "ces.csv")}
+    snakemake = type("MockSnakemake", (), {"input": type("Input", (), inputs)})
+
+    n = policy_network
+    n.optimize.create_model(multi_investment_periods=True)
+    add_RPS_constraints(n, config, snakemake=snakemake)
+
+    names = [c for c in n.model.constraints if c.startswith("GlobalConstraint-CA_2030")]
+    assert sorted(names) == ["GlobalConstraint-CA_2030_ces_limit", "GlobalConstraint-CA_2030_rps_limit"]

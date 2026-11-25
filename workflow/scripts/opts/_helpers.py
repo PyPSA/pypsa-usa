@@ -8,19 +8,42 @@ import pypsa
 logger = logging.getLogger(__name__)
 
 
+#: Bus columns a region name in a policy file can refer to
+REGION_COLUMNS = ("country", "reeds_zone", "reeds_state", "nerc_reg", "region")
+
+_warned_missing_region_columns: set[tuple[str, ...]] = set()
+
+
 def get_region_buses(n, region_list):
-    return n.buses[
-        (
-            n.buses.country.isin(region_list)
-            | n.buses.reeds_zone.isin(region_list)
-            | n.buses.reeds_state.isin(region_list)
-            | n.buses.interconnect.str.lower().isin(region_list)
-            | n.buses.nerc_reg.isin(region_list)
-            | n.buses.index.isin(region_list)
-            | (n.buses.region.isin(region_list) if "region" in n.buses.columns else False)
-            | (1 if "all" in region_list else 0)
+    """
+    Buses that belong to any region of ``region_list``.
+
+    A region is matched against the bus name, the interconnect and the columns
+    of ``REGION_COLUMNS``. Networks built with ``topological_boundaries: state``
+    carry no ``reeds_zone`` or ``nerc_reg`` (a state spans several of each), so a
+    column that is absent matches nothing; regions given at that resolution
+    then select no buses.
+    """
+    region_list = list(region_list)
+    buses = n.buses
+    if "all" in region_list:
+        return buses
+
+    missing = tuple(col for col in REGION_COLUMNS if col != "region" and col not in buses.columns)
+    if missing and missing not in _warned_missing_region_columns:
+        _warned_missing_region_columns.add(missing)
+        logger.warning(
+            "The buses have no %s column(s); policy regions given at that resolution match no buses.",
+            ", ".join(missing),
         )
-    ]
+
+    mask = buses.index.isin(region_list)
+    for col in REGION_COLUMNS:
+        if col in buses.columns:
+            mask |= buses[col].isin(region_list)
+    if "interconnect" in buses.columns:
+        mask |= buses.interconnect.astype(str).str.lower().isin(region_list)
+    return buses[mask]
 
 
 def filter_components(

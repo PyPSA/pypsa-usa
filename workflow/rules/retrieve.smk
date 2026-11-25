@@ -393,15 +393,17 @@ rule retrieve_godeeep_cf:
         "../scripts/retrieve_godeeep_cf.py"
 
 
-# NREL ReEDS wind/solar supply curves and site maps, one Zenodo record per
-# resource with a supply curve per reV land-access scenario (the scenarios
+# NREL ReEDS wind/solar supply curves and hourly capacity factors, one Zenodo
+# record per resource with a file per reV land-access scenario (the scenarios
 # `renewable_land_access` names); records and file names live in constants.py.
-# They locate the sites of the ReEDS wind/solar interconnection cost.
+# The CF tables (1-10 GB) are only fetched for renewable.dataset: reeds; the
+# supply curves and site maps (~1 MB) also feed the ReEDS wind/solar
+# interconnection cost.
 from constants import REEDS_VRE_FILES, REEDS_VRE_RECORDS
 
 
 def reeds_vre_path(technology, kind):
-    """Local path of one ReEDS VRE file (``kind``: sc | sitemap) for a technology.
+    """Local path of one ReEDS VRE file (``kind``: sc | cf | sitemap) for a technology.
 
     Fixed-bottom and floating offshore wind share ReEDS's single offshore curve.
     The access scenario follows ``renewable_land_access`` (``reference`` when null).

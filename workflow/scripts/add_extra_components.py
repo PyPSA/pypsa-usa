@@ -16,6 +16,7 @@ from constants import (
     REGIONAL_MULTIPLIER_COL,
     RENEWABLE_INTERCONNECTION_COL,
     RENEWABLE_INTERCONNECTION_SHARE_COL,
+    RETROFITS,
 )
 from external_regions import (
     add_external_regions,
@@ -41,6 +42,7 @@ logger = logging.getLogger(__name__)
 POWER_FUEL_CARRIERS = [
     "OCGT",
     "CCGT",
+    "CCGT-90CCS",
     "CCGT-95CCS",
     "CCGT-97CCS",
     "coal",
@@ -367,6 +369,7 @@ def split_retirement_gens(
     costs: pd.DataFrame,
     carriers: list[str] | None = None,
     economic: bool = True,
+    new_build_carriers: set[str] | None = None,
 ):
     """
     Seperates extendable conventional generators into existing and new
@@ -388,6 +391,11 @@ def split_retirement_gens(
     economic: bool
         If True, enable economic retirement, else only allow lifetime
         retirement for the new generators
+    new_build_carriers: set[str]
+        Carriers whose new capacity is offered at every bus by
+        attach_multihorizon_new_generators. Their plants are only renamed to
+        "existing" and get no expanding duplicate, which would be a second
+        way to build the same technology at the plant's bus.
     """
     retirement_mask = (
         n.generators["p_nom_extendable"]
@@ -432,37 +440,47 @@ def split_retirement_gens(
         "p_nom_extendable",
     ] = economic  # if economic retirement is true enable extendable
 
+    # time dependent factors added after as not all generators are time dependent
+    copy_timeseries_for_suffix(n, retirement_gens.index, "existing")
+
+    expanding = retirement_gens[~retirement_gens.carrier.isin(new_build_carriers or [])]
+    # plants without an expanding duplicate leave no generator under their old name
+    renamed_only = retirement_gens.index.difference(expanding.index)
+    for attr, series in n.generators_t.items():
+        orphaned = series.columns.intersection(renamed_only)
+        if not orphaned.empty:
+            n.generators_t[attr] = series.drop(columns=orphaned)
+    if expanding.empty:
+        return
+
     # Adding Expanding generators for the first investment period
     # There are generators that exist today and could expand
     # in the first time horizon
     n.add(
         "Generator",
-        retirement_gens.index,
-        carrier=retirement_gens.carrier,
-        bus=retirement_gens.bus,
+        expanding.index,
+        carrier=expanding.carrier,
+        bus=expanding.bus,
         p_nom_min=0,
         p_nom=0,
-        p_nom_max=retirement_gens.p_nom_max,
+        p_nom_max=expanding.p_nom_max,
         p_nom_extendable=True,
-        ramp_limit_up=retirement_gens.ramp_limit_up,
-        ramp_limit_down=retirement_gens.ramp_limit_down,
-        efficiency=retirement_gens.efficiency,
-        marginal_cost=retirement_gens.marginal_cost,
-        capital_cost=retirement_gens.capital_cost,
+        ramp_limit_up=expanding.ramp_limit_up,
+        ramp_limit_down=expanding.ramp_limit_down,
+        efficiency=expanding.efficiency,
+        marginal_cost=expanding.marginal_cost,
+        capital_cost=expanding.capital_cost,
         build_year=n.investment_periods[0],
-        lifetime=retirement_gens.carrier.map(costs.lifetime).fillna(np.inf),
-        p_min_pu=retirement_gens.p_min_pu,
-        p_max_pu=retirement_gens.p_max_pu,
-        land_region=retirement_gens.land_region,
+        lifetime=expanding.carrier.map(costs.lifetime).fillna(np.inf),
+        p_min_pu=expanding.p_min_pu,
+        p_max_pu=expanding.p_max_pu,
+        land_region=expanding.land_region,
     )
-    n.generators.loc[retirement_gens.index, "vom_cost"] = retirement_gens.get("vom_cost", np.nan)
+    n.generators.loc[expanding.index, "vom_cost"] = expanding.get("vom_cost", np.nan)
     # the new units reprice their vintages with the ReEDS regional costs
-    copy_capex_columns(n, retirement_gens, retirement_gens.index)
+    copy_capex_columns(n, expanding, expanding.index)
 
-    # time dependent factors added after as not all generators are time dependent
-    copy_timeseries_for_suffix(n, retirement_gens.index, "existing")
-
-    apply_new_build_parameters(n, retirement_gens, retirement_gens.index, costs)
+    apply_new_build_parameters(n, expanding, expanding.index, costs)
 
 
 def attach_multihorizon_existing_generators(
@@ -626,12 +644,9 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year, bus_
         p_max_pu_t = None
         if min_years and min_years.get(carrier, 0) > investment_year:
             continue
+        # the fleet of the carrier, where there is one (nuclear), sets availability and ramping
         existing_gens = n.generators[
-            (
-                (n.generators.carrier == carrier)
-                & ~n.generators.index.str.contains("existing")
-                & (n.generators.build_year <= n.investment_periods[0])
-            )
+            (n.generators.carrier == carrier) & (n.generators.build_year <= n.investment_periods[0])
         ].copy()
 
         if not existing_gens.empty:
@@ -658,6 +673,106 @@ def attach_multihorizon_new_generators(n, costs, carriers, investment_year, bus_
             carrier,
             "opex_variable_per_mwh",
         ]
+
+
+def attach_retrofits(n: pypsa.Network, costs_dict: dict[int, pd.DataFrame], retrofit: dict) -> None:
+    """
+    Lets existing gas plants be retrofitted to hydrogen turbines or carbon capture.
+
+    ``retrofit`` is ``electricity: retrofit``. ``constants.RETROFITS`` maps each
+    technology there to the technology of the plants it is retrofitted from
+    (e.g. CCHT from CCGT).
+
+    For each enabled technology, every existing plant of its source technology
+    gets, in each investment period the plant is still active in, an extendable
+    retrofit generator at the plant's bus, with ``retrofit_from`` set to the plant.
+    The retrofit:
+
+    - has the plant's efficiency, times the ATB efficiency of the target over that
+      of the source technology;
+    - takes the ATB O&M of the target technology;
+    - runs for the configured ``lifetime``, and annualizes its overnight cost
+      (``retrofit_capex_per_kw``, see build_cost_data) over
+      ``min(lifetime, ATB cost recovery period of the target technology)``;
+    - burns the plant's fuel if it captures carbon, and hydrogen at the fuel
+      cost of the cost data if it is a hydrogen turbine.
+
+    The plant and its retrofits share the plant's fuel input
+    (``opts.retrofit.add_retrofit_constraints``). So the plant becomes extendable
+    down to zero at its fixed O&M. It may retire only with ``electricity:
+    retirement: economic``; otherwise it keeps its fuel input, as the plant or
+    retrofitted. Only existing plants are retrofitted.
+    """
+    enabled = {target: options for target, options in retrofit.items() if options.get("enable", False)}
+    if not enabled:
+        return
+    # plants are still generators here in every model; add_sectors later converts
+    # them and their retrofits to links, keeping retrofit_from and retrofit_factor
+    plants = n.generators[
+        n.generators.carrier.isin({RETROFITS[target] for target in enabled}) & (n.generators.p_nom > 0)
+    ]
+    if plants.empty:
+        return
+
+    fixed = plants.index[~plants.p_nom_extendable]
+    fom = plants.loc[fixed, "carrier"].map(costs_dict[n.investment_periods[0]].opex_fixed_per_kw) * 1e3
+    n.generators.loc[fixed, "capital_cost"] = fom
+    n.generators.loc[plants.index, "p_nom_extendable"] = True
+    n.generators.loc[plants.index, "p_nom_min"] = 0
+    n.generators.loc[plants.index, "p_nom_max"] = plants.p_nom
+
+    add_missing_carriers(n, list(enabled))
+    plant_vom = plants.get("vom_cost", pd.Series(np.nan, index=plants.index)).fillna(0)
+    for year in n.investment_periods:
+        costs = costs_dict[year]
+        active = plants[(plants.build_year <= year) & (plants.build_year + plants.lifetime > year)]
+        for target, options in enabled.items():
+            source = RETROFITS[target]
+            fleet = active[active.carrier == source]
+            if fleet.empty:
+                continue
+            efficiency = fleet.efficiency * costs.at[target, "efficiency"] / costs.at[source, "efficiency"]
+            vom = costs.at[target, "opex_variable_per_mwh"]
+            if target in POWER_FUEL_CARRIERS:
+                fuel = (fleet.marginal_cost - plant_vom[fleet.index]) * fleet.efficiency
+            else:
+                fuel = costs.at[target, "fuel_cost_real_per_mwhth"]
+            # recovered over the retrofit's lifetime, at most the ATB cost recovery period
+            recovery = min(options["lifetime"], costs.at[target, "cost_recovery_period_years"])
+            annuity = calculate_annuity(recovery, costs.at[target, "wacc_real"])
+            names = fleet.index.str.replace(source, target, n=1).str.replace(" existing", "") + f" retrofit_{year}"
+            n.add(
+                "Generator",
+                names,
+                bus=fleet.bus.to_numpy(),
+                carrier=target,
+                p_nom_extendable=True,
+                p_nom_max=(fleet.p_nom * efficiency / fleet.efficiency).to_numpy(),
+                efficiency=efficiency.to_numpy(),
+                marginal_cost=(fuel / efficiency + vom).to_numpy(),
+                capital_cost=(
+                    annuity * costs.at[target, "retrofit_capex_per_kw"] + costs.at[target, "opex_fixed_per_kw"]
+                )
+                * 1e3,
+                build_year=year,
+                lifetime=options["lifetime"],
+                p_max_pu=fleet.p_max_pu.to_numpy(),
+                ramp_limit_up=fleet.ramp_limit_up.to_numpy(),
+                ramp_limit_down=fleet.ramp_limit_down.to_numpy(),
+                retrofit_from=fleet.index.to_numpy(),
+                retrofit_factor=1,  # of the plant's fuel input
+            )
+            n.generators.loc[names, "vom_cost"] = vom
+            logger.info(f"Added {len(names)} retrofits of existing {source} plants to {target} in {year}")
+
+            renamed = dict(zip(fleet.index, names))
+            p_max_pu = n.generators_t.p_max_pu.filter(items=fleet.index)
+            n.generators_t.p_max_pu = n.generators_t.p_max_pu.join(p_max_pu.rename(columns=renamed))
+            if target in POWER_FUEL_CARRIERS:
+                # USD/MWh_el of the plant -> USD/MWh_th of its fuel -> USD/MWh_el of the retrofit
+                mc = n.generators_t.marginal_cost.filter(items=fleet.index)
+                mc = mc.sub(plant_vom[mc.columns]).mul(fleet.efficiency[mc.columns]).div(efficiency[mc.columns])
+                n.generators_t.marginal_cost = n.generators_t.marginal_cost.join(mc.add(vom).rename(columns=renamed))
 
 
 def apply_power_fuel_prices(n: pypsa.Network, costs_dict: dict[int, pd.DataFrame]) -> None:
@@ -979,7 +1094,9 @@ def add_co2_storage(n: pypsa.Network, config: dict, co2_storage_csv: str, costs:
     if sector:
         links = n.links.index[n.links.index.str.contains("CCS")]
         if not links.empty:  # found links equipped with CCS
-            # specify links' bus4 to point to the CO2 capture bus of their node (e.g. "p9 co2 capture")
+            # specify links' bus4 to point to the CO2 capture bus of their node (e.g. "p9 co2 capture"),
+            # registering the port with pypsa first so that links added later leave it unconnected
+            n.add("Link", [], bus0=[], bus1=[], bus4=[])
             n.links.loc[links, "bus4"] = n.links.loc[links, "bus1"] + " co2 capture"
 
             # calculate efficiencies, per MWh of fuel the links draw (CO2 of the fuel burnt, emitted or captured)
@@ -1346,6 +1463,10 @@ def main(snakemake) -> None:
     if any("PHS" in s for s in elec_config["extendable_carriers"]["StorageUnit"]):
         attach_phs_storageunits(n, elec_config, costs_dict[n.investment_periods[0]])
 
+    # Nuclear can be built at any bus (attach_multihorizon_new_generators), so
+    # its existing plants get no expanding unit of their own
+    everywhere_carriers = {"nuclear"} & set(elec_config["extendable_carriers"].get("Generator", []))
+
     # Split conventional generators so expansion is a new unit; with technical
     # retirement the existing part is fixed and retires on its lifetime
     split_retirement_gens(
@@ -1353,6 +1474,7 @@ def main(snakemake) -> None:
         costs_dict[n.investment_periods[0]],
         set(elec_config.get("conventional_carriers", None)),
         economic=snakemake.params.retirement == "economic",
+        new_build_carriers=everywhere_carriers,
     )
     # Split renewable generators from the first investement period to support lifetime retirement
     split_retirement_gens(
@@ -1378,9 +1500,7 @@ def main(snakemake) -> None:
 
     new_carriers = list(
         set(elec_config["extendable_carriers"].get("Generator", [])) - set(n.generators.carrier.unique())
-        | set(
-            ["nuclear"] if "nuclear" in elec_config["extendable_carriers"].get("Generator", []) else [],
-        ),
+        | everywhere_carriers,
     )
 
     # ReEDS county overnight-capex multipliers for new builds (None when disabled,
@@ -1416,6 +1536,8 @@ def main(snakemake) -> None:
         # are always active, accumulate capacity through prepare_brownfield,
         # and compound across periods.
         n.remove("Generator", egs_gens.index)
+
+    attach_retrofits(n, costs_dict, elec_config.get("retrofit", {}))
 
     # gas, coal and oil plants pay the AEO fuel costs, nuclear and biomass plants the ATB
     # fuel costs, unless dynamic fuel prices are enabled
@@ -1510,6 +1632,7 @@ def main(snakemake) -> None:
             zone_col,
         )
 
+    # sector coupled models add CO2 storage, transport and DAC in add_sectors
     if snakemake.config["scenario"]["sector"] == "E":
         co2_storage = snakemake.config.get("co2", {}).get("storage", False)
         co2_network_enable = snakemake.config.get("co2", {}).get("network", {}).get("enable", False)
