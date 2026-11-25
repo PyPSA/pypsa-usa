@@ -123,6 +123,11 @@ if os.path.exists("config/config.slurm.yaml"):
     configfile: "config/config.slurm.yaml"
 
 
+if os.path.exists("config/config.sector.yaml"):
+
+    configfile: "config/config.sector.yaml"
+
+
 # EIA API key. The environment wins over the YAML so the key can stay out of
 # the checkout entirely; config/config.api.yaml remains the fallback. Resolved
 # here, once, because a dozen rules dereference config["api"]["eia"] directly

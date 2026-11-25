@@ -15,8 +15,8 @@
 | `config.sector.yaml` | sector-coupling defaults |
 | `config.default.yaml` | the scenario base — every user-facing knob, with defaults |
 
-Two optional per-user overlays follow (`config/config.api.yaml`,
-`config/config.slurm.yaml`, seeded by `init_pypsa_usa.sh`), and whatever you
+Three optional per-user overlays follow (`config/config.api.yaml`,
+`config/config.slurm.yaml`, `config/config.sector.yaml`, seeded by `init_pypsa_usa.sh`), and whatever you
 pass with `--configfile` is merged last.
 
 Because `config.default.yaml` is itself a loaded layer, **your scenario config is

@@ -1,11 +1,11 @@
 #!/bin/bash
 # One-time setup: seed the per-user configuration files.
 #
-# Everything else - config.common.yaml, config.plotting.yaml,
-# config.sector.yaml, config.default.yaml and the
-# policy_constraints/ CSVs - is loaded by workflow/Snakefile straight out of
-# the tracked templates directory, so there is nothing to copy and nothing to
-# keep in sync. Only the files below are genuinely user-owned.
+# workflow/Snakefile loads its whole base straight out of the tracked templates
+# directory, so nothing else has to be copied. Only the files below are
+# user-owned. All but config.default.yaml are loaded automatically on top of
+# the base; delete the keys you do not change from your copies, so that later
+# updates to the templates still reach you.
 #
 # Safe to re-run: existing files are left untouched, missing ones are created.
 
@@ -18,10 +18,12 @@ destination="workflow/config"
 #   config.default.yaml  starting point for your own scenario config
 #   config.api.yaml      API keys (EIA); can be replaced by $EIA_API_KEY
 #   config.slurm.yaml    per-rule Slurm wall-time overrides
+#   config.sector.yaml   sector-coupling settings
 user_files=(
     "config.default.yaml"
     "config.api.yaml"
     "config.slurm.yaml"
+    "config.sector.yaml"
 )
 
 mkdir -p "$destination"

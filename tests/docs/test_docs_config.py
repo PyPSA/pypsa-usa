@@ -244,13 +244,23 @@ def test_init_copies_only_user_owned_files():
 
     # A file init copies must NOT also be one the Snakefile reads from
     # repo_data as an authoritative base layer that users cannot override —
-    # each of these is loaded as an overlay (api, cluster) or passed by hand
+    # each of these is loaded as an overlay (api, slurm, sector) or passed by hand
     # with --configfile (default).
     assert user_files <= {
         "config.default.yaml",
         "config.api.yaml",
         "config.slurm.yaml",
+        "config.sector.yaml",
     }, f"unexpected per-user file in init_pypsa_usa.sh: {sorted(user_files)}"
+
+
+@pytest.mark.fast
+def test_seeded_files_are_loaded_as_overlays():
+    """Every seeded file but the scenario starting point must take effect when edited."""
+    _templates, _destination, user_files = _init_script()
+    snakefile = (REPO_ROOT / "workflow" / "Snakefile").read_text(encoding="utf-8")
+    overlays = set(re.findall(r'^\s+configfile:\s*"config/([^"]+)"', snakefile, re.MULTILINE))
+    assert overlays == user_files - {"config.default.yaml"}
 
 
 @pytest.mark.fast
