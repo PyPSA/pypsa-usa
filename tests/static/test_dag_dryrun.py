@@ -37,6 +37,7 @@ CALIFORNIA_COUNTY_OVERRIDE = [
     [
         ("repo_data/config/config.tutorial.yaml", "cluster_network", []),
         ("repo_data/config/config.tutorial.yaml", "solve_network", []),
+        ("repo_data/config/config.tutorial.yaml", "solve_network", ["scenario={sector: E-H}"]),
         ("repo_data/config/config.default.yaml", "cluster_network", []),
         ("repo_data/config/config.test.yaml", "cluster_network", []),
         ("repo_data/config/config.california.yaml", "cluster_network", []),
@@ -94,6 +95,38 @@ def test_sector_weather_year_is_checked_at_workflow_start(tmp_path, sector):
     assert "Sector-coupled runs require" in output
     assert "[2018]" in output
     assert "[2019]" in output
+
+
+@pytest.mark.fast
+def test_hydrogen_sector_keeps_the_electricity_demand():
+    """E-H adds hydrogen to the electricity only demand, without the end-use sectors of G."""
+    result = subprocess.run(
+        [
+            "snakemake",
+            "-n",
+            "--configfile",
+            "repo_data/config/config.tutorial.yaml",
+            "--config",
+            "scenario={sector: E-H}",
+            "--until",
+            "solve_network",
+        ],
+        cwd=WORKFLOW_DIR,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, (
+        f"snakemake -n failed for sector E-H\nstderr:\n{result.stderr}\n"
+        f"stdout (last 50 lines):\n" + "\n".join(result.stdout.splitlines()[-50:])
+    )
+    match = re.search(r"^rule add_sectors:\n\s*input: (.*)$", result.stdout, re.MULTILINE)
+    assert match, f"no add_sectors job in the dry run output:\n{result.stdout}"
+    inputs = match.group(1)
+    assert "repo_data/hydrogen/adp2024_h2_demand.csv" in inputs
+    assert "cop_" not in inputs
+    assert "pop_layout" not in inputs
+    assert "rule build_cop_profiles:" not in result.stdout
 
 
 def _solve_network_inputs(overrides):

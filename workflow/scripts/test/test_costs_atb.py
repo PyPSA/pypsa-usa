@@ -17,7 +17,7 @@ import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from _helpers import load_costs
-from build_cost_data import complete_atb_slice
+from build_cost_data import complete_atb_slice, implied_itc, offwind_floating_before_first_year
 
 pytestmark = pytest.mark.fast
 
@@ -101,3 +101,62 @@ def test_load_costs_applies_per_carrier_overrides(tech_costs):
 def test_load_costs_rejects_a_slice_the_table_does_not_carry(tech_costs, atb_cfg):
     with pytest.raises(ValueError, match="Market"):
         load_costs(tech_costs, {"atb": atb_cfg})
+
+
+# ATB 2025 Moderate offshore wind, 30-year cost recovery (PUDL v2026.10.0), as in issue #938
+OFFSHORE_COLS = [
+    "pypsa-name",
+    "projection_year",
+    "scenario_atb",
+    "model_case_nrelatb",
+    "cost_recovery_period_years",
+    "capex_per_kw",
+    "wacc_real",
+    "fixed_charge_rate",
+    "model_tax_credit_case_nrelatb",
+]
+OFFSHORE = pd.DataFrame(
+    [
+        ("offwind", 2025, "Moderate", "R&D + TC", 30, 3500.0, 0.0430, 0.0357, "ITC"),
+        ("offwind", 2030, "Moderate", "R&D + TC", 30, 3000.0, 0.0312, 0.0543, None),
+        ("offwind_floating", 2030, "Moderate", "R&D + TC", 30, 5000.0, 0.0312, 0.0543, None),
+        ("offwind", 2025, "Moderate", "R&D", 30, 3500.0, 0.0420, 0.0620, None),
+        ("offwind_floating", 2030, "Moderate", "R&D", 30, 5000.0, 0.0400, 0.0610, None),
+        # a scenario with no fixed-bottom row in 2025
+        ("offwind_floating", 2030, "Advanced", "R&D", 30, 4500.0, 0.0400, 0.0610, None),
+    ],
+    columns=OFFSHORE_COLS,
+)
+
+
+def test_floating_offshore_takes_the_cost_years_financing():
+    """Before 2030 floating offshore keeps its 2030 capex but is financed like fixed-bottom (#938)."""
+    floating = offwind_floating_before_first_year(OFFSHORE, 2025).set_index(["scenario_atb", "model_case_nrelatb"])
+
+    with_credit = floating.loc[("Moderate", "R&D + TC")]
+    assert with_credit["capex_per_kw"] == 5000.0
+    assert with_credit["projection_year"] == 2030
+    assert (with_credit["wacc_real"], with_credit["fixed_charge_rate"]) == (0.0430, 0.0357)
+    assert with_credit["model_tax_credit_case_nrelatb"] == "ITC"
+
+    without_credit = floating.loc[("Moderate", "R&D")]
+    assert (without_credit["wacc_real"], without_credit["fixed_charge_rate"]) == (0.0420, 0.0620)
+
+
+def test_floating_offshore_without_a_fixed_bottom_row_keeps_its_financing():
+    floating = offwind_floating_before_first_year(OFFSHORE, 2025).set_index(["scenario_atb", "model_case_nrelatb"])
+    advanced = floating.loc[("Advanced", "R&D")]
+    assert (advanced["wacc_real"], advanced["fixed_charge_rate"]) == (0.0400, 0.0610)
+
+
+def test_floating_and_fixed_offshore_hold_the_same_itc_before_2030():
+    floating = offwind_floating_before_first_year(OFFSHORE, 2025)
+    year = pd.concat([OFFSHORE[OFFSHORE.projection_year == 2025], floating], ignore_index=True)
+    year = year[year.scenario_atb == "Moderate"]
+    with_credit = year[year.model_case_nrelatb == "R&D + TC"]
+    base = year[year.model_case_nrelatb == "R&D"]
+
+    itc = implied_itc(with_credit, base).groupby(with_credit["pypsa-name"]).first()
+
+    assert itc["offwind"] > 0.3
+    assert itc["offwind_floating"] == pytest.approx(itc["offwind"])

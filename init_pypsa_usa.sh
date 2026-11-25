@@ -17,7 +17,7 @@ destination="workflow/config"
 # Files copied into $destination for the user to edit.
 #   config.default.yaml  starting point for your own scenario config
 #   config.api.yaml      API keys (EIA); can be replaced by $EIA_API_KEY
-#   config.slurm.yaml    HPC/SLURM account, partition, email
+#   config.slurm.yaml    per-rule Slurm wall-time overrides
 user_files=(
     "config.default.yaml"
     "config.api.yaml"
