@@ -533,6 +533,67 @@ STATE_2_CODE = {
 
 CODE_2_STATE = {value: key for key, value in STATE_2_CODE.items()}
 
+#: Two-digit state FIPS code to upper-case state name, for the 50 states and DC
+# https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt
+FIPS_2_STATE = {
+    "01": "ALABAMA",
+    "02": "ALASKA",
+    "04": "ARIZONA",
+    "05": "ARKANSAS",
+    "06": "CALIFORNIA",
+    "08": "COLORADO",
+    "09": "CONNECTICUT",
+    "10": "DELAWARE",
+    "11": "DISTRICT OF COLUMBIA",
+    "12": "FLORIDA",
+    "13": "GEORGIA",
+    "15": "HAWAII",
+    "16": "IDAHO",
+    "17": "ILLINOIS",
+    "18": "INDIANA",
+    "19": "IOWA",
+    "20": "KANSAS",
+    "21": "KENTUCKY",
+    "22": "LOUISIANA",
+    "23": "MAINE",
+    "24": "MARYLAND",
+    "25": "MASSACHUSETTS",
+    "26": "MICHIGAN",
+    "27": "MINNESOTA",
+    "28": "MISSISSIPPI",
+    "29": "MISSOURI",
+    "30": "MONTANA",
+    "31": "NEBRASKA",
+    "32": "NEVADA",
+    "33": "NEW HAMPSHIRE",
+    "34": "NEW JERSEY",
+    "35": "NEW MEXICO",
+    "36": "NEW YORK",
+    "37": "NORTH CAROLINA",
+    "38": "NORTH DAKOTA",
+    "39": "OHIO",
+    "40": "OKLAHOMA",
+    "41": "OREGON",
+    "42": "PENNSYLVANIA",
+    "44": "RHODE ISLAND",
+    "45": "SOUTH CAROLINA",
+    "46": "SOUTH DAKOTA",
+    "47": "TENNESSEE",
+    "48": "TEXAS",
+    "49": "UTAH",
+    "50": "VERMONT",
+    "51": "VIRGINIA",
+    "53": "WASHINGTON",
+    "54": "WEST VIRGINIA",
+    "55": "WISCONSIN",
+    "56": "WYOMING",
+}
+
+_UPPER_STATE_2_CODE = {state.upper(): code for state, code in STATE_2_CODE.items()}
+
+#: Two-digit state FIPS code to postal code, derived from ``FIPS_2_STATE`` and ``STATE_2_CODE``
+STATE_FIPS_2_CODE = {fips: _UPPER_STATE_2_CODE[state] for fips, state in FIPS_2_STATE.items()}
+
 REEDS_NERC_INTERCONNECT_MAPPER = {
     "WECC_CA": "western",
     "WECC_NWPP": "western",
