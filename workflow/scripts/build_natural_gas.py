@@ -1274,6 +1274,31 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         )
 
 
+#: Linepack assumptions per pipeline class, overridden by ``sector: natural_gas:
+#: linepack``. Diameters in inches, pressures in kPa, from
+#: https://publications.anl.gov/anlpubs/2008/02/61034.pdf
+DEFAULT_LINEPACK = {
+    "interstate": {"include": True, "diameter": 36, "max_pressure": 8000, "min_pressure": 4000},
+    "intrastate": {"include": True, "diameter": 24, "max_pressure": 8000, "min_pressure": 4000},
+}
+
+
+def get_linepack_assumptions(options: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
+    """``DEFAULT_LINEPACK`` with the keys given in ``options`` replaced, per pipeline class."""
+    options = options or {}
+    unknown = set(options) - set(DEFAULT_LINEPACK)
+    if unknown:
+        raise ValueError(f"Unknown linepack pipeline class {sorted(unknown)}; use {sorted(DEFAULT_LINEPACK)}")
+    assumptions = {}
+    for pipe_class, defaults in DEFAULT_LINEPACK.items():
+        given = options.get(pipe_class) or {}
+        unknown = set(given) - set(defaults)
+        if unknown:
+            raise ValueError(f"Unknown linepack option {sorted(unknown)} for {pipe_class}; use {sorted(defaults)}")
+        assumptions[pipe_class] = {**defaults, **given}
+    return assumptions
+
+
 class PipelineLinepack(GasData):
     """Creator for linepack infrastructure."""
 
@@ -1283,7 +1308,9 @@ class PipelineLinepack(GasData):
         interconnect: str,
         counties: str,
         pipelines: str,
+        assumptions: dict[str, Any] | None = None,
     ) -> None:
+        self.assumptions = get_linepack_assumptions(assumptions)
         self.counties = StateGeometry(counties)
         self.states = self.counties.states
         self.pipeline_geojson = pipelines
@@ -1318,21 +1345,17 @@ class PipelineLinepack(GasData):
             .reset_index()
         )
 
-        # https://publications.anl.gov/anlpubs/2008/02/61034.pdf
-        intrastate_radius = 12 * 0.0254  # inches in meters (24in dia)
-        interstate_radius = 18 * 0.0254  # inches meters (36in dia)
+        # every pipe the EIA does not label "Interstate" is taken as intrastate
+        pipes = length_in_state.copy()
+        pipes["CLASS"] = np.where(pipes.TYPEPIPE == "Interstate", "interstate", "intrastate")
+        included = [pipe_class for pipe_class, values in self.assumptions.items() if values["include"]]
+        pipes = pipes[pipes.CLASS.isin(included)]
 
-        volumne_in_state = length_in_state.copy()
-        volumne_in_state["RADIUS"] = volumne_in_state.TYPEPIPE.map(
-            lambda x: interstate_radius if x == "Interstate" else intrastate_radius,
-        )
-        volumne_in_state["VOLUME_M3"] = volumne_in_state.LENGTH_M * pi * volumne_in_state.RADIUS**2
-        volumne_in_state = volumne_in_state[["STATE_NAME", "STATE", "VOLUME_M3"]]
-        volumne_in_state = volumne_in_state.groupby(by=["STATE_NAME", "STATE"]).sum()
+        def assumed(key: str) -> pd.Series:
+            return pipes.CLASS.map({pipe_class: values[key] for pipe_class, values in self.assumptions.items()})
 
-        # https://publications.anl.gov/anlpubs/2008/02/61034.pdf
-        max_pressure = 8000  # kPa
-        min_pressure = 4000  # kPa
+        radius = assumed("diameter") / 2 * 0.0254  # inches to meters
+        pipes["VOLUME_M3"] = pipes.LENGTH_M * pi * radius**2
 
         # Linepack is the fuel held in the pipe, so its energy is the gas volume at
         # standard conditions times the same heating value used for MMcf -> MWh.
@@ -1340,10 +1363,11 @@ class PipelineLinepack(GasData):
         std_pressure = 101.56  # kPa (14.73 psia, the EIA reporting basis)
         m3_2_mmcf = 35.3147 / 1e6
 
-        final = volumne_in_state.copy()
-        mwh_per_kpa = final.VOLUME_M3 / std_pressure * m3_2_mmcf * MWH_2_MMCF
-        final["MAX_ENERGY_MWh"] = mwh_per_kpa * max_pressure
-        final["MIN_ENERGY_MWh"] = mwh_per_kpa * min_pressure
+        mwh_per_kpa = pipes.VOLUME_M3 / std_pressure * m3_2_mmcf * MWH_2_MMCF
+        pipes["MAX_ENERGY_MWh"] = mwh_per_kpa * assumed("max_pressure")
+        pipes["MIN_ENERGY_MWh"] = mwh_per_kpa * assumed("min_pressure")
+
+        final = pipes.groupby(by=["STATE_NAME", "STATE"])[["MAX_ENERGY_MWh", "MIN_ENERGY_MWh"]].sum()
         final["NOMINAL_ENERGY_MWh"] = (final.MAX_ENERGY_MWh + final.MIN_ENERGY_MWh) / 2
 
         final = final[["MAX_ENERGY_MWh", "MIN_ENERGY_MWh", "NOMINAL_ENERGY_MWh"]].reset_index()
@@ -1490,7 +1514,7 @@ def build_natural_gas(
 
     # add pipeline linepack
 
-    linepack = PipelineLinepack(year, interconnect, county_path, pipeline_shape_path)
+    linepack = PipelineLinepack(year, interconnect, county_path, pipeline_shape_path, options.get("linepack"))
     linepack.build_infrastructure(
         n,
         cyclic_storage=cyclic_storage,

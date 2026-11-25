@@ -4,3 +4,5 @@ s_max_pu,--,"Value in [0.,1.]",Correction factor for line capacities (`s_nom`) t
 s_nom_max,MW,float,Global upper limit for the maximum capacity of each extendable line.
 max_extension,MW,float,Upper limit for the extended capacity of each extendable line.
 length_factor,--,float,Correction factor to account for the fact that buses are *not* connected by lines through air-line distance. Only used in TAMU network.
+regional_costs,--,bool,"Price AC lines and HVDC links by the ReEDS county-pair route cost per great-circle km (region, terrain, detour). ``false`` uses the national ``HVAC overhead`` / ``HVDC overhead`` cost per km of ``length``. See :doc:`/data-costs`."
+voltage_factor,--,bool,"With ``regional_costs``, scale the AC line cost by voltage class, ``(kV/500)^b`` fitted to ReEDS ``rev_transmission_basecost.csv``. ``false`` (default) prices every line at 500 kV, as ReEDS does; ``true`` makes lines below 500 kV much dearer (x1.4 at 345 kV, x1.9 at 230 kV, x2.9 at 138 kV)."

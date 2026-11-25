@@ -120,6 +120,10 @@ enable:
 # dataset in `godeeep_cf_registry` (config.common.yaml) — the Oak mirror covers
 # 1980-2022 historical, Zenodo publishes only 2012. An undeclared year is a
 # parse-time error, never a silent swap to a neighbouring year.
+# Under `reeds` it must hold exactly one year in 2007-2013 or 2016-2023 (the
+# years ReEDS publishes; the same rule as EER demand), checked at parse time.
+# The ReEDS CFs are UTC like the snapshots; in leap years Feb 29 takes the
+# 1 March labels, the convention GODEEEP and EER demand already follow.
 # docs : RENEWABLE_WEATHER_YEARS
 renewable_weather_years: [2019]         # weather years to use (single year unless multi-horizon godeeep)
 
@@ -289,6 +293,12 @@ lines:
   s_nom_max: .inf                          # MVA cap on expanded line capacity per corridor (.inf = unbounded)
   max_extension: 20000                     # MW cap on total network-wide line expansion
   length_factor: 1.25                      # multiplier on geographic length to account for routing/right-of-way
+  regional_costs: true                     # price AC lines/HVDC links by ReEDS county-pair route cost (region, terrain, detour) per great-circle km; false = national HVAC/HVDC overhead cost per routed km
+  # With regional_costs, scale the AC line cost by voltage class, (kV/500)^b fitted to
+  # ReEDS rev_transmission_basecost. Off by default: it makes lines below 500 kV much
+  # dearer (x1.4 at 345 kV, x1.9 at 230 kV, x2.9 at 138 kV), while the ReEDS tables, and
+  # the transport model, price all new AC capacity as 500 kV lines.
+  voltage_factor: false                    # true = scale by voltage class; false = price every line at 500 kV
 
   # pyPSA line-type catalog, mapped onto AC corridors by v_nom. Every line in
   # the base network is assigned the LineType matching its voltage; values
@@ -489,7 +499,10 @@ solving:
       # https://ergo-code.github.io/HiGHS/options/definitions.html
       threads: 4
       solver: "ipm"
-      run_crossover: "off"
+      # Barrier without crossover can end with status "unknown" on sector
+      # networks and leaves small negative dispatch (issues #635, #639). "off"
+      # is faster on large networks if the interior solution is good enough.
+      run_crossover: "on"
       small_matrix_value: 1e-6
       large_matrix_value: 1e9
       primal_feasibility_tolerance: 1e-5

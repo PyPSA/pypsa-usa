@@ -18,13 +18,25 @@ GPS_CRS = "EPSG:4326"
 HOURS_PER_YEAR = 8760
 
 ###########################################
-# ReEDS wind/solar supply curves
+# Renewable resource datasets (renewable.dataset)
 ###########################################
 # Read at parse time by the rule files, so keep this module free of heavy imports.
+
+#: Sources of wind/solar capacity factors accepted by ``renewable.dataset``.
+RENEWABLE_DATASETS = ("atlite", "godeeep", "reeds")
+
+#: Weather years published in the NREL ReEDS hourly wind/solar capacity-factor
+#: tables (``cf_profile_<year>`` blocks; 2014-2015 are not published).
+#: ``renewable.dataset: reeds`` only works for these years.
+REEDS_VRE_WEATHER_YEARS = (2007, 2008, 2009, 2010, 2011, 2012, 2013, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023)
 
 #: Technologies ReEDS supply curves cover (the offshore curve serves both
 #: fixed-bottom and floating wind).
 REEDS_VRE_CARRIERS = ("onwind", "solar", "offwind", "offwind_floating")
+
+#: reV land-access scenarios ReEDS publishes a supply curve and CF table for; the
+#: same scenarios ``renewable_land_access`` selects.
+REEDS_LAND_ACCESS = ("reference", "limited", "open")
 
 #: Zenodo record of each ReEDS VRE resource (one file per land-access scenario).
 REEDS_VRE_RECORDS = {
@@ -33,13 +45,24 @@ REEDS_VRE_RECORDS = {
     "offwind": "18826680",
 }
 
-#: File names inside each ReEDS VRE record (``sc`` supply curve, ``sitemap`` site
-#: coordinates). Fixed-bottom and floating offshore wind share the ``offwind`` curve.
+#: File names inside each ReEDS VRE record (``sc`` supply curve, ``cf`` hourly
+#: capacity factors, ``sitemap`` site coordinates). Fixed-bottom and floating
+#: offshore wind share the ``offwind`` curve.
 REEDS_VRE_FILES = {
-    "onwind": {"sc": "sc_wind-ons_{access}.csv", "sitemap": "sitemap.csv"},
-    "solar": {"sc": "sc_upv_{access}.csv", "sitemap": "sitemap.csv"},
-    "offwind": {"sc": "sc_wind-ofs_{access}.csv", "sitemap": "sitemap_offshore.csv"},
+    "onwind": {"sc": "sc_wind-ons_{access}.csv", "cf": "cf_wind-ons_{access}.h5", "sitemap": "sitemap.csv"},
+    "solar": {"sc": "sc_upv_{access}.csv", "cf": "cf_upv_{access}.h5", "sitemap": "sitemap.csv"},
+    "offwind": {"sc": "sc_wind-ofs_{access}.csv", "cf": "cf_wind-ofs_{access}.h5", "sitemap": "sitemap_offshore.csv"},
 }
+
+#: ReEDS ``cf_profile_<year>`` values are stored as integers x 1e4.
+REEDS_CF_SCALE = 1e-4
+
+#: ReEDS UPV profiles are MW_AC (grid) per MW_DC (array); the supply-curve
+#: capacity, its ``cf`` column and the ATB capex are per MW_AC. Site profiles are
+#: multiplied by this inverter loading ratio and clipped at 1. Checked against
+#: the published data: raw profiles peak at 0.746 = 1/1.34, and the scaled site
+#: means match the supply-curve ``cf`` (median ratio 0.998).
+REEDS_SOLAR_INVERTER_LOADING_RATIO = 1.34
 
 #: Depth (m) dividing ReEDS's shared offshore curve into fixed and floating sites
 #: when the technology config sets no depth bound.

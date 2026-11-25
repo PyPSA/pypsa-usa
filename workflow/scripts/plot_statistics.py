@@ -580,6 +580,22 @@ def plot_emissions_bar(
 #### Temporal Plots ####
 
 
+def single_signed_columns(energy_mix: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clip each column to one sign, as a stacked area chart requires.
+
+    Storage charging and exports are drawn below zero and every other carrier
+    above. A barrier solution without crossover leaves dispatch slightly on the
+    wrong side of zero (e.g. -1e-3 MW of solar), which pandas refuses to stack.
+    """
+    negative = [c for c in energy_mix.columns if c.endswith("_charger") or c == "exports"]
+    positive = [c for c in energy_mix.columns if c not in negative]
+    energy_mix = energy_mix.copy()
+    energy_mix[negative] = energy_mix[negative].clip(upper=0)
+    energy_mix[positive] = energy_mix[positive].clip(lower=0)
+    return energy_mix
+
+
 def plot_production_area(
     n: pypsa.Network,
     carriers_2_plot: list[str],
@@ -615,6 +631,7 @@ def plot_production_area(
 
     carriers_2_plot = list(set(carriers_2_plot))
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
+    energy_mix = single_signed_columns(energy_mix)
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
 
     color_palette = get_color_palette(n)

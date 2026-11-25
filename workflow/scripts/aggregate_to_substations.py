@@ -22,6 +22,7 @@ import pandas as pd
 import pypsa
 from _helpers import configure_logging, log_network_schema
 from pypsa.clustering.spatial import get_clustering_from_busmap
+from regional_cost import LINE_CAPEX_STRATEGIES, TransmissionCostModel, assign_branch_capex
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,7 @@ def aggregate_to_substations(
         aggregate_generators_weighted=True,
         aggregate_one_ports=["Load", "StorageUnit"],
         line_length_factor=1.0,
+        line_strategies=LINE_CAPEX_STRATEGIES,
         bus_strategies={
             "type": "max",
             "Pd": "sum",
@@ -211,6 +213,20 @@ if __name__ == "__main__":
 
     n = pypsa.Network(snakemake.input.network)
     schema_entry = log_network_schema(n, stage="entry")
+
+    # Region- and voltage-resolved transmission cost. It has to be computed here,
+    # while lines still carry their native v_nom and buses their county: the next
+    # step collapses every line to 230 kV, and county is dropped below for most
+    # topologies. The intensive per-km column then rides through every clustering
+    # pass and add_electricity turns it into capital_cost.
+    if params.regional_transmission_costs:
+        model = TransmissionCostModel.from_files(
+            snakemake.input.transmission_distance_cost,
+            snakemake.input.transmission_basecost,
+            dollar_year=params.dollar_year,
+            voltage_factor=params.voltage_factor,
+        )
+        assign_branch_capex(n, model)
 
     n = convert_to_voltage_level(n, 230)
     n, trafo_map = remove_transformers(n)

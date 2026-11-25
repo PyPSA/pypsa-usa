@@ -52,7 +52,12 @@ renewable:
   # rules dereference it directly (retrieve.smk:231 gates rule retrieve_cutout
   # on `config["renewable"]["dataset"]`), so every config that sets
   # `enable.build_cutout: false` needs it defined here.
-  dataset: godeeep                         # atlite | godeeep
+  #   atlite  = ERA5 cutouts, any weather year with a cutout
+  #   godeeep = GODEEEP climate-model CFs (historical or future scenarios)
+  #   reeds   = NREL ReEDS supply-curve sites and hourly CFs, for exactly one
+  #             renewable_weather_years entry in 2007-2013 or 2016-2023; the
+  #             land-access variant follows renewable_land_access
+  dataset: godeeep                         # atlite | godeeep | reeds
 
   # How GODEEEP cells are weighted up to the s{simpl} cluster bus.
   #   capacity     = availability-weighted per substation, then p_nom_max-weighted

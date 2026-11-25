@@ -243,6 +243,51 @@ def ccs_co2_emissions(carrier: str, base_emissions: float) -> float:
     return (1 - capture_rate) * base_emissions
 
 
+#: The component lists of ``electricity: extendable_carriers``
+COMPONENTS_WITH_CARRIERS = ("Generator", "StorageUnit", "Store", "Link")
+
+
+def check_extendable_carriers(extendable_carriers: dict) -> list[str]:
+    """
+    Messages for carriers of ``electricity: extendable_carriers`` listed where they have no effect.
+
+    Each list is read by different code, which skips what it does not know
+    without saying so: ``StorageUnit`` takes the battery and pumped hydro
+    carriers of the cost table, ``Generator`` everything else, and ``Store`` and
+    ``Link`` add nothing to the electricity network. An empty list means the
+    config is fine.
+    """
+    from constants import ATB_TECH_MAPPER
+
+    storage = sorted(
+        (carrier for carrier in ATB_TECH_MAPPER if carrier.endswith(("hr_battery_storage", "hr_PHS"))),
+        key=lambda carrier: (carrier.split("hr_")[1], int(carrier.split("hr_")[0])),
+    )
+    listed = {component: list(extendable_carriers.get(component) or []) for component in COMPONENTS_WITH_CARRIERS}
+    key = "electricity.extendable_carriers"
+    messages = []
+
+    not_storage = [carrier for carrier in listed["StorageUnit"] if carrier not in storage]
+    if not_storage:
+        messages.append(
+            f"{key}.StorageUnit: {not_storage} are not storage carriers and are ignored. "
+            f"StorageUnit takes {storage}; other technologies go under Generator.",
+        )
+    misplaced = [carrier for carrier in listed["Generator"] if carrier in storage]
+    if misplaced:
+        messages.append(
+            f"{key}.Generator: {misplaced} are storage carriers and would be built as generators. "
+            "List them under StorageUnit.",
+        )
+    for component in ("Store", "Link"):
+        if listed[component]:
+            messages.append(
+                f"{key}.{component}: {listed[component]} add no components to the network; "
+                "no rule builds extendable carriers from this list.",
+            )
+    return messages
+
+
 def load_costs(tech_costs: str, costs_config: dict | None = None, year: int | None = None) -> pd.DataFrame:
     """Load tech costs and select the configured ATB scenario/model_case per carrier.
 
