@@ -67,6 +67,8 @@ def add_technology_capacity_target_constraints(n, config):
     model_horizon = get_model_horizon(n.model)
 
     for _, target in tct_data.iterrows():
+        # pandas 3 infers a str row when most columns are strings; "max"/"min" get numbers below
+        target = target.astype(object)
         planning_horizon = target.planning_horizon
         if planning_horizon != "all" and int(planning_horizon) > max(model_horizon):
             continue

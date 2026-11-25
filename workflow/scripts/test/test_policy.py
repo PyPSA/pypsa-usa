@@ -778,3 +778,17 @@ def test_rps_and_ces_in_one_zone_and_year_get_one_constraint_each(policy_network
 
     names = [c for c in n.model.constraints if c.startswith("GlobalConstraint-CA_2030")]
     assert sorted(names) == ["GlobalConstraint-CA_2030_ces_limit", "GlobalConstraint-CA_2030_rps_limit"]
+
+
+def test_tct_existing_target_on_a_string_csv(policy_network, tmp_path):
+    """A ``max: existing`` row, read by pandas 3 as a str row, gets a numeric max constraint."""
+    from opts.policy import add_technology_capacity_target_constraints
+
+    fn = tmp_path / "technology_capacity_targets.csv"
+    fn.write_text("name,region,carrier,planning_horizon,min,max\nnuclear_no_build,west,nuclear,all,,existing\n")
+    n = policy_network
+    n.optimize.create_model(multi_investment_periods=True)
+
+    add_technology_capacity_target_constraints(n, {"electricity": {"technology_capacity_targets": str(fn)}})
+
+    assert any("max" in c for c in n.model.constraints)
