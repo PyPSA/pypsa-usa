@@ -1003,10 +1003,19 @@ rule aggregate_to_substations:
         topological_boundaries=config_provider(
             "model_topology", "topological_boundaries"
         ),
+        regional_transmission_costs=config_provider(
+            "lines", "regional_costs", default=True
+        ),
+        voltage_factor=config_provider("lines", "voltage_factor", default=False),
+        dollar_year=config_provider("costs", "dollar_year"),
     input:
         bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
         sub=BUSMAPS + "{interconnect}/sub.csv",
         network=NETWORKS + "{interconnect}/elec_base_network.nc",
+        # Region/route-resolved 500 kV AC cost per county pair, and the
+        # voltage-class and DC/AC cost relationships (both 2004 USD).
+        transmission_distance_cost="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_county.csv",
+        transmission_basecost="repo_data/ReEDS_Constraints/transmission/rev_transmission_basecost.csv",
     output:
         network=NETWORKS + "{interconnect}/elec_b.nc",
         busmap=BUSMAPS + "{interconnect}/busmap_b.csv",
@@ -1129,6 +1138,8 @@ rule cluster_network:
         itl_costs_county="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_county.csv",
         itl_state="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_state_NARIS2024.csv",
         itl_costs_state="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_state.csv",
+        transmission_basecost="repo_data/ReEDS_Constraints/transmission/rev_transmission_basecost.csv",
+        county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
     output:
         network=NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
         regions_onshore=GEOSPATIAL

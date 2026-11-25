@@ -360,6 +360,8 @@ properties:
       s_nom_max: {type: number}
       max_extension: {type: number}
       length_factor: {type: number}
+      regional_costs: {type: boolean}
+      voltage_factor: {type: boolean}
       types: {type: object}
 
   links:
