@@ -55,6 +55,18 @@ HPC: `bash workflow/run_slurm.sh <snakemake args>` runs the scheduler (inside a 
 - Pre-commit hooks (snakefmt, ruff, ruff format, blackdoc, pyupgrade, pretty-format-yaml, add-trailing-comma, jupyter-notebook-cleanup) run on `git commit`. Hooks modify files on first run; re-stage and re-commit. **Do not bypass with `--no-verify`.**
 - `.github/workflows/main.yml` runs two jobs on every push/PR to `master`/`develop`/`v1-epic`: `fast-tests` (`pytest -m fast`, Tier A static checks) and `e2e-tests` (`pytest -m integration`, Tier B build under micromamba with cached `data/` and `cutouts/`). A scheduled Tuesday job (`upstream-regression`) re-runs the whole suite against upstream PyPSA/atlite/linopy master.
 
+## Pull requests: show what changed in the numbers
+
+When a PR changes values the pipeline produces (anything written under `resources/` or `results/`: heat rates, costs, capacities, demand, profiles, cluster counts, constraint bounds, solved results), post a PR comment with plots of the change. Tests show the code runs; the plots show reviewers how much the data moved. A PR that changes no produced value (refactor, docs, tests, logging) needs no plots: say "no change in produced values" in the PR body and how you checked.
+
+- **Compare the same inputs under both versions.** Run the changed step on the base (`origin/develop`) and on the PR head with real data, not test fixtures. Run the smallest step that shows the change (the changed function or rule), and go further downstream only as far as you can afford. Say where you stopped.
+- **Plot the change itself, with units.** Typical figures: before/after distribution of the changed quantity by carrier, technology or region; a before-vs-after scatter of the rows that changed; counts and MW (or MWh, $) affected. Two to four figures. Leave out a figure that shows nothing.
+- **Lead with numbers.** Open the comment with one or two sentences on the measured impact and a small table (rows changed out of the total, MW affected, largest change, weighted-mean change).
+- **Say how it was produced.** Inputs and their vintage, the config, the base and head commit shas, and what was not covered.
+- **Host the images on a fork, never in this repo.** `gh` cannot attach images. Push the PNGs to a `pr-figures` branch of your (or the user's) fork under `pr-<number>/`, and link them by commit sha: `https://raw.githubusercontent.com/<owner>/pypsa-usa/<sha>/pr-<number>/<file>.png`. Check that each link loads before posting.
+- **One comment per PR.** When the PR changes, edit that comment (`gh pr comment --edit-last`) instead of adding another.
+- If the comparison cannot be run (inputs missing, step too expensive), say so in the PR body with what is missing. Never plot synthetic data in its place.
+
 ## Architecture: the DAG and the resources/ layout
 
 The workflow was recently refactored (the "simplify-early" stack) so that topology aggregation and `{simpl}` kmeans clustering happen **before** the per-bus heavy rules. The clustered network is the input to demand/RE/electricity assembly, not the substation-level network. This is the load-bearing fact about the rule graph:
