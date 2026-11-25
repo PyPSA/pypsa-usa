@@ -6,6 +6,7 @@ use) and the available generation time series (based on weather data).
 
 import functools
 import logging
+import sys
 import time
 
 import atlite
@@ -286,6 +287,25 @@ def get_renewable_snapshots(config, year):
         return _drop_leap_day(get_snapshots(snapshots_config))
 
 
+def empty_profile(snapshots: pd.DatetimeIndex, offshore: bool) -> xr.Dataset:
+    """
+    Profile dataset with no buses, for a technology that has no region in the model.
+
+    An inland model has no offshore regions, for example. ``add_electricity`` skips
+    a profile without buses, so the technology is left out and the run goes on.
+    """
+    bus = pd.Index([], name="bus", dtype=str)
+    per_bus = ["weight", "p_nom_max", "potential", "average_distance"]
+    if offshore:
+        per_bus.append("underwater_fraction")
+    ds = xr.Dataset(
+        {name: ("bus", np.empty(0)) for name in per_bus},
+        coords={"bus": bus, "time": snapshots},
+    )
+    ds["profile"] = (("time", "bus"), np.empty((len(snapshots), 0)))
+    return ds
+
+
 def plot_data(data):
     x = data.coords["x"].values  # Longitude
     y = data.coords["y"].values  # Latitude
@@ -335,17 +355,24 @@ if __name__ == "__main__":
     if correction_factor != 1.0:
         logger.info(f"correction_factor is set as {correction_factor}")
 
+    sns = get_snapshots(snakemake.params.snapshots)
+
+    regions = gpd.read_file(snakemake.input.regions)
+    if regions.empty:
+        # e.g. an inland model with offshore wind in renewable_carriers
+        logger.warning(
+            f"No regions in {snakemake.input.regions}: the model has nowhere to build "
+            f"{snakemake.wildcards.technology}. Writing an empty profile; the technology is left out.",
+        )
+        offshore = snakemake.wildcards.technology.startswith("offwind")
+        empty_profile(sns, offshore).to_netcdf(snakemake.output.profile)
+        sys.exit(0)
+
     if nprocesses > 1:
         client = Client(n_workers=nprocesses, threads_per_worker=1)
     else:
         client = None
 
-    sns = get_snapshots(snakemake.params.snapshots)
-
-    regions = gpd.read_file(snakemake.input.regions)
-    assert "x" in regions.columns and "y" in regions.columns, (
-        f"List of regions in {snakemake.input.regions} is empty, please disable the corresponding renewable technology"
-    )
     # do not pull up, set_index does not work if geo dataframe is empty
     regions = regions.set_index("name").rename_axis("bus")
     buses = regions.index
