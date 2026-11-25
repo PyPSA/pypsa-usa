@@ -15,7 +15,7 @@ from _helpers import (
     load_costs,
     log_network_schema,
 )
-from add_electricity import add_missing_carriers
+from add_electricity import VRE_PROFILE_CARRIERS, add_missing_carriers
 from constants import (
     BECCS_CO2_REMOVAL,
     GENERATOR_CAPEX_STRATEGIES,
@@ -615,6 +615,32 @@ def attach_multihorizon_egs(
         ]
         .values
     )
+
+
+def get_new_carriers(
+    extendable_carriers: list[str],
+    network_carriers: set[str],
+    site_carriers: set[str],
+    everywhere_carriers: set[str],
+) -> list[str]:
+    """
+    Return the extendable carriers to offer at every bus.
+
+    These are the extendable carriers with no generator in the network, plus
+    ``everywhere_carriers``, which are offered at every bus even when they
+    have existing plants. Carriers in ``site_carriers`` (renewables and EGS)
+    can only be built at resource sites with a profile. If ``add_electricity`` attached none of them, the footprint
+    has no site for them, so they are left out with a warning instead of being
+    added at every bus with ``p_max_pu = 1``.
+    """
+    missing = set(extendable_carriers) - network_carriers
+    no_sites = missing & site_carriers
+    if no_sites:
+        logger.warning(
+            f"Extendable carriers {sorted(no_sites)} have no resource sites in the network; "
+            "no new capacity of them is added.",
+        )
+    return sorted((missing - site_carriers) | everywhere_carriers)
 
 
 def attach_multihorizon_new_generators(n, costs, carriers, investment_year, bus_multipliers=None):
@@ -1499,9 +1525,11 @@ def main(snakemake) -> None:
     egs_gens = n.generators[n.generators["p_nom_extendable"]]
     egs_gens = egs_gens.loc[egs_gens["carrier"].str.contains("EGS")]
 
-    new_carriers = list(
-        set(elec_config["extendable_carriers"].get("Generator", [])) - set(n.generators.carrier.unique())
-        | everywhere_carriers,
+    new_carriers = get_new_carriers(
+        elec_config["extendable_carriers"].get("Generator", []),
+        set(n.generators.carrier.unique()),
+        set(elec_config["renewable_carriers"]) | set(VRE_PROFILE_CARRIERS) | {"EGS"},
+        everywhere_carriers,
     )
 
     # ReEDS county overnight-capex multipliers for new builds (None when disabled,
