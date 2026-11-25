@@ -998,6 +998,33 @@ def merge_fc_hr_data(
     return plants
 
 
+def screen_cems_heat_rates(cems_hr: pd.DataFrame, column: str = "Heat Input (mmBtu/MWh)") -> pd.DataFrame:
+    """
+    Drop CEMS heat rates outside 1.5 IQR of their technology's, or below 3.412 (efficiency above 1).
+
+    CEMS heat input per MWh of a unit that barely ran is dominated by start-up and idling
+    fuel (oil peakers up to 220 mmBtu/MWh, an efficiency of 1.5%). The PUDL heat rates
+    are screened the same way (``filter_outliers_iqr_grouped``); dropped units keep them.
+    """
+    values = cems_hr[column]
+    keep = values.notna() & (values >= 3.412)
+    groups = cems_hr["technology_description"].fillna("unknown")
+    for _, rows in cems_hr[keep].groupby(groups[keep]):
+        q1, q3 = rows[column].quantile([0.25, 0.75])
+        iqr = q3 - q1
+        outside = (rows[column] < q1 - 1.5 * iqr) | (rows[column] > q3 + 1.5 * iqr)
+        keep[rows.index[outside]] = False
+    dropped = cems_hr[~keep & values.notna()]
+    if not dropped.empty:
+        logger.info(
+            "Dropped %d CEMS heat rates outside their technology's range (max %.1f mmBtu/MWh); "
+            "these units keep their PUDL heat rate.",
+            len(dropped),
+            dropped[column].max(),
+        )
+    return cems_hr[keep]
+
+
 def apply_cems_heat_rates(plants, crosswalk_fn, cems_fn):
     # Apply CEMS calculated heat rates
     cems_hr = pd.read_excel(cems_fn)[["Facility ID", "Unit ID", "Heat Input (mmBtu/MWh)"]]
@@ -1010,6 +1037,16 @@ def apply_cems_heat_rates(plants, crosswalk_fn, cems_fn):
         how="inner",
     )
     cems_hr["hr_source_cems"] = "cems"
+    cems_hr = pd.merge(
+        cems_hr,
+        plants[["plant_id_eia", "generator_id", "technology_description"]].drop_duplicates(
+            ["plant_id_eia", "generator_id"]
+        ),
+        left_on=["EIA_PLANT_ID", "EIA_GENERATOR_ID"],
+        right_on=["plant_id_eia", "generator_id"],
+        how="left",
+    ).drop(columns=["plant_id_eia", "generator_id"])
+    cems_hr = screen_cems_heat_rates(cems_hr).drop(columns="technology_description")
     plants = pd.merge(
         cems_hr,
         plants,
