@@ -487,6 +487,24 @@ created along the offshore shapes.
    :end-before: # docs :
 ```
 
+(conventional_cf)=
+## `conventional`
+
+Unit commitment, must-run, fuel price and capacity derate options for conventional generators.
+The ambient derate is described under [Capacity Derates](#capacity_derates).
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+   :language: yaml
+   :start-after: # docs : CONVENTIONAL
+   :end-before: # docs :
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/conventional.csv
+```
+
 (lines_cf)=
 ## `lines`
 ```{eval-rst}
@@ -672,7 +690,9 @@ Processed cost tables are written to `resources/costs/costs_{year}.csv`.
 The `ucap` section applies an Unforced Capacity (UCAP) derate to conventional generators for
 resource-adequacy accounting: each carrier's capacity is derated by its Forced Outage Rate (FOR),
 implemented as `p_max_pu = 1 - FOR`. Enable it when reserve-margin constraints should be met with
-outage-derated rather than installed capacity. Rates are given in percent per carrier.
+outage-derated rather than installed capacity. Rates are given in percent per carrier. It cannot
+be combined with `conventional: ambient_derate`, the hourly temperature-dependent version of the
+same derate, which is on by default: set its `enable: false` to use `ucap`.
 
 ```{eval-rst}
 .. literalinclude:: ../../workflow/repo_data/config/config.common.yaml

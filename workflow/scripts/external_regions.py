@@ -663,6 +663,7 @@ def attach_remote_contracted_units_externally(
         bundle["conventional_carriers"],
         bundle["unit_commitment"],
         profiles=bundle.get("vre_profiles"),
+        seasonal_derate_exempt=tuple(bundle.get("seasonal_derate_exempt", ())),
     )
     return units["zone"]
 

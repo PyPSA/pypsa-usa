@@ -343,10 +343,11 @@ their four deliberate simplifications.
 
 **Not implemented**
 
-- `conventional: ambient_derate` (CPUC SERVM unit-specific hourly thermal derates) is a
-  reserved phase-2 option. `enable: true` raises `NotImplementedError`. When it lands it
-  *replaces* the EIA-860 seasonal derate rather than stacking on it — stacking an ambient
-  derate on a seasonal derate, or on a UCAP-derated capacity credit, double-counts the same
-  thermal deficiency.
+- `conventional: ambient_derate: source: cpuc_servm` (CPUC SERVM unit-specific hourly thermal
+  derates) is a reserved phase-2 option and raises `NotImplementedError`. The generic
+  `source: murphy2019` (temperature-dependent forced outage rates by prime mover, see
+  [Capacity Derates](#capacity_derates)) is implemented. Either *replaces* the EIA-860
+  seasonal derate rather than stacking on it — stacking an ambient derate on a seasonal
+  derate, or on a UCAP-derated capacity credit, double-counts the same thermal deficiency.
 - `servm_weather_years` with more than one entry (stochastic weather scenarios) raises
   `NotImplementedError`.

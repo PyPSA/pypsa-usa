@@ -1158,6 +1158,31 @@ def flowgates_for_extra_components(wildcards):
         return "repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_ba_NARIS2024.csv"
 
 
+rule build_bus_temperature:
+    params:
+        snapshots=config["snapshots"],
+    input:
+        regions_onshore=GEOSPATIAL
+        + "{interconnect}/regions_onshore_s{simpl}_{clusters}.geojson",
+        cutout=lambda wildcards: expand(
+            "cutouts/" + CDIR + "usa_era5_" + "{renewable_weather_year}" + ".nc",
+            renewable_weather_year=config["renewable_weather_years"],
+        ),
+    output:
+        temperature=TEMPERATURE + "{interconnect}/temp_air_bus_s{simpl}_c{clusters}.nc",
+    log:
+        LOGS + "{interconnect}/build_bus_temperature_s{simpl}_c{clusters}.log",
+    benchmark:
+        BENCHMARKS + "{interconnect}/build_bus_temperature/s{simpl}_c{clusters}"
+    threads: 1
+    resources:
+        mem_mb=8000,
+    conda:
+        "../envs/environment.yaml"
+    script:
+        "../scripts/build_bus_temperature.py"
+
+
 rule add_extra_components:
     input:
         **{
@@ -1189,6 +1214,18 @@ rule add_extra_components:
         reg_cap_cost_diff=(
             "repo_data/costs/reg_cap_cost_diff_default.csv"
             if config["costs"].get("regional_multipliers", {}).get("enable", False)
+            else []
+        ),
+        # conventional.ambient_derate: Murphy et al. (2019) forced outage curves
+        # and the area-weighted air temperature of each clustered bus
+        outage_curves=(
+            "repo_data/plants/outage_forced_temperature_murphy2019.csv"
+            if ambient_derate_on()
+            else []
+        ),
+        bus_temperature=(
+            TEMPERATURE + "{interconnect}/temp_air_bus_s{simpl}_c{clusters}.nc"
+            if ambient_derate_on()
             else []
         ),
     params:

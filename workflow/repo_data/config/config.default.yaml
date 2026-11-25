@@ -265,19 +265,19 @@ conventional:
     pudl: true                             # PUDL receipts-based fuel cost time series (monthly resolution)
     wholesale: true                        # CAISO/wholesale natural-gas hub prices (overrides PUDL for NG)
 
-  # PHASE 2 (NOT IMPLEMENTED): ambient-temperature capacity derates for thermal
-  # units, from the CPUC SERVM unit-specific hourly derate profiles. Setting
-  # `enable: true` raises NotImplementedError in add_electricity — the profiles
-  # are not retrieved or applied yet (see the reserved
-  # `retrieve_cpuc_thermal_derate` rule in workflow/rules/retrieve.smk).
-  # When implemented it REPLACES the EIA-860 summer/winter seasonal derate
-  # rather than stacking on it; stacking an ambient derate on a seasonal derate
-  # (or on a UCAP-derated capacity credit) double-counts the same thermal
-  # deficiency and must never be done.
+  # Ambient-temperature derate of thermal units: p_max_pu(t) = 1 - FOR(T_bus(t)),
+  # the forced outage rate of the unit's prime mover at the hourly
+  # area-weighted air temperature of its bus region (build_bus_temperature).
+  # Applies to existing units, new builds and retrofits of the gas, coal, oil,
+  # biomass, waste and nuclear carriers (constants.AMBIENT_DERATE_PRIME_MOVER);
+  # hydro, geothermal and renewables are untouched. It REPLACES the EIA-860
+  # summer/winter seasonal derate of those carriers rather than stacking on it,
+  # and cannot be combined with `ucap` (both would count the same outages): set
+  # `enable: false` to use `ucap`, or the EIA-860 seasonal derate alone.
   ambient_derate:
-    enable: false                          # PHASE 2 — leave false
-    source: cpuc_servm                     # CPUC SERVM unit-specific hourly derates
-    replaces_seasonal_derate: true         # never stack with the EIA-860 seasonal derate
+    enable: true                           # true = temperature-dependent p_max_pu for thermal units; false = EIA-860 seasonal derate
+    source: murphy2019                     # murphy2019 = Murphy et al. (2019) curves as in ReEDS; cpuc_servm = reserved (raises NotImplementedError)
+    replaces_seasonal_derate: true         # must stay true: never stacked on the EIA-860 seasonal derate
 
 
 # ====================================================================

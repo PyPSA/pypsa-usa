@@ -335,13 +335,16 @@ properties:
       unit_commitment: {type: boolean}
       must_run: {type: boolean}
       ambient_derate:
-        description: PHASE-2 stub — enabling raises NotImplementedError.
+        description: >
+          Temperature-dependent forced outage derate of thermal units,
+          p_max_pu(t) = 1 - FOR(T_bus(t)). Replaces their EIA-860 seasonal
+          derate; mutually exclusive with ucap. Source cpuc_servm is reserved
+          and raises NotImplementedError.
         type: object
         additionalProperties: false
         properties:
           enable: {type: boolean}
-          source: {type: string}
-          scope: {type: array, items: {type: string}}
+          source: {enum: [murphy2019, cpuc_servm]}
           replaces_seasonal_derate: {type: boolean}
       dynamic_fuel_price:
         type: object

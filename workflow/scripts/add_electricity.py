@@ -26,7 +26,9 @@ from _helpers import (
     update_p_nom_max,
     weighted_avg,
 )
+from ambient_derate import ambient_derate_enabled
 from constants import (
+    AMBIENT_DERATE_PRIME_MOVER,
     REGIONAL_MULTIPLIER_COL,
     RENEWABLE_INTERCONNECTION_COL,
     RENEWABLE_INTERCONNECTION_SHARE_COL,
@@ -734,7 +736,9 @@ def attach_conventional_generators(
         # p_max_pu is the seasonal derate (apply_seasonal_capacity_derates below),
         # so p_min_pu must not exceed the *tighter* of the two seasons: above it
         # the only feasible commitment is status = 0 and the unit's capacity
-        # silently disappears for that whole season.
+        # silently disappears for that whole season. With
+        # conventional.ambient_derate thermal units skip the seasonal derate and
+        # add_extra_components scales this p_min_pu by their hourly availability.
         # build_powerplants.sanitize_uc_parameters already enforces
         # this at the source; the clip here is the second line of defence for
         # hand-edited or externally supplied powerplants.csv files, and the 0.95
@@ -1429,6 +1433,7 @@ def attach_remote_contracted_resources(
     extendable_carriers: dict,
     tech_map: pd.DataFrame | None = None,
     unit_commitment: bool = False,
+    seasonal_derate_exempt: tuple[str, ...] = (),
 ) -> pd.DataFrame:
     """Attach California's out-of-state CONTRACTED resources at California buses.
 
@@ -1460,6 +1465,9 @@ def attach_remote_contracted_resources(
     tech_map
         ``repo_data/CPUC/servm_tech_map.csv``, used to reconcile the ledger's
         ``compare_category`` with model carriers.
+    seasonal_derate_exempt
+        Carriers that get no EIA-860 seasonal derate (the thermal carriers when
+        ``conventional.ambient_derate`` is on).
 
     Notes
     -----
@@ -1492,7 +1500,14 @@ def attach_remote_contracted_resources(
     if unit_df.empty:
         return summary
 
-    dropped_vre = attach_remote_units(n, unit_df, costs, conventional_carriers, unit_commitment)
+    dropped_vre = attach_remote_units(
+        n,
+        unit_df,
+        costs,
+        conventional_carriers,
+        unit_commitment,
+        seasonal_derate_exempt=seasonal_derate_exempt,
+    )
     return _finalize_remote_summary(summary, dropped_vre)
 
 
@@ -1625,13 +1640,15 @@ def attach_remote_units(
     conventional_carriers: list,
     unit_commitment: bool,
     profiles: pd.DataFrame | None = None,
+    seasonal_derate_exempt: tuple[str, ...] = (),
 ) -> list[str]:
     """Add a derived contracted-unit table to the network at ``unit_df['bus']``.
 
     Shared by both import representations: in ``store`` mode the buses are
     California buses and the profiles are derived here; in ``generator`` mode
     ``external_regions`` rewrites ``bus`` to an external bus and supplies the
-    profiles that were borrowed at the pre-clustering stage.
+    profiles that were borrowed at the pre-clustering stage. Firm units of a
+    carrier in ``seasonal_derate_exempt`` get no EIA-860 seasonal derate.
 
     Returns the ledger names dropped for want of a VRE profile.
     """
@@ -1641,7 +1658,7 @@ def attach_remote_units(
     vre = unit_df[unit_df["carrier"].isin(VRE_PROFILE_CARRIERS)]
     firm = unit_df.drop(index=batteries.index.union(vre.index))
 
-    _attach_remote_firm(n, firm, costs, conventional_carriers, unit_commitment)
+    _attach_remote_firm(n, firm, costs, conventional_carriers, unit_commitment, seasonal_derate_exempt)
     dropped_vre = _attach_remote_vre(n, vre, costs, profiles=profiles)
     _attach_remote_batteries(n, batteries, costs)
     return dropped_vre
@@ -1654,14 +1671,16 @@ def build_remote_unit_bundle(
     costs: pd.DataFrame,
     conventional_carriers: list,
     unit_commitment: bool,
+    seasonal_derate_exempt: tuple[str, ...] = (),
 ) -> dict:
     """Serialize the contracted units instead of attaching them.
 
     Used by ``imports.representation: generator``, where the units belong at an
     external bus that only exists later, in ``add_extra_components``. Everything
     that stage cannot recompute is carried across: the derived unit table, the
-    CF profiles borrowed from the (pre-clustering) California buses, and the
-    cost table the ``n.add`` calls resolve ``capital_cost``/``lifetime`` from.
+    CF profiles borrowed from the (pre-clustering) California buses, the cost
+    table the ``n.add`` calls resolve ``capital_cost``/``lifetime`` from, and the
+    carriers that get no seasonal derate.
     """
     vre = unit_df[unit_df["carrier"].isin(VRE_PROFILE_CARRIERS)]
     profiles, dropped_vre = collect_remote_vre_profiles(n, vre)
@@ -1673,6 +1692,7 @@ def build_remote_unit_bundle(
         "costs": costs,
         "conventional_carriers": list(conventional_carriers),
         "unit_commitment": bool(unit_commitment),
+        "seasonal_derate_exempt": list(seasonal_derate_exempt),
         "summary": _finalize_remote_summary(summary, dropped_vre),
     }
     logger.info(
@@ -1710,8 +1730,14 @@ def _attach_remote_firm(
     costs: pd.DataFrame,
     conventional_carriers: list,
     unit_commitment: bool,
+    seasonal_derate_exempt: tuple[str, ...] = (),
 ):
-    """Attach firm (thermal, nuclear, geothermal, hydro) remote contracts as generators."""
+    """Attach firm (thermal, nuclear, geothermal, hydro) remote contracts as generators.
+
+    Units of a carrier in ``seasonal_derate_exempt`` get no EIA-860 seasonal
+    derate: with ``conventional.ambient_derate`` add_extra_components sets their
+    p_max_pu from the ambient temperature instead.
+    """
     if firm.empty:
         return
 
@@ -1762,7 +1788,8 @@ def _attach_remote_firm(
     n.generators.loc[firm.index, "fuel_cost"] = firm["fuel_cost"]
     n.generators.loc[firm.index, "heat_rate"] = firm["heat_rate"]
 
-    _apply_remote_seasonal_derates(n, firm[["summer_derate", "winter_derate"]])
+    derated = firm[~firm["carrier"].isin(seasonal_derate_exempt)]
+    _apply_remote_seasonal_derates(n, derated[["summer_derate", "winter_derate"]])
 
 
 def collect_remote_vre_profiles(n: pypsa.Network, vre: pd.DataFrame) -> tuple[dict[str, pd.Series], list[str]]:
@@ -1887,20 +1914,19 @@ def broadcast_investment_horizons_index(n: pypsa.Network, df: pd.DataFrame):
     return df
 
 
-def check_ambient_derate_not_enabled(conventional: dict) -> None:
-    """Guard the phase-2 ``conventional.ambient_derate`` hook.
-
-    Ambient-temperature derates are meant to REPLACE the EIA-860 seasonal
-    derate applied by :func:`apply_seasonal_capacity_derates`, never to stack
-    on top of it (or on top of a UCAP-derated capacity credit) — stacking
-    double-counts the same thermal deficiency. Until the CPUC SERVM
-    unit-specific hourly derate profiles are retrieved and applied, enabling
-    the key is a hard error rather than a silent no-op.
+def seasonal_derate_exempt_carriers(conventional: dict | None, ucap: dict | None = None) -> tuple[str, ...]:
     """
-    if (conventional or {}).get("ambient_derate", {}).get("enable", False):
-        raise NotImplementedError(
-            "conventional.ambient_derate is a phase-2 hook; CPUC unit-specific hourly derate profiles are not yet retrieved or applied.",
-        )
+    Carriers that get no EIA-860 seasonal derate.
+
+    With ``conventional.ambient_derate`` on, the thermal carriers
+    (``constants.AMBIENT_DERATE_PRIME_MOVER``) take a temperature-dependent
+    p_max_pu in ``add_extra_components`` that REPLACES the seasonal derate;
+    stacking the two would count the same thermal deficiency twice. Otherwise
+    nothing is exempt.
+    """
+    if ambient_derate_enabled(conventional, ucap):
+        return tuple(AMBIENT_DERATE_PRIME_MOVER)
+    return ()
 
 
 def apply_seasonal_capacity_derates(
@@ -1908,13 +1934,20 @@ def apply_seasonal_capacity_derates(
     plants: pd.DataFrame,
     conventional_carriers: list,
     sns: pd.DatetimeIndex,
+    exempt_carriers: tuple[str, ...] = (),
 ):
-    """Applies conventional rerate factor p_max_pu based on the seasonal capacity derates defined in eia860."""
+    """
+    Applies conventional rerate factor p_max_pu based on the seasonal capacity derates defined in eia860.
+
+    June to August take the summer derate, the other months the winter derate.
+    Carriers in ``exempt_carriers`` are skipped (see
+    :func:`seasonal_derate_exempt_carriers`).
+    """
     sns_dt = sns.get_level_values(1)
     summer_sns = sns_dt[sns_dt.month.isin([6, 7, 8])]
     winter_sns = sns_dt[~sns_dt.month.isin([6, 7, 8])]
 
-    # conventional_carriers = ['geothermal'] # testing override impact
+    conventional_carriers = [carrier for carrier in conventional_carriers if carrier not in exempt_carriers]
 
     conv_plants = plants.query("carrier in @conventional_carriers")
     conv_plants.index = "C" + conv_plants.index
@@ -2126,6 +2159,9 @@ def main(snakemake):
     renewable_carriers = set(params.renewable_carriers)
     extendable_carriers = params.extendable_carriers
     conventional_carriers = params.conventional_carriers
+    # conventional.ambient_derate replaces the seasonal derate of the thermal
+    # carriers (applied in add_extra_components); raises on invalid settings
+    seasonal_derate_exempt = seasonal_derate_exempt_carriers(params.conventional, snakemake.config.get("ucap"))
 
     plants = load_powerplants(
         snakemake.input["powerplants"],
@@ -2189,12 +2225,12 @@ def main(snakemake):
         renewable_carriers,
         unit_commitment=params.conventional["unit_commitment"],
     )
-    check_ambient_derate_not_enabled(params.conventional)
     apply_seasonal_capacity_derates(
         n,
         plants,
         conventional_carriers,
         n.snapshots,
+        exempt_carriers=seasonal_derate_exempt,
     )
 
     if params.conventional.get("must_run", False):
@@ -2275,6 +2311,7 @@ def main(snakemake):
                 costs,
                 conventional_carriers,
                 params.conventional["unit_commitment"],
+                seasonal_derate_exempt=seasonal_derate_exempt,
             )
         else:
             dropped_vre = attach_remote_units(
@@ -2283,6 +2320,7 @@ def main(snakemake):
                 costs,
                 conventional_carriers,
                 params.conventional["unit_commitment"],
+                seasonal_derate_exempt=seasonal_derate_exempt,
             )
             _finalize_remote_summary(summary, dropped_vre)
 

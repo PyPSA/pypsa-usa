@@ -148,9 +148,10 @@ rule retrieve_cpuc_baseline_generators:
 
 
 # RESERVED (phase 2): `retrieve_cpuc_thermal_derate` will pull the CPUC SERVM
-# unit-specific ambient-temperature derate profiles that back the
-# `conventional.ambient_derate` config hook. Until it lands, enabling that key
-# raises NotImplementedError in add_electricity.
+# unit-specific ambient-temperature derate profiles behind
+# `conventional.ambient_derate.source: cpuc_servm`. Until it lands, that source
+# raises NotImplementedError; `source: murphy2019` (the generic Murphy et al.
+# 2019 curves, vendored in repo_data/plants) is implemented.
 
 
 sector_datafiles = [
@@ -287,9 +288,10 @@ rule retrieve_ship_raster:
         move(input[0], output[0])
 
 
-if (
-    not config["enable"].get("build_cutout", False)
-    and not config["renewable"]["dataset"] == "godeeep"
+# GODEEEP runs read no cutout for their renewable profiles, but the ambient derate
+# needs one for the bus temperatures (build_bus_temperature)
+if not config["enable"].get("build_cutout", False) and (
+    not config["renewable"]["dataset"] == "godeeep" or ambient_derate_on()
 ):
 
     rule retrieve_cutout:

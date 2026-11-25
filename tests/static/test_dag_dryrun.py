@@ -206,3 +206,40 @@ def test_co2_storage_input_in_electricity_studies(tmp_path, sector):
     match = re.search(r"^rule add_extra_components:\n\s*input: (.*)$", result.stdout, re.MULTILINE)
     assert match, f"no add_extra_components job in the dry run output:\n{result.stdout}"
     assert "co2_storage_s" in match.group(1)
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("enable", [True, False])
+def test_ambient_derate_inputs_in_electricity_studies(tmp_path, enable):
+    """``conventional: ambient_derate`` gives ``add_extra_components`` the bus temperatures.
+
+    An electricity-only GODEEEP study reads no cutout for its renewable profiles,
+    so the bus temperatures must still resolve down to a cutout, without the
+    population layouts of the heating temperatures; with the derate off nothing
+    changes.
+    """
+    configfile = tmp_path / "ambient_derate.yaml"
+    configfile.write_text(f"conventional:\n  ambient_derate:\n    enable: {str(enable).lower()}\n")
+    result = subprocess.run(
+        [
+            "snakemake",
+            "-n",
+            "--configfile",
+            "repo_data/config/config.tutorial.yaml",
+            str(configfile),
+            "--until",
+            "add_extra_components",
+        ],
+        cwd=WORKFLOW_DIR,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, f"snakemake -n failed\nstderr:\n{result.stderr}"
+    match = re.search(r"^rule add_extra_components:\n\s*input: (.*)$", result.stdout, re.MULTILINE)
+    assert match, f"no add_extra_components job in the dry run output:\n{result.stdout}"
+    inputs = match.group(1)
+    assert ("temp_air_bus_s" in inputs) is enable
+    assert ("outage_forced_temperature_murphy2019.csv" in inputs) is enable
+    assert ("rule build_bus_temperature:" in result.stdout) is enable
+    assert "rule build_population_layouts:" not in result.stdout
