@@ -50,7 +50,7 @@ def test_every_region_gets_a_cluster_and_none_more_than_its_buses():
 
 @pytest.mark.parametrize("seed", range(25))
 def test_allocation_is_optimal(seed):
-    """The greedy allocation reaches the optimum found by enumerating every allocation."""
+    """The linear program reaches the optimum found by enumerating every allocation."""
     rng = np.random.default_rng(seed)
     regions = [f"r{i}" for i in range(rng.integers(2, 6))]
     n_nodes = pd.Series(rng.integers(1, 7, len(regions)), index=regions)
@@ -74,8 +74,8 @@ def test_an_impossible_cluster_count_is_rejected():
         allocate_clusters(target, 1, n_nodes)
 
 
-def test_clusters_are_distributed_by_load_weight_without_a_solver():
-    """Runs with no solver installed: this used to need Gurobi or Ipopt through pyomo."""
+def test_clusters_are_distributed_by_load_weight_with_highs():
+    """Runs on HiGHS alone: this used to need Gurobi or Ipopt through pyomo."""
     n = pypsa.Network()
     n.add("Bus", [f"ca{i}" for i in range(6)], country="CA")
     n.add("Bus", [f"tx{i}" for i in range(6)], country="TX")

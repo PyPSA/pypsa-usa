@@ -6,6 +6,7 @@ import warnings
 from functools import reduce
 
 import geopandas as gpd
+import linopy
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -76,16 +77,24 @@ def weighting_for_region(n, x, weighting_strategy=None):
     return (weighting * (100.0 / weighting.max())).clip(lower=1.0).astype(int)
 
 
-def allocate_clusters(target: pd.Series, n_clusters: int, n_nodes: pd.Series) -> pd.Series:
+def allocate_clusters(
+    target: pd.Series,
+    n_clusters: int,
+    n_nodes: pd.Series,
+    solver_name: str = "highs",
+) -> pd.Series:
     """
     Whole clusters per region that add up to ``n_clusters`` and stay closest to ``target``.
 
     Minimises ``sum((n - target) ** 2)`` over integers with ``1 <= n <= n_nodes``
-    and ``sum(n) == n_clusters``. Every region starts with one cluster and the
-    rest are handed out one at a time to the region where the next cluster adds
-    least to the objective, ``2 * (n - target) + 1``. For a sum of convex terms
-    under one total this greedy allocation is exactly optimal, so no solver is
-    needed. Ties go to the region listed first.
+    and ``sum(n) == n_clusters``, the problem PyPSA-Eur solves as a mixed-integer
+    quadratic program. HiGHS has no such solver, so the objective is written out
+    per cluster instead: every region starts with one cluster, and its k-th
+    cluster is a variable between 0 and 1 that costs
+    ``(k - target) ** 2 - (k - 1 - target) ** 2 = 2 * (k - target) - 1``.
+    That cost rises with k, so a region's clusters are taken in order, and with a
+    single constraint on the total the linear program has whole-number vertices.
+    It is therefore an exact LP, solved with the simplex method to land on a vertex.
     """
     n_nodes = n_nodes.reindex(target.index)
     if not len(target) <= n_clusters <= n_nodes.sum():
@@ -93,9 +102,28 @@ def allocate_clusters(target: pd.Series, n_clusters: int, n_nodes: pd.Series) ->
             f"Number of clusters must be {len(target)} <= n_clusters <= {n_nodes.sum()}, got {n_clusters}.",
         )
     allocation = pd.Series(1, index=target.index, dtype=int)
-    for _ in range(n_clusters - len(target)):
-        cost = (2 * (allocation - target) + 1).round(9).where(allocation < n_nodes, np.inf)
-        allocation[cost.idxmin()] += 1
+    n_extra = n_clusters - len(target)
+    if n_extra == 0:
+        return allocation
+
+    # one row per cluster a region can take beyond its first
+    upper = n_nodes.clip(upper=n_extra + 1).to_numpy()
+    region = np.repeat(np.arange(len(target)), upper - 1)
+    k = np.concatenate([np.arange(2, u + 1) for u in upper])
+    cost = pd.Series(2 * (k - target.to_numpy()[region]) - 1, index=pd.RangeIndex(len(k), name="step"))
+
+    m = linopy.Model()
+    take = m.add_variables(lower=0, upper=1, coords=[cost.index], name="take")
+    m.add_constraints(take.sum() == n_extra, name="tot")
+    m.objective = (take * cost).sum()
+    status, condition = m.solve(solver_name=solver_name, solver="simplex", log_to_console=False, progress=False)
+    if status != "ok":
+        raise RuntimeError(f"Distributing clusters to regions failed: {status}, {condition}.")
+
+    taken = pd.Series(m.solution["take"].to_numpy()).groupby(region).sum()
+    allocation.iloc[taken.index] += taken.round().astype(int).to_numpy()
+    if allocation.sum() != n_clusters or not np.allclose(taken, taken.round(), atol=1e-6):
+        raise RuntimeError(f"Distributing clusters to regions returned a fractional allocation: {taken.to_dict()}.")
     return allocation
 
 
