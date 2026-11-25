@@ -19,7 +19,7 @@ import pypsa
 import xarray as xr
 from _helpers import configure_logging, get_multiindex_snapshots, get_snapshots, lay_on_model_calendar
 from build_servm_load_weights import compose_busmaps
-from constants_sector import FIPS_2_STATE, NAICS, VMT_UNIT_CONVERSION, DemandFuels
+from constants_sector import NAICS, VMT_UNIT_CONVERSION, DemandFuels
 from eia import EnergyDemand, TransportationDemand
 
 logger = logging.getLogger(__name__)
@@ -1157,7 +1157,7 @@ class ReadCliu(ReadStrategy):
                 "subsector": int,
             },
         )
-        df["fipstate"] = df.fipstate.map(lambda x: FIPS_2_STATE[f"{x:02d}"].title())
+        df["fipstate"] = df.fipstate.map(lambda x: const.FIPS_2_STATE[f"{x:02d}"].title())
         return df
 
     def _format_data(self, county_demand: Any, scale_mecs: bool = True) -> pd.DataFrame:
@@ -2560,7 +2560,7 @@ class WriteIndustrial(WriteStrategy):
         # 'p' added to match reeds naming
         df["county"] = "p" + df.county.astype(str).str.zfill(5)
 
-        df["state"] = df.state.map(lambda x: FIPS_2_STATE[f"{x:02d}"].title())
+        df["state"] = df.state.map(lambda x: const.FIPS_2_STATE[f"{x:02d}"].title())
         return df
 
     def get_load_buses_per_county(self) -> dict[str, list[str]]:
