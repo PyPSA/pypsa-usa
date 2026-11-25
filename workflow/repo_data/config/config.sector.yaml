@@ -21,6 +21,17 @@ sector:
       pipeline: false  # gas pipelines between states
       storage: false  # salt dome, depleted field and aquifer gas storage; costs by formation, weighted by state
     storage_aggregation: state  # state | formation
+    linepack:  # gas held in the pipes, per pipeline class
+      interstate:
+        include: true
+        diameter: 36  # inches
+        max_pressure: 8000  # kPa
+        min_pressure: 4000  # kPa
+      intrastate:
+        include: true
+        diameter: 24  # inches
+        max_pressure: 8000  # kPa
+        min_pressure: 4000  # kPa
   methane:
     upstream_leakage_rate: 0.02 # per unit 
     downstream_leakage_rate: 0.02 # per unit 
