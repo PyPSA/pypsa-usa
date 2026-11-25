@@ -88,6 +88,7 @@ You can download and install several free options here:
 - [HiGHS](https://highs.dev/)
 - [Cbc](https://projects.coin-or.org/Cbc#DownloadandInstall)
 - [GLPK](https://www.gnu.org/software/glpk/)
+- [SCIP](https://www.scipopt.org/) (installed with the environment as `pyscipopt`; distributes clusters to regions when the configured solver cannot solve a mixed-integer quadratic program)
 
 and the non-free, commercial software (for some of which free academic licenses are available)
 

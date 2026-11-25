@@ -77,60 +77,58 @@ def weighting_for_region(n, x, weighting_strategy=None):
     return (weighting * (100.0 / weighting.max())).clip(lower=1.0).astype(int)
 
 
+# solvers linopy can hand a quadratic objective with integer variables
+MIQP_SOLVERS = ["gurobi", "scip", "cplex", "xpress", "copt", "mosek"]
+
+
 def allocate_clusters(
     target: pd.Series,
     n_clusters: int,
     n_nodes: pd.Series,
-    solver_name: str = "highs",
+    solver_name: str = "scip",
 ) -> pd.Series:
     """
     Whole clusters per region that add up to ``n_clusters`` and stay closest to ``target``.
 
     Minimises ``sum((n - target) ** 2)`` over integers with ``1 <= n <= n_nodes``
-    and ``sum(n) == n_clusters``, the problem PyPSA-Eur solves as a mixed-integer
-    quadratic program. HiGHS has no such solver, so the objective is written out
-    per cluster instead: every region starts with one cluster, and its k-th
-    cluster is a variable between 0 and 1 that costs
-    ``(k - target) ** 2 - (k - 1 - target) ** 2 = 2 * (k - target) - 1``.
-    That cost rises with k, so a region's clusters are taken in order, and with a
-    single constraint on the total the linear program has whole-number vertices.
-    It is therefore an exact LP, solved with the simplex method to land on a vertex.
+    and ``sum(n) == n_clusters``. This is the mixed-integer quadratic program of
+    PyPSA-Eur's ``distribute_n_clusters_to_countries``. A solver that cannot
+    solve one, such as HiGHS, is replaced by SCIP.
     """
     n_nodes = n_nodes.reindex(target.index)
     if not len(target) <= n_clusters <= n_nodes.sum():
         raise ValueError(
             f"Number of clusters must be {len(target)} <= n_clusters <= {n_nodes.sum()}, got {n_clusters}.",
         )
-    allocation = pd.Series(1, index=target.index, dtype=int)
-    n_extra = n_clusters - len(target)
-    if n_extra == 0:
-        return allocation
+    if solver_name == "gurobi":
+        logging.getLogger("gurobipy").propagate = False
+    elif solver_name not in MIQP_SOLVERS:
+        logger.info(
+            f"The configured solver `{solver_name}` does not support quadratic objectives. Falling back to `scip`.",
+        )
+        solver_name = "scip"
 
-    # one row per cluster a region can take beyond its first
-    upper = n_nodes.clip(upper=n_extra + 1).to_numpy()
-    region = np.repeat(np.arange(len(target)), upper - 1)
-    k = np.concatenate([np.arange(2, u + 1) for u in upper])
-    cost = pd.Series(2 * (k - target.to_numpy()[region]) - 1, index=pd.RangeIndex(len(k), name="step"))
+    # linopy coordinates cannot be the (country, sub_network) MultiIndex
+    region = pd.RangeIndex(len(target), name="region")
+    target_ = pd.Series(target.to_numpy(), index=region)
+    upper = pd.Series(n_nodes.to_numpy(), index=region)
 
     m = linopy.Model()
-    take = m.add_variables(lower=0, upper=1, coords=[cost.index], name="take")
-    m.add_constraints(take.sum() == n_extra, name="tot")
-    m.objective = (take * cost).sum()
-    status, condition = m.solve(solver_name=solver_name, solver="simplex", log_to_console=False, progress=False)
+    clusters = m.add_variables(lower=1, upper=upper, coords=[region], name="n", integer=True)
+    m.add_constraints(clusters.sum() == n_clusters, name="tot")
+    # leave out the constant target ** 2 of the objective
+    m.objective = (clusters * clusters - 2 * clusters * target_).sum()
+    status, condition = m.solve(solver_name=solver_name, progress=False)
     if status != "ok":
         raise RuntimeError(f"Distributing clusters to regions failed: {status}, {condition}.")
-
-    taken = pd.Series(m.solution["take"].to_numpy()).groupby(region).sum()
-    allocation.iloc[taken.index] += taken.round().astype(int).to_numpy()
-    if allocation.sum() != n_clusters or not np.allclose(taken, taken.round(), atol=1e-6):
-        raise RuntimeError(f"Distributing clusters to regions returned a fractional allocation: {taken.to_dict()}.")
-    return allocation
+    return pd.Series(m.solution["n"].to_numpy().round().astype(int), index=target.index)
 
 
 def distribute_clusters(
     n,
     n_clusters,
     focus_weights=None,
+    solver_name="scip",
     weighting_strategy=None,
 ):
     """Determine the number of clusters per region."""
@@ -164,12 +162,13 @@ def distribute_clusters(
         rtol=1e-3,
     ), f"Country weights L must sum up to 1.0 when distributing clusters. Is {factors.sum()}."
 
-    return allocate_clusters(factors * n_clusters, n_clusters, n_subnetwork_nodes)
+    return allocate_clusters(factors * n_clusters, n_clusters, n_subnetwork_nodes, solver_name)
 
 
 def busmap_for_n_clusters(
     n,
     n_clusters,
+    solver_name,
     focus_weights=None,
     algorithm="kmeans",
     weighting_strategy=None,
@@ -183,6 +182,8 @@ def busmap_for_n_clusters(
     n : pypsa.Network
     n_clusters : int
         The number of clusters in the new network.
+    solver_name : str
+        The name of the solver to use.
 
     Returns
     -------
@@ -207,6 +208,7 @@ def busmap_for_n_clusters(
         n_clusters,
         focus_weights=focus_weights,
         weighting_strategy=weighting_strategy,
+        solver_name=solver_name,
     )
     # Remove buses and lines that are not part of the clustering to reconcile TAMU and ReEDS Topologies
     nc_set = set(n_clusters_per_region.index.get_level_values(0).unique())
@@ -281,6 +283,7 @@ def clustering_for_n_clusters(
     aggregate_carriers=None,
     line_length_factor=1.25,
     aggregation_strategies=dict(),
+    solver_name="scip",
     algorithm="kmeans",
     focus_weights=None,
     weighting_strategy=None,
@@ -289,6 +292,7 @@ def clustering_for_n_clusters(
         busmap = busmap_for_n_clusters(
             n,
             n_clusters,
+            solver_name,
             focus_weights,
             algorithm,
             weighting_strategy,
@@ -992,6 +996,7 @@ if __name__ == "__main__":
     configure_logging(snakemake)
 
     params = snakemake.params
+    solver_name = snakemake.config["solving"]["solver"]["name"]
 
     if str(snakemake.input.network).endswith(".pkl"):
         import dill as pickle
@@ -1158,6 +1163,7 @@ if __name__ == "__main__":
             aggregate_carriers,
             params.length_factor,
             params.aggregation_strategies,
+            solver_name,
             params.cluster_network["algorithm"],
             params.focus_weights,
             weighting_strategy=params.cluster_network.get("weighting_strategy", None),

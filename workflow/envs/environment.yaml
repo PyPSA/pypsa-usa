@@ -89,6 +89,7 @@ dependencies:
   - currencyconverter==0.18.23
   - gurobipy==11.0.3
   - highspy>=1.9.0
+  - pyscipopt>=6.3.0
   - duckdb==0.10.0
   - flake8
   - dill>=0.3.9
