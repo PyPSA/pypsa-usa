@@ -38,7 +38,7 @@ def network(base_network):
     return base_network
 
 
-KWARGS = {"length_factor": 1.25, "loss_per_1000km": 0.0155, "fom_per_km": 1.15, "contraction": False}
+KWARGS = {"length_factor": 1.25, "loss_per_1000km": 0.0155, "fom_per_km": 1.15, "economic_retirement": False}
 
 
 def test_pipeline_losses_and_fixed_om_scale_with_route_length(network):
@@ -56,7 +56,7 @@ def test_pipeline_losses_and_fixed_om_scale_with_route_length(network):
 
 
 def test_pipelines_contract_down_to_zero(network):
-    make_pipelines().build_infrastructure(network, **(KWARGS | {"contraction": True}))
+    make_pipelines().build_infrastructure(network, **(KWARGS | {"economic_retirement": True}))
 
     links = network.links.loc[["CA TX pipeline", "TX CA pipeline"]]
     assert links.p_nom_extendable.all()

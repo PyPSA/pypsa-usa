@@ -1,8 +1,9 @@
 (sectors)=
 # Sectors
 
-To run sector coupled studies, the `sector` wildcard must be assigned to `G`. After doing so,
-the following configuration options are exposed to the user.
+To run sector coupled studies, the `sector` wildcard must be assigned to `G` (natural gas and
+the end-use sectors), `H` (hydrogen), or both (`G-H`). After doing so, the following configuration
+options are exposed to the user.
 
 ```{note}
 Only single-period studies are currently supported when running sector studies.
@@ -29,12 +30,25 @@ Other weather years are rejected when the workflow loads the configuration.
 .. literalinclude:: ../../workflow/repo_data/config/config.sector.yaml
    :language: yaml
    :start-at: # docs-ng
-   :end-before: # docs-heating
+   :end-before: # docs-hydrogen
 
 .. csv-table::
    :header-rows: 1
    :widths: 22,7,22,33
    :file: configtables/sector_natural_gas.csv
+```
+
+## Hydrogen Options
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.sector.yaml
+   :language: yaml
+   :start-at: # docs-hydrogen
+   :end-before: # docs-heating
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/sector_hydrogen.csv
 ```
 
 ## Heating Sector

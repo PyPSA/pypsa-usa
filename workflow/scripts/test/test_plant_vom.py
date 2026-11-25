@@ -208,6 +208,77 @@ def test_new_carrier_generators_get_vom(fleet_network, monkeypatch):
     assert (new.vom_cost == 6.0).all()
 
 
+@pytest.fixture
+def nuclear_network(fleet_network):
+    """fleet_network with an extendable nuclear plant at z1 that has an availability series."""
+    n = fleet_network
+    n.add("Carrier", "nuclear")
+    n.add(
+        "Generator",
+        "nuke1",
+        bus="z1",
+        carrier="nuclear",
+        p_nom=1000,
+        p_nom_extendable=True,
+        efficiency=0.33,
+        marginal_cost=10.0,
+        capital_cost=1e5,
+        land_region="",
+    )
+    n.generators_t.p_max_pu["nuke1"] = 0.9
+    return n
+
+
+NUCLEAR_COSTS = pd.concat(
+    [
+        COSTS,
+        pd.DataFrame(
+            {
+                "opex_variable_per_mwh": 3.0,
+                "opex_fixed_per_kw": 150.0,
+                "annualized_capex_fom": 6e5,
+                "cost_recovery_period_years": 30,
+                "lifetime": 60,
+                "marginal_cost": 12.0,
+                "efficiency": 0.33,
+                "heat_rate_mmbtu_per_mwh": 10.4,
+                "co2_emissions": 0.0,
+            },
+            index=["nuclear"],
+        ),
+    ],
+)
+
+
+def test_nuclear_plant_gets_no_expanding_duplicate(nuclear_network):
+    """New nuclear is offered once per bus, not also as a copy of each existing plant (#632)."""
+    n = nuclear_network
+
+    aec.split_retirement_gens(n, NUCLEAR_COSTS, ["gas", "nuclear"], economic=True, new_build_carriers={"nuclear"})
+
+    assert "nuke1 existing" in n.generators.index
+    assert "nuke1" not in n.generators.index
+    assert "gas2" in n.generators.index  # other carriers still expand at their plants
+    # the availability series follows the plant to its new name and leaves no orphan
+    assert (n.generators_t.p_max_pu["nuke1 existing"] == 0.9).all()
+    assert "nuke1" not in n.generators_t.p_max_pu.columns
+    n.consistency_check()
+
+
+def test_one_new_nuclear_generator_per_bus(nuclear_network, monkeypatch):
+    n = nuclear_network
+    monkeypatch.setattr(aec, "snakemake", SimpleNamespace(config={"costs": {}}), raising=False)
+    aec.split_retirement_gens(n, NUCLEAR_COSTS, ["gas", "nuclear"], economic=True, new_build_carriers={"nuclear"})
+
+    aec.attach_multihorizon_new_generators(n, NUCLEAR_COSTS, ["nuclear"], 2030)
+
+    buildable = n.generators[(n.generators.carrier == "nuclear") & ~n.generators.index.str.contains("existing")]
+    assert buildable.index.tolist() == ["z1 nuclear_2030", "z2 nuclear_2030", "z3 nuclear_2030"]
+    assert buildable.bus.is_unique
+    # the new units take the availability of the existing fleet
+    assert buildable.p_max_pu.tolist() == pytest.approx([0.9] * 3)
+
+
 # ---------------------------------------------------------------------------
 # dynamic fuel prices in add_electricity
 # ---------------------------------------------------------------------------

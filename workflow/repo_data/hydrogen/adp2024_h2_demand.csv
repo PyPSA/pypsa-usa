@@ -1,0 +1,865 @@
+scenario,state,year,demand_mwh
+baseline,AL,2024,1772951.2
+baseline,AL,2030,1919081.9
+baseline,AL,2035,1998692.2
+baseline,AL,2040,2015519.4
+baseline,AL,2045,2026034.4
+baseline,AL,2050,2021233.9
+baseline,AR,2024,4488013.2
+baseline,AR,2030,4637654.8
+baseline,AR,2035,4659904.6
+baseline,AR,2040,4664681.2
+baseline,AR,2045,4698510.6
+baseline,AR,2050,4665615.3
+baseline,AZ,2024,0.0
+baseline,AZ,2030,213.0
+baseline,AZ,2035,438.4
+baseline,AZ,2040,2166.9
+baseline,AZ,2045,22416.4
+baseline,AZ,2050,11278.6
+baseline,CA,2024,58954190.1
+baseline,CA,2030,50745923.6
+baseline,CA,2035,50812840.1
+baseline,CA,2040,51287767.1
+baseline,CA,2045,51501667.1
+baseline,CA,2050,48983536.1
+baseline,CO,2024,0.0
+baseline,CO,2030,861.4
+baseline,CO,2035,1397.7
+baseline,CO,2040,3166.0
+baseline,CO,2045,20572.8
+baseline,CO,2050,8835.2
+baseline,CT,2024,3374.6
+baseline,CT,2030,6437.4
+baseline,CT,2035,10870.1
+baseline,CT,2040,17282.1
+baseline,CT,2045,26082.6
+baseline,CT,2050,25543.7
+baseline,DE,2024,0.0
+baseline,DE,2030,178.7
+baseline,DE,2035,344.5
+baseline,DE,2040,1624.9
+baseline,DE,2045,12631.0
+baseline,DE,2050,4468.3
+baseline,FL,2024,6718.6
+baseline,FL,2030,14481.5
+baseline,FL,2035,22794.3
+baseline,FL,2040,57590.0
+baseline,FL,2045,98964.9
+baseline,FL,2050,61471.9
+baseline,GA,2024,12743464.2
+baseline,GA,2030,13619235.5
+baseline,GA,2035,14319031.2
+baseline,GA,2040,14415512.9
+baseline,GA,2045,14414689.6
+baseline,GA,2050,14414721.0
+baseline,IA,2024,20384714.5
+baseline,IA,2030,23530958.8
+baseline,IA,2035,25218168.2
+baseline,IA,2040,25586624.4
+baseline,IA,2045,25674993.5
+baseline,IA,2050,25672088.2
+baseline,ID,2024,0.0
+baseline,ID,2030,228.3
+baseline,ID,2035,541.6
+baseline,ID,2040,2982.2
+baseline,ID,2045,30311.4
+baseline,ID,2050,10830.7
+baseline,IL,2024,22514594.1
+baseline,IL,2030,22504415.8
+baseline,IL,2035,22457358.4
+baseline,IL,2040,22962522.0
+baseline,IL,2045,23311269.5
+baseline,IL,2050,23228780.8
+baseline,IN,2024,0.0
+baseline,IN,2030,0.0
+baseline,IN,2035,263.1
+baseline,IN,2040,2902.2
+baseline,IN,2045,20010.9
+baseline,IN,2050,7014.5
+baseline,KS,2024,10685757.9
+baseline,KS,2030,11175304.8
+baseline,KS,2035,11557185.8
+baseline,KS,2040,11935454.5
+baseline,KS,2045,12072315.6
+baseline,KS,2050,11992747.1
+baseline,KY,2024,0.0
+baseline,KY,2030,0.0
+baseline,KY,2035,341.9
+baseline,KY,2040,2532.8
+baseline,KY,2045,13801.6
+baseline,KY,2050,7909.1
+baseline,LA,2024,88933577.5
+baseline,LA,2030,91482253.7
+baseline,LA,2035,91827645.5
+baseline,LA,2040,91860859.8
+baseline,LA,2045,92007076.9
+baseline,LA,2050,91700656.3
+baseline,MA,2024,3374.6
+baseline,MA,2030,6450.7
+baseline,MA,2035,10957.3
+baseline,MA,2040,18323.0
+baseline,MA,2045,30719.6
+baseline,MA,2050,29267.3
+baseline,MD,2024,0.0
+baseline,MD,2030,147.7
+baseline,MD,2035,297.3
+baseline,MD,2040,1404.3
+baseline,MD,2045,10902.0
+baseline,MD,2050,4193.4
+baseline,ME,2024,3374.6
+baseline,ME,2030,6472.4
+baseline,ME,2035,10964.7
+baseline,ME,2040,18159.5
+baseline,ME,2045,30012.3
+baseline,ME,2050,28734.4
+baseline,MI,2024,2130484.7
+baseline,MI,2030,2158882.8
+baseline,MI,2035,2244127.4
+baseline,MI,2040,2344983.1
+baseline,MI,2045,2438948.6
+baseline,MI,2050,2380639.1
+baseline,MN,2024,0.0
+baseline,MN,2030,709.3
+baseline,MN,2035,1093.6
+baseline,MN,2040,4727.1
+baseline,MN,2045,74306.1
+baseline,MN,2050,47958.1
+baseline,MO,2024,0.0
+baseline,MO,2030,539.8
+baseline,MO,2035,835.9
+baseline,MO,2040,3068.3
+baseline,MO,2045,32372.3
+baseline,MO,2050,15072.0
+baseline,MS,2024,4356935.8
+baseline,MS,2030,4682154.0
+baseline,MS,2035,4795585.3
+baseline,MS,2040,4827741.5
+baseline,MS,2045,4850617.1
+baseline,MS,2050,4835416.3
+baseline,MT,2024,0.0
+baseline,MT,2030,1152.0
+baseline,MT,2035,1853.7
+baseline,MT,2040,7599.1
+baseline,MT,2045,74099.2
+baseline,MT,2050,40760.2
+baseline,NC,2024,12389.4
+baseline,NC,2030,19565.0
+baseline,NC,2035,32530.2
+baseline,NC,2040,55513.5
+baseline,NC,2045,89371.1
+baseline,NC,2050,73516.9
+baseline,ND,2024,1481309.9
+baseline,ND,2030,1841415.4
+baseline,ND,2035,2089182.1
+baseline,ND,2040,2138332.7
+baseline,ND,2045,2214459.6
+baseline,ND,2050,2184403.1
+baseline,NE,2024,3993671.4
+baseline,NE,2030,4929749.5
+baseline,NE,2035,5577507.9
+baseline,NE,2040,5793260.6
+baseline,NE,2045,5956490.2
+baseline,NE,2050,6052772.5
+baseline,NH,2024,3374.6
+baseline,NH,2030,6428.1
+baseline,NH,2035,10799.4
+baseline,NH,2040,16884.2
+baseline,NH,2045,24332.0
+baseline,NH,2050,24145.7
+baseline,NJ,2024,0.0
+baseline,NJ,2030,621.9
+baseline,NJ,2035,1156.1
+baseline,NJ,2040,5453.8
+baseline,NJ,2045,42405.7
+baseline,NJ,2050,14996.5
+baseline,NM,2024,0.0
+baseline,NM,2030,1264.5
+baseline,NM,2035,859.2
+baseline,NM,2040,4105.3
+baseline,NM,2045,42751.1
+baseline,NM,2050,21373.1
+baseline,NV,2024,0.0
+baseline,NV,2030,340.1
+baseline,NV,2035,135.9
+baseline,NV,2040,739.8
+baseline,NV,2045,8249.0
+baseline,NV,2050,4844.0
+baseline,NY,2024,162859.3
+baseline,NY,2030,295747.6
+baseline,NY,2035,413399.5
+baseline,NY,2040,538327.0
+baseline,NY,2045,695493.6
+baseline,NY,2050,777570.0
+baseline,OH,2024,11537561.1
+baseline,OH,2030,12088903.1
+baseline,OH,2035,12171279.4
+baseline,OH,2040,12229168.8
+baseline,OH,2045,12250058.4
+baseline,OH,2050,12262339.1
+baseline,OK,2024,19007621.0
+baseline,OK,2030,24046470.7
+baseline,OK,2035,25093842.4
+baseline,OK,2040,25317647.5
+baseline,OK,2045,25379824.1
+baseline,OK,2050,25364661.6
+baseline,OR,2024,9403967.1
+baseline,OR,2030,9725736.3
+baseline,OR,2035,9953602.4
+baseline,OR,2040,10097503.9
+baseline,OR,2045,10092165.8
+baseline,OR,2050,10035502.8
+baseline,PA,2024,0.0
+baseline,PA,2030,603.1
+baseline,PA,2035,213.9
+baseline,PA,2040,881.6
+baseline,PA,2045,6969.9
+baseline,PA,2050,3855.0
+baseline,RI,2024,3374.6
+baseline,RI,2030,6441.1
+baseline,RI,2035,10909.1
+baseline,RI,2040,17501.0
+baseline,RI,2045,27056.2
+baseline,RI,2050,26324.5
+baseline,SC,2024,12389.4
+baseline,SC,2030,19513.9
+baseline,SC,2035,32481.0
+baseline,SC,2040,55411.2
+baseline,SC,2045,88524.9
+baseline,SC,2050,73328.6
+baseline,SD,2024,0.0
+baseline,SD,2030,1074.8
+baseline,SD,2035,932.2
+baseline,SD,2040,2605.6
+baseline,SD,2045,36405.5
+baseline,SD,2050,24660.3
+baseline,TN,2024,0.0
+baseline,TN,2030,0.0
+baseline,TN,2035,259.3
+baseline,TN,2040,1851.1
+baseline,TN,2045,10054.2
+baseline,TN,2050,6031.0
+baseline,TX,2024,89629647.5
+baseline,TX,2030,90943408.6
+baseline,TX,2035,91348845.1
+baseline,TX,2040,91709176.8
+baseline,TX,2045,91989523.7
+baseline,TX,2050,91842794.5
+baseline,UT,2024,0.0
+baseline,UT,2030,56.8
+baseline,UT,2035,124.7
+baseline,UT,2040,680.4
+baseline,UT,2045,7002.6
+baseline,UT,2050,2736.5
+baseline,VA,2024,10442709.1
+baseline,VA,2030,11331869.3
+baseline,VA,2035,11968226.2
+baseline,VA,2040,12072068.7
+baseline,VA,2045,12080436.3
+baseline,VA,2050,12111281.6
+baseline,VT,2024,3374.6
+baseline,VT,2030,6425.6
+baseline,VT,2035,10797.0
+baseline,VT,2040,16871.2
+baseline,VT,2045,24270.4
+baseline,VT,2050,24092.4
+baseline,WA,2024,0.0
+baseline,WA,2030,91.5
+baseline,WA,2035,225.4
+baseline,WA,2040,1136.3
+baseline,WA,2045,10712.0
+baseline,WA,2050,5512.3
+baseline,WI,2024,0.0
+baseline,WI,2030,68.6
+baseline,WI,2035,134.0
+baseline,WI,2040,618.2
+baseline,WI,2045,6867.8
+baseline,WI,2050,2939.0
+baseline,WV,2024,0.0
+baseline,WV,2030,0.0
+baseline,WV,2035,12.7
+baseline,WV,2040,41.1
+baseline,WV,2045,324.1
+baseline,WV,2050,518.9
+baseline,WY,2024,6417466.2
+baseline,WY,2030,7099699.1
+baseline,WY,2035,7283423.9
+baseline,WY,2040,7267725.3
+baseline,WY,2045,7271377.3
+baseline,WY,2050,7067018.7
+central,AL,2024,1768310.7
+central,AL,2030,2402117.9
+central,AL,2035,3421912.6
+central,AL,2040,4326823.6
+central,AL,2045,10697609.9
+central,AL,2050,12918389.5
+central,AR,2024,4526766.6
+central,AR,2030,4533413.7
+central,AR,2035,3473019.7
+central,AR,2040,4979558.9
+central,AR,2045,3237265.4
+central,AR,2050,4068906.7
+central,AZ,2024,0.0
+central,AZ,2030,1021.8
+central,AZ,2035,58689.9
+central,AZ,2040,1473801.9
+central,AZ,2045,855867.7
+central,AZ,2050,2096186.8
+central,CA,2024,47955390.0
+central,CA,2030,9545527.3
+central,CA,2035,15715222.4
+central,CA,2040,36208097.8
+central,CA,2045,57708744.6
+central,CA,2050,68728273.9
+central,CO,2024,0.0
+central,CO,2030,26255.1
+central,CO,2035,1361960.1
+central,CO,2040,5323316.0
+central,CO,2045,24478974.4
+central,CO,2050,30377547.1
+central,CT,2024,5692.1
+central,CT,2030,57230.3
+central,CT,2035,396479.9
+central,CT,2040,1074725.2
+central,CT,2045,2034128.0
+central,CT,2050,2378424.8
+central,DE,2024,0.0
+central,DE,2030,0.2
+central,DE,2035,26688.6
+central,DE,2040,48540.2
+central,DE,2045,88611.1
+central,DE,2050,95992.8
+central,FL,2024,49020.5
+central,FL,2030,331694.8
+central,FL,2035,6077629.2
+central,FL,2040,9421618.9
+central,FL,2045,19406011.6
+central,FL,2050,24400500.8
+central,GA,2024,12675236.0
+central,GA,2030,12686100.3
+central,GA,2035,18914993.1
+central,GA,2040,15052881.7
+central,GA,2045,22851672.0
+central,GA,2050,25727337.7
+central,IA,2024,22071597.7
+central,IA,2030,35420690.8
+central,IA,2035,55170073.0
+central,IA,2040,70668602.3
+central,IA,2045,85952057.9
+central,IA,2050,97735835.0
+central,ID,2024,0.0
+central,ID,2030,0.7
+central,ID,2035,71680.3
+central,ID,2040,266034.3
+central,ID,2045,692203.1
+central,ID,2050,1030981.4
+central,IL,2024,23042064.9
+central,IL,2030,26269304.7
+central,IL,2035,13395189.9
+central,IL,2040,27966192.4
+central,IL,2045,70678539.0
+central,IL,2050,79615383.5
+central,IN,2024,0.0
+central,IN,2030,0.0
+central,IN,2035,3051048.1
+central,IN,2040,11479095.4
+central,IN,2045,26810042.4
+central,IN,2050,31146576.1
+central,KS,2024,12664415.6
+central,KS,2030,20623949.9
+central,KS,2035,37040820.5
+central,KS,2040,38332133.2
+central,KS,2045,31894012.1
+central,KS,2050,51282756.8
+central,KY,2024,0.0
+central,KY,2030,1530.8
+central,KY,2035,896793.7
+central,KY,2040,4231946.1
+central,KY,2045,8832573.9
+central,KY,2050,10529737.6
+central,LA,2024,89570626.0
+central,LA,2030,88980959.3
+central,LA,2035,67778730.9
+central,LA,2040,64492138.1
+central,LA,2045,77046229.4
+central,LA,2050,84891431.0
+central,MA,2024,5692.1
+central,MA,2030,57230.3
+central,MA,2035,1266153.7
+central,MA,2040,3409623.1
+central,MA,2045,6335398.0
+central,MA,2050,7376820.4
+central,MD,2024,0.0
+central,MD,2030,0.3
+central,MD,2035,368409.8
+central,MD,2040,830256.1
+central,MD,2045,1518871.8
+central,MD,2050,1693360.1
+central,ME,2024,5692.1
+central,ME,2030,57230.3
+central,ME,2035,59156.3
+central,ME,2040,148117.0
+central,ME,2045,261079.2
+central,ME,2050,352534.2
+central,MI,2024,2386977.0
+central,MI,2030,3502581.6
+central,MI,2035,2922960.7
+central,MI,2040,9404262.9
+central,MI,2045,16138975.0
+central,MI,2050,25388912.0
+central,MN,2024,0.0
+central,MN,2030,330259.9
+central,MN,2035,24357184.7
+central,MN,2040,45143104.9
+central,MN,2045,43570200.2
+central,MN,2050,58211095.3
+central,MO,2024,0.0
+central,MO,2030,1913.6
+central,MO,2035,4389553.7
+central,MO,2040,28404686.9
+central,MO,2045,49798244.1
+central,MO,2050,51003559.6
+central,MS,2024,4356617.4
+central,MS,2030,6724217.4
+central,MS,2035,7246602.5
+central,MS,2040,4193665.2
+central,MS,2045,4335346.6
+central,MS,2050,4961619.8
+central,MT,2024,0.0
+central,MT,2030,143194.7
+central,MT,2035,5532916.2
+central,MT,2040,11592228.1
+central,MT,2045,11695947.0
+central,MT,2050,20000193.8
+central,NC,2024,33029.1
+central,NC,2030,950554.9
+central,NC,2035,1905026.5
+central,NC,2040,5173478.2
+central,NC,2045,11143238.0
+central,NC,2050,13201077.5
+central,ND,2024,1778343.3
+central,ND,2030,4391046.2
+central,ND,2035,19721330.3
+central,ND,2040,26622230.6
+central,ND,2045,27195110.6
+central,ND,2050,39970484.4
+central,NE,2024,4701865.7
+central,NE,2030,10283851.8
+central,NE,2035,22256287.5
+central,NE,2040,34548612.1
+central,NE,2045,49685903.2
+central,NE,2050,60948621.0
+central,NH,2024,5692.1
+central,NH,2030,57230.3
+central,NH,2035,33007.3
+central,NH,2040,81288.1
+central,NH,2045,112602.6
+central,NH,2050,133145.7
+central,NJ,2024,0.0
+central,NJ,2030,0.8
+central,NJ,2035,991578.0
+central,NJ,2040,1866317.8
+central,NJ,2045,3463408.4
+central,NJ,2050,3625243.4
+central,NM,2024,0.0
+central,NM,2030,345091.4
+central,NM,2035,825255.5
+central,NM,2040,2876065.4
+central,NM,2045,2241219.7
+central,NM,2050,7737320.5
+central,NV,2024,0.0
+central,NV,2030,1752.2
+central,NV,2035,677797.5
+central,NV,2040,9800578.4
+central,NV,2045,6647002.4
+central,NV,2050,6882845.3
+central,NY,2024,228770.3
+central,NY,2030,402468.7
+central,NY,2035,1830125.7
+central,NY,2040,5038335.4
+central,NY,2045,10140214.9
+central,NY,2050,11735123.7
+central,OH,2024,12428556.6
+central,OH,2030,17126362.3
+central,OH,2035,18791147.2
+central,OH,2040,22101059.3
+central,OH,2045,38253679.8
+central,OH,2050,44170947.1
+central,OK,2024,20555805.9
+central,OK,2030,32300813.2
+central,OK,2035,37552302.8
+central,OK,2040,33479672.1
+central,OK,2045,21615738.2
+central,OK,2050,38749669.1
+central,OR,2024,8942357.8
+central,OR,2030,9032517.8
+central,OR,2035,7495651.4
+central,OR,2040,5754717.5
+central,OR,2045,10875555.1
+central,OR,2050,12234042.1
+central,PA,2024,0.0
+central,PA,2030,6784.5
+central,PA,2035,9009996.1
+central,PA,2040,19602330.0
+central,PA,2045,34488711.7
+central,PA,2050,35957262.5
+central,RI,2024,5692.1
+central,RI,2030,57230.3
+central,RI,2035,20962.6
+central,RI,2040,54518.0
+central,RI,2045,95704.1
+central,RI,2050,135543.2
+central,SC,2024,33029.1
+central,SC,2030,950872.5
+central,SC,2035,2457139.3
+central,SC,2040,6934531.9
+central,SC,2045,19470047.7
+central,SC,2050,23786133.9
+central,SD,2024,0.0
+central,SD,2030,186298.7
+central,SD,2035,8146728.5
+central,SD,2040,14584859.2
+central,SD,2045,13770501.0
+central,SD,2050,23295891.3
+central,TN,2024,0.0
+central,TN,2030,1225.7
+central,TN,2035,2351970.3
+central,TN,2040,10876079.0
+central,TN,2045,22149035.9
+central,TN,2050,25962166.8
+central,TX,2024,90473213.1
+central,TX,2030,110712420.5
+central,TX,2035,124392991.8
+central,TX,2040,184840059.7
+central,TX,2045,306309015.2
+central,TX,2050,500401161.7
+central,UT,2024,0.0
+central,UT,2030,0.2
+central,UT,2035,1202007.9
+central,UT,2040,4745944.3
+central,UT,2045,9907602.5
+central,UT,2050,10187625.5
+central,VA,2024,10745848.8
+central,VA,2030,14793748.0
+central,VA,2035,9257499.7
+central,VA,2040,6716875.7
+central,VA,2045,9425951.6
+central,VA,2050,12069539.3
+central,VT,2024,5692.1
+central,VT,2030,57230.3
+central,VT,2035,19653.6
+central,VT,2040,44427.6
+central,VT,2045,31065.2
+central,VT,2050,37123.5
+central,WA,2024,0.0
+central,WA,2030,12.2
+central,WA,2035,993911.7
+central,WA,2040,4104702.8
+central,WA,2045,7720475.2
+central,WA,2050,8603423.5
+central,WI,2024,0.0
+central,WI,2030,355.6
+central,WI,2035,1221978.9
+central,WI,2040,6517809.6
+central,WI,2045,13625659.9
+central,WI,2050,14613062.7
+central,WV,2024,0.0
+central,WV,2030,0.0
+central,WV,2035,96040.6
+central,WV,2040,571026.5
+central,WV,2045,935296.8
+central,WV,2050,1073706.4
+central,WY,2024,6479505.6
+central,WY,2030,7268423.5
+central,WY,2035,6062036.3
+central,WY,2040,5077898.9
+central,WY,2045,9943863.3
+central,WY,2050,20661496.2
+current policy,AL,2024,1899677.4
+current policy,AL,2030,2506673.6
+current policy,AL,2035,2527832.7
+current policy,AL,2040,2549559.8
+current policy,AL,2045,2564359.0
+current policy,AL,2050,2519813.1
+current policy,AR,2024,4525066.7
+current policy,AR,2030,4792195.6
+current policy,AR,2035,4566654.6
+current policy,AR,2040,4552832.9
+current policy,AR,2045,4469537.1
+current policy,AR,2050,4566913.2
+current policy,AZ,2024,0.0
+current policy,AZ,2030,649.0
+current policy,AZ,2035,5394.5
+current policy,AZ,2040,51383.0
+current policy,AZ,2045,47316.1
+current policy,AZ,2050,58600.1
+current policy,CA,2024,47680629.1
+current policy,CA,2030,8286858.2
+current policy,CA,2035,8397687.5
+current policy,CA,2040,11023617.2
+current policy,CA,2045,11344143.0
+current policy,CA,2050,12695539.3
+current policy,CO,2024,0.0
+current policy,CO,2030,19113.1
+current policy,CO,2035,40244.9
+current policy,CO,2040,366398.5
+current policy,CO,2045,404515.2
+current policy,CO,2050,391266.4
+current policy,CT,2024,3931.8
+current policy,CT,2030,5327.8
+current policy,CT,2035,9829.6
+current policy,CT,2040,14976.4
+current policy,CT,2045,19008.4
+current policy,CT,2050,28676.3
+current policy,DE,2024,0.0
+current policy,DE,2030,868.0
+current policy,DE,2035,2047.0
+current policy,DE,2040,2522.9
+current policy,DE,2045,3202.6
+current policy,DE,2050,4224.6
+current policy,FL,2024,15757.6
+current policy,FL,2030,191249.8
+current policy,FL,2035,201940.1
+current policy,FL,2040,282315.4
+current policy,FL,2045,322931.8
+current policy,FL,2050,263916.0
+current policy,GA,2024,13481031.5
+current policy,GA,2030,15389648.3
+current policy,GA,2035,15445208.9
+current policy,GA,2040,15507227.8
+current policy,GA,2045,15292305.9
+current policy,GA,2050,14936658.7
+current policy,IA,2024,22186303.9
+current policy,IA,2030,32712645.8
+current policy,IA,2035,42987343.7
+current policy,IA,2040,47201289.4
+current policy,IA,2045,45871463.0
+current policy,IA,2050,45331796.7
+current policy,ID,2024,0.0
+current policy,ID,2030,321.2
+current policy,ID,2035,6707.4
+current policy,ID,2040,19079.9
+current policy,ID,2045,25555.4
+current policy,ID,2050,29278.1
+current policy,IL,2024,22775883.1
+current policy,IL,2030,27975082.0
+current policy,IL,2035,23632182.1
+current policy,IL,2040,22807801.2
+current policy,IL,2045,23148702.2
+current policy,IL,2050,23104485.5
+current policy,IN,2024,0.0
+current policy,IN,2030,0.0
+current policy,IN,2035,4299.7
+current policy,IN,2040,1588263.9
+current policy,IN,2045,1639245.7
+current policy,IN,2050,1632801.8
+current policy,KS,2024,11584743.6
+current policy,KS,2030,17410013.7
+current policy,KS,2035,25449483.5
+current policy,KS,2040,28479522.0
+current policy,KS,2045,28748620.8
+current policy,KS,2050,28075384.5
+current policy,KY,2024,0.0
+current policy,KY,2030,2590.0
+current policy,KY,2035,7171.3
+current policy,KY,2040,10590.7
+current policy,KY,2045,12999.6
+current policy,KY,2050,18494.1
+current policy,LA,2024,89564694.2
+current policy,LA,2030,94004521.2
+current policy,LA,2035,88692291.9
+current policy,LA,2040,84343241.2
+current policy,LA,2045,82371044.4
+current policy,LA,2050,83461054.6
+current policy,MA,2024,3931.8
+current policy,MA,2030,5332.7
+current policy,MA,2035,11628.0
+current policy,MA,2040,18675.5
+current policy,MA,2045,23315.1
+current policy,MA,2050,36434.2
+current policy,MD,2024,0.0
+current policy,MD,2030,720.4
+current policy,MD,2035,2594.0
+current policy,MD,2040,10307.4
+current policy,MD,2045,12740.8
+current policy,MD,2050,17927.8
+current policy,ME,2024,3931.8
+current policy,ME,2030,5340.3
+current policy,ME,2035,12759.1
+current policy,ME,2040,19881.0
+current policy,ME,2045,25213.7
+current policy,ME,2050,39299.9
+current policy,MI,2024,2179348.1
+current policy,MI,2030,2571250.6
+current policy,MI,2035,1380170.7
+current policy,MI,2040,1328160.0
+current policy,MI,2045,1373750.5
+current policy,MI,2050,1461123.7
+current policy,MN,2024,0.0
+current policy,MN,2030,1911179.4
+current policy,MN,2035,17488370.7
+current policy,MN,2040,22644050.0
+current policy,MN,2045,21169751.0
+current policy,MN,2050,21108282.6
+current policy,MO,2024,0.0
+current policy,MO,2030,9590.3
+current policy,MO,2035,813259.7
+current policy,MO,2040,4314811.2
+current policy,MO,2045,4607711.4
+current policy,MO,2050,4551272.3
+current policy,MS,2024,4642926.6
+current policy,MS,2030,6444624.6
+current policy,MS,2035,6392803.4
+current policy,MS,2040,6482025.7
+current policy,MS,2045,6565834.6
+current policy,MS,2050,6500168.8
+current policy,MT,2024,0.0
+current policy,MT,2030,657784.1
+current policy,MT,2035,4574105.4
+current policy,MT,2040,5682992.9
+current policy,MT,2045,6185495.1
+current policy,MT,2050,5842225.1
+current policy,NC,2024,30428.6
+current policy,NC,2030,562263.6
+current policy,NC,2035,583318.4
+current policy,NC,2040,625855.3
+current policy,NC,2045,816989.7
+current policy,NC,2050,983169.5
+current policy,ND,2024,1812820.8
+current policy,ND,2030,5122274.3
+current policy,ND,2035,16072150.4
+current policy,ND,2040,18827166.0
+current policy,ND,2045,20501025.9
+current policy,ND,2050,19433603.1
+current policy,NE,2024,4791328.3
+current policy,NE,2030,9515474.0
+current policy,NE,2035,17614987.0
+current policy,NE,2040,20404327.9
+current policy,NE,2045,20646041.8
+current policy,NE,2050,20235177.2
+current policy,NH,2024,3931.8
+current policy,NH,2030,5324.1
+current policy,NH,2035,8777.9
+current policy,NH,2040,14138.4
+current policy,NH,2045,18211.3
+current policy,NH,2050,27054.4
+current policy,NJ,2024,0.0
+current policy,NJ,2030,3020.1
+current policy,NJ,2035,6816.2
+current policy,NJ,2040,8426.8
+current policy,NJ,2045,10714.3
+current policy,NJ,2050,14110.9
+current policy,NM,2024,0.0
+current policy,NM,2030,28913.6
+current policy,NM,2035,682172.0
+current policy,NM,2040,1450894.4
+current policy,NM,2045,1304615.5
+current policy,NM,2050,1319417.6
+current policy,NV,2024,0.0
+current policy,NV,2030,1821.8
+current policy,NV,2035,1719.1
+current policy,NV,2040,7675.3
+current policy,NV,2045,10171.4
+current policy,NV,2050,34397.7
+current policy,NY,2024,173172.4
+current policy,NY,2030,199093.4
+current policy,NY,2035,233284.5
+current policy,NY,2040,174238.3
+current policy,NY,2045,218812.6
+current policy,NY,2050,507276.6
+current policy,OH,2024,12022702.8
+current policy,OH,2030,15985445.9
+current policy,OH,2035,16080454.0
+current policy,OH,2040,17526176.1
+current policy,OH,2045,17728066.8
+current policy,OH,2050,18126598.8
+current policy,OK,2024,20255124.2
+current policy,OK,2030,31983773.1
+current policy,OK,2035,44783364.2
+current policy,OK,2040,49120876.8
+current policy,OK,2045,48287865.5
+current policy,OK,2050,48542052.8
+current policy,OR,2024,9505748.0
+current policy,OR,2030,9909434.9
+current policy,OR,2035,10098930.6
+current policy,OR,2040,7463724.2
+current policy,OR,2045,7315055.7
+current policy,OR,2050,6983378.8
+current policy,PA,2024,0.0
+current policy,PA,2030,3169.7
+current policy,PA,2035,2058.7
+current policy,PA,2040,14084.7
+current policy,PA,2045,17701.7
+current policy,PA,2050,24923.1
+current policy,RI,2024,3931.8
+current policy,RI,2030,5329.2
+current policy,RI,2035,10526.4
+current policy,RI,2040,15647.2
+current policy,RI,2045,19760.6
+current policy,RI,2050,30066.9
+current policy,SC,2024,30428.6
+current policy,SC,2030,562596.8
+current policy,SC,2035,582511.3
+current policy,SC,2040,626482.2
+current policy,SC,2045,813182.9
+current policy,SC,2050,979549.8
+current policy,SD,2024,0.0
+current policy,SD,2030,907201.2
+current policy,SD,2035,6811797.6
+current policy,SD,2040,8579832.2
+current policy,SD,2045,8649375.3
+current policy,SD,2050,8276594.7
+current policy,TN,2024,0.0
+current policy,TN,2030,2029.0
+current policy,TN,2035,4386.7
+current policy,TN,2040,6887.0
+current policy,TN,2045,8264.9
+current policy,TN,2050,12123.1
+current policy,TX,2024,90303747.6
+current policy,TX,2030,113840222.4
+current policy,TX,2035,121464389.1
+current policy,TX,2040,131413852.6
+current policy,TX,2045,126388013.0
+current policy,TX,2050,125863878.5
+current policy,UT,2024,0.0
+current policy,UT,2030,83.5
+current policy,UT,2035,1480.4
+current policy,UT,2040,4658.8
+current policy,UT,2045,6219.4
+current policy,UT,2050,7170.6
+current policy,VA,2024,10812697.0
+current policy,VA,2030,12371444.8
+current policy,VA,2035,12414209.6
+current policy,VA,2040,12674097.3
+current policy,VA,2045,12725188.2
+current policy,VA,2050,12866907.0
+current policy,VT,2024,3931.8
+current policy,VT,2030,5323.3
+current policy,VT,2035,8622.1
+current policy,VT,2040,13897.6
+current policy,VT,2045,17874.8
+current policy,VT,2050,26510.7
+current policy,WA,2024,0.0
+current policy,WA,2030,228.7
+current policy,WA,2035,3362.8
+current policy,WA,2040,39506.7
+current policy,WA,2045,50740.4
+current policy,WA,2050,50826.5
+current policy,WI,2024,0.0
+current policy,WI,2030,861.8
+current policy,WI,2035,204685.4
+current policy,WI,2040,337475.2
+current policy,WI,2045,354744.6
+current policy,WI,2050,436357.3
+current policy,WV,2024,0.0
+current policy,WV,2030,0.0
+current policy,WV,2035,206.1
+current policy,WV,2040,10769.8
+current policy,WV,2045,13472.3
+current policy,WV,2050,19004.7
+current policy,WY,2024,6931997.5
+current policy,WY,2030,7213168.5
+current policy,WY,2035,6774215.7
+current policy,WY,2040,7062146.5
+current policy,WY,2045,6685638.1
+current policy,WY,2050,6643499.3

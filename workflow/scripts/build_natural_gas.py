@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 import yaml
+from _helpers import get_gas_economic_retirement
 from constants import (
     CODE_2_STATE,
     EMPTY_STATES,
@@ -328,8 +329,19 @@ class GasStorage(GasData):
         )
         df["CHARGE_MW"] = df.DISCHARGE_MW * NG_STORAGE_CHARGE_DISCHARGE_RATIO
 
+        # the working gas and withdrawal of each formation, whose shares weigh the
+        # costs of retrofitting the storage to hydrogen
+        formations = sorted(df.FORMATION.dropna().unique())
+        for formation in formations:
+            in_formation = df.FORMATION == formation
+            df[f"WORKING_{formation}"] = df.WORKING_CAPACITY_MWH.where(in_formation, 0)
+            df[f"WITHDRAWAL_{formation}"] = df.DISCHARGE_MW.where(in_formation, 0)
+
         by = ["STATE", "FORMATION"] if self.aggregation == "formation" else ["STATE"]
         df = df.groupby(by).sum(numeric_only=True).reset_index()
+        for formation in formations:
+            df[f"working_share_{formation}"] = (df.pop(f"WORKING_{formation}") / df.WORKING_CAPACITY_MWH).fillna(0)
+            df[f"withdrawal_share_{formation}"] = (df.pop(f"WITHDRAWAL_{formation}") / df.DISCHARGE_MW).fillna(0)
         df = df[df.MAX_CAPACITY_MWH > 0]
         df["NAME"] = df[by].agg(" ".join, axis=1)
 
@@ -358,15 +370,15 @@ class GasStorage(GasData):
         )
 
         cyclic_storage = kwargs.get("cyclic_storage", True)
-        # with contraction, every capacity is optimised between zero and the existing one
-        contraction = kwargs["contraction"]
+        # a storage that may retire has every capacity optimised between zero and the existing one
+        retire = kwargs["economic_retirement"]
         n.add(
             "Store",
             name=df.index,
             suffix=" gas storage",
             bus=df.index + " gas storage",
             carrier="gas storage",
-            e_nom_extendable=contraction,
+            e_nom_extendable=retire,
             e_nom=df.MAX_CAPACITY_MWH,
             e_nom_min=0,
             e_nom_max=df.MAX_CAPACITY_MWH,
@@ -378,6 +390,9 @@ class GasStorage(GasData):
             marginal_cost=0,  # to update
             lifetime=np.inf,
             build_year=n.investment_periods[0],
+            # the geology, for retrofitting the storage to hydrogen
+            **({"formation": df.FORMATION} if "FORMATION" in df else {}),
+            **{column: df[column] for column in df.columns if "_share_" in column},
         )
 
         # must do two links, rather than a bidirectional one, to constrain charge limits
@@ -400,7 +415,7 @@ class GasStorage(GasData):
             p_nom_max=df.CHARGE_MW,
             p_min_pu=0,
             p_max_pu=1,
-            p_nom_extendable=contraction,
+            p_nom_extendable=retire,
             marginal_cost=0,
             lifetime=np.inf,
             build_year=n.investment_periods[0],
@@ -418,7 +433,7 @@ class GasStorage(GasData):
             p_nom_max=df.DISCHARGE_MW,
             p_min_pu=0,
             p_max_pu=1,
-            p_nom_extendable=contraction,
+            p_nom_extendable=retire,
             marginal_cost=0,
             lifetime=np.inf,
             build_year=n.investment_periods[0],
@@ -459,9 +474,9 @@ class GasProcessing(GasData):
         df = df.set_index("STATE")
         df["bus"] = df.index + " gas"
 
-        # with contraction, the capacity is optimised between zero and the existing one
+        # production that may retire is optimised between zero and its existing capacity
         capacity_mult = kwargs.get("capacity_multiplier", 1)
-        p_nom_extendable = kwargs["contraction"] or capacity_mult != 1
+        p_nom_extendable = kwargs["economic_retirement"] or capacity_mult != 1
         p_nom_mult = 1 if capacity_mult >= 1 else capacity_mult
         p_nom_max_mult = capacity_mult
 
@@ -819,8 +834,8 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
         length_factor = kwargs["length_factor"]
         loss_per_1000km = kwargs["loss_per_1000km"]
         fom_per_km = kwargs["fom_per_km"]
-        # with contraction, the capacity is optimised between zero and the existing one
-        contraction = kwargs["contraction"]
+        # a pipeline that may retire is optimised between zero and its existing capacity
+        retire = kwargs["economic_retirement"]
         length = (
             pypsa.geo.haversine_pts(
                 n.buses.loc[bus0, ["x", "y"]].to_numpy(),
@@ -845,7 +860,7 @@ class InterconnectGasPipelineCapacity(_GasPipelineCapacity):
             p_nom_max=df.CAPACITY_MW,
             p_min_pu=0,
             p_max_pu=1,
-            p_nom_extendable=contraction,
+            p_nom_extendable=retire,
             lifetime=np.inf,
             build_year=n.investment_periods[0],
         )
@@ -1259,6 +1274,31 @@ class TradeGasPipelineCapacity(_GasPipelineCapacity):
         )
 
 
+#: Linepack assumptions per pipeline class, overridden by ``sector: natural_gas:
+#: linepack``. Diameters in inches, pressures in kPa, from
+#: https://publications.anl.gov/anlpubs/2008/02/61034.pdf
+DEFAULT_LINEPACK = {
+    "interstate": {"include": True, "diameter": 36, "max_pressure": 8000, "min_pressure": 4000},
+    "intrastate": {"include": True, "diameter": 24, "max_pressure": 8000, "min_pressure": 4000},
+}
+
+
+def get_linepack_assumptions(options: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
+    """``DEFAULT_LINEPACK`` with the keys given in ``options`` replaced, per pipeline class."""
+    options = options or {}
+    unknown = set(options) - set(DEFAULT_LINEPACK)
+    if unknown:
+        raise ValueError(f"Unknown linepack pipeline class {sorted(unknown)}; use {sorted(DEFAULT_LINEPACK)}")
+    assumptions = {}
+    for pipe_class, defaults in DEFAULT_LINEPACK.items():
+        given = options.get(pipe_class) or {}
+        unknown = set(given) - set(defaults)
+        if unknown:
+            raise ValueError(f"Unknown linepack option {sorted(unknown)} for {pipe_class}; use {sorted(defaults)}")
+        assumptions[pipe_class] = {**defaults, **given}
+    return assumptions
+
+
 class PipelineLinepack(GasData):
     """Creator for linepack infrastructure."""
 
@@ -1268,7 +1308,9 @@ class PipelineLinepack(GasData):
         interconnect: str,
         counties: str,
         pipelines: str,
+        assumptions: dict[str, Any] | None = None,
     ) -> None:
+        self.assumptions = get_linepack_assumptions(assumptions)
         self.counties = StateGeometry(counties)
         self.states = self.counties.states
         self.pipeline_geojson = pipelines
@@ -1303,21 +1345,17 @@ class PipelineLinepack(GasData):
             .reset_index()
         )
 
-        # https://publications.anl.gov/anlpubs/2008/02/61034.pdf
-        intrastate_radius = 12 * 0.0254  # inches in meters (24in dia)
-        interstate_radius = 18 * 0.0254  # inches meters (36in dia)
+        # every pipe the EIA does not label "Interstate" is taken as intrastate
+        pipes = length_in_state.copy()
+        pipes["CLASS"] = np.where(pipes.TYPEPIPE == "Interstate", "interstate", "intrastate")
+        included = [pipe_class for pipe_class, values in self.assumptions.items() if values["include"]]
+        pipes = pipes[pipes.CLASS.isin(included)]
 
-        volumne_in_state = length_in_state.copy()
-        volumne_in_state["RADIUS"] = volumne_in_state.TYPEPIPE.map(
-            lambda x: interstate_radius if x == "Interstate" else intrastate_radius,
-        )
-        volumne_in_state["VOLUME_M3"] = volumne_in_state.LENGTH_M * pi * volumne_in_state.RADIUS**2
-        volumne_in_state = volumne_in_state[["STATE_NAME", "STATE", "VOLUME_M3"]]
-        volumne_in_state = volumne_in_state.groupby(by=["STATE_NAME", "STATE"]).sum()
+        def assumed(key: str) -> pd.Series:
+            return pipes.CLASS.map({pipe_class: values[key] for pipe_class, values in self.assumptions.items()})
 
-        # https://publications.anl.gov/anlpubs/2008/02/61034.pdf
-        max_pressure = 8000  # kPa
-        min_pressure = 4000  # kPa
+        radius = assumed("diameter") / 2 * 0.0254  # inches to meters
+        pipes["VOLUME_M3"] = pipes.LENGTH_M * pi * radius**2
 
         # Linepack is the fuel held in the pipe, so its energy is the gas volume at
         # standard conditions times the same heating value used for MMcf -> MWh.
@@ -1325,10 +1363,11 @@ class PipelineLinepack(GasData):
         std_pressure = 101.56  # kPa (14.73 psia, the EIA reporting basis)
         m3_2_mmcf = 35.3147 / 1e6
 
-        final = volumne_in_state.copy()
-        mwh_per_kpa = final.VOLUME_M3 / std_pressure * m3_2_mmcf * MWH_2_MMCF
-        final["MAX_ENERGY_MWh"] = mwh_per_kpa * max_pressure
-        final["MIN_ENERGY_MWh"] = mwh_per_kpa * min_pressure
+        mwh_per_kpa = pipes.VOLUME_M3 / std_pressure * m3_2_mmcf * MWH_2_MMCF
+        pipes["MAX_ENERGY_MWh"] = mwh_per_kpa * assumed("max_pressure")
+        pipes["MIN_ENERGY_MWh"] = mwh_per_kpa * assumed("min_pressure")
+
+        final = pipes.groupby(by=["STATE_NAME", "STATE"])[["MAX_ENERGY_MWh", "MIN_ENERGY_MWh"]].sum()
         final["NOMINAL_ENERGY_MWh"] = (final.MAX_ENERGY_MWh + final.MIN_ENERGY_MWh) / 2
 
         final = final[["MAX_ENERGY_MWh", "MIN_ENERGY_MWh", "NOMINAL_ENERGY_MWh"]].reset_index()
@@ -1390,7 +1429,14 @@ def build_natural_gas(
     options: dict[str, Any] | None = None,
     **kwargs,
 ) -> None:
-    """Add the natural gas network."""
+    """
+    Add the natural gas network.
+
+    The existing production, pipelines and storage that may retire
+    (``options["economic_retirement"]``) are optimised between zero and their
+    capacity. ``build_hydrogen`` makes the pipelines and storage it retrofits
+    extendable too.
+    """
     if not options:
         options = {}
 
@@ -1400,8 +1446,7 @@ def build_natural_gas(
     capacity_multiplier = options.get("existing_pipeline_multiplier", 1)
     storage_aggregation = options.get("storage_aggregation", "state")
     pipeline_length_factor = options.get("pipeline_length_factor", 1.25)
-    # existing production, storage and pipelines may shrink below their capacity
-    infra_contraction = options.get("infra_contraction", False)
+    retirement = get_gas_economic_retirement({"natural_gas": options})
 
     # percent rates of the cost table
     pipeline_loss_per_1000km = (costs.at["gas pipeline", "compressor-fuel"] + costs.at["gas pipeline", "leakage"]) / 100
@@ -1422,7 +1467,7 @@ def build_natural_gas(
         production_costs=production_costs,
         efficiency=production_efficiency,
         fom=production_fom,
-        contraction=infra_contraction,
+        economic_retirement=retirement,
     )
 
     # add state level gas storage facilities
@@ -1433,7 +1478,7 @@ def build_natural_gas(
         cyclic_storage=cyclic_storage,
         injection_loss=storage_injection_loss,
         compressor_fom=storage_compressor_fom,
-        contraction=infra_contraction,
+        economic_retirement=retirement,
     )
 
     # add interconnect pipelines
@@ -1444,7 +1489,7 @@ def build_natural_gas(
         length_factor=pipeline_length_factor,
         loss_per_1000km=pipeline_loss_per_1000km,
         fom_per_km=pipeline_fom_per_km,
-        contraction=infra_contraction,
+        economic_retirement=retirement,
     )
 
     # add pipelines for imports/exports
@@ -1469,7 +1514,7 @@ def build_natural_gas(
 
     # add pipeline linepack
 
-    linepack = PipelineLinepack(year, interconnect, county_path, pipeline_shape_path)
+    linepack = PipelineLinepack(year, interconnect, county_path, pipeline_shape_path, options.get("linepack"))
     linepack.build_infrastructure(
         n,
         cyclic_storage=cyclic_storage,

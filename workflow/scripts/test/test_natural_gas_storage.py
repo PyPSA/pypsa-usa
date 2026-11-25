@@ -88,6 +88,20 @@ def test_storage_by_formation(make_storage):
     assert data.at["CA depleted-field", "MAX_CAPACITY_MWH"] == pytest.approx(5.0e6 * MWH_PER_MCF)
 
 
+def test_storage_keeps_the_shares_of_its_formations(make_storage):
+    state = make_storage().data.set_index("STATE")
+    # CA: depleted fields hold 2.0e6 + 1.5e6 of the 3.9e6 mcf working gas, 360e3 of the 408e3 mcf/d withdrawal
+    assert state.at["CA", "working_share_depleted-field"] == pytest.approx(3.5 / 3.9)
+    assert state.at["CA", "working_share_aquifer"] == pytest.approx(0.4 / 3.9)
+    assert state.at["CA", "withdrawal_share_depleted-field"] == pytest.approx(360 / 408)
+    assert state.at["CA", "withdrawal_share_salt-dome"] == 0
+    assert state.at["TX", "working_share_salt-dome"] == 1
+
+    formation = make_storage("formation").data.set_index("NAME")
+    assert formation.at["CA aquifer", "working_share_aquifer"] == 1
+    assert formation.at["CA aquifer", "withdrawal_share_depleted-field"] == 0
+
+
 def test_latest_report_does_not_depend_on_model_year(make_storage):
     pd.testing.assert_frame_equal(make_storage(year=2018).data, make_storage(year=2030).data)
 
@@ -104,7 +118,7 @@ def test_storage_components(base_network, make_storage, aggregation):
     n.add("Bus", ["CA", "TX"], suffix=" gas", carrier="gas")
     storage = make_storage(aggregation)
 
-    storage.build_infrastructure(n, injection_loss=0.0103, compressor_fom=1277.7, contraction=False)
+    storage.build_infrastructure(n, injection_loss=0.0103, compressor_fom=1277.7, economic_retirement=False)
 
     for _, row in storage.data.iterrows():
         name = row.NAME
@@ -134,7 +148,7 @@ def test_storage_contracts_down_to_zero(base_network, make_storage):
     n.add("Bus", ["CA", "TX"], suffix=" gas", carrier="gas")
     storage = make_storage()
 
-    storage.build_infrastructure(n, injection_loss=0.0103, compressor_fom=1277.7, contraction=True)
+    storage.build_infrastructure(n, injection_loss=0.0103, compressor_fom=1277.7, economic_retirement=True)
 
     data = storage.data.set_index("NAME")
     stores = n.stores.loc[data.index + " gas storage"]
@@ -151,7 +165,9 @@ def test_storage_contracts_down_to_zero(base_network, make_storage):
 def test_underground_storage_summary_sums_formations(base_network, make_storage):
     n = base_network
     n.add("Bus", ["CA", "TX"], suffix=" gas", carrier="gas")
-    make_storage("formation").build_infrastructure(n, injection_loss=0.0103, compressor_fom=1277.7, contraction=False)
+    make_storage("formation").build_infrastructure(
+        n, injection_loss=0.0103, compressor_fom=1277.7, economic_retirement=False
+    )
     stores = n.stores.index[n.stores.carrier == "gas storage"]
     n.stores_t.e = pd.DataFrame(1.0, index=n.snapshots, columns=stores)
 

@@ -1,7 +1,7 @@
 # Conda/mamba environment for PyPSA-USA.
 #
 # The scientific stack here is kept in sync with `pyproject.toml` / `uv.lock`
-# (see CLAUDE.md). Three pins deliberately diverge, because conda-forge cannot
+# (see AGENTS.md). Three pins deliberately diverge, because conda-forge cannot
 # express the uv resolution:
 #
 # 1. rasterio ==1.3.10 (uv.lock: 1.3.8). conda-forge's rasterio 1.3.8 builds
@@ -65,7 +65,6 @@ dependencies:
 - plotly==5.17.0
 - pyomo==6.6.1
 - graphviz
-- cyipopt
 
 # Keep in conda environment when calling ipython
 - ipython
@@ -91,6 +90,7 @@ dependencies:
   - gurobipy==11.0.3
   - highspy>=1.9.0
   - inflate64>=1.0.0
+  - pyscipopt>=6.3.0
   - duckdb==0.10.0
   - flake8
   - dill>=0.3.9
