@@ -296,6 +296,19 @@ def plot_global_constraint_shadow_prices(
     plt.close()
 
 
+def get_bus_regions(n: pypsa.Network) -> pd.Series:
+    """
+    Region of each bus for the regional charts.
+
+    The NERC region where the buses carry one; networks built with
+    ``topological_boundaries: state`` do not, and are grouped by state.
+    """
+    for col in ("nerc_reg", "reeds_state", "country"):
+        if col in n.buses.columns:
+            return n.buses[col]
+    raise KeyError("The buses carry no nerc_reg, reeds_state or country column to group the regional charts by.")
+
+
 def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
     """Returns a DataFrame with capacity existing at start of first period (by region/carrier)."""
     first_period = (
@@ -303,7 +316,7 @@ def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
         if hasattr(n, "investment_periods") and n.investment_periods is not None and len(n.investment_periods)
         else None
     )
-    n.generators["nerc_reg"] = n.generators.bus.map(n.buses.nerc_reg)
+    n.generators["nerc_reg"] = n.generators.bus.map(get_bus_regions(n))
     if first_period is not None:
         gen_mask = n.generators["build_year"].isna() | (n.generators["build_year"] < first_period)
         gens = n.generators.loc[gen_mask]
@@ -313,7 +326,7 @@ def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
             _original_p_nom(n.generators).groupby([n.generators["nerc_reg"], n.generators["carrier"]]).sum().round(0)
         )
     existing_capacity = existing_capacity.to_frame(name="Existing")
-    n.storage_units["nerc_reg"] = n.storage_units.bus.map(n.buses.nerc_reg)
+    n.storage_units["nerc_reg"] = n.storage_units.bus.map(get_bus_regions(n))
     if first_period is not None and hasattr(n.storage_units, "build_year") and "build_year" in n.storage_units.columns:
         su_mask = n.storage_units["build_year"].isna() | (n.storage_units["build_year"] < first_period)
         storage_units = n.storage_units.loc[su_mask].groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
@@ -356,9 +369,9 @@ def get_statistics(n, column_name):
 
     # Add nerc_region data
     gens = df.loc["Generator"].index.get_level_values(0)
-    gens_reg = gens.map(n.generators.bus.map(n.buses.nerc_reg)).to_series()
+    gens_reg = gens.map(n.generators.bus.map(get_bus_regions(n))).to_series()
     su = df.loc["StorageUnit"].index.get_level_values(0)
-    su_reg = su.map(n.storage_units.bus.map(n.buses.nerc_reg)).to_series()
+    su_reg = su.map(n.storage_units.bus.map(get_bus_regions(n))).to_series()
     nerc_reg = pd.concat([gens_reg, su_reg])
 
     df = df.set_index(nerc_reg, append=True)
@@ -480,7 +493,7 @@ def plot_regional_emissions_bar(
     save: str,
 ) -> None:
     """PLOT OF CO2 EMISSIONS BY NERC REGION AND INVESTMENT PERIOD."""
-    regional_emisssions_ts = get_node_emissions_timeseries(n).T.groupby(n.buses.nerc_reg).sum().T / 1e6
+    regional_emisssions_ts = get_node_emissions_timeseries(n).T.groupby(get_bus_regions(n)).sum().T / 1e6
     regional_emissions = (
         regional_emisssions_ts.groupby(regional_emisssions_ts.index.get_level_values(0)).sum().round(3).T
     )
