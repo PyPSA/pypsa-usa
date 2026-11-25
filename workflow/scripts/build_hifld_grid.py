@@ -76,13 +76,12 @@ from _helpers import configure_logging
 from build_base_network import BE_OFFSHORE_SUB_ID_MIN, TEXAS_POI_SUB_IDS
 from build_bus_population import load_county_population
 from build_shapes import load_na_shapes
+from constants import EARTH_RADIUS_KM
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 from sklearn.neighbors import BallTree
 
 logger = logging.getLogger(__name__)
-
-EARTH_RADIUS_KM = 6371.0088
 
 # HIFLD's voltage classes and the bin edges that map a nominal kV onto one.
 VOLTAGE_CLASSES = (69, 138, 230, 345, 500, 765)

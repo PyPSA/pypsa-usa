@@ -10,6 +10,9 @@ from enum import Enum
 MEASUREMENT_CRS = "EPSG:5070"
 GPS_CRS = "EPSG:4326"
 
+#: Earth radius for great-circle distances on lon/lat coordinates, as in ``pypsa.geo.haversine``.
+EARTH_RADIUS_KM = 6371.0
+
 ###################
 # General Constants
 ###################

@@ -180,7 +180,7 @@ def test_merge_footprint_islands_moves_islands_onto_the_nearest_main_substation(
         sub_id=[1, 2, 3, 4, 5, 6, 4],  # g is offshore, wired to island substation 4
         interconnect="Western",
         county=["A", "B", "C", "D", "E", "F", "G"],
-        load_weight=[10.0, 10.0, 10.0, 1.0, 1.0, 1.0, 0.0],
+        load_weight=[100.0, 100.0, 100.0, 0.5, 0.5, 0.5, 0.0],
         substation_off=[False] * 6 + [True],
     )
     n.add("Line", ["ab", "bc", "de"], bus0=["a", "b", "d"], bus1=["b", "c", "e"], x=0.1, s_nom=100)
@@ -189,4 +189,36 @@ def test_merge_footprint_islands_moves_islands_onto_the_nearest_main_substation(
     assert n.buses.loc[["d", "e"], "x"].tolist() == [2.0, 2.0]
     assert n.buses.loc["g", "x"] == 3.0  # offshore bus keeps its position
     assert n.buses.loc["f", "county"] == "A"
-    assert n.buses.load_weight.sum() == 33.0  # nothing is dropped
+    assert n.buses.load_weight.sum() == 301.5  # nothing is dropped
+
+
+def _two_area_network(island_x, island_load):
+    """Main network a-b-c on the equator, and a two-bus island d-e starting at ``island_x``."""
+    n = pypsa.Network()
+    n.add(
+        "Bus",
+        list("abcde"),
+        x=[0.0, 1.0, 2.0, island_x, island_x + 0.5],
+        y=0.0,
+        sub_id=[1, 2, 3, 4, 5],
+        interconnect="Western",
+        state=["WA"] * 3 + ["AZ"] * 2,
+        load_weight=[100.0, 100.0, 100.0, island_load, island_load],
+        substation_off=False,
+    )
+    n.add("Line", ["ab", "bc", "de"], bus0=["a", "b", "d"], bus1=["b", "c", "e"], x=0.1, s_nom=100)
+    return n
+
+
+@pytest.mark.parametrize(
+    ("island_x", "island_load"),
+    [
+        (2.3, 20.0),  # 33 km away but 12% of load: a real area, not a boundary fragment
+        (12.0, 0.5),  # 0.3% of load but over 1,000 km away: a second area of the footprint
+    ],
+)
+def test_merge_footprint_islands_keeps_a_large_or_distant_island(island_x, island_load):
+    n = _two_area_network(island_x, island_load)
+    before = n.buses.loc[["d", "e"], ["x", "y", "sub_id", "state"]].copy()
+    merge_footprint_islands(n)
+    pd.testing.assert_frame_equal(n.buses.loc[["d", "e"], ["x", "y", "sub_id", "state"]], before)

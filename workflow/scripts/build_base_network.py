@@ -10,7 +10,7 @@ import pypsa
 from _helpers import configure_logging, log_network_schema
 from build_bus_population import assign_load_weight, load_county_population
 from build_shapes import load_na_shapes
-from constants import FWD_SUFFIX, REC_TRADING_ZONE_MAPPER, REV_SUFFIX
+from constants import EARTH_RADIUS_KM, FWD_SUFFIX, REC_TRADING_ZONE_MAPPER, REV_SUFFIX
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 from shapely.geometry import Polygon
@@ -385,19 +385,31 @@ ISLAND_MERGE_ATTRS = [
     "rec_trading_zone",
 ]
 
+#: An island is merged only if one of its buses is this close to the main network (km).
+ISLAND_MERGE_MAX_DISTANCE_KM = 50.0
+#: An island is merged only if it holds at most this share of its interconnection's load weight.
+ISLAND_MERGE_MAX_LOAD_SHARE = 0.01
+
 
 def merge_footprint_islands(n: pypsa.Network) -> pypsa.Network:
-    """Merge the buses a footprint filter cut off into the nearest main-network substation.
+    """Merge the small islands a footprint filter cut off into the nearest main-network substation.
 
     Cutting a grid at a footprint boundary removes the lines that leave the
     footprint, which can strand a few buses on the boundary in AC islands. Each
     island would need its own cluster downstream. Per interconnection, the
-    largest AC component (lines and transformers) is the main network; every
-    other island takes the substation (``sub_id``, coordinates and region
-    attributes) of the main-network bus nearest to it, so
+    largest AC component (lines and transformers) is the main network. An island
+    within :data:`ISLAND_MERGE_MAX_DISTANCE_KM` of it and holding at most
+    :data:`ISLAND_MERGE_MAX_LOAD_SHARE` of the interconnection's load weight (bus
+    share without load weights) takes the substation (``sub_id``, coordinates and
+    region attributes) of the main-network bus nearest to it, so
     ``aggregate_to_substations`` merges it there with its load and generation.
     Offshore buses share the ``sub_id`` of their point of interconnection; those
     of an island's substations follow it, keeping their own coordinates.
+
+    A larger or more distant island is a real part of the footprint (a second
+    area of a non-contiguous footprint, or a part of a state whose lines connect
+    only through a neighbour). It stays as its own component and gets its own
+    clusters downstream.
     """
     is_offshore = n.buses.get("substation_off", pd.Series(False, index=n.buses.index)).astype(bool)
     onshore = n.buses.index[~is_offshore]
@@ -412,13 +424,26 @@ def merge_footprint_islands(n: pypsa.Network) -> pypsa.Network:
     attrs = [a for a in ISLAND_MERGE_ATTRS if a in n.buses.columns]
 
     merged, islands = [], 0
-    for _, group in n.buses.loc[onshore].groupby("interconnect"):
+    for interconnect, group in n.buses.loc[onshore].groupby("interconnect"):
         comp = component[group.index]
         main = comp.value_counts().index[0]
         main_buses = group.index[comp == main]
+        weight = group.load_weight.astype(float) if "load_weight" in group else pd.Series(np.nan, index=group.index)
+        if not weight.sum() > 0:
+            weight = pd.Series(1.0, index=group.index)
         tree = BallTree(np.radians(n.buses.loc[main_buses, ["y", "x"]].to_numpy(dtype=float)), metric="haversine")
         for _, members in comp[comp != main].groupby(comp):
             distance, index = tree.query(np.radians(n.buses.loc[members.index, ["y", "x"]].to_numpy(dtype=float)), k=1)
+            distance_km = distance[:, 0].min() * EARTH_RADIUS_KM
+            share = weight[members.index].sum() / weight.sum()
+            if distance_km > ISLAND_MERGE_MAX_DISTANCE_KM or share > ISLAND_MERGE_MAX_LOAD_SHARE:
+                states = sorted(n.buses.loc[members.index, "state"].dropna().unique()) if "state" in n.buses else []
+                logger.warning(
+                    f"Keeping an AC island of {len(members)} buses in {interconnect} ({', '.join(states) or 'no state'}; "
+                    f"{share:.2%} of load weight, {distance_km:.0f} km from the main network) as its own component; "
+                    "it needs its own cluster downstream.",
+                )
+                continue
             target = main_buses[index[distance[:, 0].argmin(), 0]]
             offshore = n.buses.index[is_offshore & n.buses.sub_id.isin(n.buses.loc[members.index, "sub_id"])]
             n.buses.loc[members.index, attrs] = n.buses.loc[[target] * len(members), attrs].to_numpy()
