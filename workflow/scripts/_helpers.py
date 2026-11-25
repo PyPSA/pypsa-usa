@@ -220,6 +220,29 @@ def calculate_annuity(n, r):
         return 1 / n
 
 
+def ccs_capture_rate(name: str) -> float | None:
+    """
+    Share of the CO2 a carbon-capture carrier captures, read from its name.
+
+    0.95 for ``CCGT-95CCS``, and for a component named after it
+    (``p1 CCGT-95CCS_2030``). None for a name without carbon capture.
+    """
+    match = re.search(r"-(\d+)CCS", name)
+    return int(match.group(1)) / 100 if match else None
+
+
+def ccs_co2_emissions(carrier: str, base_emissions: float) -> float:
+    """
+    CO2 a carbon-capture carrier still emits, given the emissions of its base technology.
+
+    Same unit as ``base_emissions`` (tCO2 per MWh of fuel in the cost table).
+    """
+    capture_rate = ccs_capture_rate(carrier)
+    if capture_rate is None:
+        raise ValueError(f"'{carrier}' names no carbon capture level, e.g. CCGT-95CCS")
+    return (1 - capture_rate) * base_emissions
+
+
 #: The component lists of ``electricity: extendable_carriers``
 COMPONENTS_WITH_CARRIERS = ("Generator", "StorageUnit", "Store", "Link")
 

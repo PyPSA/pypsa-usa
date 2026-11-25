@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 from _helpers import (
+    ccs_co2_emissions,
     configure_logging,
     get_gas_economic_retirement,
     get_gas_retrofit,
@@ -619,8 +620,6 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
     Separate function, as there is some odd logic to account for
     different names in translation to a sector study.
     """
-    # the ccs case are a hack solution
-
     match carrier:
         case "gas":
             return 0
@@ -629,13 +628,9 @@ def get_pwr_co2_intensity(carrier: str, costs: pd.DataFrame) -> float:
         case "lpg":
             return costs.at["oil", "co2_emissions"]
         case "CCGT-90CCS" | "CCGT-95CCS" | "CCGT-97CCS":
-            base = costs.at["gas", "co2_emissions"]
-            ccs_level = int(carrier.split("-")[1].replace("CCS", ""))
-            return (1 - ccs_level / 100) * base
+            return ccs_co2_emissions(carrier, costs.at["gas", "co2_emissions"])
         case "coal-95CCS" | "coal-99CCS":
-            base = costs.at["coal", "co2_emissions"]
-            ccs_level = int(carrier.split("-")[1].replace("CCS", ""))
-            return (1 - ccs_level / 100) * base
+            return ccs_co2_emissions(carrier, costs.at["coal", "co2_emissions"])
         case _:
             return costs.at[carrier, "co2_emissions"]
 
