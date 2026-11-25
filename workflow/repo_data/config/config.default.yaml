@@ -18,9 +18,9 @@
 #   repo_data/config/config.api.yaml       (API-key placeholders)
 #   repo_data/config/config.sector.yaml    (sector-coupling defaults)
 #   repo_data/config/config.default.yaml   (THIS FILE — the scenario base)
-# then the optional per-user overlays config/config.api.yaml and
-# config/config.slurm.yaml, and finally whatever you pass with
-# --configfile. Nested mappings merge; lists and scalars are REPLACED
+# then the optional per-user overlays config/config.api.yaml,
+# config/config.slurm.yaml and config/config.sector.yaml, and finally
+# whatever you pass with --configfile. Nested mappings merge; lists and scalars are REPLACED
 # wholesale, so a list you change must be restated in full.
 #
 # Editing this file changes the base for every run in the checkout.

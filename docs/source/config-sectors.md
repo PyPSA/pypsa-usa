@@ -3,7 +3,9 @@
 
 To run sector coupled studies, the `sector` wildcard must be assigned to `G` (natural gas and
 the end-use sectors), `H` (hydrogen), or both (`G-H`). After doing so, the following configuration
-options are exposed to the user.
+options are exposed to the user. To change them, edit your copy at
+`workflow/config/config.sector.yaml` (seeded by `init_pypsa_usa.sh`) or set them under `sector:`
+in a scenario config, which takes precedence.
 
 ```{note}
 Only single-period studies are currently supported when running sector studies.

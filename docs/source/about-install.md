@@ -23,10 +23,12 @@ git clone git@github.com:PyPSA/pypsa-usa.git
 From the command line, run the script `init_pypsa_usa.sh` to seed the per-user
 configuration files into the `workflow/config` folder.
 
-Only three files are copied — `config.default.yaml` (a starting point for your own
-scenario config), `config.api.yaml` (API keys) and `config.slurm.yaml` (HPC account
-settings). Every other configuration file is read by the workflow directly from the
-tracked `workflow/repo_data/config/` templates, so it can never fall out of sync with
+Only four files are copied — `config.default.yaml` (a starting point for your own
+scenario config), `config.api.yaml` (API keys), `config.slurm.yaml` (per-rule HPC
+wall times) and `config.sector.yaml` (sector-coupling settings). The last three are loaded
+automatically on top of the defaults. A key left in your copy overrides the template even
+after the template is updated, so delete the keys you do not change. Every other configuration file is read by the workflow directly from the
+tracked `workflow/repo_data/config/` templates, so those cannot fall out of sync with
 your checkout. The script is safe to re-run: existing files are left untouched.
 
 ```console
