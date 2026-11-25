@@ -114,6 +114,36 @@ NG_STORAGE_CHARGE_DISCHARGE_RATIO = 132 / 359
 # and the technology of the plants they are retrofitted from
 RETROFITS = {"OCHT": "OCGT", "CCHT": "CCGT", "CCGT-90CCS": "CCGT"}
 
+# Prime mover of the temperature-dependent forced outage curve
+# (conventional: ambient_derate, Murphy et al. 2019) each generator carrier takes,
+# following primemover2techgroup of ReEDS reeds/input_processing/outage_rates.py:
+# GAS_CC -> combined_cycle, GAS_CT and H2_COMBUSTION (H2-CT and H2-CC) ->
+# combustion_turbine, OGS -> diesel, COAL and BIO -> steam, NUCLEAR (with
+# Nuclear-SMR) -> nuclear. Carriers left out keep their p_max_pu: hydro (its
+# p_max_pu is the inflow profile), geothermal and EGS (no curve), renewables.
+AMBIENT_DERATE_PRIME_MOVER = {
+    "CCGT": "combined_cycle",
+    "CCGT-90CCS": "combined_cycle",
+    "CCGT-95CCS": "combined_cycle",
+    "CCGT-97CCS": "combined_cycle",
+    "OCGT": "combustion_turbine",
+    "OCHT": "combustion_turbine",
+    "CCHT": "combustion_turbine",  # ReEDS puts H2-CC with the hydrogen turbines
+    "oil": "diesel",
+    "coal": "steam",
+    "coal-95CCS": "steam",
+    "coal-99CCS": "steam",
+    "biomass": "steam",
+    "biomass-95CCS": "steam",
+    "waste": "steam",
+    "nuclear": "nuclear",
+    "SMR": "nuclear",  # small modular reactor
+}
+
+# ReEDS caps the extrapolated forced outage rate at 0.4, the 60 % capacity credit
+# PJM gives gas combustion turbines
+AMBIENT_DERATE_MAX_FORCED_OUTAGE = 0.4
+
 LBS_TON = 2000  # lbs/ short ton
 COAL_BTU_LB = 9396  # BTU/lb - EIA US AVERAGE TODO: differentiate between coal types
 MMBTU_MWHthemal = 3.4129  # MMBTU to MWh_thermal

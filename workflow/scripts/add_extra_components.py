@@ -9,6 +9,12 @@ import pandas as pd
 import pypsa
 from _helpers import calculate_annuity, configure_logging, load_costs, log_network_schema
 from add_electricity import add_missing_carriers
+from ambient_derate import (
+    ambient_derate_enabled,
+    apply_ambient_derate,
+    load_bus_temperature,
+    load_outage_curves,
+)
 from constants import (
     BECCS_CO2_REMOVAL,
     GENERATOR_CAPEX_STRATEGIES,
@@ -1260,6 +1266,9 @@ def apply_ucap(n: pypsa.Network, ucap_config: dict) -> None:
     For generators with time-varying p_max_pu values in n.generators_t.p_max_pu,
     the time series is multiplied by (1 - FOR).
 
+    Mutually exclusive with ``conventional.ambient_derate`` (checked in ``main``),
+    the hourly temperature-dependent version of the same derate.
+
     Arguments:
         n: pypsa.Network
         ucap_config: dict with 'enable' boolean and 'forced_outage_rates' dict
@@ -1436,6 +1445,9 @@ def main(snakemake) -> None:
     n = pypsa.Network(snakemake.input.network)
     schema_entry = log_network_schema(n, stage="entry")
     elec_config = snakemake.config["electricity"]
+    ucap_config = snakemake.config.get("ucap", {})
+    # raises on invalid settings, e.g. together with ucap
+    ambient_derate = ambient_derate_enabled(snakemake.config.get("conventional"), ucap_config)
 
     costs_dict = {
         n.investment_periods[i]: load_costs(
@@ -1647,8 +1659,18 @@ def main(snakemake) -> None:
                     "Not adding DAC capabilities given that CO2 (underground) storage is not enabled",
                 )
 
+    # Temperature-dependent forced outage derate of the thermal generators. Runs
+    # once every generator is attached (existing fleet, new builds, retrofits and
+    # remote contracted units), and replaces their p_max_pu.
+    if ambient_derate:
+        logger.info("Applying the temperature-dependent forced outage derate to thermal generators")
+        apply_ambient_derate(
+            n,
+            load_outage_curves(snakemake.input.outage_curves),
+            load_bus_temperature(snakemake.input.bus_temperature),
+        )
+
     # Apply UCAP derating to conventional generators
-    ucap_config = snakemake.config.get("ucap", {})
     if ucap_config.get("enable", False):
         logger.info("Applying UCAP derating to conventional generators")
         apply_ucap(n, ucap_config)

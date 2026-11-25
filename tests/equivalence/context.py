@@ -521,7 +521,8 @@ CONFIG_DIFF_ALLOWLIST: tuple[tuple[str, str], ...] = (
     # --- capabilities shipped default-off (HF-21) ----------------------------
     (
         "conventional.ambient_derate",
-        "HF-21 default-off capability (enable: false); develop raises if it is ever enabled",
+        "HF-21 default-off capability (enable: false); when enabled it replaces the seasonal derate "
+        "of thermal units, a result-changing switch",
     ),
     (
         "electricity.imports",

@@ -187,6 +187,8 @@ conventional:
     enable: false
     pudl: true
     wholesale: true
+  ambient_derate:
+    enable: false                        # the baseline has only the EIA-860 seasonal derate
 
 lines:
   s_max_pu: 0.7

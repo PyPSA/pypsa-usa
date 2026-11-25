@@ -25,6 +25,42 @@ In production cost-minimizing optimization models, a generator’s marginal cost
 - **Future Fuel Costs**:
     - By default, gas, coal and oil plants, existing and new, pay the electric power prices of the EIA's [Annual Energy Outlook 2026](https://www.eia.gov/outlooks/aeo/) Table 3 (Energy Prices by Sector and Source, United States) for natural gas, steam coal and distillate fuel oil, in the AEO case set by `costs: aeo: scenario` (`reference` is the Counterfactual Baseline). Each investment period gets the price of its year, or of the nearest AEO year outside 2025-2050, converted from 2025 to 2023 dollars. Nuclear, small modular reactor, biomass and biomass with carbon capture plants, existing and new, pay the ATB fuel cost of their ATB scenario (the ATB fuel cost per MWh of electricity over the ATB heat rate, per MWh of fuel). The plant level and historical prices above are used instead when `conventional: dynamic_fuel_price: enable` is true.
 
+(capacity_derates)=
+## Capacity Derates
+
+By default (`conventional: ambient_derate: enable: true`, `source: murphy2019`) the thermal
+units take an hourly, temperature-dependent derate, as [ReEDS](https://github.com/ReEDS-Model/ReEDS)
+does (`reeds/input_processing/outage_rates.py`): `p_max_pu(t) = 1 - FOR(T(t))`, where `FOR` is
+the forced outage rate of the unit's prime mover at the air temperature `T` of its bus, the
+area-weighted mean over the bus region (`build_bus_temperature`, from the atlite cutout of the
+weather year). The curves
+are those of [Murphy et al. (2019)](https://doi.org/10.1016/j.apenergy.2019.113513), tabulated
+from -15 to 35 °C in 5 °C steps (`workflow/repo_data/plants/outage_forced_temperature_murphy2019.csv`,
+copied unchanged from ReEDS `inputs/plant_characteristics/`): they are interpolated linearly,
+extrapolated linearly beyond the table with the slope of its two end points, and capped at 0.4.
+Carriers take a prime mover as ReEDS maps its technologies:
+
+| Prime mover | Carriers |
+| --- | --- |
+| combined cycle | CCGT, CCGT-90CCS, CCGT-95CCS, CCGT-97CCS |
+| combustion turbine | OCGT, OCHT, CCHT (ReEDS groups H2-CC with the hydrogen turbines) |
+| diesel | oil |
+| steam | coal, coal-95CCS, coal-99CCS, biomass, biomass-95CCS, waste |
+| nuclear | nuclear, SMR |
+
+Hydro (whose `p_max_pu` is its inflow profile), geothermal, EGS and the renewables keep their
+availability. The derate is applied in `add_extra_components`, once the existing fleet, new
+builds, retrofits and out-of-state contracted units are attached, and it **replaces** the
+EIA-860 seasonal derate of these carriers rather than stacking on it. A non-zero minimum stable
+level is scaled by the same factor, `p_min_pu(t) = p_min_pu * (1 - FOR(t))`, so a unit's dispatch
+range never becomes empty. It cannot be combined with `ucap`, which derates the same carriers by
+a static forced outage rate. A unit at a bus without a temperature profile (an external import
+bus) takes the mean temperature of the buses it is linked to.
+
+With `enable: false` the available capacity of every conventional unit follows its EIA-860
+seasonal rating: June to August take the summer rating, every other month the winter rating,
+whatever the weather. Geothermal follows it in either case.
+
 (remote_contracted_resources)=
 ## Out-of-State Contracted Resources (California)
 
@@ -51,7 +87,9 @@ generator — or a StorageUnit for battery contracts — at a California bus:
   unit-commitment parameters) are capacity-weighted over the plant's constituent units, so a
   contract inherits the same data the physical fleet carries. Generators are named
   `R <cpuc_unit_name>`, mirroring the `C` prefix on the conventional fleet, and are attached
-  **non-extendable**: they are existing contracts, not expansion candidates.
+  **non-extendable**: they are existing contracts, not expansion candidates. With
+  `conventional: ambient_derate` on, thermal contracts take the [ambient derate](#capacity_derates)
+  instead of their seasonal derates, like the rest of the fleet.
 
 Four simplifications are deliberate and worth knowing before reading results:
 

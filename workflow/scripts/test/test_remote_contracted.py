@@ -342,6 +342,22 @@ def test_firm_units_carry_seasonal_derates_and_commitment(network, plants_prefil
     assert np.allclose(p_max_pu[months == 1], 1.0)  # winter derate
 
 
+def test_ambient_derate_exempts_thermal_contracts_from_the_seasonal_derate(network, plants_prefilter):
+    """With conventional.ambient_derate the seasonal derate is not applied (add_extra_components derates)."""
+    _attach(
+        network,
+        plants_prefilter,
+        _ledger([["SMALL_CC", "SCE", "Gas CC", 400.0, "1001"]]),
+        unit_commitment=True,
+        seasonal_derate_exempt=("CCGT", "OCGT", "nuclear"),
+    )
+
+    name = REMOTE_PREFIX + "SMALL_CC"
+    assert name in network.generators.index
+    assert name not in network.generators_t.p_max_pu.columns
+    assert network.generators.at[name, "p_max_pu"] == 1.0
+
+
 def test_category_mismatch_uses_the_contracted_category_carrier(network, plants_prefilter, caplog):
     """A Solar entitlement pointed at a battery-only plant stays solar."""
     with caplog.at_level(logging.WARNING):

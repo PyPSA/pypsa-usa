@@ -39,6 +39,15 @@ def hydrogen_sector_on(sector):
     return "H" in sector_letters(sector)
 
 
+def ambient_derate_on():
+    """``conventional.ambient_derate`` is on with the Murphy et al. (2019) curves."""
+    settings = config.get("conventional", {}).get("ambient_derate") or {}
+    return (
+        bool(settings.get("enable", False))
+        and settings.get("source", "murphy2019") == "murphy2019"
+    )
+
+
 def get_config(config, keys, default=None):
     """Retrieve a nested value from a dictionary using a tuple of keys."""
     value = config

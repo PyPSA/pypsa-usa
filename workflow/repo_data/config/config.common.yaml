@@ -322,6 +322,8 @@ offshore_network:
 # ====================================================================
 # Applies a derate to conventional plants based on Forced Outage Rates:
 # UCAP = ICAP * (1 - FOR), implemented as p_max_pu = 1 - FOR.
+# Mutually exclusive with conventional: ambient_derate (hourly, temperature-dependent FOR),
+# which is on by default: set its enable: false before enabling ucap.
 # docs : UCAP
 ucap:
   enable: false                          # true = apply FOR derate to conventional generators

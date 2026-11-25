@@ -1,0 +1,13 @@
+,Unit,Values,Description
+unit_commitment,bool,"{true, false}","Make conventional generators committable, with minimum stable level, minimum up/down times and start-up costs (solved as an LP relaxation unless ``solving: options: linearized_unit_commitment`` is false)."
+must_run,bool,"{true, false}",Apply the WECC ADS must-run minimum loading to the flagged thermal plants.
+,,,
+dynamic_fuel_price:,,,
+-- enable,bool,"{true, false}","Use time-varying plant-level fuel prices instead of the constant AEO/ATB fuel costs."
+-- pudl,bool,"{true, false}",Use the PUDL EIA-923 receipts-based fuel costs (monthly).
+-- wholesale,bool,"{true, false}","Use the EIA state and balancing-area natural gas prices and state coal prices. Requires an EIA API key."
+,,,
+ambient_derate:,,,"Temperature-dependent forced outage derate of thermal units: ``p_max_pu(t) = 1 - FOR(T(t))`` at the area-weighted air temperature of the unit's bus region. See :ref:`capacity_derates`."
+-- enable,bool,"{true, false}","On by default. Derate the gas, coal, oil, biomass, waste and nuclear carriers (existing, new and retrofits) by the hourly temperature. Replaces their EIA-860 seasonal derate. Cannot be combined with ``ucap: enable: true``. Builds the bus temperatures (``build_bus_temperature``) from the atlite cutout of the weather year, which is retrieved also with ``renewable: dataset: godeeep``."
+-- source,--,"One of {``murphy2019``, ``cpuc_servm``}","``murphy2019``: forced outage rate by prime mover from Murphy et al. (2019) as ReEDS uses it, interpolated linearly, extrapolated linearly beyond -15 to 35 °C and capped at 0.4. ``cpuc_servm`` (CPUC SERVM unit-specific derates) is reserved and raises ``NotImplementedError``."
+-- replaces_seasonal_derate,bool,true,Must be true: the ambient derate is never stacked on the EIA-860 seasonal derate.
