@@ -54,6 +54,10 @@ def add_buses_from_file(
     return n
 
 
+#: System base of the per-unit branch impedances in the TAMU/Breakthrough grid (MVA)
+TAMU_S_BASE = 100
+
+
 def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
     branches = pd.read_csv(
         fn_branches,
@@ -66,21 +70,38 @@ def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
         tech_branches = branches.query("branch_device_type == @tech")
         logger.info(f"Adding {len(tech_branches)} branches as {tech}s to the network.")
 
-        # S_base = 100 MVA
+        # The file gives r, x and b in per unit of S_base = 100 MVA
+        if tech == "Line":
+            # pypsa takes line impedances in Ohm and Siemens
+            v_nom_sq = n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2
+            impedance = {
+                "r": tech_branches.r * v_nom_sq / TAMU_S_BASE,
+                "x": tech_branches.x * v_nom_sq / TAMU_S_BASE,
+                "b": tech_branches.b / v_nom_sq,
+                "type": "temp",  # temporarily then over ridden by assign_line_types
+            }
+        else:
+            # pypsa takes transformer impedances in per unit of the transformer's s_nom;
+            # the file follows MATPOWER, whose branches are PI models
+            rating = tech_branches.rateA / TAMU_S_BASE
+            impedance = {
+                "r": tech_branches.r * rating,
+                "x": tech_branches.x * rating,
+                "b": tech_branches.b / rating,
+                "model": "pi",
+            }
+
         n.add(
             tech,
             tech_branches.index,
             bus0=tech_branches.from_bus_id,
             bus1=tech_branches.to_bus_id,
-            r=tech_branches.r * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2) / 100,
-            x=tech_branches.x * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2) / 100,
-            b=tech_branches.b / (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2),
             s_nom=tech_branches.rateA,
             v_nom=tech_branches.from_bus_id.map(n.buses.v_nom),
             interconnect=tech_branches.interconnect,
-            type="temp",  # temporarily then over ridden by assign_line_types
             carrier="AC",
             underwater_fraction=0.0,
+            **impedance,
         )
     return n
 
