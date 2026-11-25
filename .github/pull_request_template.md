@@ -1,5 +1,5 @@
-Closes #
-<!--- PRs should generally have an issue; small fixes can go without (delete the line above). Use "Part of #" if it only resolves part of one. -->
+Closes # (if applicable).
+<!--- PRs should generally have an issue; small fixes can go without. Use "Part of #" if it only resolves part of one. -->
 <!--- Into `develop`, "Closes #" does not link or close the issue: link it in the Development sidebar, and close it by hand after the merge. -->
 
 ## Changes proposed in this Pull Request
