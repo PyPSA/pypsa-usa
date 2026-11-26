@@ -596,6 +596,17 @@ def demand_scaling_data(wildcards):
         return ""
 
 
+def ba_demand_input(path):
+    """Extra input of the eia profile, which maps base-bus balancing areas to clusters."""
+
+    def get_path(wildcards):
+        if config["electricity"]["demand"]["profile"] == "eia":
+            return path.format(**wildcards)
+        return []
+
+    return get_path
+
+
 rule build_electrical_demand:
     wildcard_constraints:
         end_use="power",  # added for consistency in build_demand.py
@@ -612,6 +623,9 @@ rule build_electrical_demand:
         pudl_path=config_provider("pudl_path"),
     input:
         network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
+        base_network=ba_demand_input(NETWORKS + "{interconnect}/elec_base_network.nc"),
+        busmap_b=ba_demand_input(BUSMAPS + "{interconnect}/busmap_b.csv"),
+        busmap_s=ba_demand_input(BUSMAPS + "{interconnect}/busmap_s{simpl}.csv"),
         demand_files=demand_raw_data,
         dissagregate_files=demand_disaggregate_data,
         demand_scaling_file=demand_scaling_data,

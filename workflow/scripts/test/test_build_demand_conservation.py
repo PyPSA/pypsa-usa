@@ -229,13 +229,13 @@ class _WriteFixedLaf(WriteStrategy):
 
 
 def test_renormalisation_is_applied_for_every_zone_type():
-    """A 'ba' key whose factors were normalised over states still conserves."""
+    """A 'reeds' key whose factors were normalised over states still conserves."""
     n = make_network()
-    n.buses["balancing_area"] = ["PJM", "PJM", "PJM", "PJM"]
+    n.buses["reeds_zone"] = "p123"
     laf = pd.Series([0.6, 0.4, 1.0, 1.0], index=n.buses.index)
-    demand = make_demand(n, {"PJM": [3000.0, 1500.0]})
+    demand = make_demand(n, {"p123": [3000.0, 1500.0]})
 
-    result = _WriteFixedLaf(n, laf).dissagregate_demand(demand, "ba")
+    result = _WriteFixedLaf(n, laf).dissagregate_demand(demand, "reeds")
 
     assert result.sum(axis=1).tolist() == pytest.approx([3000.0, 1500.0])
     assert result.loc[:, "md_a"].tolist() == pytest.approx([600.0, 300.0])
