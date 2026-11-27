@@ -188,15 +188,14 @@ def map_bus_to_region(
         name: str
             column name in shape to merge
     """
-    names.append("geometry")
-    shape_filtered = shape[names]
+    shape_filtered = shape[[*names, "geometry"]]
     joined = gpd.sjoin(buses, shape_filtered, how="left").drop(columns=["index_right"])
     duplicated = joined.index.duplicated(keep="first")
     if duplicated.any():
         logger.info(
             "%d bus(es) lie in more than one %s polygon; keeping the first match.",
             joined.index[duplicated].nunique(),
-            "/".join(names[:-1]),
+            "/".join(names),
         )
     return joined[~duplicated]
 

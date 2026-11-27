@@ -49,6 +49,13 @@ def test_bus_in_two_polygons_keeps_its_first_match():
 
 
 @pytest.mark.fast
+def test_caller_names_list_is_not_mutated():
+    names = ["balancing_area"]
+    map_bus_to_region(_buses(), _overlapping_shapes("balancing_area"), names)
+    assert names == ["balancing_area"]
+
+
+@pytest.mark.fast
 def test_successive_overlapping_joins_still_give_one_row_per_bus():
     """Two overlapping layers in a row used to multiply the rows (2 x 2 for bus 1)."""
     out = map_bus_to_region(_buses(), _overlapping_shapes("balancing_area"), ["balancing_area"])
