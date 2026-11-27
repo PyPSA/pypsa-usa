@@ -416,7 +416,8 @@ def add_RPS_constraints(n, config, snakemake=None):
         region_demand = (
             n.loads_t.p_set.loc[constraint_row.planning_horizon]
             .loc[:, n.loads.bus.isin(region_buses.index)]
-            .sum()
+            .sum(axis=1)
+            .mul(n.snapshot_weightings.generators.loc[constraint_row.planning_horizon])
             .sum()
         )
         region_rps_rhs = int(constraint_row.pct * region_demand)
@@ -449,7 +450,8 @@ def add_RPS_constraints(n, config, snakemake=None):
             name=region_gens_eligible.index,
         )
         renewable_gen = zone_constraints.rps_rhs.sum()
-        lhs = p_eligible.sum() - renewable_gen
+        weights = n.snapshot_weightings.generators.loc[planning_horizon]
+        lhs = (p_eligible * weights).sum() - renewable_gen
         rhs = 0
 
         name = f"GlobalConstraint-{rec_trading_zone}_{planning_horizon}_{policy}_limit"
@@ -468,6 +470,7 @@ def _get_state_generation(n, planning_horizon, state, carriers):
     state_buses = n.buses[(n.buses.reeds_state == state) & (n.buses.carrier == "AC")]
     state_gens = n.generators[n.generators.bus.isin(state_buses.index) & n.generators.carrier.isin(carriers)]
     state_links = n.links[n.links.bus1.isin(state_buses.index) & n.links.carrier.isin(carriers)]
+    weights = n.snapshot_weightings.generators.loc[planning_horizon]
 
     gens_demand = (
         n.model["Generator-p"]
@@ -475,10 +478,15 @@ def _get_state_generation(n, planning_horizon, state, carriers):
             period=planning_horizon,
             name=state_gens.index,
         )
+        .mul(weights)
         .sum()
     )
     links_demand = (
-        n.model["Link-p"].sel(period=planning_horizon, name=state_links.index).mul(state_links.efficiency).sum()
+        n.model["Link-p"]
+        .sel(period=planning_horizon, name=state_links.index)
+        .mul(state_links.efficiency)
+        .mul(weights)
+        .sum()
     )
 
     return gens_demand + links_demand

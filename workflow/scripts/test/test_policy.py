@@ -11,6 +11,7 @@ import os
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pypsa
 import pytest
@@ -314,14 +315,23 @@ def test_add_rps_constraints(policy_network, rps_config):
             continue
 
         # Calculate total generation from eligible sources
-        eligible_generation = n.generators_t.p[region_gens_eligible.index].sum().sum()
+        # energy over the standard's planning horizon, each snapshot weighted by its hours
+        weights = n.snapshot_weightings.generators.loc[row.planning_horizon]
+        eligible_generation = (
+            n.generators_t.p.loc[row.planning_horizon, region_gens_eligible.index].mul(weights, axis=0).sum().sum()
+        )
 
         # Calculate total demand in the region
-        region_demand = n.loads_t.p_set.loc[:, n.loads.bus.isin(region_buses.index)].sum().sum()
+        region_demand = (
+            n.loads_t.p_set.loc[row.planning_horizon, n.loads.bus.isin(region_buses.index)]
+            .mul(weights, axis=0)
+            .sum()
+            .sum()
+        )
         logger.info(
             f"RPS Check: Region: {row.region}, Carriers: {carriers}, "
-            f"Eligible Generation: {eligible_generation:.2f} MW, "
-            f"Total Demand: {region_demand:.2f} MW, "
+            f"Eligible Generation: {eligible_generation:.2f} MWh, "
+            f"Total Demand: {region_demand:.2f} MWh, "
             f"Required %: {row.pct * 100:.1f}%, "
             f"Actual %: {(eligible_generation / region_demand) * 100:.1f}%",
         )
@@ -330,6 +340,67 @@ def test_add_rps_constraints(policy_network, rps_config):
         assert eligible_generation >= (row.pct * region_demand) - epsilon, (
             f"RPS requirement of {row.pct * 100}% not met for region {row.region}"
         )
+
+
+def test_rps_weights_snapshots_by_their_hours(policy_network, rps_config):
+    """The RPS counts energy: generation and demand are weighted by the snapshot hours."""
+    from opts.policy import add_RPS_constraints
+
+    n = policy_network
+    config, snakemake = rps_config
+    weights = pd.Series(np.linspace(1.0, 7.0, len(n.snapshots)), index=n.snapshots)
+    n.snapshot_weightings["generators"] = weights
+    n.snapshot_weightings["objective"] = weights
+    n.optimize.create_model(multi_investment_periods=True)
+    add_RPS_constraints(n, config, snakemake=snakemake)
+
+    names = [c for c in n.model.constraints if "rps_limit" in c]
+    assert names
+    for name in names:
+        con = n.model.constraints[name]
+        coeffs = con.coeffs.values[con.vars.values != -1]
+        # each generator's output enters with the hours of its snapshot
+        assert np.isin(np.round(coeffs, 9), np.round(weights.to_numpy(), 9)).all()
+        assert len(np.unique(np.round(coeffs, 9))) > 1
+
+
+def test_sector_rps_weights_snapshots_by_their_hours(policy_network, rps_config):
+    """The sector RPS weights both the eligible and the total generation by the snapshot hours."""
+    from opts.policy import add_RPS_constraints_sector
+
+    n = policy_network
+    config, snakemake = rps_config
+    config = {
+        "electricity": {
+            **config["electricity"],
+            "conventional_carriers": ["gas", "nuclear"],
+            "renewable_carriers": ["solar", "onwind"],
+            "extendable_carriers": {"Generator": []},
+        },
+    }
+    weights = pd.Series(np.linspace(1.0, 7.0, len(n.snapshots)), index=n.snapshots)
+    n.snapshot_weightings["generators"] = weights
+    n.optimize.create_model(multi_investment_periods=True)
+    add_RPS_constraints_sector(n, config, snakemake=snakemake)
+
+    # model label of Generator-p -> (generator, snapshot weight)
+    labels = n.model["Generator-p"].labels.to_pandas()
+    stacked = labels.stack()
+    owner = pd.Series(stacked.index.get_level_values("name"), index=stacked.to_numpy())
+    hours = pd.Series(weights.reindex(stacked.index.droplevel("name")).to_numpy(), index=stacked.to_numpy())
+
+    names = [c for c in n.model.constraints if c.endswith("_limit") and c.startswith("GlobalConstraint-")]
+    assert names
+    for name in names:
+        con = n.model.constraints[name]
+        valid = con.vars.values != -1
+        terms = pd.DataFrame({"var": con.vars.values[valid], "coeff": con.coeffs.values[valid]})
+        # a generator can enter twice (eligible and total generation): add its terms up
+        coeff = terms[terms["var"].isin(owner.index)].groupby("var")["coeff"].sum()
+        # each generator's coefficient is its share (1 - pct or -pct) times the snapshot hours
+        per_hour = (coeff / coeff.index.map(hours)).groupby(coeff.index.map(owner))
+        assert (per_hour.max() - per_hour.min()).abs().max() < 1e-9
+        assert coeff.abs().round(9).nunique() > 1
 
 
 def test_add_rps_constraints_clustered(clustered_policy_network, rps_config):
@@ -367,14 +438,23 @@ def test_add_rps_constraints_clustered(clustered_policy_network, rps_config):
             continue
 
         # Calculate total generation from eligible sources
-        eligible_generation = n.generators_t.p[region_gens_eligible.index].sum().sum()
+        # energy over the standard's planning horizon, each snapshot weighted by its hours
+        weights = n.snapshot_weightings.generators.loc[row.planning_horizon]
+        eligible_generation = (
+            n.generators_t.p.loc[row.planning_horizon, region_gens_eligible.index].mul(weights, axis=0).sum().sum()
+        )
 
         # Calculate total demand in the region
-        region_demand = n.loads_t.p_set.loc[:, n.loads.bus.isin(region_buses.index)].sum().sum()
+        region_demand = (
+            n.loads_t.p_set.loc[row.planning_horizon, n.loads.bus.isin(region_buses.index)]
+            .mul(weights, axis=0)
+            .sum()
+            .sum()
+        )
         logger.info(
             f"RPS Check (Clustered): Region: {row.region}, Carriers: {carriers}, "
-            f"Eligible Generation: {eligible_generation:.2f} MW, "
-            f"Total Demand: {region_demand:.2f} MW, "
+            f"Eligible Generation: {eligible_generation:.2f} MWh, "
+            f"Total Demand: {region_demand:.2f} MWh, "
             f"Required %: {row.pct * 100:.1f}%, "
             f"Actual %: {(eligible_generation / region_demand) * 100:.1f}%",
         )
