@@ -80,6 +80,60 @@ def load_reeds_sites(tech: str, inputs, params, tech_config: dict):
     return sites
 
 
+#: How far outside every substation region of the run (km) a BE substation may
+#: lie and still have its NREL caps entry kept, for substations on the coastline
+#: of the generalised onshore shapes.
+CAPS_REKEY_COAST_KM = 5.0
+
+
+def _int_str(values) -> pd.Series:
+    """Normalise substation ids to plain integer strings ("35000.0" -> "35000")."""
+    return pd.to_numeric(pd.Series(values), errors="coerce").astype("Int64").astype(str)
+
+
+def rekey_caps_to_grid_substations(
+    caps_ds: xr.Dataset,
+    be_sub_fn: str,
+    grid_regions_fn: str,
+    tech: str = "",
+    coast_km: float = CAPS_REKEY_COAST_KM,
+) -> xr.Dataset:
+    """Re-key BE-substation-keyed NREL caps onto the substations of the run's grid.
+
+    The NREL caps artifacts are rolled up on Breakthrough Energy's substations, so
+    their ``bus`` keys are BE ``sub_id``s, which a grid built from HIFLD
+    (``transmission_network: hifld``) does not have. Each entry moves to the
+    grid substation whose onshore region (``build_bus_regions``, named by
+    ``sub_id``) holds its BE substation; offshore entries are keyed by their
+    onshore point of interconnection, so the onshore regions serve every
+    technology. Entries outside the run's regions are dropped, as the busmap
+    drops them on the BE grid; ``coast_km`` keeps those just off the coastline.
+    Entries landing on one substation are aggregated as in
+    :func:`remap_caps_to_cluster`, so the result is keyed like ``busmap_s``.
+    """
+    be_sub = pd.read_csv(be_sub_fn)
+    be_sub.index = _int_str(be_sub.sub_id).to_numpy()
+    keys = pd.Series(caps_ds["bus"].values).astype(str)
+    located = be_sub.reindex(_int_str(keys).to_numpy())[["lon", "lat"]].dropna()
+
+    regions = gpd.read_file(grid_regions_fn)[["name", "geometry"]].to_crs(5070)
+    points = gpd.GeoDataFrame(
+        index=located.index,
+        geometry=gpd.points_from_xy(located.lon, located.lat),
+        crs=4326,
+    ).to_crs(5070)
+    joined = gpd.sjoin_nearest(points, regions, how="inner", max_distance=coast_km * 1000, distance_col="_m")
+    region_of = joined[~joined.index.duplicated()]["name"]
+
+    rekey = pd.Series(_int_str(keys).map(region_of).to_numpy(), index=keys.to_numpy())
+    rekey = _int_str(rekey).where(rekey.notna())
+    logger.info(
+        f"NREL caps ({tech}): {int(rekey.notna().sum())} of {len(keys)} BE-substation entries lie in the "
+        f"run's substation regions and move onto {rekey.nunique()} grid substations.",
+    )
+    return remap_caps_to_cluster(caps_ds, rekey.dropna(), tech=f"{tech}, BE->grid substations")
+
+
 def _reassign_unmapped_caps(
     df: pd.DataFrame,
     max_km: float,
@@ -599,6 +653,16 @@ if __name__ == "__main__":
         # so they intersect with the profile/region bus space.
         busmap_s = pd.read_csv(snakemake.input.busmap_s, index_col=0, dtype=str).iloc[:, 0]
         busmap_s.index = busmap_s.index.astype(str)
+        if snakemake.params.transmission_network == "hifld":
+            # caps are keyed by BE substation; move them onto HIFLD substations
+            # first so both the cluster remap and the capacity CF weighting
+            # below see the grid's own substation ids
+            caps_ds_sub = rekey_caps_to_grid_substations(
+                caps_ds_sub,
+                snakemake.input.be_sub,
+                snakemake.input.grid_regions,
+                tech=tech,
+            )
         # Opt-in recovery of out-of-footprint caps entries (default off);
         # reaches the script the same way renewable_land_access does.
         reassign_cfg = snakemake.config.get("nrel_caps_reassign") or {}

@@ -52,6 +52,76 @@ rule build_shapes:
         "../scripts/build_shapes.py"
 
 
+HIFLD_GRID = NETWORKS + "hifld_base_grid/"
+
+
+def base_grid_file(name):
+    """Path of one base-grid table in Breakthrough Energy's CSV schema.
+
+    ``model_topology.transmission_network: hifld`` swaps the BE/TAMU synthetic
+    grid for one rebuilt from the real HIFLD transmission layer
+    (``build_hifld_grid``); ``reeds`` and ``tamu`` both start from the BE grid
+    as shipped. ``offshore_poi`` only exists on the HIFLD side -- the BE path
+    finds its points of interconnection from BE's own offshore substations.
+    """
+    if config["model_topology"]["transmission_network"] == "hifld":
+        return HIFLD_GRID + f"{name}.csv"
+    if name == "offshore_poi":
+        return []
+    return DATA + f"breakthrough_network/base_grid/{name}.csv"
+
+
+if config["model_topology"]["transmission_network"] == "hifld" and "EGS" in (
+    config["electricity"]["extendable_carriers"].get("Generator") or []
+):
+    # The NREL EGS supply curves (data/EGS/) are keyed by BE substation id and
+    # aggregate_egs maps them through busmap_s, which on the HIFLD grid holds
+    # HIFLD substation ids only -- every EGS site would silently drop out.
+    raise ValueError(
+        "EGS is keyed by Breakthrough Energy substation ids and is not supported "
+        "with model_topology.transmission_network: hifld. Remove EGS from "
+        "electricity.extendable_carriers.Generator or use reeds/tamu.",
+    )
+
+
+# The BE/TAMU corridors are synthetic ("a fictitious configuration", in its
+# authors' words). This rebuilds the base grid from the real HIFLD transmission
+# layer, borrowing only BE's per-voltage-class typical electrical parameters,
+# and writes it in BE's schema so build_base_network reads it unchanged. It is
+# built once nationally (interconnection labelling needs the whole graph), hence
+# the usa shapes; build_base_network filters it by {interconnect}.
+rule build_hifld_grid:
+    input:
+        hifld_lines=DATA + "hifld/transmission_lines.geojson",
+        county_population=DATA + "population/DECENNIALDHC2020.P1-Data.csv",
+        county_shapes=GEOSPATIAL + "usa/county_shapes.geojson",
+        state_shapes=GEOSPATIAL + "usa/state_boundaries.geojson",
+        be_bus=DATA + "breakthrough_network/base_grid/bus.csv",
+        be_branch=DATA + "breakthrough_network/base_grid/branch.csv",
+        be_bus2sub=DATA + "breakthrough_network/base_grid/bus2sub.csv",
+        be_sub=DATA + "breakthrough_network/base_grid/sub.csv",
+        be_dcline=DATA + "breakthrough_network/base_grid/dcline.csv",
+        be_plant=DATA + "breakthrough_network/base_grid/plant.csv",
+    output:
+        bus=HIFLD_GRID + "bus.csv",
+        branch=HIFLD_GRID + "branch.csv",
+        bus2sub=HIFLD_GRID + "bus2sub.csv",
+        sub=HIFLD_GRID + "sub.csv",
+        dcline=HIFLD_GRID + "dcline.csv",
+        plant=HIFLD_GRID + "plant.csv",
+        poi=HIFLD_GRID + "offshore_poi.csv",
+    log:
+        LOGS + "build_hifld_grid.log",
+    benchmark:
+        BENCHMARKS + "build_hifld_grid"
+    threads: 1
+    resources:
+        mem_mb=16000,
+        walltime=config_provider("walltime", "build_hifld_grid", default="01:00:00"),
+    script:
+        "../scripts/build_hifld_grid.py"
+
+
 def bus_allocation_data(wildcards):
     """2020 census county populations, only when bus_allocation=population."""
     method = config["electricity"]["demand"].get("bus_allocation", "population")
@@ -71,13 +141,15 @@ rule build_base_network:
             "model_topology", "topological_boundaries"
         ),
         length_factor=config["lines"]["length_factor"],
+        transmission_network=config_provider("model_topology", "transmission_network"),
     input:
         unpack(bus_allocation_data),
-        buses=DATA + "breakthrough_network/base_grid/bus.csv",
-        lines=DATA + "breakthrough_network/base_grid/branch.csv",
-        links=DATA + "breakthrough_network/base_grid/dcline.csv",
-        bus2sub=DATA + "breakthrough_network/base_grid/bus2sub.csv",
-        sub=DATA + "breakthrough_network/base_grid/sub.csv",
+        buses=base_grid_file("bus"),
+        lines=base_grid_file("branch"),
+        links=base_grid_file("dcline"),
+        bus2sub=base_grid_file("bus2sub"),
+        sub=base_grid_file("sub"),
+        offshore_poi=base_grid_file("offshore_poi"),
         onshore_shapes=GEOSPATIAL + "{interconnect}/onshore_shapes.geojson",
         offshore_shapes=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
         state_shapes=GEOSPATIAL + "{interconnect}/state_boundaries.geojson",
@@ -334,8 +406,19 @@ rule build_renewable_profiles:
         ),
         renewable_scenarios=config_provider("renewable_scenarios"),
         mapping_cache_dir=PROFILES + "{interconnect}/nrel_mapping_cache",
+        transmission_network=config_provider("model_topology", "transmission_network"),
         dollar_year=config_provider("costs", "dollar_year"),
     input:
+        # NREL caps are keyed by BE substation; on the HIFLD grid each entry
+        # moves to the substation region holding it (build_renewable_profiles)
+        **(
+            {
+                "be_sub": DATA + "breakthrough_network/base_grid/sub.csv",
+                "grid_regions": GEOSPATIAL + "{interconnect}/regions_onshore.geojson",
+            }
+            if config["model_topology"]["transmission_network"] == "hifld"
+            else {}
+        ),
         corine=ancient(
             DATA
             + "copernicus/PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_USA_EPSG-4326.tif"
@@ -1020,7 +1103,9 @@ rule add_electricity:
         regions_offshore=GEOSPATIAL + "{interconnect}/regions_offshore_s{simpl}.geojson",
         reeds_shapes=GEOSPATIAL + "{interconnect}/reeds_shapes.geojson",
         powerplants="resources/powerplants/powerplants.csv",
-        plants_breakthrough=DATA + "breakthrough_network/base_grid/plant.csv",
+        # keyed by base-grid bus id, so it follows the selected grid (the HIFLD
+        # build re-keys BE's plants onto HIFLD buses by coordinate)
+        plants_breakthrough=base_grid_file("plant"),
         hydro_breakthrough=DATA + "breakthrough_network/base_grid/hydro.csv",
         bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
         busmap_s=BUSMAPS + "{interconnect}/busmap_s{simpl}.csv",

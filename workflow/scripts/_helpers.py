@@ -358,7 +358,10 @@ def is_transport_model(transmission_network):
     match transmission_network:
         case "reeds":
             return True
-        case "tamu":
+        # 'tamu' and 'hifld' are both line-preserving power-flow models and
+        # differ only in where the base grid comes from (BE's synthetic grid
+        # vs. one rebuilt from HIFLD in build_hifld_grid)
+        case "tamu" | "hifld":
             return False
         case _:
             return ValueError(

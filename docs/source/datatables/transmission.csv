@@ -1,5 +1,6 @@
 Characteristic,Data Source,Spatial Scale
 Transmission Topology,Breakthrough Energy / TAMU,CONUS / Interconnections
+Transmission Topology,HIFLD (ORNL / DHS),CONUS / Interconnections
 Transmission Topology,ReEDS (NARIS),CONUS
 Clustering Shapes,ReEDS,CONUS
 ,Balancing Areas (Mixed),

@@ -10,6 +10,9 @@ from enum import Enum
 MEASUREMENT_CRS = "EPSG:5070"
 GPS_CRS = "EPSG:4326"
 
+#: Earth radius for great-circle distances on lon/lat coordinates, as in ``pypsa.geo.haversine``.
+EARTH_RADIUS_KM = 6371.0
+
 ###################
 # General Constants
 ###################
@@ -33,6 +36,15 @@ REEDS_VRE_WEATHER_YEARS = (2007, 2008, 2009, 2010, 2011, 2012, 2013, 2016, 2017,
 #: Technologies ReEDS supply curves cover (the offshore curve serves both
 #: fixed-bottom and floating wind).
 REEDS_VRE_CARRIERS = ("onwind", "solar", "offwind", "offwind_floating")
+
+#: ArcGIS feature layer of the HIFLD "Electric Power Transmission Lines" layer that
+#: ``rule retrieve_hifld_transmission_lines`` downloads: Esri's public archive of the
+#: last HIFLD Open version (data updated 2024-09-30, 94,619 records). HIFLD Open
+#: itself was shut down on 2025-08-26.
+HIFLD_TRANSMISSION_LINES_URL = (
+    "https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/"
+    "US_Electric_Power_Transmission_Lines/FeatureServer/0"
+)
 
 #: reV land-access scenarios ReEDS publishes a supply curve and CF table for; the
 #: same scenarios ``renewable_land_access`` selects.

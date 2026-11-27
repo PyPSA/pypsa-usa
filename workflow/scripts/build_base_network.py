@@ -10,17 +10,30 @@ import pypsa
 from _helpers import configure_logging, log_network_schema
 from build_bus_population import assign_load_weight, load_county_population
 from build_shapes import load_na_shapes
-from constants import FWD_SUFFIX, REC_TRADING_ZONE_MAPPER, REV_SUFFIX
+from constants import EARTH_RADIUS_KM, FWD_SUFFIX, REC_TRADING_ZONE_MAPPER, REV_SUFFIX
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
 from shapely.geometry import Polygon
 from sklearn.neighbors import BallTree
 
 logger = logging.getLogger(__name__)
+
+# Breakthrough Energy numbers its offshore substations from this id upwards; they
+# are used to locate the offshore points of interconnection and then removed. A
+# grid rebuilt from HIFLD (build_hifld_grid) has no offshore substations at all,
+# and its substation ids start at 100000, so the test must not be applied to it.
+BE_OFFSHORE_SUB_ID_MIN = 41012
+
+# BE substations taken as Texas offshore wind points of interconnection (BE has
+# no Texas offshore lines to find them from).
+TEXAS_POI_SUB_IDS = [40893, 40894, 40729, 40908, 40854, 40760, 40776]
 
 
 def add_buses_from_file(
     n: pypsa.Network,
     buses: gpd.GeoDataFrame,
     interconnect: str,
+    offshore_sub_id_min: int | None = BE_OFFSHORE_SUB_ID_MIN,
 ) -> pypsa.Network:
     if interconnect != "usa":
         buses = buses.query(
@@ -50,7 +63,8 @@ def add_buses_from_file(
         LAF_state=buses.LAF_state,
     )
 
-    n.buses.loc[n.buses.sub_id.astype(int) >= 41012, "substation_off"] = True  # mark offshore buses
+    if offshore_sub_id_min is not None:
+        n.buses.loc[n.buses.sub_id.astype(int) >= offshore_sub_id_min, "substation_off"] = True  # mark offshore buses
     return n
 
 
@@ -331,9 +345,8 @@ def add_offshore_buses(n: pypsa.Network, offshore_buses: pd.DataFrame) -> pypsa.
 
 
 def assign_texas_poi(n: pypsa.Network) -> pypsa.Network:
-    tx_pois_sub = [40893, 40894, 40729, 40908, 40854, 40760, 40776]
     tx_pois_bus = [3007405, 3007407, 3007096, 3007429, 3007321, 3007171, 3007205]
-    n.buses.loc[n.buses.sub_id.isin(tx_pois_sub), "poi_sub"] = True
+    n.buses.loc[n.buses.sub_id.isin(TEXAS_POI_SUB_IDS), "poi_sub"] = True
     n.buses.loc[n.buses.sub_id.isin(tx_pois_bus), "poi_bus"] = True
     return n
 
@@ -347,6 +360,124 @@ def identify_osw_poi(n: pypsa.Network) -> pypsa.Network:
     n.buses.loc[n.buses.sub_id.isin(poi_sub_ids), "poi_sub"] = True
     n.buses.poi_bus = n.buses.poi_bus.astype(bool).fillna(False)
     n.buses.poi_sub = n.buses.poi_sub.astype(bool).fillna(False)
+    return n
+
+
+#: Bus attributes an island bus takes from the substation it is merged into.
+ISLAND_MERGE_ATTRS = [
+    "sub_id",
+    "x",
+    "y",
+    "balancing_area",
+    "state",
+    "country",
+    "county",
+    "reeds_zone",
+    "reeds_ba",
+    "reeds_state",
+    "nerc_reg",
+    "trans_reg",
+    "trans_grp",
+    "rec_trading_zone",
+]
+
+#: An island is merged only if one of its buses is this close to the main network (km).
+ISLAND_MERGE_MAX_DISTANCE_KM = 50.0
+#: An island is merged only if it holds at most this share of its interconnection's load weight.
+ISLAND_MERGE_MAX_LOAD_SHARE = 0.01
+
+
+def merge_footprint_islands(n: pypsa.Network) -> pypsa.Network:
+    """Merge the small islands a footprint filter cut off into the nearest main-network substation.
+
+    Cutting a grid at a footprint boundary removes the lines that leave the
+    footprint, which can strand a few buses on the boundary in AC islands. Each
+    island would need its own cluster downstream. Per interconnection, the
+    largest AC component (lines and transformers) is the main network. An island
+    within :data:`ISLAND_MERGE_MAX_DISTANCE_KM` of it and holding at most
+    :data:`ISLAND_MERGE_MAX_LOAD_SHARE` of the interconnection's load weight (bus
+    share without load weights) takes the substation (``sub_id``, coordinates and
+    region attributes) of the main-network bus nearest to it, so
+    ``aggregate_to_substations`` merges it there with its load and generation.
+    Offshore buses share the ``sub_id`` of their point of interconnection; those
+    of an island's substations follow it, keeping their own coordinates.
+
+    A larger or more distant island is a real part of the footprint (a second
+    area of a non-contiguous footprint, or a part of a state whose lines connect
+    only through a neighbour). It stays as its own component and gets its own
+    clusters downstream.
+    """
+    is_offshore = n.buses.get("substation_off", pd.Series(False, index=n.buses.index)).astype(bool)
+    onshore = n.buses.index[~is_offshore]
+    pos = pd.Series(np.arange(len(n.buses)), index=n.buses.index)
+    branches = pd.concat([n.lines[["bus0", "bus1"]], n.transformers[["bus0", "bus1"]]])
+    graph = coo_matrix(
+        (np.ones(len(branches)), (pos[branches.bus0].to_numpy(), pos[branches.bus1].to_numpy())),
+        shape=(len(n.buses), len(n.buses)),
+    )
+    _, component = connected_components(graph, directed=False)
+    component = pd.Series(component, index=n.buses.index)
+    attrs = [a for a in ISLAND_MERGE_ATTRS if a in n.buses.columns]
+
+    merged, islands = [], 0
+    for interconnect, group in n.buses.loc[onshore].groupby("interconnect"):
+        comp = component[group.index]
+        main = comp.value_counts().index[0]
+        main_buses = group.index[comp == main]
+        weight = group.load_weight.astype(float) if "load_weight" in group else pd.Series(np.nan, index=group.index)
+        if not weight.sum() > 0:
+            weight = pd.Series(1.0, index=group.index)
+        tree = BallTree(np.radians(n.buses.loc[main_buses, ["y", "x"]].to_numpy(dtype=float)), metric="haversine")
+        for _, members in comp[comp != main].groupby(comp):
+            distance, index = tree.query(np.radians(n.buses.loc[members.index, ["y", "x"]].to_numpy(dtype=float)), k=1)
+            distance_km = distance[:, 0].min() * EARTH_RADIUS_KM
+            share = weight[members.index].sum() / weight.sum()
+            if distance_km > ISLAND_MERGE_MAX_DISTANCE_KM or share > ISLAND_MERGE_MAX_LOAD_SHARE:
+                states = sorted(n.buses.loc[members.index, "state"].dropna().unique()) if "state" in n.buses else []
+                logger.warning(
+                    f"Keeping an AC island of {len(members)} buses in {interconnect} ({', '.join(states) or 'no state'}; "
+                    f"{share:.2%} of load weight, {distance_km:.0f} km from the main network) as its own component; "
+                    "it needs its own cluster downstream.",
+                )
+                continue
+            target = main_buses[index[distance[:, 0].argmin(), 0]]
+            offshore = n.buses.index[is_offshore & n.buses.sub_id.isin(n.buses.loc[members.index, "sub_id"])]
+            n.buses.loc[members.index, attrs] = n.buses.loc[[target] * len(members), attrs].to_numpy()
+            region = [a for a in attrs if a not in ("x", "y")]
+            n.buses.loc[offshore, region] = n.buses.loc[[target] * len(offshore), region].to_numpy()
+            merged.extend(members.index)
+            islands += 1
+
+    if islands:
+        share = (
+            n.buses.loc[merged, "load_weight"].sum() / n.buses.load_weight.sum() if "load_weight" in n.buses else np.nan
+        )
+        logger.info(
+            f"Merged {islands} AC island(s) left by the footprint filter ({len(merged)} buses, "
+            f"{share:.2%} of load weight) into their nearest main-network substation.",
+        )
+    return n
+
+
+def assign_poi_from_file(n: pypsa.Network, fn_poi: str) -> pypsa.Network:
+    """Mark the offshore points of interconnection listed in ``fn_poi``.
+
+    The Breakthrough path finds its POIs by looking for onshore buses wired to
+    BE's own offshore substations, which a grid rebuilt from HIFLD does not have.
+    ``build_hifld_grid`` takes the same BE sites (offshore-line landfalls plus
+    :data:`TEXAS_POI_SUB_IDS`) and matches them to the nearest HIFLD bus.
+    """
+    poi = pd.read_csv(fn_poi)
+    poi = poi[poi.bus_id.isin(n.buses.index.astype(int))]
+    n.buses["poi_bus"] = False
+    n.buses["poi_sub"] = False
+    n.buses.loc[n.buses.index.astype(int).isin(poi.bus_id), "poi_bus"] = True
+    n.buses.loc[n.buses.sub_id.astype(int).isin(poi.sub_id), "poi_sub"] = True
+    logger.info(
+        "Marked %s bus(es) at %s substation(s) as offshore points of interconnection.",
+        int(n.buses.poi_bus.sum()),
+        int(n.buses.poi_sub.sum()),
+    )
     return n
 
 
@@ -523,6 +654,11 @@ def main(snakemake):
 
     model_topology = snakemake.params.model_topology
     interconnect = snakemake.wildcards.interconnect
+    # 'hifld' reads a grid rebuilt from the real HIFLD transmission layer, which
+    # has no offshore substations of its own; 'reeds' and 'tamu' read
+    # Breakthrough's synthetic grid, whose offshore substations locate the
+    # points of interconnection and are then removed.
+    is_hifld = snakemake.params.transmission_network == "hifld"
     # interconnect in raw data given with an uppercase first letter
     if interconnect != "usa":
         interconnect = interconnect[0].upper() + interconnect[1:]
@@ -593,15 +729,23 @@ def main(snakemake):
     gdf_bus = gdf_bus.drop(columns=["full_state"])
 
     # add buses, transformers, lines and links
-    n = add_buses_from_file(n, gdf_bus, interconnect=interconnect)
+    n = add_buses_from_file(
+        n,
+        gdf_bus,
+        interconnect=interconnect,
+        offshore_sub_id_min=None if is_hifld else BE_OFFSHORE_SUB_ID_MIN,
+    )
     n = add_branches_from_file(n, snakemake.input["lines"])
     n = add_dclines_from_file(n, snakemake.input["links"])
 
     # identify offshore points of interconnection, and remove unncess components from BE network
-    n = identify_osw_poi(n)
-    if interconnect == "Texas" or interconnect == "usa":
-        n = assign_texas_poi(n)
-    n = remove_breakthrough_offshore(n)
+    if is_hifld:
+        n = assign_poi_from_file(n, snakemake.input["offshore_poi"])
+    else:
+        n = identify_osw_poi(n)
+        if interconnect == "Texas" or interconnect == "usa":
+            n = assign_texas_poi(n)
+        n = remove_breakthrough_offshore(n)
     assign_missing_regions(n)
 
     # build offshore network configuration
@@ -643,6 +787,8 @@ def main(snakemake):
             assert len(n.buses) > 0, (
                 "No buses remaining in network. Check your model_topology: inclusion:, you may be filtering the wrong zones for the selected interconnect"
             )
+        if is_hifld:
+            n = merge_footprint_islands(n)
 
     col_list = ["poi_bus", "poi_sub", "poi"]
     n.buses = n.buses.drop(columns=[col for col in col_list if col in n.buses])
