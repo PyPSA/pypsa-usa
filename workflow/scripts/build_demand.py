@@ -13,14 +13,13 @@ from typing import Any, ClassVar
 
 import constants as const
 import duckdb
-import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
 from _helpers import configure_logging, get_multiindex_snapshots, get_snapshots, lay_on_model_calendar
 from build_servm_load_weights import compose_busmaps
-from constants_sector import FIPS_2_STATE, NAICS, VMT_UNIT_CONVERSION, DemandFuels
+from constants_sector import NAICS, VMT_UNIT_CONVERSION, DemandFuels
 from eia import EnergyDemand, TransportationDemand
 
 logger = logging.getLogger(__name__)
@@ -62,6 +61,21 @@ DEMAND_KEY_FOLDS = {
     "District of Columbia": "Maryland",
     "DC": "MD",
 }
+
+#: Bus balancing areas (GIS shapes) that are published as one area by EIA.
+BA_DEMAND_KEYS = {
+    "^CISO.*": "CISO",
+    "^ERCO.*": "ERCO",
+    "^MISO.*": "MISO",
+    "^SPP.*": "SPP",
+    "^PJM.*": "PJM",
+    "^NYISO.*": "NYIS",
+    "^ISONE.*": "ISNE",
+}
+
+#: EIA balancing areas of the western interconnect that have no GIS shape, so no
+#: bus carries them. Their demand is dropped.
+UNMAPPED_WESTERN_BAS = {"SCL": "Seattle City Light", "TPWR": "Tacoma Power"}
 
 #: Buses with a load allocation factor below this are dropped from the
 #: allocation by ``WriteStrategy._disaggregate_demand_to_buses``.
@@ -326,37 +340,11 @@ class ReadFERC714(ReadStrategy):
         logger.info("Building Load Data using PUDL FERC 714 demand")
         return pd.read_parquet(self.filepath[0], dtype_backend="pyarrow")
 
-    def _read_census_data(self) -> pd.DataFrame:
-        """Reads in census data for population weighting using parquet."""
-        duckdb.connect(database=":memory:", read_only=False)
-        duckdb.query("INSTALL httpfs;")
-
-        parquet_path = snakemake.params.pudl_path
-
-        sql = f"""
-        SELECT
-        stusps10 as state_abbr,
-        geoid10 as state_id_fips,
-        name10 as state_name,
-        shape as geom
-        FROM read_parquet('{parquet_path}/censusdp1tract.state_2010census_dp1.parquet');
-        """
-
-        states = (
-            gpd.read_postgis(sql, duckdb, crs="EPSG:4326")
-            .convert_dtypes()
-            .sort_values("state_abbr")
-            .set_index("state_id_fips")
-        )
-        return states
-
     def _format_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """Formats raw data."""
-        states = self._read_census_data()
-
         df = data.copy()
 
-        df["State"] = df.state_id_fips.map(states.state_abbr)
+        df["State"] = df.state_id_fips.astype(str).str.zfill(2).map(const.STATE_FIPS_2_CODE)
         df = df.drop(columns=["state_id_fips", "demand_mwh"])
         df = df.groupby(["datetime_utc", "State"]).sum().reset_index()
 
@@ -1184,7 +1172,7 @@ class ReadCliu(ReadStrategy):
                 "subsector": int,
             },
         )
-        df["fipstate"] = df.fipstate.map(lambda x: FIPS_2_STATE[f"{x:02d}"].title())
+        df["fipstate"] = df.fipstate.map(lambda x: const.FIPS_2_STATE[f"{x:02d}"].title())
         return df
 
     def _format_data(self, county_demand: Any, scale_mecs: bool = True) -> pd.DataFrame:
@@ -2207,10 +2195,8 @@ class WriteStrategy(ABC):
         )
 
     def _get_load_dissagregation_zones(self, zone: str) -> pd.Series:
-        """Map each bus to the load dissagregation zone (states, ba, ...)."""
-        if zone == "ba":
-            return self._get_balanceing_area_zones()
-        elif zone == "state":
+        """Map each bus to the load dissagregation zone (states, reeds, ...)."""
+        if zone == "state":
             return self._get_state_zones()
         elif zone == "reeds":
             return self._get_reeds_zones()
@@ -2310,25 +2296,6 @@ class WriteStrategy(ABC):
         load = pd.concat(all_load, axis=1)
         assert not load.isna().any().any()  # no data should be added during concat
         return load
-
-    def _get_balanceing_area_zones(self) -> pd.Series:
-        n = self.n
-        zones = n.buses.balancing_area.replace(
-            {
-                "^CISO.*": "CISO",
-                "^ERCO.*": "ERCO",
-                "^MISO.*": "MISO",
-                "^SPP.*": "SPP",
-                "^PJM.*": "PJM",
-                "^NYISO.*": "NYIS",
-                "^ISONE.*": "ISNE",
-            },
-            regex=True,
-        )
-        zones = zones.replace({"": "missing"})
-        if "missing" in zones:
-            logger.warning("Missing BA Assignment for load dissagregation")
-        return zones
 
     def _get_state_zones(self) -> pd.Series:
         n = self.n
@@ -2463,16 +2430,102 @@ class WriteServm(WritePopulation):
         return demand.dot(weights)
 
 
+class WriteBalancingArea(WritePopulation):
+    """
+    Disaggregates balancing area demand with base-network load weights.
+
+    A cluster bus can span several balancing areas, so the areas are read from
+    the base-network buses (``base_buses``, see :func:`load_base_buses`). Each
+    cluster bus receives its share of every balancing area it overlaps.
+    """
+
+    def __init__(self, n: pypsa.Network, base_buses: pd.DataFrame) -> None:
+        super().__init__(n)
+        self.weights = self._build_weights(base_buses)
+
+    def _build_weights(self, base_buses: pd.DataFrame) -> pd.DataFrame:
+        """Build the (balancing area x cluster bus) matrix; every row sums to one."""
+        df = pd.DataFrame(
+            {
+                "bus": base_buses.bus,
+                "ba": base_buses.balancing_area.fillna("").astype(str).str.strip().replace(BA_DEMAND_KEYS, regex=True),
+                "load_weight": pd.to_numeric(base_buses.load_weight, errors="coerce").fillna(0.0),
+            },
+        )
+        df = df[df.load_weight > 0]
+
+        blank = df.ba == ""
+        if blank.any():
+            logger.warning(
+                "%d buses have demand weight but no balancing area; they receive no demand.",
+                int(blank.sum()),
+            )
+            df = df[~blank]
+
+        unknown = ~df.bus.isin(self.n.buses.index)
+        if unknown.any():
+            raise ValueError(
+                f"{int(unknown.sum())} base buses with demand weight do not map to a bus of the "
+                f"clustered network: {list(df.index[unknown][:10])}",
+            )
+
+        weights = df.pivot_table(
+            index="ba",
+            columns="bus",
+            values="load_weight",
+            aggfunc="sum",
+            fill_value=0.0,
+        )
+        return weights.div(weights.sum(axis=1), axis=0)
+
+    def _drop_unmapped_western_bas(self, demand: pd.DataFrame) -> pd.DataFrame:
+        """Drop, with a warning, western balancing areas that no bus carries."""
+        unmapped = [ba for ba in UNMAPPED_WESTERN_BAS if ba in demand.columns and ba not in self.weights.index]
+        if unmapped and self.n.buses.interconnect.str.lower().eq("western").any():
+            logger.warning(
+                "Dropping the demand of balancing areas without a GIS shape: %s.",
+                ", ".join(f"{ba} ({UNMAPPED_WESTERN_BAS[ba]}, {demand[ba].mean():.1f} MW mean)" for ba in unmapped),
+            )
+        return demand.drop(columns=unmapped)
+
+    def dissagregate_demand(
+        self,
+        df: pd.DataFrame,
+        zone: str,
+        sector: str | list[str] | None = None,
+        subsector: str | list[str] | None = None,
+        fuel: str | list[str] | None = None,
+        sns: pd.DatetimeIndex | None = None,
+    ) -> pd.DataFrame:
+        """Allocate balancing area demand to buses via the weights matrix product."""
+        assert zone == "ba"
+        self._check_datastructure(df)
+
+        demand = self._filter_demand(df, sector, subsector, fuel, sns)
+        demand = self._group_demand(demand)
+        if demand.empty:
+            demand = self._make_empty_demand(columns=df.columns)
+        demand = self._drop_unmapped_western_bas(demand.astype(float))
+
+        self._log_unallocated_demand(demand, pd.DataFrame({"zone": self.weights.index}))
+        missing = self.weights.index.difference(demand.columns)
+        if len(missing):
+            logger.warning("No demand found for balancing areas %s", list(missing))
+
+        common = self.weights.index.intersection(demand.columns)
+        return demand[common].dot(self.weights.loc[common])
+
+
 def load_base_buses(network: str, busmap_b: str, busmap_s: str) -> pd.DataFrame:
     """
-    County and demand weight of every base-network bus, plus its cluster bus.
+    County, balancing area and demand weight of every base-network bus, plus its cluster bus.
 
-    ``aggregate_to_substations`` drops ``county`` from the buses, and a cluster
-    bus spans several counties anyway, so the county is read from
+    ``aggregate_to_substations`` drops ``county`` and ``balancing_area`` from the
+    buses, and a cluster bus spans several of them anyway, so they are read from
     ``elec_base_network.nc`` and the two busmaps are composed to find the
     cluster bus (column ``bus``) each base bus ends up in.
     """
-    buses = pypsa.Network(network).buses[["county", "load_weight"]].copy()
+    buses = pypsa.Network(network).buses[["county", "balancing_area", "load_weight"]].copy()
     busmap = compose_busmaps(
         pd.read_csv(busmap_b, index_col=0, dtype=str).iloc[:, 0],
         pd.read_csv(busmap_s, index_col=0, dtype=str).iloc[:, 0],
@@ -2587,7 +2640,7 @@ class WriteIndustrial(WriteStrategy):
         # 'p' added to match reeds naming
         df["county"] = "p" + df.county.astype(str).str.zfill(5)
 
-        df["state"] = df.state.map(lambda x: FIPS_2_STATE[f"{x:02d}"].title())
+        df["state"] = df.state.map(lambda x: const.FIPS_2_STATE[f"{x:02d}"].title())
         return df
 
     def get_load_buses_per_county(self) -> dict[str, list[str]]:
@@ -2803,7 +2856,20 @@ class DemandScaler(ABC):
 
 
 class AeoElectricityScaler(DemandScaler):
-    """Scales against EIA Annual Energy Outlook electricity projections."""
+    """
+    Scales against EIA Annual Energy Outlook electricity projections.
+
+    PUDL stores several AEO editions in one table, and their projection years
+    overlap, so a single edition (``report_year``) has to be selected. AEO2023 is
+    used rather than the newer AEO2025 because the demand being scaled is
+    historical (2018-2023): AEO2023 starts in 2022, AEO2025 only in 2024.
+    Scaling with AEO2025 would treat the historical demand as 2024 demand and
+    leave out the growth before 2024. Mixing editions (an AEO2023 base year and
+    an AEO2025 projection) would count the differences between the two outlooks
+    as growth.
+    """
+
+    report_year: int = 2023
 
     def __init__(self, pudl_path: str, scenario: str = "reference"):
         self.pudl_path = pudl_path
@@ -2834,6 +2900,7 @@ class AeoElectricityScaler(DemandScaler):
         FROM read_parquet('{self.pudl_path}/core_eiaaeo__yearly_projected_generation_in_electric_sector_by_technology.parquet')
         WHERE electricity_market_module_region_eiaaeo = '{self.region}'
         AND model_case_eiaaeo = '{self.scenario}'
+        AND report_year = {self.report_year}
         """
 
         df = duckdb.query(query).to_df()
@@ -3050,6 +3117,7 @@ def get_demand_params(
             if demand_profile == "efs":
                 scaling_method = "efs"
             elif demand_profile == "eia":
+                demand_disaggregation = "ba"  # balancing areas are read from base buses
                 scaling_method = "aeo_electricity"
             elif demand_profile == "ferc":
                 scaling_method = "aeo_electricity"
@@ -3354,6 +3422,13 @@ if __name__ == "__main__":
         writer = WriteIndustrial(n, cliu_file, base_buses)
     elif demand_disaggregation == "servm":
         writer = WriteServm(n, snakemake.input.dissagregate_files)
+    elif demand_disaggregation == "ba":
+        base_buses = load_base_buses(
+            snakemake.input.base_network,
+            snakemake.input.busmap_b,
+            snakemake.input.busmap_s,
+        )
+        writer = WriteBalancingArea(n, base_buses)
     else:
         raise NotImplementedError
 

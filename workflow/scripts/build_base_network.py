@@ -29,26 +29,6 @@ BE_OFFSHORE_SUB_ID_MIN = 41012
 TEXAS_POI_SUB_IDS = [40893, 40894, 40729, 40908, 40854, 40760, 40776]
 
 
-def haversine_np(lon1, lat1, lon2, lat2):
-    """
-    Calculate the great circle distance between two points on the earth
-    (specified in decimal degrees).
-
-    All args must be of equal length.
-    source: https://stackoverflow.com/questions/29545704/fast-haversine-approximation-python-pandas
-    """
-    lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
-
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-
-    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
-
-    c = 2 * np.arcsin(np.sqrt(a))
-    km = 6378.137 * c
-    return km
-
-
 def add_buses_from_file(
     n: pypsa.Network,
     buses: gpd.GeoDataFrame,
@@ -88,6 +68,10 @@ def add_buses_from_file(
     return n
 
 
+#: System base of the per-unit branch impedances in the TAMU/Breakthrough grid (MVA)
+TAMU_S_BASE = 100
+
+
 def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
     branches = pd.read_csv(
         fn_branches,
@@ -100,21 +84,38 @@ def add_branches_from_file(n: pypsa.Network, fn_branches: str) -> pypsa.Network:
         tech_branches = branches.query("branch_device_type == @tech")
         logger.info(f"Adding {len(tech_branches)} branches as {tech}s to the network.")
 
-        # S_base = 100 MVA
+        # The file gives r, x and b in per unit of S_base = 100 MVA
+        if tech == "Line":
+            # pypsa takes line impedances in Ohm and Siemens
+            v_nom_sq = n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2
+            impedance = {
+                "r": tech_branches.r * v_nom_sq / TAMU_S_BASE,
+                "x": tech_branches.x * v_nom_sq / TAMU_S_BASE,
+                "b": tech_branches.b / v_nom_sq,
+                "type": "temp",  # temporarily then over ridden by assign_line_types
+            }
+        else:
+            # pypsa takes transformer impedances in per unit of the transformer's s_nom;
+            # the file follows MATPOWER, whose branches are PI models
+            rating = tech_branches.rateA / TAMU_S_BASE
+            impedance = {
+                "r": tech_branches.r * rating,
+                "x": tech_branches.x * rating,
+                "b": tech_branches.b / rating,
+                "model": "pi",
+            }
+
         n.add(
             tech,
             tech_branches.index,
             bus0=tech_branches.from_bus_id,
             bus1=tech_branches.to_bus_id,
-            r=tech_branches.r * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2) / 100,
-            x=tech_branches.x * (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2) / 100,
-            b=tech_branches.b / (n.buses.loc[tech_branches.from_bus_id]["v_nom"].values ** 2),
             s_nom=tech_branches.rateA,
             v_nom=tech_branches.from_bus_id.map(n.buses.v_nom),
             interconnect=tech_branches.interconnect,
-            type="temp",  # temporarily then over ridden by assign_line_types
             carrier="AC",
             underwater_fraction=0.0,
+            **impedance,
         )
     return n
 
@@ -217,18 +218,13 @@ def map_bus_to_region(
 def assign_line_length(n: pypsa.Network):
     """Assigns line length to each line in the network using Haversine distance."""
     bus_df = n.buses[["x", "y"]]
-    bus0 = bus_df.loc[n.lines.bus0].values
-    bus1 = bus_df.loc[n.lines.bus1].values
-    distances = haversine_np(bus0[:, 0], bus0[:, 1], bus1[:, 0], bus1[:, 1])
-    n.lines["length"] = distances
+    n.lines["length"] = pypsa.geo.haversine_pts(bus_df.loc[n.lines.bus0], bus_df.loc[n.lines.bus1])
 
 
 def assign_link_length_and_efficiency(n: pypsa.Network, length_factor: float):
     """Assigns link length and efficiency to each link (DC transmission line) in the network using Haversine distance."""
     bus_df = n.buses[["x", "y"]]
-    bus0 = bus_df.loc[n.links.bus0].values
-    bus1 = bus_df.loc[n.links.bus1].values
-    distances = haversine_np(bus0[:, 0], bus0[:, 1], bus1[:, 0], bus1[:, 1])
+    distances = pypsa.geo.haversine_pts(bus_df.loc[n.links.bus0], bus_df.loc[n.links.bus1])
     n.links["length"] = distances
     # 2% loss for inverters, 3%/1000km loss for DC lines, https://www.nature.com/articles/s41560-025-01752-6#Sec14
     n.links["efficiency"] = 1 - 0.02 - 0.03 * distances * length_factor / 1000

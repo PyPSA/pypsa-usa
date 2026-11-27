@@ -48,7 +48,7 @@ renewable_scenarios: ['historical']
 
 electricity:
   extendable_carriers:
-    Generator: [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, nuclear, hydrogen_ct]
+    Generator: [solar, onwind, offwind_floating, OCGT, CCGT, CCGT-95CCS, nuclear, OCHT]
   remote_contracted_resources:
     enable: true                # attach CA-contracted out-of-state units (Palo Verde, Intermountain, Hoover, ...) at CA buses
   demand:

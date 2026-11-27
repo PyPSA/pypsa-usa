@@ -63,9 +63,13 @@ Fill `.github/pull_request_template.md`, then add:
 - **Equivalence** (larger changes only) — ask the user whether an
   equivalence-harness run (`tests/equivalence/`) exists for this branch. If
   yes: paste the report summary and list any deltas-ledger rows (DL-N in
-  `docs/superpowers/specs/2026-08-07-deltas-ledger.md`) this PR adds or
-  touches. If no: write "No equivalence run for this branch." — stated,
+  `docs/deltas-ledger.md`) this PR adds or touches. If no: write "No equivalence run for this branch." — stated,
   never omitted.
+- **Impact on produced values** — when the change alters values the pipeline
+  writes (see "Pull requests: show what changed in the numbers" in
+  `AGENTS.md`), state the headline numbers here and note that plots follow in
+  a comment. When it alters none, write "No change in produced values." and
+  how that was checked — stated, never omitted.
 - Ask the user whether the PR closes an issue; if so, `Closes #N` at the top.
 - Attribution footer:
 
@@ -83,12 +87,22 @@ git push <remote> HEAD:<head-branch>
 gh pr create --repo PyPSA/pypsa-usa --base <base> [--draft] ...
 ```
 
-## 6. Watch CI
+## 6. Post the impact plots
+
+For a PR that changes produced values, post the plots comment described in
+"Pull requests: show what changed in the numbers" in `AGENTS.md`: base vs
+head on real data, headline numbers first, figures hosted on a fork's
+`pr-figures` branch and linked by commit sha. Invoking `/pr` is standing
+permission to push that branch to the fork and post the comment. Skip this
+step when the PR changes no produced value.
+
+## 7. Watch CI
 
 Wait for the `fast-tests` check (`gh pr checks <num> --repo PyPSA/pypsa-usa
 --watch`), fixing failures in-session and pushing until it is green.
 `e2e-tests` runs longer — report its status, don't wait on it.
 
 Done when: PR URL reported to the user, `fast-tests` green (or its failure
-explained), and any skipped evidence (Tier B, equivalence) called out
+explained), the impact plots posted (or "no change in produced values"
+stated), and any skipped evidence (Tier B, equivalence, plots) called out
 explicitly in the PR body.

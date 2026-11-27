@@ -6,10 +6,10 @@ import warnings
 from functools import reduce
 
 import geopandas as gpd
+import linopy
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pyomo.environ as po
 import pypsa
 import seaborn as sns
 from _helpers import (
@@ -33,6 +33,12 @@ from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
     busmap_by_kmeans,
     get_clustering_from_busmap,
+)
+from regional_cost import (
+    BRANCH_CAPEX_COL,
+    LINE_CAPEX_STRATEGIES,
+    TransmissionCostModel,
+    assign_bus_counties,
 )
 
 warnings.filterwarnings(action="ignore", category=UserWarning)
@@ -77,11 +83,58 @@ def weighting_for_region(n, x, weighting_strategy=None):
     return (weighting * (100.0 / weighting.max())).clip(lower=1.0).astype(int)
 
 
+# solvers linopy can hand a quadratic objective with integer variables
+MIQP_SOLVERS = ["gurobi", "scip", "cplex", "xpress", "copt", "mosek"]
+
+
+def allocate_clusters(
+    target: pd.Series,
+    n_clusters: int,
+    n_nodes: pd.Series,
+    solver_name: str = "scip",
+) -> pd.Series:
+    """
+    Whole clusters per region that add up to ``n_clusters`` and stay closest to ``target``.
+
+    Minimises ``sum((n - target) ** 2)`` over integers with ``1 <= n <= n_nodes``
+    and ``sum(n) == n_clusters``. This is the mixed-integer quadratic program of
+    PyPSA-Eur's ``distribute_n_clusters_to_countries``. A solver that cannot
+    solve one, such as HiGHS, is replaced by SCIP.
+    """
+    n_nodes = n_nodes.reindex(target.index)
+    if not len(target) <= n_clusters <= n_nodes.sum():
+        raise ValueError(
+            f"Number of clusters must be {len(target)} <= n_clusters <= {n_nodes.sum()}, got {n_clusters}.",
+        )
+    if solver_name == "gurobi":
+        logging.getLogger("gurobipy").propagate = False
+    elif solver_name not in MIQP_SOLVERS:
+        logger.info(
+            f"The configured solver `{solver_name}` does not support quadratic objectives. Falling back to `scip`.",
+        )
+        solver_name = "scip"
+
+    # linopy coordinates cannot be the (country, sub_network) MultiIndex
+    region = pd.RangeIndex(len(target), name="region")
+    target_ = pd.Series(target.to_numpy(), index=region)
+    upper = pd.Series(n_nodes.to_numpy(), index=region)
+
+    m = linopy.Model()
+    clusters = m.add_variables(lower=1, upper=upper, coords=[region], name="n", integer=True)
+    m.add_constraints(clusters.sum() == n_clusters, name="tot")
+    # leave out the constant target ** 2 of the objective
+    m.objective = (clusters * clusters - 2 * clusters * target_).sum()
+    status, condition = m.solve(solver_name=solver_name, progress=False)
+    if status != "ok":
+        raise RuntimeError(f"Distributing clusters to regions failed: {status}, {condition}.")
+    return pd.Series(m.solution["n"].to_numpy().round().astype(int), index=target.index)
+
+
 def distribute_clusters(
     n,
     n_clusters,
     focus_weights=None,
-    solver_name="cbc",
+    solver_name="scip",
     weighting_strategy=None,
 ):
     """Determine the number of clusters per region."""
@@ -115,32 +168,7 @@ def distribute_clusters(
         rtol=1e-3,
     ), f"Country weights L must sum up to 1.0 when distributing clusters. Is {factors.sum()}."
 
-    m = po.ConcreteModel()
-
-    def n_bounds(model, *n_id):
-        return (1, n_subnetwork_nodes[n_id])
-
-    m.n = po.Var(list(factors.index), bounds=n_bounds, domain=po.Integers)
-    m.tot = po.Constraint(expr=(po.summation(m.n) == n_clusters))
-    m.objective = po.Objective(
-        expr=sum((m.n[i] - factors.loc[i] * n_clusters) ** 2 for i in factors.index),
-        sense=po.minimize,
-    )
-
-    if solver_name == "highs":
-        solver_name = "ipopt"
-
-    opt = po.SolverFactory(solver_name)
-    if not opt.has_capability("quadratic_objective"):
-        logger.warning(
-            f"The configured solver `{solver_name}` does not support quadratic objectives. Falling back to `ipopt`.",
-        )
-        opt = po.SolverFactory("ipopt")
-
-    results = opt.solve(m)
-    assert results["Solver"][0]["Status"] == "ok", f"Solver returned non-optimally: {results}"
-
-    return pd.Series(m.n.get_values(), index=factors.index).round().astype(int)
+    return allocate_clusters(factors * n_clusters, n_clusters, n_subnetwork_nodes, solver_name)
 
 
 def busmap_for_n_clusters(
@@ -261,7 +289,7 @@ def clustering_for_n_clusters(
     aggregate_carriers=None,
     line_length_factor=1.25,
     aggregation_strategies=dict(),
-    solver_name="cbc",
+    solver_name="scip",
     algorithm="kmeans",
     focus_weights=None,
     weighting_strategy=None,
@@ -279,7 +307,10 @@ def clustering_for_n_clusters(
     else:
         busmap = custom_busmap
 
-    line_strategies = aggregation_strategies.get("lines", dict())
+    # The region/voltage-resolved transmission unit cost is intensive (per km), so
+    # merged parallel lines take its capacity-weighted mean, as pypsa does for
+    # capital_cost / length. A user strategy for the column still wins.
+    line_strategies = {**LINE_CAPEX_STRATEGIES, **aggregation_strategies.get("lines", dict())}
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
     generator_strategies = generator_aggregation_strategies(aggregation_strategies)
     bus_strategies = {
@@ -602,6 +633,19 @@ def parse_clusters_wildcard(
     return n_clusters, agg, all_carriers - agg
 
 
+def is_noop_clustering(cluster_wc, n_clusters: int, n_buses: int, aggregate_carriers, transport_model: bool) -> bool:
+    """Whether ``cluster_network`` can return the network unchanged.
+
+    Only when the buses stay as they are and no generator has to be merged: with
+    ``all``, or a cluster count equal to the bus count whose suffix aggregates no
+    carrier (``Na``). A plain ``N`` (or ``Nm``/``Ns``/``Nc``) equal to the bus count
+    still merges the generators of its carriers per bus.
+    """
+    if transport_model or n_clusters != n_buses:
+        return False
+    return cluster_wc == "all" or not aggregate_carriers
+
+
 def cluster_regions(busmaps, input=None, output=None):
     """Create new geojson files for the clustered regions."""
     busmap = reduce(lambda x, y: x.map(y), busmaps[1:], busmaps[0])
@@ -670,6 +714,8 @@ def calibrate_tamu_transmission_capacity(
     build_year,
     lifetime,
     use_original_region=False,
+    cost_model=None,
+    county_shapes=None,
 ):
     """
     Apply REEDS transmission capacity data to correct the aggregated TAMU network.
@@ -697,6 +743,11 @@ def calibrate_tamu_transmission_capacity(
         Lifetime stamped on calibrated existing TAMU lines and new REEDS-backfill lines.
     use_original_region : bool
         If True, use original region info saved before aggregation
+    cost_model : regional_cost.TransmissionCostModel, optional
+        When given (with ``county_shapes``), lines backfilled from REEDS are
+        priced by region and voltage instead of the national HVAC cost.
+    county_shapes : str, optional
+        County polygons used to locate the backfilled lines' endpoints.
     """
     logger.info("Calibrate TAMU transmission capacity...")
 
@@ -888,7 +939,8 @@ def calibrate_tamu_transmission_capacity(
         new_b = avg_b_per_length_capacity * new_s_nom / distance_km
         new_g = avg_g_per_length_capacity * new_s_nom / distance_km
 
-        # Calculate capital cost
+        # Annualized cost per MW (pypsa multiplies by s_nom itself); replaced by
+        # the regional cost below when a cost model is given.
         new_capital_cost = hvac_overhead_cost * distance_km
 
         # Generate unique line name
@@ -934,6 +986,22 @@ def calibrate_tamu_transmission_capacity(
     # Batch add all new lines using madd
     if new_lines_data:
         new_lines_df = pd.DataFrame(new_lines_data)
+        if cost_model is not None:
+            # Price the backfilled interfaces like every other line: ReEDS route
+            # cost between the endpoint counties x voltage ratio, per great-circle
+            # km (distance_km carries length_factor, which ReEDS prices embed).
+            bus_county = assign_bus_counties(clustering.n.buses, county_shapes)
+            unit = cost_model.ac_unit_cost(
+                bus_county.reindex(new_lines_df["bus0"]).set_axis(new_lines_df.index),
+                bus_county.reindex(new_lines_df["bus1"]).set_axis(new_lines_df.index),
+                new_lines_df["v_nom"].to_numpy(),
+            )
+            annuity = calculate_annuity(
+                costs.at["HVAC overhead", "cost_recovery_period_years"],
+                costs.at["HVAC overhead", "wacc_real"],
+            )
+            new_lines_df[BRANCH_CAPEX_COL] = unit.to_numpy()
+            new_lines_df["capital_cost"] = annuity * unit.to_numpy() * new_lines_df["length"] / length_factor
         clustering.n.add(
             "Line",
             name=new_lines_df["name"],
@@ -955,6 +1023,8 @@ def calibrate_tamu_transmission_capacity(
             build_year=build_year,
             lifetime=lifetime,
         )
+        if BRANCH_CAPEX_COL in new_lines_df:
+            clustering.n.lines.loc[new_lines_df["name"], BRANCH_CAPEX_COL] = new_lines_df[BRANCH_CAPEX_COL].to_numpy()
 
     logger.info(
         f"Added {len(new_lines_data)} missing lines from REEDS data that were not present in TAMU network",
@@ -1045,7 +1115,20 @@ if __name__ == "__main__":
 
     costs = load_costs(snakemake.input.tech_costs, params.costs)
 
-    if (n_clusters == len(n.buses)) and not transport_model:
+    regional_transmission_costs = snakemake.config["lines"].get("regional_costs", True)
+    # Only needed to price the lines calibrate_tamu_transmission_capacity backfills.
+    transmission_cost_model = None
+    if regional_transmission_costs and params.transmission_network == "tamu":
+        from money import dollar_year_from_config
+
+        transmission_cost_model = TransmissionCostModel.from_files(
+            snakemake.input.itl_costs_county,
+            snakemake.input.transmission_basecost,
+            dollar_year=dollar_year_from_config(snakemake.config),
+            voltage_factor=snakemake.config["lines"].get("voltage_factor", False),
+        )
+
+    if is_noop_clustering(cluster_wc, n_clusters, len(n.buses), aggregate_carriers, transport_model):
         # Fast-path if no clustering is necessary
         busmap = n.buses.index.to_series()
         linemap = n.lines.index.to_series()
@@ -1063,6 +1146,12 @@ if __name__ == "__main__":
             ).squeeze("columns")
             custom_busmap.index = custom_busmap.index.astype(str)
             logger.info(f"Imported custom busmap from {snakemake.input.custom_busmap}")
+        elif n_clusters == len(n.buses) and not transport_model:
+            # keep every bus; only merge the generators of the aggregated carriers
+            custom_busmap = n.buses.index.to_series()
+            logger.info(
+                f"Keeping all {n_clusters} buses and aggregating the generators of {sorted(aggregate_carriers)}."
+            )
 
         if transport_model:
             # Prepare data for transport model
@@ -1168,8 +1257,10 @@ if __name__ == "__main__":
                 agg_busmap=agg_busmap,
             )
         else:
-            # Use standard transmission cost estimates
-            update_transmission_costs(clustering.n, costs)
+            # Re-price on the clustered buses. With lines.regional_costs the
+            # unit cost aggregated above (capacity-weighted) is kept and only the
+            # great-circle length of each new corridor changes.
+            update_transmission_costs(clustering.n, costs, regional=regional_transmission_costs)
 
     # Only the synthetic TAMU grid is calibrated to ReEDS interface capacities.
     # 'hifld' keeps the ratings build_hifld_grid gives HIFLD's real corridors.
@@ -1210,6 +1301,8 @@ if __name__ == "__main__":
             transmission_build_year,
             transmission_lifetime,
             use_original_region=use_original_region,
+            cost_model=transmission_cost_model,
+            county_shapes=snakemake.input.get("county_shapes"),
         )
 
     # Defensive backstop: stamp any transmission Line/Link still carrying PyPSA's default

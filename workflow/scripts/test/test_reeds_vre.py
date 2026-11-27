@@ -1,6 +1,9 @@
-"""ReEDS wind/solar interconnection cost.
+"""ReEDS wind/solar resource: time axis, profile aggregation and interconnection cost.
 
-The interconnection tables shipped in repo_data are read as published.
+Synthetic CF tables in the published layout (``/columns``, ``/cf_profile_<year>``
+uint16 x 1e4, ``/time_index_<year>`` ISO strings with offsets) stand in for the
+multi-GB ReEDS files. The interconnection tables shipped in repo_data are read
+as published.
 """
 
 import os
@@ -10,18 +13,29 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+import tables
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from _helpers import calculate_annuity
+from _helpers import calculate_annuity, weather_year_hours
 from add_extra_components import apply_renewable_interconnection_costs
 from cluster_network import clustering_for_n_clusters, generator_aggregation_strategies
 from constants import (
     GENERATOR_CAPEX_STRATEGIES,
+    REEDS_SOLAR_INVERTER_LOADING_RATIO,
     RENEWABLE_INTERCONNECTION_COL,
     RENEWABLE_INTERCONNECTION_SHARE_COL,
 )
-from reeds_vre import bus_weighted_mean, load_interconnection_costs
+from reeds_vre import (
+    _parse_utc,
+    available_weather_years,
+    bus_profiles,
+    bus_weighted_mean,
+    load_interconnection_costs,
+    read_time_axis,
+    solar_ac_transform,
+    utc_year_axis,
+)
 from regional_cost import (
     renewable_interconnection_capital_cost,
     renewable_interconnection_enabled,
@@ -32,6 +46,21 @@ REPO_COSTS = Path(__file__).resolve().parents[2] / "repo_data" / "costs"
 SOLAR = ["solar1", "solar2"]
 #: merges the fixture's two eastern buses, which share every regional attribute
 EAST_BUSMAP = pd.Series({"z1": "z1", "z2": "X", "z3": "X"})
+
+
+def _stamps(start: str, periods: int, offset: str = "+00:00") -> list[bytes]:
+    """ReEDS-style ISO stamps: local wall time of ``offset`` with the offset suffix."""
+    local = pd.date_range(start, periods=periods, freq="h")
+    return [f"{t:%Y-%m-%d %H:%M:%S}{offset}".encode() for t in local]
+
+
+def _write_cf_table(path: Path, year: int, gids, values: np.ndarray, stamps: list[bytes]) -> str:
+    """One weather-year block in the ReEDS CF layout; ``values`` are CFs (rows x sites)."""
+    with tables.open_file(path, "w") as h5:
+        h5.create_array("/", "columns", np.asarray(gids, dtype=np.int64))
+        h5.create_array("/", f"cf_profile_{year}", np.round(values * 1e4).astype(np.uint16))
+        h5.create_array("/", f"time_index_{year}", np.array(stamps, dtype="S25"))
+    return str(path)
 
 
 def _costs() -> pd.DataFrame:
@@ -53,6 +82,130 @@ def _costs() -> pd.DataFrame:
             "annualized_capex_fom": annuity * (r["overnight"] + r["gcc"] + r["cff"]) * 1e3 + r["fom"] * 1e3,
         }
     return pd.DataFrame(out).T
+
+
+# ---------------------------------------------------------------------------
+# Time axis
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.fast
+def test_utc_table_needs_no_shift():
+    stamps = _parse_utc(_stamps("2019-01-01", 8760))
+    labels, shift, keep = utc_year_axis(stamps, 2019, 8760)
+    assert shift == 0
+    assert keep.all()
+    assert labels[0] == pd.Timestamp("2019-01-01 00:00")
+    assert labels[-1] == pd.Timestamp("2019-12-31 23:00")
+    assert labels.tz is None
+
+
+@pytest.mark.fast
+def test_leap_year_8760_rows_shift_feb29_onto_march_1():
+    """ReEDS leap years hold Jan 1-Dec 30: Feb 29 takes the 1 March labels (DL-17, EER)."""
+    stamps = _parse_utc(_stamps("2012-01-01", 8760))
+    assert ((stamps.month == 2) & (stamps.day == 29)).sum() == 24
+    labels, shift, keep = utc_year_axis(stamps, 2012, 8760)
+    assert shift == 0 and keep.all() and len(labels) == 8760
+    assert not ((labels.month == 2) & (labels.day == 29)).any()
+    feb29_row = stamps.get_loc(pd.Timestamp("2012-02-29 00:00"))
+    assert labels[feb29_row] == pd.Timestamp("2012-03-01 00:00")
+    assert labels[-1] == pd.Timestamp("2012-12-31 23:00")
+
+
+@pytest.mark.fast
+def test_full_leap_year_drops_dec31_like_weather_year_hours():
+    """A full leap year is laid on by position, as _helpers.weather_year_hours does."""
+    stamps = _parse_utc(_stamps("2012-01-01", 8784))
+    labels, shift, keep = utc_year_axis(stamps, 2012, 8784)
+    assert shift == 0 and keep.sum() == 8760 and len(labels) == 8760
+    kept = stamps[keep]
+    assert kept[-1] == pd.Timestamp("2012-12-30 23:00")
+    assert labels[kept.get_loc(pd.Timestamp("2012-02-29 12:00"))] == pd.Timestamp("2012-03-01 12:00")
+    assert kept.equals(weather_year_hours(labels))
+
+
+@pytest.mark.fast
+def test_non_utc_offset_is_converted_and_rolled_like_eer():
+    """A CST-published block (UTC-6) starts at 06:00 UTC and is rolled +6 h, wrapping its tail."""
+    stamps = _parse_utc(_stamps("2019-01-01", 8760, offset="-06:00"))
+    assert stamps[0] == pd.Timestamp("2019-01-01 06:00")
+    labels, shift, _keep = utc_year_axis(stamps, 2019, 8760)
+    assert shift == 6
+    rows = np.arange(8760)
+    rolled = np.roll(rows, shift)
+    # UTC hour 6 holds the first published row; UTC hours 0-5 hold the wrapped tail
+    assert rolled[6] == 0
+    assert list(rolled[:6]) == list(range(8754, 8760))
+    assert labels[6] == pd.Timestamp("2019-01-01 06:00")
+
+
+@pytest.mark.fast
+def test_naive_stamps_are_rejected():
+    raw = [f"{t:%Y-%m-%d %H:%M:%S}".encode() for t in pd.date_range("2019-01-01", periods=3, freq="h")]
+    with pytest.raises(ValueError, match="no UTC offset"):
+        _parse_utc(raw)
+
+
+@pytest.mark.fast
+def test_gap_or_wrong_year_is_rejected():
+    stamps = _parse_utc(_stamps("2019-01-01", 8760))
+    with pytest.raises(ValueError, match="contiguous"):
+        utc_year_axis(stamps.delete(100).append(pd.DatetimeIndex(["2020-01-01"])), 2019, 8760)
+    with pytest.raises(ValueError, match="does not belong"):
+        utc_year_axis(stamps, 2018, 8760)
+
+
+# ---------------------------------------------------------------------------
+# Profiles
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.fast
+def test_bus_profiles_capacity_weighted_and_labelled(tmp_path):
+    year = 2019
+    rng = np.random.default_rng(1)
+    gids = [11, 12, 13, 14]
+    cf = rng.uniform(0, 0.8, size=(8760, 4)).round(4)
+    path = _write_cf_table(tmp_path / "cf.h5", year, gids, cf, _stamps(f"{year}-01-01", 8760))
+    sites = pd.DataFrame({"sc_point_gid": [13, 11, 12], "bus": ["b", "a", "a"], "capacity": [50.0, 100.0, 300.0]})
+
+    out = bus_profiles(path, year, sites, pd.Index(["a", "b"]))
+
+    assert out.index[0] == pd.Timestamp("2019-01-01") and len(out) == 8760
+    expected_a = (cf[:, 0] * 100 + cf[:, 1] * 300) / 400
+    np.testing.assert_allclose(out["a"].to_numpy(), expected_a, atol=1e-6)
+    np.testing.assert_allclose(out["b"].to_numpy(), cf[:, 2], atol=1e-6)
+    assert read_time_axis(path, year)[1] == 0
+    assert available_weather_years(path) == [year]
+
+
+@pytest.mark.fast
+def test_solar_ilr_is_applied_per_site_before_averaging(tmp_path):
+    """Clipping after averaging would overstate output; the transform acts on sites."""
+    year = 2019
+    cf = np.zeros((8760, 2))
+    cf[:, 0] = 0.8  # saturates at the inverter: 0.8 * 1.34 > 1
+    cf[:, 1] = 0.2
+    path = _write_cf_table(tmp_path / "cf.h5", year, [1, 2], cf, _stamps(f"{year}-01-01", 8760))
+    sites = pd.DataFrame({"sc_point_gid": [1, 2], "bus": ["a", "a"], "capacity": [1.0, 1.0]})
+
+    out = bus_profiles(path, year, sites, pd.Index(["a"]), transform=solar_ac_transform)
+
+    expected = (1.0 + 0.2 * REEDS_SOLAR_INVERTER_LOADING_RATIO) / 2
+    np.testing.assert_allclose(out["a"].to_numpy(), expected, atol=1e-6)
+
+
+@pytest.mark.fast
+def test_missing_weather_year_names_the_available_years(tmp_path):
+    path = _write_cf_table(tmp_path / "cf.h5", 2019, [1], np.zeros((8760, 1)), _stamps("2019-01-01", 8760))
+    with pytest.raises(ValueError, match=r"\[2019\]"):
+        read_time_axis(path, 2014)
+
+
+# ---------------------------------------------------------------------------
+# Interconnection cost
+# ---------------------------------------------------------------------------
 
 
 def _two_solar_sites(n, interconnection, p_nom=(100.0, 300.0)):

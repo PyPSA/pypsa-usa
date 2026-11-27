@@ -56,7 +56,13 @@ def test_industrial_laf_is_summed_onto_cluster_buses(base_network, cliu_file):
 def test_load_base_buses_composes_busmaps(tmp_path):
     """Base buses keep their county and are keyed to the cluster bus via both busmaps."""
     n = pypsa.Network()
-    n.add("Bus", ["b1", "b2", "b3"], county=["p06001", "p06003", "p06003"], load_weight=[1.0, 2.0, 0.0])
+    n.add(
+        "Bus",
+        ["b1", "b2", "b3"],
+        county=["p06001", "p06003", "p06003"],
+        balancing_area=["BANC", "BANC", "CISO-PGAE"],
+        load_weight=[1.0, 2.0, 0.0],
+    )
     network = tmp_path / "elec_base_network.nc"
     n.export_to_netcdf(network)
 
@@ -69,4 +75,5 @@ def test_load_base_buses_composes_busmaps(tmp_path):
 
     assert buses.bus.to_dict() == {"b1": "z1", "b2": "z1", "b3": "z2"}
     assert buses.county.to_dict() == {"b1": "p06001", "b2": "p06003", "b3": "p06003"}
+    assert buses.balancing_area.tolist() == ["BANC", "BANC", "CISO-PGAE"]
     assert buses.load_weight.tolist() == [1.0, 2.0, 0.0]

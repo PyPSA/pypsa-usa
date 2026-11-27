@@ -220,6 +220,74 @@ def calculate_annuity(n, r):
         return 1 / n
 
 
+def ccs_capture_rate(name: str) -> float | None:
+    """
+    Share of the CO2 a carbon-capture carrier captures, read from its name.
+
+    0.95 for ``CCGT-95CCS``, and for a component named after it
+    (``p1 CCGT-95CCS_2030``). None for a name without carbon capture.
+    """
+    match = re.search(r"-(\d+)CCS", name)
+    return int(match.group(1)) / 100 if match else None
+
+
+def ccs_co2_emissions(carrier: str, base_emissions: float) -> float:
+    """
+    CO2 a carbon-capture carrier still emits, given the emissions of its base technology.
+
+    Same unit as ``base_emissions`` (tCO2 per MWh of fuel in the cost table).
+    """
+    capture_rate = ccs_capture_rate(carrier)
+    if capture_rate is None:
+        raise ValueError(f"'{carrier}' names no carbon capture level, e.g. CCGT-95CCS")
+    return (1 - capture_rate) * base_emissions
+
+
+#: The component lists of ``electricity: extendable_carriers``
+COMPONENTS_WITH_CARRIERS = ("Generator", "StorageUnit", "Store", "Link")
+
+
+def check_extendable_carriers(extendable_carriers: dict) -> list[str]:
+    """
+    Messages for carriers of ``electricity: extendable_carriers`` listed where they have no effect.
+
+    Each list is read by different code, which skips what it does not know
+    without saying so: ``StorageUnit`` takes the battery and pumped hydro
+    carriers of the cost table, ``Generator`` everything else, and ``Store`` and
+    ``Link`` add nothing to the electricity network. An empty list means the
+    config is fine.
+    """
+    from constants import ATB_TECH_MAPPER
+
+    storage = sorted(
+        (carrier for carrier in ATB_TECH_MAPPER if carrier.endswith(("hr_battery_storage", "hr_PHS"))),
+        key=lambda carrier: (carrier.split("hr_")[1], int(carrier.split("hr_")[0])),
+    )
+    listed = {component: list(extendable_carriers.get(component) or []) for component in COMPONENTS_WITH_CARRIERS}
+    key = "electricity.extendable_carriers"
+    messages = []
+
+    not_storage = [carrier for carrier in listed["StorageUnit"] if carrier not in storage]
+    if not_storage:
+        messages.append(
+            f"{key}.StorageUnit: {not_storage} are not storage carriers and are ignored. "
+            f"StorageUnit takes {storage}; other technologies go under Generator.",
+        )
+    misplaced = [carrier for carrier in listed["Generator"] if carrier in storage]
+    if misplaced:
+        messages.append(
+            f"{key}.Generator: {misplaced} are storage carriers and would be built as generators. "
+            "List them under StorageUnit.",
+        )
+    for component in ("Store", "Link"):
+        if listed[component]:
+            messages.append(
+                f"{key}.{component}: {listed[component]} add no components to the network; "
+                "no rule builds extendable carriers from this list.",
+            )
+    return messages
+
+
 def load_costs(tech_costs: str, costs_config: dict | None = None, year: int | None = None) -> pd.DataFrame:
     """Load tech costs and select the configured ATB scenario/model_case per carrier.
 
@@ -961,3 +1029,24 @@ def get_multiindex_snapshots(
             get_snapshots(sns_config).map(lambda x: x.replace(year=year)),
         )
     return pd.MultiIndex.from_arrays([sns.year, sns], names=["period", "timestep"])
+
+
+# carriers of the existing natural gas production, pipelines and storage
+GAS_INFRASTRUCTURE = ("gas production", "gas pipeline", "gas storage")
+
+
+def get_gas_economic_retirement(sector: dict) -> bool:
+    """
+    Whether the existing natural gas production, pipelines and storage may retire,
+    saving their fixed O&M (``sector: natural_gas: economic_retirement``).
+    """
+    return sector.get("natural_gas", {}).get("economic_retirement", False)
+
+
+def get_gas_retrofit(sector: dict) -> dict[str, bool]:
+    """
+    Whether the existing natural gas pipelines and storage may be retrofitted to
+    hydrogen (``sector: natural_gas: retrofit``).
+    """
+    setting = sector.get("natural_gas", {}).get("retrofit", {})
+    return {part: setting.get(part, False) for part in ("pipeline", "storage")}

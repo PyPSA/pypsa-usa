@@ -29,7 +29,8 @@ cpuc,Pumping_Load,Pumping Load,CPUC-only; modelled as load rather than as a reso
 pypsa,CCGT,Gas CC,
 pypsa,CCGT-95CCS,Gas CC,
 pypsa,OCGT,Gas CT/ICE/Steam,EIA 'Natural Gas Steam Turbine' / 'Combustion Turbine' / 'Internal Combustion Engine' all map here
-pypsa,hydrogen_ct,Gas CT/ICE/Steam,
+pypsa,OCHT,Gas CT/ICE/Steam,
+pypsa,CCHT,Gas CC,
 pypsa,coal,Coal,
 pypsa,nuclear,Nuclear,
 pypsa,geothermal,Geothermal,

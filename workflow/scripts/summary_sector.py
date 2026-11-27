@@ -43,6 +43,7 @@ PWR_CARRIERS = [
     "offwind_floating",
     "solar",
     "hydro",
+    "CCGT-90CCS",
     "CCGT-95CCS",
     "CCGT-97CCS",
     "coal-95CCS",

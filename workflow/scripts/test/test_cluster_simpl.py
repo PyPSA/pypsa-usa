@@ -8,6 +8,7 @@ import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import pypsa
+from cluster_network import clustering_for_n_clusters
 from cluster_simpl import (
     build_county_busmap,
     resolve_simpl_mode,
@@ -145,3 +146,26 @@ def test_cluster_regions_passes_empty_offshore_layer_through(tmp_path):
     assert gpd.read_file(outputs.regions_offshore).empty
     clustered = gpd.read_file(outputs.regions_onshore)
     assert clustered["name"].tolist() == ["c0"]
+
+
+def test_build_county_busmap_splits_a_county_across_interconnections(substation_network):
+    """A county on an interconnection seam gets one bus per interconnection."""
+    substation_network.buses.loc["s2", "interconnect"] = "eastern"
+    busmap = build_county_busmap(substation_network)
+    assert busmap.tolist() == ["p9_06001_western", "p9_06001_eastern", "p10_06037", "p10_06037"]
+
+
+def test_county_clustering_works_on_an_interconnection_seam(substation_network):
+    """Pypsa used to refuse the merge: the interconnect values of the cluster disagreed."""
+    substation_network.buses.loc["s2", "interconnect"] = "eastern"
+    clustering = clustering_for_n_clusters(
+        substation_network,
+        0,
+        custom_busmap=build_county_busmap(substation_network),
+        aggregation_strategies={},
+        weighting_strategy="population",
+    )
+    buses = clustering.n.buses
+    assert len(buses) == 3
+    assert buses.loc["p9_06001_eastern", "interconnect"] == "eastern"
+    assert buses.loc["p9_06001_western", "interconnect"] == "western"

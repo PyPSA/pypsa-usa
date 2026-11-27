@@ -2,7 +2,12 @@
 
 from itertools import chain
 
-from constants import REEDS_VRE_CARRIERS
+from constants import (
+    RENEWABLE_DATASETS,
+    REEDS_LAND_ACCESS,
+    REEDS_VRE_CARRIERS,
+    REEDS_VRE_WEATHER_YEARS,
+)
 
 # rules/common.smk materializes godeeep_cf_registry.py into the source-cache
 # dir it puts on sys.path, so the CF registry is importable at parse time —
@@ -213,6 +218,8 @@ rule build_cost_data:
         eia_tech_costs="repo_data/costs/eia_tech_costs.csv",
         egs_costs="repo_data/costs/egs_costs.csv",
         additional_costs="repo_data/costs/additional_costs.csv",
+        hydrogen_costs="repo_data/costs/hydrogen_costs.csv",
+        gas_ccs_retrofit_costs="repo_data/costs/reeds_gas_ccs_retrofit_costs.csv",
     output:
         tech_costs=COSTS + "costs_{year}.csv",
         sector_costs=COSTS + "sector_costs_{year}.csv",
@@ -260,6 +267,37 @@ if config["enable"].get("build_cutout", False):
 # of hundreds of DAG nodes later. A non-godeeep config is a no-op.
 validate_godeeep_cf_config(config)
 
+RENEWABLE_DATASET = config["renewable"]["dataset"]
+if RENEWABLE_DATASET not in RENEWABLE_DATASETS:
+    raise ValueError(
+        f"renewable.dataset must be one of {RENEWABLE_DATASETS}; received {RENEWABLE_DATASET!r}."
+    )
+
+
+def validate_reeds_vre_config(config):
+    """Fail at parse time when renewable.dataset: reeds cannot serve the weather years.
+
+    ReEDS publishes CF blocks for REEDS_VRE_WEATHER_YEARS only, and the profile is
+    built for one weather year and reused across planning horizons.
+    """
+    if config["renewable"]["dataset"] != "reeds":
+        return
+    years = config.get("renewable_weather_years") or []
+    if len(years) != 1 or int(years[0]) not in REEDS_VRE_WEATHER_YEARS:
+        raise ValueError(
+            "renewable.dataset: reeds needs renewable_weather_years to hold exactly one year from "
+            f"{list(REEDS_VRE_WEATHER_YEARS)}; received {list(years)}."
+        )
+    access = config.get("renewable_land_access") or "reference"
+    if access not in REEDS_LAND_ACCESS:
+        raise ValueError(
+            f"renewable_land_access must be one of {REEDS_LAND_ACCESS} for renewable.dataset: reeds; "
+            f"received {access!r}."
+        )
+
+
+validate_reeds_vre_config(config)
+
 
 def reeds_interconnection_enabled():
     """Whether wind/solar take the ReEDS per-site interconnection cost."""
@@ -270,17 +308,19 @@ def reeds_interconnection_enabled():
 
 
 def reeds_vre_input(kind):
-    """Input function for one ReEDS supply-curve file (``kind``: sc | sitemap) of the
-    technology wildcard, needed while the ReEDS interconnection cost is on.
+    """Input function for one ReEDS VRE file of the technology wildcard.
+
+    The CF table is needed only for renewable.dataset: reeds; the supply curve and
+    site map also whenever the ReEDS interconnection cost is on.
     """
 
     def _inner(w):
-        if (
-            w.technology not in REEDS_VRE_CARRIERS
-            or not reeds_interconnection_enabled()
-        ):
+        if w.technology not in REEDS_VRE_CARRIERS:
             return []
-        return reeds_vre_path(w.technology, kind)
+        needed = RENEWABLE_DATASET == "reeds" or (
+            kind != "cf" and reeds_interconnection_enabled()
+        )
+        return reeds_vre_path(w.technology, kind) if needed else []
 
     return _inner
 
@@ -335,7 +375,8 @@ def nrel_exclusion_artifact(kind):
 
     def _inner(w):
         access = config.get("renewable_land_access")
-        if not access:
+        # reeds reads its own supply curves; the NREL artifacts feed godeeep/atlite
+        if not access or RENEWABLE_DATASET == "reeds":
             return []
         cec = (
             "_cec"
@@ -392,14 +433,17 @@ rule build_renewable_profiles:
                 if config["renewable"][w.technology].get("max_depth")
                 or (
                     w.technology.startswith("offwind")
-                    and reeds_interconnection_enabled()
+                    and (
+                        RENEWABLE_DATASET == "reeds" or reeds_interconnection_enabled()
+                    )
                 )
                 else []
             )
         ),
-        # the ReEDS wind/solar interconnection cost
+        # renewable.dataset: reeds, and the ReEDS wind/solar interconnection cost
         reeds_sc=reeds_vre_input("sc"),
         reeds_sitemap=reeds_vre_input("sitemap"),
+        reeds_cf=reeds_vre_input("cf"),
         reeds_interconnection=reeds_interconnection_input,
         country_shapes=GEOSPATIAL + "{interconnect}/country_shapes.geojson",
         offshore_shapes=GEOSPATIAL + "{interconnect}/offshore_shapes.geojson",
@@ -458,15 +502,22 @@ rule build_renewable_profiles:
             else BENCHMARKS
             + "{interconnect}/build_renewable_profiles_{technology}_s{simpl}"
         )
-    threads: ATLITE_NPROCESSES
+    # reeds reads the CF table in row blocks on one thread (no dask cluster)
+    threads: 1 if RENEWABLE_DATASET == "reeds" else ATLITE_NPROCESSES
     resources:
         # godeeep does no atlite excluder work: it streams the compressed CF in
         # 500-hour chunks and aggregates onto bus polygons, whose peak footprint
         # is set by the chunk and the cell->bus mapping, not by input.size.
+        # reeds holds one 2048-row block of the CF table (~200 MB for onshore
+        # wind) plus the (8760 x bus) profile, whatever the multi-GB file size.
         mem_mb=lambda wildcards, input, attempt: (
             32000 * attempt
             if config["renewable"]["dataset"] == "godeeep"
-            else (ATLITE_NPROCESSES * input.size // 2000000) * 2.5
+            else (
+                16000 * attempt
+                if config["renewable"]["dataset"] == "reeds"
+                else (ATLITE_NPROCESSES * input.size // 2000000) * 2.5
+            )
         ),
         walltime=config_provider(
             "walltime", "build_renewable_profiles", default="02:30:00"
@@ -552,10 +603,7 @@ def demand_raw_data(wildcards):
     elif profile == "servm":
         return servm_demand_files()
     elif profile == "ferc":
-        return [
-            DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet",
-            DATA + "pudl/censusdp1tract.sqlite",
-        ]
+        return [DATA + "pudl/out_ferc714__hourly_estimated_state_demand.parquet"]
     elif profile == "eulp":
         return [
             DEMAND + f"eulp/{eulp_sector}/{state}.csv"
@@ -631,6 +679,17 @@ def demand_scaling_data(wildcards):
         return ""
 
 
+def ba_demand_input(path):
+    """Extra input of the eia profile, which maps base-bus balancing areas to clusters."""
+
+    def get_path(wildcards):
+        if config["electricity"]["demand"]["profile"] == "eia":
+            return path.format(**wildcards)
+        return []
+
+    return get_path
+
+
 rule build_electrical_demand:
     wildcard_constraints:
         end_use="power",  # added for consistency in build_demand.py
@@ -647,6 +706,9 @@ rule build_electrical_demand:
         pudl_path=config_provider("pudl_path"),
     input:
         network=NETWORKS + "{interconnect}/elec_s{simpl}.nc",
+        base_network=ba_demand_input(NETWORKS + "{interconnect}/elec_base_network.nc"),
+        busmap_b=ba_demand_input(BUSMAPS + "{interconnect}/busmap_b.csv"),
+        busmap_s=ba_demand_input(BUSMAPS + "{interconnect}/busmap_s{simpl}.csv"),
         demand_files=demand_raw_data,
         dissagregate_files=demand_disaggregate_data,
         demand_scaling_file=demand_scaling_data,
@@ -826,7 +888,7 @@ rule build_transport_other_demand:
 
 def demand_to_add(wildcards):
 
-    if config["scenario"]["sector"] == "E":
+    if not gas_sector_on(config["scenario"]["sector"]):
         return DEMAND + "{interconnect}/power_electricity_s{simpl}.csv"
     else:
         # service demand
@@ -864,6 +926,17 @@ def demand_to_add(wildcards):
         return chain(service_demands, industrial_demands, road_demand, non_road_demand)
 
 
+def add_demand_mem_mb(wildcards, input, attempt):
+    """
+    Memory of add_demand in MB.
+
+    The demand files are read one at a time and the network ends up holding all
+    of them, so memory follows their total size by a small factor (the sector
+    run of issue #552 used 1.6 bytes per byte of input).
+    """
+    return max(4000, 3 * input.size // 1_000_000) * attempt
+
+
 rule add_demand:
     params:
         sectors=config["scenario"]["sector"],
@@ -879,7 +952,7 @@ rule add_demand:
     benchmark:
         BENCHMARKS + "{interconnect}/elec_s{simpl}_add_demand"
     resources:
-        mem_mb=lambda wildcards, input, attempt: (input.size // 70000) * attempt * 2,
+        mem_mb=add_demand_mem_mb,
         walltime=config_provider("walltime", "add_demand", default="00:50:00"),
     script:
         "../scripts/add_demand.py"
@@ -1086,10 +1159,19 @@ rule aggregate_to_substations:
         topological_boundaries=config_provider(
             "model_topology", "topological_boundaries"
         ),
+        regional_transmission_costs=config_provider(
+            "lines", "regional_costs", default=True
+        ),
+        voltage_factor=config_provider("lines", "voltage_factor", default=False),
+        dollar_year=config_provider("costs", "dollar_year"),
     input:
         bus2sub=BUSMAPS + "{interconnect}/bus2sub.csv",
         sub=BUSMAPS + "{interconnect}/sub.csv",
         network=NETWORKS + "{interconnect}/elec_base_network.nc",
+        # Region/route-resolved 500 kV AC cost per county pair, and the
+        # voltage-class and DC/AC cost relationships (both 2004 USD).
+        transmission_distance_cost="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_county.csv",
+        transmission_basecost="repo_data/ReEDS_Constraints/transmission/rev_transmission_basecost.csv",
     output:
         network=NETWORKS + "{interconnect}/elec_b.nc",
         busmap=BUSMAPS + "{interconnect}/busmap_b.csv",
@@ -1212,6 +1294,8 @@ rule cluster_network:
         itl_costs_county="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_county.csv",
         itl_state="repo_data/ReEDS_Constraints/transmission/transmission_capacity_init_AC_state_NARIS2024.csv",
         itl_costs_state="repo_data/ReEDS_Constraints/transmission/transmission_distance_cost_500kVac_state.csv",
+        transmission_basecost="repo_data/ReEDS_Constraints/transmission/rev_transmission_basecost.csv",
+        county_shapes=DATA + "counties/cb_2020_us_county_500k.shp",
     output:
         network=NETWORKS + "{interconnect}/elec_s{simpl}_c{clusters}.nc",
         regions_onshore=GEOSPATIAL
@@ -1264,7 +1348,7 @@ rule add_extra_components:
         # rules are parsed before the Snakefile pads an empty sector to "E"
         co2_storage=(
             CO2 + "{interconnect}/co2_storage_s{simpl}_{clusters}.csv"
-            if config["scenario"]["sector"] in ("", "E")
+            if not sector_on(config["scenario"]["sector"])
             and config["co2"]["storage"] is True
             else []
         ),

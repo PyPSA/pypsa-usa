@@ -29,7 +29,9 @@ CES_CARRIERS = [
     *RPS_CARRIERS,
     "nuclear",
     "SMR",
-    "hydrogen_ct",
+    "OCHT",
+    "CCHT",
+    "CCGT-90CCS",
     "CCGT-95CCS",
     "CCGT-97CCS",
     "coal-95CCS",
@@ -65,6 +67,8 @@ def add_technology_capacity_target_constraints(n, config):
     model_horizon = get_model_horizon(n.model)
 
     for _, target in tct_data.iterrows():
+        # pandas 3 infers a str row when most columns are strings; "max"/"min" get numbers below
+        target = target.astype(object)
         planning_horizon = target.planning_horizon
         if planning_horizon != "all" and int(planning_horizon) > max(model_horizon):
             continue
@@ -325,10 +329,15 @@ def _process_reeds_data(filepath, carriers, value_col):
 
 
 def _collapse_portfolio_standards(n: pypsa.Network, planning_horizons: list[int], *args):
-    """Collapse portfolio standards into a single row per region, planning horizon, and carrier."""
+    """Collapse portfolio standards into a single row per region, planning horizon, and carrier.
+
+    ``policy`` names the standard a row belongs to (``rps``, ``ces``); rows without
+    one (the ``portfolio_standards`` file) count as ``rps``.
+    """
     expected_columns = ["region", "planning_horizon", "carrier", "pct"]
-    dfs = [df[expected_columns] for df in args]
+    dfs = [df[expected_columns].assign(policy=df["policy"] if "policy" in df else None) for df in args]
     portfolio_standards = pd.concat(dfs)
+    portfolio_standards["policy"] = portfolio_standards["policy"].fillna("rps").astype(str)
 
     portfolio_standards = portfolio_standards[
         (portfolio_standards.pct > 0.0)
@@ -382,12 +391,12 @@ def add_RPS_constraints(n, config, snakemake=None):
         snakemake.input.rps_reeds,
         RPS_CARRIERS,
         value_col="pct",
-    )
+    ).assign(policy="rps")
     ces_reeds = _process_reeds_data(
         snakemake.input.ces_reeds,
         CES_CARRIERS,
         value_col="pct",
-    )
+    ).assign(policy="ces")
 
     # Concatenate all portfolio standards
     portfolio_standards = _collapse_portfolio_standards(
@@ -413,9 +422,10 @@ def add_RPS_constraints(n, config, snakemake=None):
         region_rps_rhs = int(constraint_row.pct * region_demand)
         portfolio_standards.loc[constraint_row.name, "rps_rhs"] = region_rps_rhs
 
-    # Iterate through constraints and add RPS constraints to the model
-    for (rec_trading_zone, planning_horizon, policy_carriers), zone_constraints in portfolio_standards.groupby(
-        ["rec_trading_zone", "planning_horizon", "carrier"],
+    # Iterate through constraints and add RPS constraints to the model; a REC trading
+    # zone can hold several standards in one year (e.g. an RPS and a CES)
+    for (rec_trading_zone, planning_horizon, policy, policy_carriers), zone_constraints in portfolio_standards.groupby(
+        ["rec_trading_zone", "planning_horizon", "policy", "carrier"],
     ):
         if planning_horizon not in model_horizon:
             continue
@@ -442,13 +452,13 @@ def add_RPS_constraints(n, config, snakemake=None):
         lhs = p_eligible.sum() - renewable_gen
         rhs = 0
 
-        n.model.add_constraints(
-            lhs >= rhs,
-            name=f"GlobalConstraint-{rec_trading_zone}_{planning_horizon}_rps_limit",
-        )
+        name = f"GlobalConstraint-{rec_trading_zone}_{planning_horizon}_{policy}_limit"
+        if name in n.model.constraints:  # another carrier set of the same standard, e.g. a custom RPS
+            name = f"{name}_{sum(c.startswith(name) for c in n.model.constraints)}"
+        n.model.add_constraints(lhs >= rhs, name=name)
 
         logger.info(
-            f"Added RPS constraint '{rec_trading_zone}' for {planning_horizon} "
+            f"Added {policy} constraint '{rec_trading_zone}' for {planning_horizon} "
             f"requiring {renewable_gen / 1e6:.1f} TWh of {policy_carriers} generation ",
         )
 
@@ -497,12 +507,12 @@ def add_RPS_constraints_sector(n, config, snakemake=None):
         snakemake.input.rps_reeds,
         RPS_CARRIERS,
         value_col="pct",
-    )
+    ).assign(policy="rps")
     ces_reeds = _process_reeds_data(
         snakemake.input.ces_reeds,
         CES_CARRIERS,
         value_col="pct",
-    )
+    ).assign(policy="ces")
 
     # Concatenate all portfolio standards
     portfolio_standards = _collapse_portfolio_standards(
