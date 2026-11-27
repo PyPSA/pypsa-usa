@@ -282,6 +282,29 @@ def generator_aggregation_strategies(aggregation_strategies: dict | None) -> dic
     return {**GENERATOR_CAPEX_STRATEGIES, **configured}
 
 
+def ramp_limit_mean(p_nom: pd.Series):
+    """
+    Capacity-weighted mean of the ramp limits of merged generators, as a groupby reduction.
+
+    PyPSA's ``capacity_weighted_average`` sums the capacity-weighted values, and the sum
+    skips NaN: generators without a ramp limit (renewables) merge into a limit of 0, which
+    PyPSA enforces as "output may not change". Here a generator without a limit counts as
+    1, since it may change its output by its whole capacity between snapshots, and a merged
+    generator whose members all have none has none.
+    """
+
+    def aggregate(limits: pd.Series) -> float:
+        if limits.isna().all():
+            return np.nan
+        weights = p_nom.reindex(limits.index).fillna(0.0)
+        limits = limits.fillna(1.0)
+        if weights.sum() <= 0:
+            return float(limits.mean())
+        return float((limits * weights).sum() / weights.sum())
+
+    return aggregate
+
+
 def clustering_for_n_clusters(
     n,
     n_clusters,
@@ -313,6 +336,9 @@ def clustering_for_n_clusters(
     line_strategies = {**LINE_CAPEX_STRATEGIES, **aggregation_strategies.get("lines", dict())}
     one_port_strategies = aggregation_strategies.get("one_ports", dict())
     generator_strategies = generator_aggregation_strategies(aggregation_strategies)
+    for attr in ("ramp_limit_up", "ramp_limit_down"):
+        if generator_strategies.get(attr) == "capacity_weighted_average":
+            generator_strategies[attr] = ramp_limit_mean(n.generators.p_nom)
     bus_strategies = {
         "Pd": "sum",
         "load_weight": "sum",
