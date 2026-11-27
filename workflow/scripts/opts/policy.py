@@ -3,6 +3,7 @@ import logging  # noqa: D100
 import numpy as np
 import pandas as pd
 import pypsa
+import xarray as xr
 from opts._helpers import (
     ceil_precision,
     filter_components,
@@ -355,6 +356,23 @@ def _collapse_portfolio_standards(n: pypsa.Network, planning_horizons: list[int]
     return portfolio_standards
 
 
+def _period_weights(n, planning_horizon, var) -> xr.DataArray:
+    """Generator snapshot weightings (hours) of ``planning_horizon``, over the snapshots of ``var`` in it."""
+    weights = n.snapshot_weightings.generators.loc[planning_horizon]
+    # selecting a period of the MultiIndex snapshots leaves its timestep level as the dimension
+    dim = "timestep" if "timestep" in var.indexes else "snapshot"
+    sns = var.indexes[dim]
+    if len(sns) != len(weights):
+        raise ValueError(f"{len(sns)} model snapshots but {len(weights)} weightings in {planning_horizon}.")
+    return xr.DataArray(weights.reindex(sns).to_numpy(), coords={dim: sns}, dims=dim)
+
+
+def _period_energy(n, var, planning_horizon):
+    """Energy (MWh) of ``var`` (MW per snapshot) over ``planning_horizon``: weighted by the snapshot hours."""
+    var = var.sel(period=planning_horizon)
+    return (var * _period_weights(n, planning_horizon, var)).sum()
+
+
 def add_RPS_constraints(n, config, snakemake=None):
     """
     Add Renewable Portfolio Standards (RPS) constraints to the network.
@@ -413,10 +431,12 @@ def add_RPS_constraints(n, config, snakemake=None):
         if region_buses.empty:
             continue
 
+        # energy (MWh): each snapshot weighted by the hours it stands for
         region_demand = (
             n.loads_t.p_set.loc[constraint_row.planning_horizon]
             .loc[:, n.loads.bus.isin(region_buses.index)]
-            .sum()
+            .sum(axis=1)
+            .mul(n.snapshot_weightings.generators.loc[constraint_row.planning_horizon])
             .sum()
         )
         region_rps_rhs = int(constraint_row.pct * region_demand)
@@ -443,13 +463,10 @@ def add_RPS_constraints(n, config, snakemake=None):
             )
             continue
 
-        # Eligible generation
-        p_eligible = n.model["Generator-p"].sel(
-            period=planning_horizon,
-            name=region_gens_eligible.index,
-        )
+        # Eligible generation (MWh)
+        p_eligible = n.model["Generator-p"].sel(name=region_gens_eligible.index)
         renewable_gen = zone_constraints.rps_rhs.sum()
-        lhs = p_eligible.sum() - renewable_gen
+        lhs = _period_energy(n, p_eligible, planning_horizon) - renewable_gen
         rhs = 0
 
         name = f"GlobalConstraint-{rec_trading_zone}_{planning_horizon}_{policy}_limit"
@@ -464,22 +481,14 @@ def add_RPS_constraints(n, config, snakemake=None):
 
 
 def _get_state_generation(n, planning_horizon, state, carriers):
-    """Generation of supply side technologies excluding trade."""
+    """Generation (MWh) of supply side technologies excluding trade."""
     state_buses = n.buses[(n.buses.reeds_state == state) & (n.buses.carrier == "AC")]
     state_gens = n.generators[n.generators.bus.isin(state_buses.index) & n.generators.carrier.isin(carriers)]
     state_links = n.links[n.links.bus1.isin(state_buses.index) & n.links.carrier.isin(carriers)]
 
-    gens_demand = (
-        n.model["Generator-p"]
-        .sel(
-            period=planning_horizon,
-            name=state_gens.index,
-        )
-        .sum()
-    )
-    links_demand = (
-        n.model["Link-p"].sel(period=planning_horizon, name=state_links.index).mul(state_links.efficiency).sum()
-    )
+    gens_demand = _period_energy(n, n.model["Generator-p"].sel(name=state_gens.index), planning_horizon)
+    efficiency = xr.DataArray(state_links.efficiency.to_numpy(), coords={"name": state_links.index}, dims="name")
+    links_demand = _period_energy(n, n.model["Link-p"].sel(name=state_links.index) * efficiency, planning_horizon)
 
     return gens_demand + links_demand
 
