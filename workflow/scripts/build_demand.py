@@ -2067,7 +2067,11 @@ class WriteStrategy(ABC):
         )
         # HF-28: the factors are normalised upstream over a DIFFERENT column
         # than the one demand is keyed on, so renormalise them here.
-        zone_data = self._normalize_laf_within_zone(zone_data, demand)
+        zone_data = self._normalize_laf_within_zone(
+            zone_data,
+            demand,
+            self._network_share(dissagregation_zones, zone),
+        )
         self._log_unallocated_demand(demand, zone_data)
         return self._disaggregate_demand_to_buses(demand, zone_data)
 
@@ -2123,51 +2127,79 @@ class WriteStrategy(ABC):
             )
         return folded
 
+    def _network_share(self, zones: pd.Series, zone: str) -> pd.Series | None:
+        """Share of each demand key's demand that this network holds, at most 1.
+
+        Only a state can be split across interconnects, and only ``LAF_state``
+        measures the split: ``build_base_network`` normalises it on the national
+        bus set over the state key used here, so its total inside a state is the
+        network's share of that state (0.03 of Texas in ``western``). Every other
+        key, and a network without ``LAF_state``, holds all of its demand (None).
+
+        The writer's own factors only spread that share over the key's buses.
+        Their total is not a share: the industrial factors fall short of 1 for a
+        county without a load bus, and state factors inside a balancing area sum
+        to anything.
+        """
+        if zone != "state" or "LAF_state" not in self.n.buses:
+            return None
+        state_laf = pd.to_numeric(self.n.buses.LAF_state, errors="coerce").fillna(0.0)
+        return state_laf.groupby(zones).sum().clip(upper=1.0)
+
     @staticmethod
     def _normalize_laf_within_zone(
         zone_data: pd.DataFrame,
         demand: pd.DataFrame,
+        network_share: pd.Series | None = None,
     ) -> pd.DataFrame:
-        """Rescale load allocation factors to sum to one inside each demand key (HF-28).
+        """Rescale load allocation factors to the network's share of each demand key (HF-28).
 
-        ``build_base_network`` normalises ``LAF_state`` over ``full_state``,
-        a column no demand key reproduces (it separates the District of
-        Columbia), and the population/industrial factors are normalised over
-        whatever zone mapping they were built with. The consumption key here --
-        ``state``, ``ba``, ``reeds`` -- is a different column, so ``sum(laf)``
-        inside a key is not 1 and the allocated demand does not equal the
-        demand table's column for that key (USA 2026-09-15: +2.28 % on master,
-        +1.85 % on develop). Renormalising within the key that demand is
-        actually indexed by makes the allocation conserving whatever the key is.
+        ``network_share`` is the total each key's factors must sum to (see
+        ``_network_share``): 1 for a key inside the network, less for a state
+        split across interconnects, so a split state gets only its share. Without
+        it every key sums to 1.
 
-        A key whose factors sum to zero gets 0, never NaN, and is logged with
-        the demand it cannot place.
+        The factors themselves are normalised upstream over another column than
+        the one demand is keyed on, so their total inside a key is not that
+        share (USA 2026-09-15: Maryland's summed to 2.008, +1.85 % on develop).
+        Rescaling them to it conserves the key's demand whatever the key is.
+
+        A key with no factor mass, or whose every bus falls under
+        ``LAF_DROP_THRESHOLD``, gets 0, never NaN, and is logged with the demand
+        it cannot place.
 
         The rescale runs twice. ``_disaggregate_demand_to_buses`` drops every
         bus below ``LAF_DROP_THRESHOLD``, so the first pass is followed by
-        zeroing those buses and rescaling the survivors; the second pass can
-        only raise a share (it divides by a total <= 1), so nothing new falls
+        zeroing those buses and rescaling the survivors back to the key's
+        total; the second pass can only raise a factor, so nothing new falls
         under the threshold and the downstream drop cannot leak demand.
         """
         normalized = zone_data.copy()
         laf = pd.to_numeric(normalized["laf"], errors="coerce").fillna(0.0)
         zones = normalized["zone"]
 
-        def rescale(values: pd.Series) -> tuple[pd.Series, pd.Series]:
-            totals = values.groupby(zones).sum()
-            per_bus = pd.to_numeric(zones.map(totals), errors="coerce")
-            return values.div(per_bus).where(per_bus > 0, 0.0).astype(float), totals
+        if network_share is None:
+            target = pd.Series(1.0, index=zones.index)
+        else:
+            target = pd.to_numeric(zones.map(network_share), errors="coerce").fillna(0.0)
 
-        shares, zone_totals = rescale(laf)
-        shares, _ = rescale(shares.where(shares >= LAF_DROP_THRESHOLD, 0.0))
+        def rescale(values: pd.Series) -> pd.Series:
+            per_bus = pd.to_numeric(zones.map(values.groupby(zones).sum()), errors="coerce")
+            return values.div(per_bus).mul(target).where(per_bus > 0, 0.0).astype(float)
+
+        shares = rescale(laf)
+        shares = rescale(shares.where(shares >= LAF_DROP_THRESHOLD, 0.0))
         normalized["laf"] = shares
 
-        empty_zones = [z for z, total in zone_totals.items() if not total > 0]
+        # read after the drop, so a key whose buses all fell under the threshold is reported too
+        placed = shares.groupby(zones).sum()
+        empty_zones = [z for z, total in placed.items() if not total > 0]
         if empty_zones:
             unplaced = {str(z): float(demand[z].mean()) for z in empty_zones if z in demand.columns}
             logger.warning(
-                "Zero load allocation factor mass in zone(s) %s; their allocation is set to 0. "
+                "No load allocation factor at or above %g in zone(s) %s; their allocation is set to 0. "
                 "Unplaced demand: %s (%.1f MW mean in total).",
+                LAF_DROP_THRESHOLD,
                 sorted(str(z) for z in empty_zones),
                 {k: round(v, 1) for k, v in sorted(unplaced.items())},
                 sum(unplaced.values()),
