@@ -411,13 +411,14 @@ def test_uc_rescale_is_a_noop_at_hourly_resolution():
     pd.testing.assert_frame_equal(n.generators, before)
 
 
-def test_uc_rescale_is_a_noop_without_committable_generators():
-    """Runs with unit_commitment: false must be bit-for-bit unchanged."""
+def test_ramp_rescaled_without_committable_generators():
+    """PyPSA enforces ramp limits without unit commitment too; min up/down times stay."""
     n = _uc_network()
     n.generators["committable"] = False
-    before = n.generators.copy()
     rescale_uc_attrs_to_resolution(n, "3h")
-    pd.testing.assert_frame_equal(n.generators, before)
+    assert n.generators.at["coal", "ramp_limit_up"] == pytest.approx(0.6)
+    assert n.generators.at["ccgt", "ramp_limit_down"] == pytest.approx(1.0)
+    assert n.generators.at["coal", "min_up_time"] == 9
 
 
 # ---------------------------------------------------------------------------
