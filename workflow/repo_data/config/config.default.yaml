@@ -445,7 +445,7 @@ clustering:
       start_up_cost:   sum                          # aggregate acts as one unit: starting it starts the members; cap-weighted average understates cycling cost ~N-fold
       min_up_time:     'capacity_weighted_average'
       min_down_time:   'capacity_weighted_average'
-      ramp_limit_up:   capacity_weighted_average    # max would make the cluster as flexible as its single nimblest member
+      ramp_limit_up:   capacity_weighted_average    # no limit (NaN) counts as 1; max would make the cluster as flexible as its single nimblest member
       ramp_limit_down: capacity_weighted_average
       committable:     any
       vom_cost:        capacity_weighted_average    # matches marginal_cost, which carries it
