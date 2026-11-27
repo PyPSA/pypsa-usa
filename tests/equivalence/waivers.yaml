@@ -1,6 +1,6 @@
 # Machine-readable waivers for the equivalence harness (spec D8).
 # Each entry suppresses exactly one signed-off delta and MUST reference a row
-# in docs/superpowers/specs/2026-08-07-deltas-ledger.md.
+# in docs/deltas-ledger.md.
 #
 # There are TWO kinds of entry here and an entry is one or the other, never
 # both:

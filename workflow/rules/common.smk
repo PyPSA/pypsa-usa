@@ -15,9 +15,38 @@ workflow.source_path("../scripts/godeeep_cf_registry.py")
 workflow.source_path("../scripts/tax_credits.py")  # imported by _helpers
 sys.path.insert(0, os.path.dirname(path))
 
-from _helpers import validate_checksum, update_config_from_wildcards
+from _helpers import (
+    check_extendable_carriers,
+    validate_checksum,
+    update_config_from_wildcards,
+)
 from constants import HOURS_PER_YEAR
+from snakemake.logging import logger
 from snakemake.utils import update_config
+
+# Carriers listed under the wrong component are skipped without a word by the
+# scripts that read the lists, so say it once here, before any rule runs.
+for message in check_extendable_carriers(config["electricity"]["extendable_carriers"]):
+    logger.warning(message)
+
+
+def sector_letters(sector):
+    """Sectors of a ``{sector}`` wildcard or ``scenario.sector`` ("" is electricity only)."""
+    return set(filter(None, str(sector).split("-"))) | {"E"}
+
+
+def sector_on(sector):
+    """Every sector but electricity only ("" or E) is a sector coupled model."""
+    return sector_letters(sector) != {"E"}
+
+
+def gas_sector_on(sector):
+    """Natural gas and the end-use (service, transport, industry) sectors."""
+    return "G" in sector_letters(sector)
+
+
+def hydrogen_sector_on(sector):
+    return "H" in sector_letters(sector)
 
 
 def get_config(config, keys, default=None):

@@ -296,6 +296,19 @@ def plot_global_constraint_shadow_prices(
     plt.close()
 
 
+def get_bus_regions(n: pypsa.Network) -> pd.Series:
+    """
+    Region of each bus for the regional charts.
+
+    The NERC region where the buses carry one; networks built with
+    ``topological_boundaries: state`` do not, and are grouped by state.
+    """
+    for col in ("nerc_reg", "reeds_state", "country"):
+        if col in n.buses.columns:
+            return n.buses[col]
+    raise KeyError("The buses carry no nerc_reg, reeds_state or country column to group the regional charts by.")
+
+
 def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
     """Returns a DataFrame with capacity existing at start of first period (by region/carrier)."""
     first_period = (
@@ -303,7 +316,7 @@ def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
         if hasattr(n, "investment_periods") and n.investment_periods is not None and len(n.investment_periods)
         else None
     )
-    n.generators["nerc_reg"] = n.generators.bus.map(n.buses.nerc_reg)
+    n.generators["nerc_reg"] = n.generators.bus.map(get_bus_regions(n))
     if first_period is not None:
         gen_mask = n.generators["build_year"].isna() | (n.generators["build_year"] < first_period)
         gens = n.generators.loc[gen_mask]
@@ -313,7 +326,7 @@ def get_currently_installed_capacity(n: pypsa.Network) -> pd.DataFrame:
             _original_p_nom(n.generators).groupby([n.generators["nerc_reg"], n.generators["carrier"]]).sum().round(0)
         )
     existing_capacity = existing_capacity.to_frame(name="Existing")
-    n.storage_units["nerc_reg"] = n.storage_units.bus.map(n.buses.nerc_reg)
+    n.storage_units["nerc_reg"] = n.storage_units.bus.map(get_bus_regions(n))
     if first_period is not None and hasattr(n.storage_units, "build_year") and "build_year" in n.storage_units.columns:
         su_mask = n.storage_units["build_year"].isna() | (n.storage_units["build_year"] < first_period)
         storage_units = n.storage_units.loc[su_mask].groupby(["nerc_reg", "carrier"]).p_nom.sum().round(0)
@@ -356,9 +369,9 @@ def get_statistics(n, column_name):
 
     # Add nerc_region data
     gens = df.loc["Generator"].index.get_level_values(0)
-    gens_reg = gens.map(n.generators.bus.map(n.buses.nerc_reg)).to_series()
+    gens_reg = gens.map(n.generators.bus.map(get_bus_regions(n))).to_series()
     su = df.loc["StorageUnit"].index.get_level_values(0)
-    su_reg = su.map(n.storage_units.bus.map(n.buses.nerc_reg)).to_series()
+    su_reg = su.map(n.storage_units.bus.map(get_bus_regions(n))).to_series()
     nerc_reg = pd.concat([gens_reg, su_reg])
 
     df = df.set_index(nerc_reg, append=True)
@@ -480,7 +493,7 @@ def plot_regional_emissions_bar(
     save: str,
 ) -> None:
     """PLOT OF CO2 EMISSIONS BY NERC REGION AND INVESTMENT PERIOD."""
-    regional_emisssions_ts = get_node_emissions_timeseries(n).T.groupby(n.buses.nerc_reg).sum().T / 1e6
+    regional_emisssions_ts = get_node_emissions_timeseries(n).T.groupby(get_bus_regions(n)).sum().T / 1e6
     regional_emissions = (
         regional_emisssions_ts.groupby(regional_emisssions_ts.index.get_level_values(0)).sum().round(3).T
     )
@@ -567,6 +580,22 @@ def plot_emissions_bar(
 #### Temporal Plots ####
 
 
+def single_signed_columns(energy_mix: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clip each column to one sign, as a stacked area chart requires.
+
+    Storage charging and exports are drawn below zero and every other carrier
+    above. A barrier solution without crossover leaves dispatch slightly on the
+    wrong side of zero (e.g. -1e-3 MW of solar), which pandas refuses to stack.
+    """
+    negative = [c for c in energy_mix.columns if c.endswith("_charger") or c == "exports"]
+    positive = [c for c in energy_mix.columns if c not in negative]
+    energy_mix = energy_mix.copy()
+    energy_mix[negative] = energy_mix[negative].clip(upper=0)
+    energy_mix[positive] = energy_mix[positive].clip(lower=0)
+    return energy_mix
+
+
 def plot_production_area(
     n: pypsa.Network,
     carriers_2_plot: list[str],
@@ -602,6 +631,7 @@ def plot_production_area(
 
     carriers_2_plot = list(set(carriers_2_plot))
     energy_mix = energy_mix[[x for x in carriers_2_plot if x in energy_mix]]
+    energy_mix = single_signed_columns(energy_mix)
     energy_mix = energy_mix.rename(columns=n.carriers.nice_name)
 
     color_palette = get_color_palette(n)
@@ -652,90 +682,87 @@ def plot_production_area(
         plt.close()
 
 
+def plot_area_per_period(
+    n: pypsa.Network,
+    data: pd.DataFrame,
+    title: str,
+    ylabel: str,
+    save: str,
+) -> None:
+    """
+    Stacked area chart of a snapshot-indexed table, one panel per investment period.
+
+    A single axis would string the periods together on one (period, timestep)
+    axis; each period is its own modelled year and gets its own panel.
+    """
+    color_palette = get_color_palette(n)
+    periods = n.investment_periods
+    fig, axs = plt.subplots(figsize=(14, 4 * len(periods)), nrows=len(periods), squeeze=False)
+
+    for ax, period in zip(axs[:, 0], periods):
+        period_data = data.loc[period]
+        if not period_data.empty and len(period_data.columns) > 0:
+            period_data.plot.area(
+                ax=ax,
+                alpha=0.7,
+                legend="reverse",
+                color=color_palette,
+            )
+            ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+        ax.set_title(title if len(periods) == 1 else f"{title} ({period})")
+        ax.set_ylabel(ylabel)
+
+    fig.tight_layout()
+    fig.savefig(save)
+    plt.close(fig)
+
+
+def cumulative_per_period(data: pd.DataFrame) -> pd.DataFrame:
+    """Running total over the snapshots of each investment period, restarting at every period."""
+    return data.groupby(level="period").cumsum()
+
+
 def plot_hourly_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     """Plots snapshot emissions by technology."""
-    # get data
     emissions = get_tech_emissions_timeseries(n).mul(1e-6)  # T -> MT
     zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
     emissions = emissions.drop(columns=zeros)
 
-    # plot
-    color_palette = get_color_palette(n)
-
-    fig, ax = plt.subplots(figsize=(14, 4))
-    if not emissions.empty:
-        emissions.plot.area(
-            ax=ax,
-            alpha=0.7,
-            legend="reverse",
-            color=color_palette,
-        )
-
-    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-    ax.set_title(create_title("Technology Emissions", **wildcards))
-    ax.set_ylabel("Emissions [MT]")
-    fig.tight_layout()
-
-    fig.savefig(save)
-    plt.close()
+    plot_area_per_period(
+        n,
+        emissions,
+        create_title("Technology Emissions", **wildcards),
+        "Emissions [MT]",
+        save,
+    )
 
 
 def plot_accumulated_emissions_tech(n: pypsa.Network, save: str, **wildcards) -> None:
     """Creates area plot of accumulated emissions by technology."""
-    # get data
-
-    emissions = get_tech_emissions_timeseries(n).cumsum().mul(1e-6)  # T -> MT
+    emissions = cumulative_per_period(get_tech_emissions_timeseries(n)).mul(1e-6)  # T -> MT
     zeros = emissions.columns[(np.abs(emissions) < 1e-7).all()]
     emissions = emissions.drop(columns=zeros)
 
-    # plot
-
-    color_palette = get_color_palette(n)
-
-    fig, ax = plt.subplots(figsize=(14, 4))
-    if not emissions.empty:
-        emissions.plot.area(
-            ax=ax,
-            alpha=0.7,
-            legend="reverse",
-            color=color_palette,
-        )
-
-    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-    ax.set_title(create_title("Technology Accumulated Emissions", **wildcards))
-    ax.set_ylabel("Emissions [MT]")
-    fig.tight_layout()
-
-    fig.savefig(save)
-    plt.close()
+    plot_area_per_period(
+        n,
+        emissions,
+        create_title("Technology Accumulated Emissions", **wildcards),
+        "Emissions [MT]",
+        save,
+    )
 
 
 def plot_accumulated_emissions(n: pypsa.Network, save: str, **wildcards) -> None:
     """Plots accumulated emissions."""
-    # get data
+    emissions = get_tech_emissions_timeseries(n).mul(1e-6).sum(axis=1).to_frame("co2")  # T -> MT
 
-    emissions = get_tech_emissions_timeseries(n).mul(1e-6).sum(axis=1)  # T -> MT
-    emissions = emissions.cumsum().to_frame("co2")
-
-    # plot
-
-    color_palette = get_color_palette(n)
-
-    fig, ax = plt.subplots(figsize=(14, 4))
-
-    emissions.plot.area(
-        ax=ax,
-        alpha=0.7,
-        legend="reverse",
-        color=color_palette,
+    plot_area_per_period(
+        n,
+        cumulative_per_period(emissions),
+        create_title("Accumulated Emissions", **wildcards),
+        "Emissions [MT]",
+        save,
     )
-
-    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
-    ax.set_title(create_title("Accumulated Emissions", **wildcards))
-    ax.set_ylabel("Emissions [MT]")
-    fig.tight_layout()
-    fig.savefig(save)
-    plt.close()
 
 
 def plot_capacity_factor_heatmap(n: pypsa.Network, save: str, **wildcards) -> None:

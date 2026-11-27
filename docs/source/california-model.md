@@ -4,8 +4,9 @@
 PyPSA-USA ships a maintained, runnable California-only configuration at
 `workflow/repo_data/config/config.california.yaml`. It is a sparse overlay on the layered base
 config and is run in place, with `--configfile repo_data/config/config.california.yaml`; it is
-*not* copied into `workflow/config/` by `init_pypsa_usa.sh`, which seeds only the three
-per-user files (`config.default.yaml`, `config.api.yaml`, `config.slurm.yaml`). This page is
+*not* copied into `workflow/config/` by `init_pypsa_usa.sh`, which seeds only the four
+per-user files (`config.default.yaml`, `config.api.yaml`, `config.slurm.yaml`,
+`config.sector.yaml`). This page is
 the reference for that configuration: what data goes into it, which weather years are
 available for each ingredient, and which simplifications the results carry.
 

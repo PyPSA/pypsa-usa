@@ -251,13 +251,13 @@ class _WriteFixedLaf(WriteStrategy):
 
 
 def test_renormalisation_is_applied_for_every_zone_type():
-    """A 'ba' key whose factors were normalised over states still conserves."""
+    """A 'reeds' key whose factors were normalised over states still conserves."""
     n = make_network()
-    n.buses["balancing_area"] = ["PJM", "PJM", "PJM", "PJM"]
+    n.buses["reeds_zone"] = "p123"
     laf = pd.Series([0.6, 0.4, 1.0, 1.0], index=n.buses.index)
-    demand = make_demand(n, {"PJM": [3000.0, 1500.0]})
+    demand = make_demand(n, {"p123": [3000.0, 1500.0]})
 
-    result = _WriteFixedLaf(n, laf).dissagregate_demand(demand, "ba")
+    result = _WriteFixedLaf(n, laf).dissagregate_demand(demand, "reeds")
 
     assert result.sum(axis=1).tolist() == pytest.approx([3000.0, 1500.0])
     assert result.loc[:, "md_a"].tolist() == pytest.approx([600.0, 300.0])
@@ -345,14 +345,14 @@ def test_split_state_share_comes_from_the_state_factors_for_every_writer():
     assert result.loc[:, "elp_b"].iloc[0] == pytest.approx(1125.0)
 
 
-def test_balancing_area_holding_part_of_a_state_gets_all_of_its_demand():
-    """State-normalised factors summing below 1 inside a 'ba' key are not a network share."""
+def test_reeds_zone_holding_part_of_a_state_gets_all_of_its_demand():
+    """State-normalised factors summing below 1 inside a 'reeds' key are not a network share."""
     n = make_network()
-    n.buses["balancing_area"] = ["PJM", "PJM", "DOM", "DOM"]
+    n.buses["reeds_zone"] = ["p1", "p1", "p2", "p2"]
     laf = pd.Series([0.3, 0.1, 0.2, 0.4], index=n.buses.index)
-    demand = make_demand(n, {"PJM": [3000.0], "DOM": [600.0]})
+    demand = make_demand(n, {"p1": [3000.0], "p2": [600.0]})
 
-    result = _WriteFixedLaf(n, laf).dissagregate_demand(demand, "ba")
+    result = _WriteFixedLaf(n, laf).dissagregate_demand(demand, "reeds")
 
     assert result[["md_a", "md_b"]].sum(axis=1).iloc[0] == pytest.approx(3000.0)
     assert result[["dc", "va"]].sum(axis=1).iloc[0] == pytest.approx(600.0)

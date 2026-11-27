@@ -109,6 +109,7 @@ Snakemake DAG for sector coupled studies
 
 Each sector has a dedicated page giving information on data sources, implementation details, and assumptions. See the corresponding page linked below.
 - [Natural Gas](./data-naturalgas.md)
+- [Hydrogen](./data-hydrogen.md)
 - [Service Sector](./data-services.md)
 - [Industrial Sector](./data-industrial.md)
 - [Transportation Sector](./data-transportation.md)

@@ -76,6 +76,7 @@ import dill
 import pandas as pd
 import pypsa
 from add_electricity import add_missing_carriers, attach_remote_units
+from constants import STATE_FIPS_2_CODE
 from eia import FuelCosts
 
 logger = logging.getLogger(__name__)
@@ -539,60 +540,6 @@ def map_remote_units_to_zones(
 
 
 # County zones are "p" + 5-digit county FIPS; the first two digits are the state.
-_STATE_BY_FIPS = {
-    "01": "AL",
-    "02": "AK",
-    "04": "AZ",
-    "05": "AR",
-    "06": "CA",
-    "08": "CO",
-    "09": "CT",
-    "10": "DE",
-    "11": "DC",
-    "12": "FL",
-    "13": "GA",
-    "15": "HI",
-    "16": "ID",
-    "17": "IL",
-    "18": "IN",
-    "19": "IA",
-    "20": "KS",
-    "21": "KY",
-    "22": "LA",
-    "23": "ME",
-    "24": "MD",
-    "25": "MA",
-    "26": "MI",
-    "27": "MN",
-    "28": "MS",
-    "29": "MO",
-    "30": "MT",
-    "31": "NE",
-    "32": "NV",
-    "33": "NH",
-    "34": "NJ",
-    "35": "NM",
-    "36": "NY",
-    "37": "NC",
-    "38": "ND",
-    "39": "OH",
-    "40": "OK",
-    "41": "OR",
-    "42": "PA",
-    "44": "RI",
-    "45": "SC",
-    "46": "SD",
-    "47": "TN",
-    "48": "TX",
-    "49": "UT",
-    "50": "VT",
-    "51": "VA",
-    "53": "WA",
-    "54": "WV",
-    "55": "WI",
-    "56": "WY",
-}
-
 _COUNTY_ZONE_RE = re.compile(r"^p?(\d{2})\d{3}$")
 
 
@@ -614,7 +561,7 @@ def _external_zone_states(
     def state_of(zone: str) -> str | None:
         m = _COUNTY_ZONE_RE.match(zone)
         if m and zone not in mbshp.index:
-            return _STATE_BY_FIPS.get(m.group(1))
+            return STATE_FIPS_2_CODE.get(m.group(1))
         return mbshp.get(zone)
 
     states = {zone: state_of(zone) for zone in external_zones}

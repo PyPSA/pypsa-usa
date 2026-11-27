@@ -18,13 +18,25 @@ GPS_CRS = "EPSG:4326"
 HOURS_PER_YEAR = 8760
 
 ###########################################
-# ReEDS wind/solar supply curves
+# Renewable resource datasets (renewable.dataset)
 ###########################################
 # Read at parse time by the rule files, so keep this module free of heavy imports.
+
+#: Sources of wind/solar capacity factors accepted by ``renewable.dataset``.
+RENEWABLE_DATASETS = ("atlite", "godeeep", "reeds")
+
+#: Weather years published in the NREL ReEDS hourly wind/solar capacity-factor
+#: tables (``cf_profile_<year>`` blocks; 2014-2015 are not published).
+#: ``renewable.dataset: reeds`` only works for these years.
+REEDS_VRE_WEATHER_YEARS = (2007, 2008, 2009, 2010, 2011, 2012, 2013, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023)
 
 #: Technologies ReEDS supply curves cover (the offshore curve serves both
 #: fixed-bottom and floating wind).
 REEDS_VRE_CARRIERS = ("onwind", "solar", "offwind", "offwind_floating")
+
+#: reV land-access scenarios ReEDS publishes a supply curve and CF table for; the
+#: same scenarios ``renewable_land_access`` selects.
+REEDS_LAND_ACCESS = ("reference", "limited", "open")
 
 #: Zenodo record of each ReEDS VRE resource (one file per land-access scenario).
 REEDS_VRE_RECORDS = {
@@ -33,13 +45,24 @@ REEDS_VRE_RECORDS = {
     "offwind": "18826680",
 }
 
-#: File names inside each ReEDS VRE record (``sc`` supply curve, ``sitemap`` site
-#: coordinates). Fixed-bottom and floating offshore wind share the ``offwind`` curve.
+#: File names inside each ReEDS VRE record (``sc`` supply curve, ``cf`` hourly
+#: capacity factors, ``sitemap`` site coordinates). Fixed-bottom and floating
+#: offshore wind share the ``offwind`` curve.
 REEDS_VRE_FILES = {
-    "onwind": {"sc": "sc_wind-ons_{access}.csv", "sitemap": "sitemap.csv"},
-    "solar": {"sc": "sc_upv_{access}.csv", "sitemap": "sitemap.csv"},
-    "offwind": {"sc": "sc_wind-ofs_{access}.csv", "sitemap": "sitemap_offshore.csv"},
+    "onwind": {"sc": "sc_wind-ons_{access}.csv", "cf": "cf_wind-ons_{access}.h5", "sitemap": "sitemap.csv"},
+    "solar": {"sc": "sc_upv_{access}.csv", "cf": "cf_upv_{access}.h5", "sitemap": "sitemap.csv"},
+    "offwind": {"sc": "sc_wind-ofs_{access}.csv", "cf": "cf_wind-ofs_{access}.h5", "sitemap": "sitemap_offshore.csv"},
 }
+
+#: ReEDS ``cf_profile_<year>`` values are stored as integers x 1e4.
+REEDS_CF_SCALE = 1e-4
+
+#: ReEDS UPV profiles are MW_AC (grid) per MW_DC (array); the supply-curve
+#: capacity, its ``cf`` column and the ATB capex are per MW_AC. Site profiles are
+#: multiplied by this inverter loading ratio and clipped at 1. Checked against
+#: the published data: raw profiles peak at 0.746 = 1/1.34, and the scaled site
+#: means match the supply-curve ``cf`` (median ratio 0.998).
+REEDS_SOLAR_INVERTER_LOADING_RATIO = 1.34
 
 #: Depth (m) dividing ReEDS's shared offshore curve into fixed and floating sites
 #: when the technology config sets no depth bound.
@@ -109,6 +132,10 @@ BECCS_CO2_REMOVAL = 206 * 0.95 * 0.45359237 / 1000 * 3.412  # tCO2/MWh_th
 # (132 Bcf) to the largest weekly net withdrawal (359 Bcf) in the Lower 48 storage
 # history: https://www.eia.gov/dnav/ng/hist/nw2_epg0_swo_r48_bcfw.htm
 NG_STORAGE_CHARGE_DISCHARGE_RATIO = 132 / 359
+
+# technologies existing gas plants can be retrofitted to (electricity: retrofit),
+# and the technology of the plants they are retrofitted from
+RETROFITS = {"OCHT": "OCGT", "CCHT": "CCGT", "CCGT-90CCS": "CCGT"}
 
 LBS_TON = 2000  # lbs/ short ton
 COAL_BTU_LB = 9396  # BTU/lb - EIA US AVERAGE TODO: differentiate between coal types
@@ -505,6 +532,67 @@ STATE_2_CODE = {
 }
 
 CODE_2_STATE = {value: key for key, value in STATE_2_CODE.items()}
+
+#: Two-digit state FIPS code to upper-case state name, for the 50 states and DC
+# https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt
+FIPS_2_STATE = {
+    "01": "ALABAMA",
+    "02": "ALASKA",
+    "04": "ARIZONA",
+    "05": "ARKANSAS",
+    "06": "CALIFORNIA",
+    "08": "COLORADO",
+    "09": "CONNECTICUT",
+    "10": "DELAWARE",
+    "11": "DISTRICT OF COLUMBIA",
+    "12": "FLORIDA",
+    "13": "GEORGIA",
+    "15": "HAWAII",
+    "16": "IDAHO",
+    "17": "ILLINOIS",
+    "18": "INDIANA",
+    "19": "IOWA",
+    "20": "KANSAS",
+    "21": "KENTUCKY",
+    "22": "LOUISIANA",
+    "23": "MAINE",
+    "24": "MARYLAND",
+    "25": "MASSACHUSETTS",
+    "26": "MICHIGAN",
+    "27": "MINNESOTA",
+    "28": "MISSISSIPPI",
+    "29": "MISSOURI",
+    "30": "MONTANA",
+    "31": "NEBRASKA",
+    "32": "NEVADA",
+    "33": "NEW HAMPSHIRE",
+    "34": "NEW JERSEY",
+    "35": "NEW MEXICO",
+    "36": "NEW YORK",
+    "37": "NORTH CAROLINA",
+    "38": "NORTH DAKOTA",
+    "39": "OHIO",
+    "40": "OKLAHOMA",
+    "41": "OREGON",
+    "42": "PENNSYLVANIA",
+    "44": "RHODE ISLAND",
+    "45": "SOUTH CAROLINA",
+    "46": "SOUTH DAKOTA",
+    "47": "TENNESSEE",
+    "48": "TEXAS",
+    "49": "UTAH",
+    "50": "VERMONT",
+    "51": "VIRGINIA",
+    "53": "WASHINGTON",
+    "54": "WEST VIRGINIA",
+    "55": "WISCONSIN",
+    "56": "WYOMING",
+}
+
+_UPPER_STATE_2_CODE = {state.upper(): code for state, code in STATE_2_CODE.items()}
+
+#: Two-digit state FIPS code to postal code, derived from ``FIPS_2_STATE`` and ``STATE_2_CODE``
+STATE_FIPS_2_CODE = {fips: _UPPER_STATE_2_CODE[state] for fips, state in FIPS_2_STATE.items()}
 
 REEDS_NERC_INTERCONNECT_MAPPER = {
     "WECC_CA": "western",

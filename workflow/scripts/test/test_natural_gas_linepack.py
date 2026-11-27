@@ -102,3 +102,39 @@ def test_pressure_band_sets_min_and_nominal_levels(linepack):
 
     assert (data.MIN_ENERGY_MWh / data.MAX_ENERGY_MWh).to_numpy() == pytest.approx(0.5)
     assert (data.NOMINAL_ENERGY_MWh / data.MAX_ENERGY_MWh).to_numpy() == pytest.approx(0.75)
+
+
+def _linepack(tmp_path, counties, pipes, assumptions):
+    path = tmp_path / "pipelines.geojson"
+    pipes.to_file(path, driver="GeoJSON")
+    return PipelineLinepack(2020, "usa", str(counties), str(path), assumptions).data.set_index("STATE")
+
+
+def test_a_pipeline_class_can_be_left_out(linepack, tmp_path, counties, pipes):
+    """Without the intrastate pipe Utah holds only its share of the interstate pipe."""
+    default = linepack.data.set_index("STATE")
+    interstate_only = _linepack(tmp_path, counties, pipes, {"intrastate": {"include": False}})
+
+    assert interstate_only.at["CO", "MAX_ENERGY_MWh"] == pytest.approx(default.at["CO", "MAX_ENERGY_MWh"])
+    assert interstate_only.at["UT", "MAX_ENERGY_MWh"] < default.at["UT", "MAX_ENERGY_MWh"]
+
+
+def test_diameter_and_pressures_are_set_per_class(linepack, tmp_path, counties, pipes):
+    default = linepack.data.set_index("STATE")
+    changed = _linepack(
+        tmp_path,
+        counties,
+        pipes,
+        {"interstate": {"diameter": 18, "max_pressure": 4000, "min_pressure": 1000}},
+    )
+
+    # Colorado has only the interstate pipe: half the diameter and half the pressure
+    assert changed.at["CO", "MAX_ENERGY_MWh"] == pytest.approx(default.at["CO", "MAX_ENERGY_MWh"] / 4 / 2)
+    assert changed.at["CO", "MIN_ENERGY_MWh"] / changed.at["CO", "MAX_ENERGY_MWh"] == pytest.approx(0.25)
+
+
+def test_unknown_linepack_options_are_rejected(tmp_path, counties, pipes):
+    with pytest.raises(ValueError, match="radius"):
+        _linepack(tmp_path, counties, pipes, {"interstate": {"radius": 18}})
+    with pytest.raises(ValueError, match="gathering"):
+        _linepack(tmp_path, counties, pipes, {"gathering": {"include": True}})

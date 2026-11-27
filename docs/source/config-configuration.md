@@ -15,8 +15,8 @@
 | `config.sector.yaml` | sector-coupling defaults |
 | `config.default.yaml` | the scenario base — every user-facing knob, with defaults |
 
-Two optional per-user overlays follow (`config/config.api.yaml`,
-`config/config.slurm.yaml`, seeded by `init_pypsa_usa.sh`), and whatever you
+Three optional per-user overlays follow (`config/config.api.yaml`,
+`config/config.slurm.yaml`, `config/config.sector.yaml`, seeded by `init_pypsa_usa.sh`), and whatever you
 pass with `--configfile` is merged last.
 
 Because `config.default.yaml` is itself a loaded layer, **your scenario config is
@@ -164,7 +164,9 @@ Specifies the temporal range to build an energy system model for as arguments to
 Sets the weather year(s) the renewable capacity-factor time series are built for. With
 `renewable.dataset: atlite` any year with a matching cutout works; with `godeeep` this key is only
 used when `renewable_scenarios` is `historical` — for future climate scenarios the year is taken
-from `planning_horizons` instead. The optional commented `renewable_weather_years_by_horizon`
+from `planning_horizons` instead. With `reeds` it must hold exactly one year in 2007-2013 or
+2016-2023, the years ReEDS publishes (see [`renewable: reeds`](reeds_cf)); the workflow stops at
+parse time otherwise. The optional commented `renewable_weather_years_by_horizon`
 mapping assigns a different weather year to each planning horizon in multi-horizon atlite runs.
 
 ```{eval-rst}
@@ -335,7 +337,7 @@ forthcoming publication.
 (godeeep_cf)=
 ### `renewable: godeeep`
 
-PyPSA-USA supports two sources for renewable capacity-factor time series, selected via `renewable.dataset` in `config.common.yaml`:
+PyPSA-USA supports three sources for renewable capacity-factor time series, selected via `renewable.dataset` in `config.common.yaml` (the third, `reeds`, is described in [`renewable: reeds`](reeds_cf)):
 
 - `atlite` — runtime computation of capacity factors from ERA5 cutouts, weighted by Copernicus / CORINE land-use exclusions (the legacy default; see [Renewable Capacity Factors](renewable_cfs) under Model Data).
 - `godeeep` — pre-computed regional climate-model capacity factors from the [GODEEEP](https://www.pnnl.gov/projects/godeeep) (Grid Operations, Decarbonization, Environmental and Energy Equity Platform) dataset, weighted at runtime by NREL reV land-access exclusions.
@@ -459,6 +461,32 @@ A complete godeeep configuration requires four config blocks beyond the standard
 
 The `_cec` and `_boem` variants overlay additional regulatory screens on top of the base NREL availability raster: California Energy Commission Wind/Solar BaseScreen for onshore solar/wind in CA, and BOEM offshore wind planning areas for offshore. Outside their applicable region the variant equals the base.
 
+(reeds_cf)=
+### `renewable: reeds`
+
+`renewable.dataset: reeds` builds the onshore wind, offshore wind (fixed and floating) and utility PV
+profiles from the NREL ReEDS supply curves and hourly capacity factors (Zenodo records 18827074,
+18826700 and 18826680, fetched by `rule retrieve_reeds_vre_file`):
+
+- **Sites and capacity** — every ReEDS supply-curve site is placed in the `s{simpl}` bus region that
+  contains it; `p_nom_max` is the sum of the site capacities and the bus profile their
+  capacity-weighted mean. The supply-curve and CF variant follows `renewable_land_access`
+  (`reference` | `limited` | `open`). Fixed-bottom and floating offshore wind share ReEDS's offshore
+  curve and are split at the `max_depth` / `min_depth` of `renewable: offwind` /
+  `offwind_floating` (60 m) using GEBCO.
+- **Weather years** — only one year, from 2007-2013 or 2016-2023 (the years ReEDS publishes, the same
+  rule as EER demand). The profile is reused for every planning horizon.
+- **Time zone** — ReEDS time stamps carry explicit UTC offsets and are converted to the model's naive
+  UTC snapshots; the published tables are UTC (solar output peaks at solar noon in UTC), so no
+  hours move. A table at another offset would be rolled onto the UTC hours of the year, as the EER
+  demand reader rolls its CST data. Leap weather years hold 8760 hours (1 January to 30 December):
+  their Feb 29 hours take the 1 March labels, as for GODEEEP and EER demand.
+- **Solar** — ReEDS UPV profiles are per MW DC; each site's profile is multiplied by the inverter
+  loading ratio 1.34 and clipped at 1, giving the per MW AC basis of the capacity and the ATB costs.
+
+The land screens of `renewable: onwind/solar/offwind` (`corine`, `natura`, `cec`, `boem_screen`,
+depth and shore distances) do not apply; ReEDS's supply curves carry their own reV exclusions.
+
 (offshore_shape_cf)=
 ## `offshore_shape`
 
@@ -485,6 +513,23 @@ created along the offshore shapes.
    :language: yaml
    :start-after: # docs : OFFSHORE_NETWORK
    :end-before: # docs :
+```
+
+(conventional_cf)=
+## `conventional`
+
+Options for existing conventional (thermal) generators: unit commitment, must-run minimum loading and time-varying fuel prices. All of them are off by default.
+
+```{eval-rst}
+.. literalinclude:: ../../workflow/repo_data/config/config.default.yaml
+   :language: yaml
+   :start-after: # docs : CONVENTIONAL
+   :end-before: # docs :
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 22,7,22,33
+   :file: configtables/conventional.csv
 ```
 
 (lines_cf)=
@@ -731,7 +776,7 @@ networks.
 ## `walltime`
 
 Per-rule wall-time overrides consumed as Snakemake `walltime` resources and forwarded to
-`sbatch --time` by `workflow/run_slurm.sh`. This is the single source for per-rule wall times;
+`sbatch --time` by `workflow/run_slurm.sh` (through `workflow/slurm_submit.sh`). This is the single source for per-rule wall times;
 it lives in `config.slurm.yaml` (renamed from `config.cluster.yaml`, whose name collided with
 the `{clusters}` wildcard and the `clustering:` section). Rules not listed here fall back to
 per-rule defaults defined in the workflow. Local runs ignore these values.
