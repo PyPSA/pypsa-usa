@@ -43,15 +43,16 @@ The following steps will walk through how to submit code changes.
 
 ```{seealso}
 Before contributing, please see our
-[installation instructions](about-install.md) and [usage guide](about-usage.md)
+[installation instructions](about-install.md) and [usage guide](about-usage.md). If you
+use AI tools, also read [AI Use](ai-use.md).
 ```
 
 ### 1. Submit an Issue
 
-Before you work on any non-trivial code contribution it's best to first create
-a report in the [issue tracker](https://github.com/PyPSA/pypsa-usa/issues)
-to start a discussion on the subject. This often provides additional considerations
-and avoids unnecessary work.
+In general, a pull request should have an associated issue. Before you start, find or create one in the
+[issue tracker](https://github.com/PyPSA/pypsa-usa/issues) and comment that you are
+working on it. Discussing the approach there often raises additional considerations
+and avoids unnecessary work. Small fixes can go without an issue.
 
 ### 2. Fork the repository
 
@@ -67,6 +68,7 @@ copy of the code under your account on the repository service.
     ``` bash
     ~/repositories $ git clone https://github.com/<github_username>/pypsa-usa.git
     ~/repositories $ cd pypsa-usa
+    ~/repositories/pypsa-usa $ git remote add upstream https://github.com/PyPSA/pypsa-usa.git
     ~/repositories/pypsa-usa $
     ```
 
@@ -100,14 +102,15 @@ pre-commit install
 
 ### 5. Implement your changes
 
-- Create a new branch with a name in the form of `issue-###` where `###` is
-the auto assigned issue number from GitHub.
+- Create a new branch from the latest `develop`, with a name in the form of `issue-###`
+where `###` is the auto assigned issue number from GitHub.
 
     ```console
-    ~/repositories/pypsa-usa $ git checkout -b issue-###
+    ~/repositories/pypsa-usa $ git fetch upstream develop
+    ~/repositories/pypsa-usa $ git checkout --no-track -b issue-### upstream/develop
     ```
 
-   and start making changes. **Never work on the main branch!**
+   and start making changes. **Never work on `master` or `develop` directly!**
 
 - Start your work on this branch. Don't forget to add
 [docstrings](https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html)
@@ -137,16 +140,54 @@ pytest -v
 
 ### 6. Submit a Pull Request to the **`develop`** branch
 
+All contributions go to `develop`. Only release pull requests, from `develop`, go to
+`master`.
+
 - If everything works fine, push your local branch to your fork with:
 
     ```console
-    git push -u origin my-feature
+    git push -u origin issue-###
     ```
 
 - Go to the web page of your fork and click
 [Create a Pull Request](https://github.com/PyPSA/pypsa-usa/pulls). Then make sure you are submitting the pull request from your_git/issue-xxx branch to the PyPSA/PyPSA-USA:develop branch.
 
+- Complete the pull request template, link the issue (step 7), and request a reviewer
+(step 8). Open the pull request as a draft if it is not ready for review.
+
 - Communicate on the github Pull Request page to reconcile any changes to be made!
+
+(linking-issues)=
+### 7. Link the issue
+
+If the pull request has an issue, put `Closes #123` at the top of the pull request description, with one keyword per issue
+(`Closes #123, closes #124`). If the pull request resolves only part of an issue, write
+`Part of #123` instead, and leave the issue open.
+
+GitHub acts on closing keywords only when a pull request targets the default branch, which
+for PyPSA-USA is `master`. What happens to the issue therefore depends on the base branch:
+
+| Pull request into | Used for | Linked by `Closes #123`? | Issue closes |
+|---|---|---|---|
+| `develop` | All contributions | No. Also link it in the **Development** sidebar. | **By hand**, after the merge |
+| `master` | Releases, by maintainers | Yes | Automatically, on merge |
+
+For a pull request into `develop`:
+
+- Link the issue under **Development** in the pull request sidebar. If you do not have
+  permission, the reviewer does this.
+- After merging, whoever merged the pull request closes each fully resolved issue by hand,
+  with a comment naming the pull request. Releases do not follow a fixed schedule, so a
+  closed issue means the change is on `develop`; it reaches `master` with the next release.
+- If an issue should stay open until the release, say so in the issue. The maintainer
+  preparing the release adds `Closes #123` to the release pull request, so the issue closes
+  when it merges into `master`.
+
+### 8. Request a reviewer
+
+Every pull request needs a review from a maintainer other than its author. Request at
+least one under **Reviewers** once the pull request is ready. If you do not have
+permission, ask for a review in a comment, and a maintainer will assign someone.
 
 ## Updating Documentation
 
