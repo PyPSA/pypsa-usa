@@ -202,36 +202,32 @@ def rescale_uc_attrs_to_resolution(n, offset: str) -> None:
     diverge by exactly N: a 6 h minimum up time would be enforced as 18 h, and a
     50 %/h ramp would be enforced as 50 % per 3 h.
 
-    Rescaling is applied only when the network actually has committable
-    generators, so runs with ``conventional.unit_commitment: false`` — where the
-    UC attributes are PyPSA defaults and the ramp limits are the only affected
-    column — keep their previous behavior exactly.
+    The ramp limits of every generator are rescaled, since PyPSA enforces them with or
+    without unit commitment; the minimum up and down times only matter for committable
+    generators.
     """
-    gens = n.generators
-    if "committable" not in gens or not gens.committable.any():
-        return
-
     nhours = _hours_per_snapshot(offset)
     if nhours == 1:
         return
+    gens = n.generators
 
-    com = gens.index[gens.committable.fillna(False).astype(bool)]
-
-    for col in ("min_up_time", "min_down_time"):
+    for col in ("ramp_limit_up", "ramp_limit_down"):
         if col not in gens:
+            continue
+        per_hour = pd.to_numeric(gens[col], errors="coerce")
+        n.generators[col] = (per_hour * nhours).clip(upper=1.0)
+
+    com = gens.index[gens.committable.fillna(False).astype(bool)] if "committable" in gens else gens.index[:0]
+    for col in ("min_up_time", "min_down_time"):
+        if col not in gens or com.empty:
             continue
         hours = pd.to_numeric(gens.loc[com, col], errors="coerce").fillna(0.0)
         # Round up: a 2 h minimum up time still blocks the whole 3 h snapshot.
         n.generators.loc[com, col] = np.ceil(hours / nhours).astype(int)
 
-    for col in ("ramp_limit_up", "ramp_limit_down"):
-        if col not in gens:
-            continue
-        per_hour = pd.to_numeric(gens.loc[com, col], errors="coerce")
-        n.generators.loc[com, col] = (per_hour * nhours).clip(upper=1.0)
-
     logger.info(
-        "Rescaled unit-commitment attributes of %d committable generators from hourly to %d-hour snapshots.",
+        "Rescaled the ramp limits of all generators and the minimum up/down times of %d committable "
+        "generators from hourly to %d-hour snapshots.",
         len(com),
         nhours,
     )
